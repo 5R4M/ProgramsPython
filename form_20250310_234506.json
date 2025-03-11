@@ -1,0 +1,46 @@
+{
+  "title": "Primera Serie",
+  "description": "Conteste lo que se le solicite.",
+  "questions": [
+    {
+      "type": "Texto",
+      "question": "Cual es el pais en el que vivimos?",
+      "options": [],
+      "required": false
+    },
+    {
+      "type": "Opción múltiple",
+      "question": "Elija el pais en el que vivimos?",
+      "options": [
+        "Guatemala",
+        "El Salvador",
+        "Costa Rica",
+        "Venezuela"
+      ],
+      "required": false
+    },
+    {
+      "type": "Párrafo",
+      "question": "Resuma los recuersos de nuestro pais?",
+      "options": [],
+      "required": false
+    },
+    {
+      "type": "Imágenes múltiples",
+      "question": "Coloree",
+      "options": [
+        "Imagen 1",
+        "Imagen 2",
+        "Imagen 3",
+        "Imagen 4"
+      ],
+      "image_paths": [
+        "C:\\Users\\selso\\Downloads\\R (1).jpeg",
+        "C:\\Users\\selso\\Downloads\\OIP (1).jpeg",
+        "C:\\Users\\selso\\Downloads\\R.jpeg",
+        "C:\\Users\\selso\\Downloads\\OIP.jpeg"
+      ],
+      "required": false
+    }
+  ]
+}
