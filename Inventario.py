@@ -2,6 +2,7 @@ import pandas as pd
 import os
 import tkinter as tk
 from tkinter import ttk, messagebox
+from tkinter import ttk, PhotoImage
 from openpyxl import load_workbook
 from openpyxl.styles import Alignment, Border, Side, Font
 
@@ -85,9 +86,16 @@ def gestionar_insumos():
     # Crear la ventana principal
     ventana = tk.Tk()
     ventana.title("Gestión de Insumos")
-    ventana.geometry("600x800")  # Aumentar la altura para que todo sea visible
+    ventana.geometry("600x800")
     ventana.resizable(False, False)
 
+    # Cargar los íconos
+    icono_agregar = PhotoImage(file="add.png")  # Ícono para "Agregar Nuevo Insumo"
+    icono_agregar_nuevo = PhotoImage(file="add_new.png")  # Ícono para "Agregar Nuevo Insumo"
+    icono_modificar = PhotoImage(file="edit.png")  # Ícono para "Modificar Movimiento"
+    icono_eliminar = PhotoImage(file="delete.png")  # Ícono para "Eliminar Movimiento"
+    icono_guardar = PhotoImage(file="save.png")  # Ícono para "Guardar Movimientos"
+    
     # Sección: Selección de distrito
     frame_distrito = tk.LabelFrame(ventana, text="Seleccionar Distrito", padx=10, pady=10)
     frame_distrito.pack(fill="x", padx=10, pady=10)
@@ -106,7 +114,7 @@ def gestionar_insumos():
     insumo_combobox["values"] = listado_insumos["Insumo"].tolist()
     insumo_combobox.pack(fill="x", pady=5)
 
-    # Función para abrir la ventana emergente de agregar insumo
+    # Botón para abrir la ventana emergente de agregar insumo
     def abrir_ventana_agregar_insumo():
         ventana_agregar = tk.Toplevel(ventana)
         ventana_agregar.title("Agregar Nuevo Insumo")
@@ -118,7 +126,7 @@ def gestionar_insumos():
         nuevo_insumo_entry.pack(fill="x", padx=20, pady=10)
 
         def agregar_insumo():
-            nuevo_insumo = nuevo_insumo_entry.get()
+            nuevo_insumo = nuevo_insumo_entry.get().strip()
             if not nuevo_insumo:
                 messagebox.showerror("Error", "Debes ingresar un nombre para el insumo.")
                 return
@@ -147,21 +155,110 @@ def gestionar_insumos():
 
         tk.Button(ventana_agregar, text="Guardar Insumo", command=agregar_insumo).pack(pady=10)
 
-    # Botón para abrir la ventana emergente
-    tk.Button(ventana, text="Agregar Insumo", command=abrir_ventana_agregar_insumo).pack(pady=10)
+    tk.Button(
+    ventana,
+    text=" Agregar Nuevo Insumo",  # Texto del botón
+    image=icono_agregar_nuevo,  # Ícono
+    compound="left",  # Posición del texto (a la derecha del ícono)
+    command=abrir_ventana_agregar_insumo,  # Acción al hacer clic
+    bd=0,  # Sin bordes
+    highlightthickness=0  # Sin borde de enfoque
+    ).pack(pady=10)
 
     # Sección: Formulario de movimiento
     frame_movimiento = tk.LabelFrame(ventana, text="Registrar Movimiento", padx=10, pady=10)
     frame_movimiento.pack(fill="x", padx=10, pady=10)
+
     entradas = {}
     campos = ["Saldo Anterior", "Entrada Nivel Superior", "Entregado", "No Entregado", "Reajuste"]
-    for campo in campos:
-        tk.Label(frame_movimiento, text=campo + ":").pack(anchor="w")
+
+    # Organizar los inputs en 3 columnas y 2 filas
+    for i, campo in enumerate(campos):
+        fila = i // 3  # Dividir en filas de 3 columnas
+        columna = i % 3  # Calcular la columna
+        tk.Label(frame_movimiento, text=campo + ":").grid(row=fila * 2, column=columna, sticky="w", padx=5, pady=5)  # Etiqueta
         entrada = tk.Entry(frame_movimiento)
-        entrada.pack(fill="x", pady=5)
+        entrada.grid(row=fila * 2 + 1, column=columna, padx=5, pady=5, sticky="ew")  # Input
         entradas[campo] = entrada
 
-    def guardar_movimiento():
+    # Ajustar las columnas para que se expandan uniformemente
+    for col in range(3):
+        frame_movimiento.columnconfigure(col, weight=1)
+
+    # Sección: DataGridView para movimientos temporales
+    frame_tabla = tk.LabelFrame(ventana, text="Movimientos", padx=10, pady=10)
+    frame_tabla.pack(fill="both", expand=False, padx=10, pady=10)
+
+    # Crear un contenedor para el Treeview y las barras de desplazamiento
+    frame_tree = tk.Frame(frame_tabla)
+    frame_tree.pack(fill="both", expand=False)
+
+    # Crear el Treeview
+    tree = ttk.Treeview(
+        frame_tree,
+        columns=("Insumo", "Saldo Anterior", "Entrada Nivel Superior", "Entregado", "No Entregado", "Reajuste", "Saldo Final"),
+        show="headings",
+        height=5
+    )
+
+    # Configurar las columnas del Treeview
+    for col in tree["columns"]:
+        tree.heading(col, text=col)
+        tree.column(col, width=150, anchor="center")
+
+    # Crear barra de desplazamiento vertical
+    scrollbar_vertical = tk.Scrollbar(frame_tree, orient="vertical", command=tree.yview)
+    scrollbar_vertical.pack(side="right", fill="y")
+
+    # Crear barra de desplazamiento horizontal
+    scrollbar_horizontal = tk.Scrollbar(frame_tree, orient="horizontal", command=tree.xview)
+    scrollbar_horizontal.pack(side="bottom", fill="x")
+
+    # Vincular las barras de desplazamiento al Treeview
+    tree.configure(yscrollcommand=scrollbar_vertical.set, xscrollcommand=scrollbar_horizontal.set)
+
+    # Empaquetar el Treeview
+    tree.pack(fill="both", expand=False)
+
+    # Sección: Botones debajo del Treeview
+    frame_botones = tk.Frame(ventana)
+    frame_botones.pack(fill="x", padx=10, pady=20)
+
+    # Botón "Modificar Movimiento" con ícono
+    tk.Button(
+        frame_botones,
+        text=" Modificar Movimiento",  # Texto del botón
+        image=icono_modificar,  # Ícono
+        compound="left",  # Posición del texto (a la derecha del ícono)
+        command=lambda: modificar_movimiento(tree, listado_insumos),
+        bd=0,  # Sin bordes
+        highlightthickness=0  # Sin borde de enfoque
+    ).pack(side="left", padx=5)
+
+    # Botón "Eliminar Movimiento" con ícono
+    tk.Button(
+        frame_botones,
+        text=" Eliminar Movimiento",  # Texto del botón
+        image=icono_eliminar,  # Ícono
+        compound="left",  # Posición del texto (a la derecha del ícono)
+        command=lambda: eliminar_movimiento(tree),
+        bd=0,  # Sin bordes
+        highlightthickness=0  # Sin borde de enfoque
+    ).pack(side="left", padx=5)
+
+    # Botón "Guardar Movimientos" con ícono
+    tk.Button(
+        frame_botones,
+        text=" Guardar Movimientos",  # Texto del botón
+        image=icono_guardar,  # Ícono
+        compound="left",  # Posición del texto (a la derecha del ícono)
+        command=lambda: guardar_movimientos(tree, distrito_var, archivo_excel),
+        bd=0,  # Sin bordes
+        highlightthickness=0  # Sin borde de enfoque
+    ).pack(side="left", padx=5)
+    
+    # Función para agregar un movimiento al DataGridView
+    def agregar_movimiento():
         distrito_seleccionado = distrito_var.get()
         insumo_seleccionado = insumo_var.get()
         if not distrito_seleccionado:
@@ -172,18 +269,6 @@ def gestionar_insumos():
             return
 
         try:
-            # Leer la pestaña del distrito si ya existe
-            try:
-                movimientos_distrito = pd.read_excel(archivo_excel, sheet_name=distrito_seleccionado)
-            except ValueError:
-                movimientos_distrito = pd.DataFrame()
-
-            # Verificar si el insumo ya existe en el distrito
-            if not movimientos_distrito.empty and insumo_seleccionado in movimientos_distrito["Insumo"].values:
-                messagebox.showwarning("Advertencia", f"El insumo '{insumo_seleccionado}' ya ha sido ingresado en el distrito '{distrito_seleccionado}'.")
-                return
-
-            # Obtener los valores ingresados
             saldo_anterior = float(entradas["Saldo Anterior"].get())
             entrada_nivel_superior = float(entradas["Entrada Nivel Superior"].get())
             entregado = float(entradas["Entregado"].get())
@@ -193,34 +278,105 @@ def gestionar_insumos():
             # Calcular saldo final
             saldo_final = saldo_anterior + entrada_nivel_superior - entregado + reajuste
 
-            # Crear un DataFrame con los datos del movimiento
-            datos_movimiento = {
-                "Insumo": [insumo_seleccionado],
-                "Saldo Anterior": [saldo_anterior],
-                "Entrada Nivel Superior": [entrada_nivel_superior],
-                "Entregado": [entregado],
-                "No Entregado": [no_entregado],
-                "Reajuste": [reajuste],
-                "Saldo Final": [saldo_final]
-            }
-            df_movimiento = pd.DataFrame(datos_movimiento)
+            # Agregar el movimiento al Treeview
+            tree.insert("", "end", values=(insumo_seleccionado, saldo_anterior, entrada_nivel_superior, entregado, no_entregado, reajuste, saldo_final))
 
-            # Agregar el nuevo movimiento
-            movimientos_actualizados = pd.concat([movimientos_distrito, df_movimiento], ignore_index=True)
-            with pd.ExcelWriter(archivo_excel, engine="openpyxl", mode="a", if_sheet_exists="overlay") as writer:
-                movimientos_actualizados.to_excel(writer, sheet_name=distrito_seleccionado, index=False)
-
-            # Aplicar formato a la pestaña del distrito
-            aplicar_formato_excel(archivo_excel, distrito_seleccionado)
-
-            messagebox.showinfo("Éxito", f"El movimiento se ha registrado en la pestaña '{distrito_seleccionado}'.")
-            ventana.destroy()
+            # Limpiar los campos de entrada
+            for entrada in entradas.values():
+                entrada.delete(0, tk.END)
 
         except ValueError:
             messagebox.showerror("Error", "Todos los campos deben contener valores numéricos válidos.")
 
-    # Botón para guardar el movimiento
-    tk.Button(frame_movimiento, text="Guardar Movimiento", command=guardar_movimiento).pack(pady=10)
+    # Función para modificar un movimiento seleccionado
+    def modificar_movimiento(tree, listado_insumos):
+        seleccion = tree.selection()
+        if not seleccion:
+            messagebox.showerror("Error", "Debes seleccionar un movimiento para modificar.")
+            return
+
+        item = seleccion[0]
+        valores = tree.item(item, "values")
+
+        # Crear ventana emergente para modificar el movimiento
+        ventana_modificar = tk.Toplevel(ventana)
+        ventana_modificar.title("Modificar Movimiento")
+        ventana_modificar.geometry("400x500")
+        ventana_modificar.resizable(False, False)
+
+        entradas_modificar = {}
+        for i, col in enumerate(tree["columns"]):
+            if col == "Insumo":
+                tk.Label(ventana_modificar, text=col).pack(anchor="w", padx=10, pady=5)
+                insumo_modificar_combobox = ttk.Combobox(ventana_modificar, state="readonly")
+                insumo_modificar_combobox["values"] = listado_insumos["Insumo"].tolist()
+                insumo_modificar_combobox.set(valores[i])
+                insumo_modificar_combobox.pack(fill="x", padx=10, pady=5)
+                entradas_modificar[col] = insumo_modificar_combobox
+            else:
+                tk.Label(ventana_modificar, text=col).pack(anchor="w", padx=10, pady=5)
+                entrada = tk.Entry(ventana_modificar)
+                entrada.insert(0, valores[i])
+                entrada.pack(fill="x", padx=10, pady=5)
+                entradas_modificar[col] = entrada
+
+        def guardar_cambios():
+            nuevos_valores = [entrada.get() if isinstance(entrada, tk.Entry) else entrada.get() for entrada in entradas_modificar.values()]
+            tree.item(item, values=nuevos_valores)
+            ventana_modificar.destroy()
+
+        tk.Button(ventana_modificar, text="Guardar Cambios", command=guardar_cambios).pack(pady=10)
+
+    # Función para eliminar un movimiento seleccionado
+    def eliminar_movimiento(tree):
+        seleccion = tree.selection()
+        if not seleccion:
+            messagebox.showerror("Error", "Debes seleccionar un movimiento para eliminar.")
+            return
+
+        confirmacion = messagebox.askyesno("Confirmación", "¿Estás seguro de que deseas eliminar este movimiento?")
+        if confirmacion:
+            tree.delete(seleccion[0])
+
+    # Función para guardar los movimientos en el archivo Excel
+    def guardar_movimientos(tree, distrito_var, archivo_excel):
+        distrito_seleccionado = distrito_var.get()
+        if not distrito_seleccionado:
+            messagebox.showerror("Error", "Debes seleccionar un distrito.")
+            return
+
+        # Obtener los datos del Treeview
+        movimientos = [tree.item(item, "values") for item in tree.get_children()]
+        if not movimientos:
+            messagebox.showerror("Error", "No hay movimientos para guardar.")
+            return
+
+        # Crear un DataFrame con los movimientos
+        columnas = ["Insumo", "Saldo Anterior", "Entrada Nivel Superior", "Entregado", "No Entregado", "Reajuste", "Saldo Final"]
+        df_movimientos = pd.DataFrame(movimientos, columns=columnas)
+
+        # Guardar en el archivo Excel
+        try:
+            with pd.ExcelWriter(archivo_excel, engine="openpyxl", mode="a", if_sheet_exists="overlay") as writer:
+                df_movimientos.to_excel(writer, sheet_name=distrito_seleccionado, index=False)
+
+            aplicar_formato_excel(archivo_excel, distrito_seleccionado)
+            messagebox.showinfo("Éxito", f"Los movimientos se han guardado en el distrito '{distrito_seleccionado}'.")
+            tree.delete(*tree.get_children())  # Limpiar el Treeview después de guardar
+        except Exception as e:
+            messagebox.showerror("Error", f"No se pudo guardar: {e}")
+
+    # Botón para agregar
+    boton_agregar = tk.Button(
+        frame_movimiento,
+        text=" Agregar Movimiento",  # Texto del botón
+        image=icono_agregar,  # Ícono
+        compound="left",  # Posición del texto (a la derecha del ícono)
+        command=agregar_movimiento,  # Acción al hacer clic
+        bd=0,  # Sin bordes
+        highlightthickness=0  # Sin borde de enfoque
+    )
+    boton_agregar.grid(row=4, column=0, columnspan=3, pady=10)  # Colocar el botón en la fila 4, ocupando las 3 columnas
 
     # Ejecutar la ventana
     ventana.mainloop()
