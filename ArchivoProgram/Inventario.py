@@ -443,7 +443,7 @@ def abrir_ingreso_insumos():
                 ventana_modificar.destroy()
                 
             
-             tk.Button(
+            tk.Button(
             ventana_modificar,
             text=" Guardar Cambios",  # Texto del botón
             image=ventana.icono_editar_otro,  # Ícono
