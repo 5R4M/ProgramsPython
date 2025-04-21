@@ -1,116 +1,85 @@
 import tkinter as tk
 from tkinter import ttk
 from tkinter import PhotoImage
+import sqlite3
+import os
+
+# Función para inicializar la base de datos SQLite
+def inicializar_base_datos():
+    conexion = sqlite3.connect("insumos.db")
+    cursor = conexion.cursor()
+
+    # Crear tablas si no existen
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS Distritos (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            nombre TEXT UNIQUE NOT NULL
+        )
+    """)
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS ListadoInsumos (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            nombre TEXT UNIQUE NOT NULL
+        )
+    """)
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS Presentaciones (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            nombre TEXT UNIQUE NOT NULL
+        )
+    """)
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS Movimientos (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            distrito TEXT NOT NULL,
+            insumo TEXT NOT NULL,
+            presentacion TEXT NOT NULL,
+            saldo_anterior REAL,
+            entrada_nivel_superior REAL,
+            entregado REAL,
+            no_entregado REAL,
+            reajuste REAL,
+            saldo_final REAL
+        )
+    """)
+    conexion.commit()
+    conexion.close()
+
+# Función para cargar datos desde SQLite en un combobox
+def cargar_datos_combobox(combobox, tabla):
+    conexion = sqlite3.connect("insumos.db")
+    cursor = conexion.cursor()
+
+    # Obtener los datos de la tabla correspondiente
+    cursor.execute(f"SELECT nombre FROM {tabla}")
+    datos = [fila[0] for fila in cursor.fetchall()]
+
+    # Cargar los datos en el combobox
+    combobox["values"] = datos
+
+    # Mostrar advertencia si no hay datos
+    if not datos:
+        print(f"Advertencia: No hay datos disponibles en la tabla '{tabla}'.")
+        combobox.set("No hay datos disponibles")
+
+    conexion.close()
 
 # Función para abrir la ventana de "Ingreso de Insumos"
 def abrir_ingreso_insumos():
-    import pandas as pd
-    import os
     import tkinter as tk
     from tkinter import ttk, messagebox
     from tkinter import ttk, PhotoImage
-    from openpyxl import load_workbook
-    from openpyxl.styles import Alignment, Border, Side, Font
-
-    # Función para aplicar formato a la tabla
-    def aplicar_formato_excel(archivo_excel, hoja):
-        wb = load_workbook(archivo_excel)
-        if hoja in wb.sheetnames:
-            ws = wb[hoja]
-
-            # Aplicar formato a los encabezados
-            font_bold = Font(bold=True)
-            alignment_center = Alignment(horizontal="center", vertical="center", wrap_text=True)
-            thin_border = Border(
-                left=Side(style="thin"),
-                right=Side(style="thin"),
-                top=Side(style="thin"),
-                bottom=Side(style="thin"),
-            )
-
-            for col in ws.iter_cols(min_row=1, max_row=1):  # Encabezados
-                for cell in col:
-                    cell.font = font_bold
-                    cell.alignment = alignment_center
-                    cell.border = thin_border
-
-            # Aplicar formato a las celdas de datos
-            for row in ws.iter_rows(min_row=2, max_row=ws.max_row, min_col=1, max_col=ws.max_column):
-                for cell in row:
-                    cell.alignment = alignment_center
-                    cell.border = thin_border
-
-            # Ajustar el ancho de las columnas
-            columnas_fijas = ["Saldo Anterior", "Entrada Nivel Superior", "Entregado", "No Entregado", "Reajuste", "Saldo Final"]
-            for col in ws.columns:
-                col_letter = col[0].column_letter  # Obtener la letra de la columna
-                if col[0].value in columnas_fijas:  # Si el título está en las columnas fijas
-                    ws.column_dimensions[col_letter].width = 20  # Ancho fijo
-                else:
-                    # Ajuste automático para las demás columnas
-                    max_length = 0
-                    for cell in col:
-                        try:
-                            if cell.value:  # Si la celda tiene un valor
-                                max_length = max(max_length, len(str(cell.value)))
-                        except:
-                            pass
-                    adjusted_width = max_length + 2  # Agregar un poco de espacio adicional
-                    ws.column_dimensions[col_letter].width = adjusted_width
-
-            # Eliminar cuadrícula de fondo
-            ws.sheet_view.showGridLines = False
-
-            wb.save(archivo_excel)
-        wb.close()
 
     # Función principal
     def gestionar_insumos():
-        # Nombre del archivo Excel
-        archivo_excel = "insumos_movimientos.xlsx"
-
-        # Verificar si el archivo ya existe
-        if not os.path.exists(archivo_excel):
-            # Crear un archivo inicial con una pestaña de insumos vacía
-            df_insumos = pd.DataFrame({"Insumo": []})  # Crear un DataFrame vacío para insumos
-            df_distritos = pd.DataFrame({"Distrito": []})  # Ejemplo de distritos
-            df_presentaciones = pd.DataFrame({"Presentación": []})  # Ejemplo de presentaciones
-            with pd.ExcelWriter(archivo_excel, engine="openpyxl") as writer:
-                df_insumos.to_excel(writer, sheet_name="Listado de Insumos", index=False)
-                df_distritos.to_excel(writer, sheet_name="Distritos", index=False)
-                df_presentaciones.to_excel(writer, sheet_name="Presentación", index=False)
-
-        # Verificar si las pestañas necesarias existen
-        try:
-            listado_insumos = pd.read_excel(archivo_excel, sheet_name="Listado de Insumos")
-        except ValueError:
-            listado_insumos = pd.DataFrame({"Insumo": []})
-
-        try:
-            distritos = pd.read_excel(archivo_excel, sheet_name="Distritos")
-        except ValueError:
-            distritos = pd.DataFrame({"Distrito": []})
-            
-        try:
-            presentaciones = pd.read_excel(archivo_excel, sheet_name="Distritos")
-        except ValueError:
-            presentaciones = pd.DataFrame({"Presentación": []})
 
         # Crear la ventana principal
         ventana = tk.Toplevel()
-        ventana.title("Gestión de Insumos")
-        ventana.geometry("700x950")
+        ventana.title("Ingreso de Insumos")
+        ventana.geometry("800x1000")
         ventana.resizable(False, False)
-
-        # Cargar los íconos
-        ventana.icono_agregar = PhotoImage(file="add.png")  # Ícono para "Agregar Nuevo Insumo"
-        ventana.icono_agregar_nuevo = PhotoImage(file="add_new.png")  # Ícono para "Agregar Nuevo Insumo"
-        ventana.icono_modificar = PhotoImage(file="edit.png")  # Ícono para "Modificar Movimiento"
-        ventana.icono_eliminar = PhotoImage(file="delete.png")  # Ícono para "Eliminar Movimiento"
-        ventana.icono_guardar = PhotoImage(file="save.png")  # Ícono para "Guardar Movimientos"
-        ventana.icono_guardar_otro = PhotoImage(file="save_other.png")  # Ícono para "Guardar Otros"
-        ventana.icono_agregar_otro = PhotoImage(file="add_other.png")  # Ícono para "Agregar Otros"
-        ventana.icono_editar_otro = PhotoImage(file="edit_other.png")  # Ícono para "Editar Otros"
+        
+        tk.Label(ventana, text="Ingreso de Insumos", font=("Arial", 14)).pack(pady=10)
         
         # Sección: Selección de distrito
         frame_distrito = tk.LabelFrame(ventana, text="Seleccionar Distrito", padx=10, pady=10)
@@ -118,7 +87,7 @@ def abrir_ingreso_insumos():
         tk.Label(frame_distrito, text="Selecciona un distrito:").pack(anchor="w")
         distrito_var = tk.StringVar()
         distrito_combobox = ttk.Combobox(frame_distrito, textvariable=distrito_var, state="readonly")
-        distrito_combobox["values"] = distritos["Distrito"].tolist()
+        cargar_datos_combobox(distrito_combobox, "Distritos")
         distrito_combobox.pack(fill="x", pady=5)
         
         # Sección: Selección de insumo
@@ -127,7 +96,7 @@ def abrir_ingreso_insumos():
         tk.Label(frame_insumo, text="Selecciona un insumo:").pack(anchor="w")
         insumo_var = tk.StringVar()
         insumo_combobox = ttk.Combobox(frame_insumo, textvariable=insumo_var, state="readonly")
-        insumo_combobox["values"] = listado_insumos["Insumo"].tolist()
+        cargar_datos_combobox(insumo_combobox, "ListadoInsumos")
         insumo_combobox.pack(fill="x", pady=5)
         
         # Botón para abrir la ventana emergente de agregar insumo
@@ -147,24 +116,22 @@ def abrir_ingreso_insumos():
                     messagebox.showerror("Error", "Debes ingresar un nombre para el insumo.")
                     return
 
-                if nuevo_insumo in listado_insumos["Insumo"].values:
+                # Verificar si el insumo ya existe en la base de datos
+                conexion = sqlite3.connect("insumos.db")
+                cursor = conexion.cursor()
+                cursor.execute("SELECT COUNT(*) FROM ListadoInsumos WHERE nombre = ?", (nuevo_insumo,))
+                if cursor.fetchone()[0] > 0:
                     messagebox.showerror("Error", "El insumo ya existe en el listado.")
+                    conexion.close()
                     return
 
-                # Agregar el nuevo insumo al listado
-                nuevo_insumo_df = pd.DataFrame({"Insumo": [nuevo_insumo]})
-                listado_insumos_actualizado = pd.concat([listado_insumos, nuevo_insumo_df], ignore_index=True)
-
-                # Ordenar el listado alfabéticamente
-                listado_insumos_actualizado = listado_insumos_actualizado.sort_values(by="Insumo").reset_index(drop=True)
-
-                # Guardar el listado actualizado en el archivo Excel
-                with pd.ExcelWriter(archivo_excel, engine="openpyxl", mode="a", if_sheet_exists="replace") as writer:
-                    listado_insumos_actualizado.to_excel(writer, sheet_name="Listado de Insumos", index=False)
-                    distritos.to_excel(writer, sheet_name="Distritos", index=False)
+                # Insertar el nuevo insumo en la base de datos
+                cursor.execute("INSERT INTO ListadoInsumos (nombre) VALUES (?)", (nuevo_insumo,))
+                conexion.commit()
+                conexion.close()
 
                 # Actualizar el combobox
-                insumo_combobox["values"] = listado_insumos_actualizado["Insumo"].tolist()
+                cargar_datos_combobox(insumo_combobox, "ListadoInsumos")
                 messagebox.showinfo("Éxito", "El insumo se ha agregado correctamente.")
                 nuevo_insumo_entry.delete(0, tk.END)
                 ventana_agregar.destroy()
@@ -172,17 +139,30 @@ def abrir_ingreso_insumos():
             tk.Button(
             ventana_agregar,
             text=" Guardar Insumo",  # Texto del botón
-            image=ventana.icono_guardar_otro,  # Ícono
+            image=iconos["icono_guardar_otro"],  # Ícono
             compound="left",  # Posición del texto (a la derecha del ícono)
             command=agregar_insumo,  # Acción al hacer clic
             bd=0,  # Sin bordes
             highlightthickness=0  # Sin borde de enfoque
             ).pack(pady=10)
+            
+            tk.Button(
+                ventana_agregar,
+                text="Cerrar",
+                image=iconos["icono_cerrar"],
+                compound="left",
+                command=ventana_agregar.destroy,
+                font=("Arial", 12),
+                padx=10,
+                pady=5,
+                bd=0,
+                highlightthickness=0
+            ).pack(pady=10)
 
         tk.Button(
         ventana,
         text=" Agregar Nuevo Insumo",  # Texto del botón
-        image=ventana.icono_agregar_nuevo,  # Ícono
+        image=iconos["icono_agregar_nuevo"],  # Ícono
         compound="left",  # Posición del texto (a la derecha del ícono)
         command=abrir_ventana_agregar_insumo,  # Acción al hacer clic
         bd=0,  # Sin bordes
@@ -192,19 +172,10 @@ def abrir_ingreso_insumos():
         # Sección: Selección de presentación
         frame_presentacion = tk.LabelFrame(ventana, text="Seleccionar Presentación", padx=10, pady=10)
         frame_presentacion.pack(fill="x", padx=10, pady=10)
-
-        # Leer el listado de presentaciones desde el archivo Excel
-        try:
-            presentaciones = pd.read_excel(archivo_excel, sheet_name="Presentaciones")
-        except ValueError:
-            # Si no existe la pestaña, crear un DataFrame vacío
-            presentaciones = pd.DataFrame({"Presentación": []})
-
-        # Crear el Combobox para seleccionar la presentación
         tk.Label(frame_presentacion, text="Selecciona una presentación:").pack(anchor="w")
         presentacion_var = tk.StringVar()
         presentacion_combobox = ttk.Combobox(frame_presentacion, textvariable=presentacion_var, state="readonly")
-        presentacion_combobox["values"] = presentaciones["Presentación"].tolist()
+        cargar_datos_combobox(presentacion_combobox, "Presentaciones")
         presentacion_combobox.pack(fill="x", pady=5)
 
         # Función para abrir la ventana emergente de agregar presentación
@@ -224,39 +195,54 @@ def abrir_ingreso_insumos():
                     messagebox.showerror("Error", "Debes ingresar un nombre para la presentación.")
                     return
 
-                if nueva_presentacion in presentaciones["Presentación"].values:
+                # Verificar si la presentación ya existe en la base de datos
+                conexion = sqlite3.connect("insumos.db")
+                cursor = conexion.cursor()
+                cursor.execute("SELECT COUNT(*) FROM Presentaciones WHERE nombre = ?", (nueva_presentacion,))
+                if cursor.fetchone()[0] > 0:
                     messagebox.showerror("Error", "La presentación ya existe en el listado.")
+                    conexion.close()
                     return
 
-                # Agregar la nueva presentación al listado
-                nueva_presentacion_df = pd.DataFrame({"Presentación": [nueva_presentacion]})
-                presentaciones_actualizadas = pd.concat([presentaciones, nueva_presentacion_df], ignore_index=True)
-
-                # Guardar el listado actualizado en el archivo Excel
-                with pd.ExcelWriter(archivo_excel, engine="openpyxl", mode="a", if_sheet_exists="replace") as writer:
-                    presentaciones_actualizadas.to_excel(writer, sheet_name="Presentaciones", index=False)
+                # Insertar la nueva presentación en la base de datos
+                cursor.execute("INSERT INTO Presentaciones (nombre) VALUES (?)", (nueva_presentacion,))
+                conexion.commit()
+                conexion.close()
 
                 # Actualizar el combobox
-                presentacion_combobox["values"] = presentaciones_actualizadas["Presentación"].tolist()
+                cargar_datos_combobox(presentacion_combobox, "Presentaciones")
                 messagebox.showinfo("Éxito", "La presentación se ha agregado correctamente.")
                 nueva_presentacion_entry.delete(0, tk.END)
                 ventana_agregar_presentacion.destroy()
 
             tk.Button(
-            ventana_agregar_presentacion,
-            text=" Guardar Presentación",  # Texto del botón
-            image=ventana.icono_guardar_otro,  # Ícono
-            compound="left",  # Posición del texto (a la derecha del ícono)
-            command=agregar_presentacion,  # Acción al hacer clic
-            bd=0,  # Sin bordes
-            highlightthickness=0  # Sin borde de enfoque
+                ventana_agregar_presentacion,
+                text=" Guardar Presentación",  # Texto del botón
+                image=iconos["icono_guardar_otro"],  # Ícono
+                compound="left",  # Posición del texto (a la derecha del ícono)
+                command=agregar_presentacion,  # Acción al hacer clic
+                bd=0,  # Sin bordes
+                highlightthickness=0  # Sin borde de enfoque
+            ).pack(pady=10)
+            
+            tk.Button(
+                ventana_agregar_presentacion,
+                text="Cerrar",
+                image=iconos["icono_cerrar"],
+                compound="left",
+                command=ventana_agregar_presentacion.destroy,
+                font=("Arial", 12),
+                padx=10,
+                pady=5,
+                bd=0,
+                highlightthickness=0
             ).pack(pady=10)  
 
         # Botón para abrir la ventana emergente de agregar presentación
         tk.Button(
         ventana,
         text=" Agregar Nueva Presentación",  # Texto del botón
-        image=ventana.icono_agregar_otro,  # Ícono
+        image=iconos["icono_agregar_otro"],  # Ícono
         compound="left",  # Posición del texto (a la derecha del ícono)
         command=abrir_ventana_agregar_presentacion,  # Acción al hacer clic
         bd=0,  # Sin bordes
@@ -327,9 +313,9 @@ def abrir_ingreso_insumos():
         tk.Button(
             frame_botones,
             text=" Modificar Movimiento",  # Texto del botón
-            image=ventana.icono_modificar,  # Ícono
+            image=iconos["icono_modificar"],  # Ícono
             compound="left",  # Posición del texto (a la derecha del ícono)
-            command=lambda: modificar_movimiento(tree, listado_insumos),
+            command=lambda: modificar_movimiento(tree),
             bd=0,  # Sin bordes
             highlightthickness=0  # Sin borde de enfoque
         ).pack(side="left", padx=5)
@@ -338,7 +324,7 @@ def abrir_ingreso_insumos():
         tk.Button(
             frame_botones,
             text=" Eliminar Movimiento",  # Texto del botón
-            image=ventana.icono_eliminar,  # Ícono
+            image=iconos["icono_eliminar"],  # Ícono
             compound="left",  # Posición del texto (a la derecha del ícono)
             command=lambda: eliminar_movimiento(tree),
             bd=0,  # Sin bordes
@@ -349,9 +335,9 @@ def abrir_ingreso_insumos():
         tk.Button(
             frame_botones,
             text=" Guardar Movimientos",  # Texto del botón
-            image=ventana.icono_guardar,  # Ícono
+            image=iconos["icono_guardar"],  # Ícono
             compound="left",  # Posición del texto (a la derecha del ícono)
-            command=lambda: guardar_movimientos(tree, distrito_var, archivo_excel),
+            command=lambda: guardar_movimientos(tree, distrito_var),
             bd=0,  # Sin bordes
             highlightthickness=0  # Sin borde de enfoque
         ).pack(side="left", padx=5)
@@ -392,41 +378,51 @@ def abrir_ingreso_insumos():
                 messagebox.showerror("Error", "Todos los campos deben contener valores numéricos válidos.")
 
         # Función para modificar un movimiento seleccionado
-        def modificar_movimiento(tree, listado_insumos):
+        def modificar_movimiento(tree):
+            # Verificar si hay movimientos en el Treeview
+            if not tree.get_children():
+                messagebox.showerror("Error", "No hay movimientos para modificar.")
+                return
+
+            # Verificar si se ha seleccionado un movimiento
             seleccion = tree.selection()
             if not seleccion:
                 messagebox.showerror("Error", "Debes seleccionar un movimiento para modificar.")
                 return
 
+            # Obtener el elemento seleccionado
             item = seleccion[0]
             valores = tree.item(item, "values")
 
             # Crear ventana emergente para modificar el movimiento
-            ventana_modificar = tk.Toplevel(ventana)
+            ventana_modificar = tk.Toplevel()
             ventana_modificar.title("Modificar Movimiento")
             ventana_modificar.geometry("400x600")
             ventana_modificar.resizable(False, False)
-            
-            # Leer el listado de presentaciones desde el archivo Excel
-            try:
-                presentaciones = pd.read_excel(archivo_excel, sheet_name="Presentaciones")
-            except ValueError:
-                presentaciones = pd.DataFrame({"Presentación": []})
 
+            # Obtener insumos y presentaciones desde SQLite
+            conexion = sqlite3.connect("insumos.db")
+            cursor = conexion.cursor()
+            cursor.execute("SELECT nombre FROM ListadoInsumos")
+            insumos = [fila[0] for fila in cursor.fetchall()]
+            cursor.execute("SELECT nombre FROM Presentaciones")
+            presentaciones = [fila[0] for fila in cursor.fetchall()]
+            conexion.close()
+
+            # Crear entradas para modificar los valores
             entradas_modificar = {}
             for i, col in enumerate(tree["columns"]):
                 if col == "Insumo":
                     tk.Label(ventana_modificar, text=col).pack(anchor="w", padx=10, pady=5)
                     insumo_modificar_combobox = ttk.Combobox(ventana_modificar, state="readonly")
-                    insumo_modificar_combobox["values"] = listado_insumos["Insumo"].tolist()
+                    insumo_modificar_combobox["values"] = insumos
                     insumo_modificar_combobox.set(valores[i])
                     insumo_modificar_combobox.pack(fill="x", padx=10, pady=5)
                     entradas_modificar[col] = insumo_modificar_combobox
                 elif col == "Presentación":
-                    # Combobox para seleccionar una presentación
                     tk.Label(ventana_modificar, text=col).pack(anchor="w", padx=10, pady=5)
                     presentacion_modificar_combobox = ttk.Combobox(ventana_modificar, state="readonly")
-                    presentacion_modificar_combobox["values"] = presentaciones["Presentación"].tolist()
+                    presentacion_modificar_combobox["values"] = presentaciones
                     presentacion_modificar_combobox.set(valores[i])
                     presentacion_modificar_combobox.pack(fill="x", padx=10, pady=5)
                     entradas_modificar[col] = presentacion_modificar_combobox
@@ -437,20 +433,37 @@ def abrir_ingreso_insumos():
                     entrada.pack(fill="x", padx=10, pady=5)
                     entradas_modificar[col] = entrada
 
+            # Función para guardar los cambios
             def guardar_cambios():
-                nuevos_valores = [entrada.get() if isinstance(entrada, tk.Entry) else entrada.get() for entrada in entradas_modificar.values()]
+                nuevos_valores = [
+                    entrada.get() if isinstance(entrada, tk.Entry) else entrada.get()
+                    for entrada in entradas_modificar.values()
+                ]
                 tree.item(item, values=nuevos_valores)
                 ventana_modificar.destroy()
-                
+
+            # Botón para guardar los cambios
+            tk.Button(
+                ventana_modificar,
+                text=" Guardar Cambios",
+                image=iconos.get("icono_editar_otro"),  # Verificar si el ícono existe
+                compound="left",
+                command=guardar_cambios,
+                bd=0,
+                highlightthickness=0
+            ).pack(pady=10)
             
             tk.Button(
-            ventana_modificar,
-            text=" Guardar Cambios",  # Texto del botón
-            image=ventana.icono_editar_otro,  # Ícono
-            compound="left",  # Posición del texto (a la derecha del ícono)
-            command=guardar_cambios,  # Acción al hacer clic
-            bd=0,  # Sin bordes
-            highlightthickness=0  # Sin borde de enfoque
+                ventana_modificar,
+                text="Cerrar",
+                image=iconos["icono_cerrar"],
+                compound="left",
+                command=ventana_modificar.destroy,
+                font=("Arial", 12),
+                padx=10,
+                pady=5,
+                bd=0,
+                highlightthickness=0
             ).pack(pady=10)
 
         # Función para eliminar un movimiento seleccionado
@@ -465,7 +478,7 @@ def abrir_ingreso_insumos():
                 tree.delete(seleccion[0])
 
         # Función para guardar los movimientos en el archivo Excel
-        def guardar_movimientos(tree, distrito_var, archivo_excel):
+        def guardar_movimientos(tree, distrito_var):
             distrito_seleccionado = distrito_var.get()
             if not distrito_seleccionado:
                 messagebox.showerror("Error", "Debes seleccionar un distrito.")
@@ -477,26 +490,55 @@ def abrir_ingreso_insumos():
                 messagebox.showerror("Error", "No hay movimientos para guardar.")
                 return
 
-            # Crear un DataFrame con los movimientos
-            columnas = ["Insumo", "Presentación", "Saldo Anterior", "Entrada Nivel Superior", "Entregado", "No Entregado", "Reajuste", "Saldo Final"]
-            df_movimientos = pd.DataFrame(movimientos, columns=columnas)
+            # Guardar los movimientos en la base de datos
+            conexion = sqlite3.connect("insumos.db")
+            cursor = conexion.cursor()
 
-            # Guardar en el archivo Excel
-            try:
-                with pd.ExcelWriter(archivo_excel, engine="openpyxl", mode="a", if_sheet_exists="overlay") as writer:
-                    df_movimientos.to_excel(writer, sheet_name=distrito_seleccionado, index=False)
+            # Crear una tabla para movimientos si no existe
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS Movimientos (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    distrito TEXT NOT NULL,
+                    insumo TEXT NOT NULL,
+                    presentacion TEXT NOT NULL,
+                    saldo_anterior REAL,
+                    entrada_nivel_superior REAL,
+                    entregado REAL,
+                    no_entregado REAL,
+                    reajuste REAL,
+                    saldo_final REAL
+                )
+            """)
 
-                aplicar_formato_excel(archivo_excel, distrito_seleccionado)
-                messagebox.showinfo("Éxito", f"Los movimientos se han guardado en el distrito '{distrito_seleccionado}'.")
-                tree.delete(*tree.get_children())  # Limpiar el Treeview después de guardar
-            except Exception as e:
-                messagebox.showerror("Error", f"No se pudo guardar: {e}")
+            # Insertar los movimientos en la tabla, evitando duplicados
+            for movimiento in movimientos:
+                cursor.execute("""
+                    SELECT COUNT(*) FROM Movimientos
+                    WHERE distrito = ? AND insumo = ? AND presentacion = ?
+                """, (distrito_seleccionado, movimiento[0], movimiento[1]))
+                if cursor.fetchone()[0] > 0:
+                    messagebox.showwarning("Advertencia", f"El movimiento con insumo '{movimiento[0]}' y presentación '{movimiento[1]}' ya existe.")
+                    continue
+
+                cursor.execute("""
+                    INSERT INTO Movimientos (
+                        distrito, insumo, presentacion, saldo_anterior, entrada_nivel_superior,
+                        entregado, no_entregado, reajuste, saldo_final
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """, (distrito_seleccionado, *movimiento))
+
+            conexion.commit()
+            conexion.close()
+
+            # Limpiar el Treeview después de guardar
+            tree.delete(*tree.get_children())
+            messagebox.showinfo("Éxito", f"Los movimientos se han guardado en el distrito '{distrito_seleccionado}'.")
 
         # Botón para agregar
         boton_agregar = tk.Button(
             frame_movimiento,
             text=" Agregar Movimiento",  # Texto del botón
-            image=ventana.icono_agregar,  # Ícono
+            image=iconos["icono_agregar"],  # Ícono
             compound="left",  # Posición del texto (a la derecha del ícono)
             command=agregar_movimiento,  # Acción al hacer clic
             bd=0,  # Sin bordes
@@ -512,46 +554,335 @@ def abrir_ingreso_insumos():
     
     pass
 
+import pandas as pd
+from tkinter import filedialog, messagebox
 # Función para abrir la ventana de "Gestión de Insumos"
 def abrir_gestion_insumos():
     ventana_gestion_insumos = tk.Toplevel()
     ventana_gestion_insumos.title("Gestión de Insumos")
-    ventana_gestion_insumos.geometry("600x400")
+    ventana_gestion_insumos.geometry("400x300")
     ventana_gestion_insumos.resizable(False, False)
 
-    tk.Label(ventana_gestion_insumos, text="Gestión de Insumos", font=("Arial", 16)).pack(pady=20)
-    tk.Label(ventana_gestion_insumos, text="Aquí puedes implementar la lógica para gestionar insumos.").pack(pady=10)
+    tk.Label(ventana_gestion_insumos, text="Gestión de Insumos", font=("Arial", 14)).pack(pady=10)
+    
+    frame_gestion_insumos = tk.LabelFrame(ventana_gestion_insumos, text="Gestion de Insumos", padx=5, pady=5, font=("Arial", 10))
+    frame_gestion_insumos.pack(fill="x", padx=10, pady=10)
+    
+    # Función genérica para cargar datos desde un archivo de Excel
+    def cargar_datos_desde_excel(tabla, columna_esperada):
+        archivo = filedialog.askopenfilename(
+            title="Seleccionar archivo de Excel",
+            filetypes=[("Archivos de Excel", "*.xlsx *.xls")]
+        )
+        if not archivo:
+            return  # Si no se selecciona un archivo, salir de la función
+
+        try:
+            # Leer el archivo de Excel
+            df = pd.read_excel(archivo)
+
+            # Verificar que la columna esperada exista
+            if columna_esperada not in df.columns:
+                messagebox.showerror("Error", f"El archivo debe contener una columna llamada '{columna_esperada}'.")
+                return
+
+            # Conectar a la base de datos
+            conexion = sqlite3.connect("insumos.db")
+            cursor = conexion.cursor()
+
+            # Insertar los datos en la base de datos, evitando duplicados
+            for dato in df[columna_esperada]:
+                dato = str(dato).strip()  # Limpiar espacios en blanco
+                if dato:  # Verificar que no esté vacío
+                    cursor.execute(f"SELECT COUNT(*) FROM {tabla} WHERE nombre = ?", (dato,))
+                    if cursor.fetchone()[0] == 0:  # Si no existe, insertarlo
+                        cursor.execute(f"INSERT INTO {tabla} (nombre) VALUES (?)", (dato,))
+
+            conexion.commit()
+            conexion.close()
+
+            messagebox.showinfo("Éxito", f"Los datos se han cargado correctamente desde el archivo.")
+        except Exception as e:
+            messagebox.showerror("Error", f"Hubo un problema al cargar el archivo: {e}")
+
+    # Botón para cargar listado de insumos    
+    tk.Button(
+        frame_gestion_insumos,
+        text="Cargar Listado de Insumos",  # Texto del botón
+        image=iconos["icono_subir1"],  # Ícono
+        compound="left",  # Posición del texto (a la derecha del ícono)
+        font=("Arial", 12),  # Fuente del texto
+        command=lambda: cargar_datos_desde_excel("ListadoInsumos", "Insumo"),  # Acción al hacer clic
+        padx=10,  # Espaciado horizontal entre ícono y texto
+        pady=5,  # Espaciado vertical
+        bd=0,  # Sin bordes
+        highlightthickness=0  # Sin borde de enfoque
+    ).pack(pady=5)
+
+    # Botón para cargar listado de presentaciones    
+    tk.Button(
+        frame_gestion_insumos,
+        text="Cargar Listado de Presentaciones",  # Texto del botón
+        image=iconos["icono_subir2"],  # Ícono
+        compound="left",  # Posición del texto (a la derecha del ícono)
+        font=("Arial", 12),  # Fuente del texto
+        command=lambda: cargar_datos_desde_excel("Presentaciones", "Presentación"),  # Acción al hacer clic
+        padx=10,  # Espaciado horizontal entre ícono y texto
+        pady=5,  # Espaciado vertical
+        bd=0,  # Sin bordes
+        highlightthickness=0  # Sin borde de enfoque
+    ).pack(pady=5)
 
     # Ejemplo de botón para cerrar la ventana
-    tk.Button(ventana_gestion_insumos, text="Cerrar", command=ventana_gestion_insumos.destroy).pack(pady=20)
-
+    tk.Button(
+        frame_gestion_insumos,
+       text="Cerrar",
+        image=iconos["icono_cerrar"],
+        compound="left",
+        command=ventana_gestion_insumos.destroy,
+        font=("Arial", 12),
+        padx=10,
+        pady=5,
+        bd=0,
+        highlightthickness=0
+    ).pack(pady=20)
+    
 # Función para abrir la ventana de "Gestión de Servicios"
 def abrir_gestion_servicios():
     ventana_gestion_servicios = tk.Toplevel()
     ventana_gestion_servicios.title("Gestión de Servicios")
-    ventana_gestion_servicios.geometry("600x400")
+    ventana_gestion_servicios.geometry("400x300")
     ventana_gestion_servicios.resizable(False, False)
 
-    tk.Label(ventana_gestion_servicios, text="Gestión de Servicios", font=("Arial", 16)).pack(pady=20)
-    tk.Label(ventana_gestion_servicios, text="Aquí puedes implementar la lógica para gestionar servicios.").pack(pady=10)
+    tk.Label(ventana_gestion_servicios, text="Gestión de Servicios", font=("Arial", 14)).pack(pady=10)
+    
+    frame_gestion_servicios = tk.LabelFrame(ventana_gestion_servicios, text="Gestion de Servicios", padx=5, pady=5, font=("Arial", 10))
+    frame_gestion_servicios.pack(fill="x", padx=10, pady=10)
+    
+    # Función para cargar distritos desde un archivo de Excel
+    def cargar_distritos_desde_excel():
+        archivo = filedialog.askopenfilename(
+            title="Seleccionar archivo de Excel",
+            filetypes=[("Archivos de Excel", "*.xlsx *.xls")]
+        )
+        if not archivo:
+            return  # Si no se selecciona un archivo, salir de la función
+
+        try:
+            # Leer el archivo de Excel
+            df = pd.read_excel(archivo)
+
+            # Verificar que la columna "Distrito" exista
+            if "Distrito" not in df.columns:
+                messagebox.showerror("Error", "El archivo debe contener una columna llamada 'Distrito'.")
+                return
+
+            # Conectar a la base de datos
+            conexion = sqlite3.connect("insumos.db")
+            cursor = conexion.cursor()
+
+            # Insertar los distritos en la base de datos, evitando duplicados
+            for distrito in df["Distrito"]:
+                distrito = str(distrito).strip()  # Limpiar espacios en blanco
+                if distrito:  # Verificar que no esté vacío
+                    cursor.execute("SELECT COUNT(*) FROM Distritos WHERE nombre = ?", (distrito,))
+                    if cursor.fetchone()[0] == 0:  # Si no existe, insertarlo
+                        cursor.execute("INSERT INTO Distritos (nombre) VALUES (?)", (distrito,))
+
+            conexion.commit()
+            conexion.close()
+
+            messagebox.showinfo("Éxito", "Los distritos se han cargado correctamente desde el archivo.")
+        except Exception as e:
+            messagebox.showerror("Error", f"Hubo un problema al cargar el archivo: {e}")
+
+    # Botón para cargar listado de distritos   
+    tk.Button(
+        frame_gestion_servicios,
+        text="Cargar Listado de Distritos",  # Texto del botón
+        image=iconos["icono_subir1"],  # Ícono
+        compound="left",  # Posición del texto (a la derecha del ícono)
+        font=("Arial", 12),  # Fuente del texto
+        command=cargar_distritos_desde_excel,  # Acción al hacer clic
+        padx=10,  # Espaciado horizontal entre ícono y texto
+        pady=5,  # Espaciado vertical
+        bd=0,  # Sin bordes
+        highlightthickness=0  # Sin borde de enfoque
+    ).pack(pady=5)
 
     # Ejemplo de botón para cerrar la ventana
-    tk.Button(ventana_gestion_servicios, text="Cerrar", command=ventana_gestion_servicios.destroy).pack(pady=20)
+    tk.Button(
+        frame_gestion_servicios,
+        text="Cerrar",
+        image=iconos["icono_cerrar"],
+        compound="left",
+        command=ventana_gestion_servicios.destroy,
+        font=("Arial", 12),
+        padx=10,
+        pady=5,
+        bd=0,
+        highlightthickness=0
+    ).pack(pady=20)
+
+import pandas as pd
+from openpyxl import Workbook
+from openpyxl.styles import Font, Alignment, Border, Side
+from openpyxl.utils import get_column_letter
+
+def abrir_reportes():
+    ventana_reportes = tk.Toplevel()
+    ventana_reportes.title("Reportes")
+    ventana_reportes.geometry("400x300")
+    ventana_reportes.resizable(False, False)
+
+    tk.Label(ventana_reportes, text="Generar Reporte de Movimientos", font=("Arial", 14)).pack(pady=10)
+    
+    frame_reportes = tk.LabelFrame(ventana_reportes, text="Generar Reporte", padx=5, pady=5, font=("Arial", 10))
+    frame_reportes.pack(fill="x", padx=10, pady=10)
+    
+    # Combobox para seleccionar el distrito
+    tk.Label(frame_reportes, text="Selecciona un distrito:").pack(anchor="w", padx=10, pady=5)
+    distrito_var = tk.StringVar()
+    distrito_combobox = ttk.Combobox(frame_reportes, textvariable=distrito_var, state="readonly")
+    cargar_datos_combobox(distrito_combobox, "Distritos")
+    distrito_combobox.pack(fill="x", padx=10, pady=5)
+
+    # Función para generar el reporte en Excel
+    def generar_reporte():
+        distrito_seleccionado = distrito_var.get()
+        if not distrito_seleccionado:
+            messagebox.showerror("Error", "Debes seleccionar un distrito.")
+            return
+
+        # Conectar a la base de datos y obtener los movimientos del distrito seleccionado
+        conexion = sqlite3.connect("insumos.db")
+        cursor = conexion.cursor()
+        cursor.execute("""
+            SELECT insumo, presentacion, saldo_anterior, entrada_nivel_superior, entregado,
+                   no_entregado, reajuste, saldo_final
+            FROM Movimientos
+            WHERE distrito = ?
+        """, (distrito_seleccionado,))
+        movimientos = cursor.fetchall()
+        conexion.close()
+
+        if not movimientos:
+            messagebox.showerror("Error", f"No hay movimientos registrados para el distrito '{distrito_seleccionado}'.")
+            return
+
+        # Crear un DataFrame con los datos
+        columnas = ["Insumo", "Presentación", "Saldo Anterior", "Entrada Nivel Superior",
+                    "Entregado", "No Entregado", "Reajuste", "Saldo Final"]
+        df = pd.DataFrame(movimientos, columns=columnas)
+
+        # Crear un archivo de Excel
+        archivo_excel = f"Reporte_{distrito_seleccionado}.xlsx"
+        with pd.ExcelWriter(archivo_excel, engine="openpyxl") as writer:
+            df.to_excel(writer, index=False, sheet_name=distrito_seleccionado)
+
+            # Obtener la hoja de trabajo
+            workbook = writer.book
+            worksheet = writer.sheets[distrito_seleccionado]
+
+            # Ocultar las líneas de cuadrícula
+            worksheet.sheet_view.showGridLines = False
+
+            # Aplicar formato a los encabezados
+            header_font = Font(bold=True)
+            thin_border = Border(
+                left=Side(style="thin"),
+                right=Side(style="thin"),
+                top=Side(style="thin"),
+                bottom=Side(style="thin")
+            )
+            for col_num, column_title in enumerate(df.columns, 1):
+                cell = worksheet.cell(row=1, column=col_num)
+                cell.font = header_font
+                cell.alignment = Alignment(horizontal="center", vertical="center")
+                cell.border = thin_border
+
+            # Ajustar el ancho de las columnas
+            for col_num, column_title in enumerate(df.columns, 1):
+                max_length = max(
+                    len(str(column_title)),  # Longitud del encabezado
+                    *(len(str(value)) for value in df[column_title])  # Longitud de los valores
+                )
+                worksheet.column_dimensions[get_column_letter(col_num)].width = max_length + 2
+
+            # Aplicar bordes a las celdas
+            for row in worksheet.iter_rows(min_row=2, max_row=worksheet.max_row,
+                                           min_col=1, max_col=worksheet.max_column):
+                for cell in row:
+                    cell.border = thin_border
+
+        messagebox.showinfo("Éxito", f"El reporte se ha generado correctamente: {archivo_excel}")
+    
+    # Botón para generar el reporte    
+    tk.Button(
+        frame_reportes,
+        text="Generar Reporte",  # Texto del botón
+        image=iconos["icono_reporte_excel"],  # Ícono
+        compound="left",  # Posición del texto (a la derecha del ícono)
+        font=("Arial", 12),  # Fuente del texto
+        command=generar_reporte,  # Acción al hacer clic
+        padx=10,  # Espaciado horizontal entre ícono y texto
+        pady=5,  # Espaciado vertical
+        bd=0,  # Sin bordes
+        highlightthickness=0  # Sin borde de enfoque
+    ).pack(pady=5)
+
+    # Botón para cerrar la ventana
+    tk.Button(
+        frame_reportes,
+        text="Cerrar",
+        image=iconos["icono_cerrar"],
+        compound="left",
+        command=ventana_reportes.destroy,
+        font=("Arial", 12),
+        padx=10,
+        pady=5,
+        bd=0,
+        highlightthickness=0
+    ).pack(pady=10)
 
 # Ventana principal
 def ventana_principal():
     ventana = tk.Tk()
     ventana.title("Menú Principal")
-    ventana.geometry("400x600")
+    ventana.geometry("400x700")
     ventana.resizable(False, False)
     
-    # Cargar los íconos
-    icono_ingreso_insumos = PhotoImage(file="icon_ingreso_insumos.png")  # Ícono para "Ingreso de Insumos"
-    icono_gestion_insumos = PhotoImage(file="icon_gestion_insumos.png")  # Ícono para "Gestión de Insumos"
-    icono_gestion_servicios = PhotoImage(file="icon_gestion_servicios.png")  # Ícono para "Gestión de Servicios"
+    # Cargar los íconos como variables globales
+
+    def cargar_icono(ruta):
+        if os.path.exists(ruta):
+            return PhotoImage(file=ruta)
+        else:
+            print(f"Advertencia: El archivo {ruta} no existe.")
+            return None  # O un ícono predeterminado
+    
+    global iconos
+    iconos = {
+        "icono_ingreso_insumos": PhotoImage(file="icon_ingreso_insumos.png"),
+        "icono_gestion_insumos": PhotoImage(file="icon_gestion_insumos.png"),
+        "icono_gestion_servicios": PhotoImage(file="icon_gestion_servicios.png"),
+        "icono_reporte": PhotoImage(file="report.png"),
+        "icono_agregar": PhotoImage(file="add.png"),
+        "icono_agregar_nuevo": PhotoImage(file="add_new.png"),
+        "icono_modificar": PhotoImage(file="edit.png"),
+        "icono_eliminar": PhotoImage(file="delete.png"),
+        "icono_guardar": PhotoImage(file="save.png"),
+        "icono_guardar_otro": PhotoImage(file="save_other.png"),
+        "icono_agregar_otro": PhotoImage(file="add_other.png"),
+        "icono_editar_otro": PhotoImage(file="edit_other.png"),
+        "icono_reporte_excel": PhotoImage(file="excel.png"),
+        "icono_cerrar": PhotoImage(file="exit.png"),
+        "icono_subir1": PhotoImage(file="up_1.png"),
+        "icono_subir2": PhotoImage(file="up_2.png")
+    }
 
     # Título
-    tk.Label(ventana, text="Menú Principal", font=("Arial", 16)).pack(pady=20)
+    tk.Label(ventana, text="Menú Principal", font=("Arial", 14)).pack(pady=10)
 
     # Sección 1: Ingreso de Insumos
     frame_insumos = tk.LabelFrame(ventana, text="Ingreso de Insumos", padx=5, pady=5, font=("Arial", 10))
@@ -560,7 +891,7 @@ def ventana_principal():
     boton_insumos = tk.Button(
         frame_insumos,
         text="Ingreso de Insumos",  # Texto del botón
-        image=icono_ingreso_insumos,  # Ícono
+        image=iconos["icono_ingreso_insumos"],  # Ícono
         compound="left",  # Posición del texto (a la derecha del ícono)
         font=("Arial", 14),  # Fuente del texto
         command=abrir_ingreso_insumos,  # Acción al hacer clic
@@ -578,7 +909,7 @@ def ventana_principal():
     boton_gestion = tk.Button(
         frame_gestion,
         text="Gestión de Insumos",  # Texto del botón
-        image=icono_gestion_insumos,  # Ícono
+        image=iconos["icono_gestion_insumos"],  # Ícono
         compound="left",  # Posición del texto (a la derecha del ícono)
         font=("Arial", 14),  # Fuente del texto
         command=abrir_gestion_insumos,  # Acción al hacer clic
@@ -596,7 +927,7 @@ def ventana_principal():
     boton_servicios = tk.Button(
         frame_servicios,
         text="Gestión de Servicios",  # Texto del botón
-        image=icono_gestion_servicios,  # Ícono
+        image=iconos["icono_gestion_servicios"],  # Ícono
         compound="left",  # Posición del texto (a la derecha del ícono)
         font=("Arial", 14),  # Fuente del texto
         command=abrir_gestion_servicios,  # Acción al hacer clic
@@ -606,9 +937,28 @@ def ventana_principal():
         highlightthickness=0  # Sin borde de enfoque
     )
     boton_servicios.pack(pady=5)
+    
+    # Botón para abrir la sección de reportes
+    frame_reportes = tk.LabelFrame(ventana, text="Reportes de Movimientos", padx=5, pady=5, font=("Arial", 10))
+    frame_reportes.pack(fill="x", padx=10, pady=10)
+    
+    boton_reportes = tk.Button(
+        frame_reportes,
+        text="Reportes de Movimientos",  # Texto del botón
+        image=iconos["icono_reporte"],  # Puedes agregar un ícono si lo deseas
+        compound="left",  # Posición del texto (a la derecha del ícono)
+        font=("Arial", 14),  # Fuente del texto
+        command=abrir_reportes,  # Acción al hacer clic
+        padx=10,  # Espaciado horizontal entre ícono y texto
+        pady=5,  # Espaciado vertical
+        bd=0,  # Sin bordes
+        highlightthickness=0  # Sin borde de enfoque
+    )
+    boton_reportes.pack(pady=5)
 
     # Ejecutar la ventana principal
     ventana.mainloop()
 
+inicializar_base_datos()
 # Ejecutar el programa
 ventana_principal()
