@@ -152,7 +152,6 @@ def abrir_ingreso_insumos():
                 image=iconos["icono_cerrar"],
                 compound="left",
                 command=ventana_agregar.destroy,
-                font=("Arial", 12),
                 padx=10,
                 pady=5,
                 bd=0,
@@ -231,7 +230,6 @@ def abrir_ingreso_insumos():
                 image=iconos["icono_cerrar"],
                 compound="left",
                 command=ventana_agregar_presentacion.destroy,
-                font=("Arial", 12),
                 padx=10,
                 pady=5,
                 bd=0,
@@ -459,7 +457,6 @@ def abrir_ingreso_insumos():
                 image=iconos["icono_cerrar"],
                 compound="left",
                 command=ventana_modificar.destroy,
-                font=("Arial", 12),
                 padx=10,
                 pady=5,
                 bd=0,
@@ -735,7 +732,7 @@ def abrir_reportes():
     ventana_reportes.geometry("400x300")
     ventana_reportes.resizable(False, False)
 
-    tk.Label(ventana_reportes, text="Generar Reporte de Movimientos", font=("Arial", 14)).pack(pady=10)
+    tk.Label(ventana_reportes, text="Reporte de Movimientos", font=("Arial", 14)).pack(pady=10)
     
     frame_reportes = tk.LabelFrame(ventana_reportes, text="Generar Reporte", padx=5, pady=5, font=("Arial", 10))
     frame_reportes.pack(fill="x", padx=10, pady=10)
