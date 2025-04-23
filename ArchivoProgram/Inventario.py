@@ -96,7 +96,7 @@ def abrir_ingreso_insumos(ventana_principal):
         ventana = tk.Toplevel()
         ventana.title("Ingreso de Insumos")
         ventana.geometry("1300x600")
-        ventana.resizable(False, False)
+        ventana.resizable(True, True)
         centrar_ventana(ventana)
         
         def on_closing():
@@ -112,16 +112,23 @@ def abrir_ingreso_insumos(ventana_principal):
         frame_principal.pack(fill="both", expand=True, padx=10, pady=10)
 
         # Configurar las columnas del frame principal
-        frame_principal.grid_columnconfigure(0, weight=1)  # Columna izquierda
-        frame_principal.grid_columnconfigure(1, weight=1)  # Columna derecha
+        frame_principal.grid_columnconfigure(0, weight=85)  # Columna izquierda
+        frame_principal.grid_columnconfigure(1, weight=15)  # Columna derecha
+        frame_principal.grid_rowconfigure(0, weight=1)  # Primera fila
+        frame_principal.grid_rowconfigure(1, weight=1)  # Segunda fila
+        frame_principal.grid_rowconfigure(2, weight=1)  # Tercera fila
 
         # Frame Información Servicios (columna izquierda)
         frame_seleccion = tk.LabelFrame(frame_principal, text="Información Servicios", padx=10, pady=10)
         frame_seleccion.grid(row=0, column=0, sticky="nsew", padx=5, pady=5)
+        frame_seleccion.grid_columnconfigure(0, weight=1)
+        frame_seleccion.grid_columnconfigure(1, weight=1)
 
         # Frame Información Insumos (columna izquierda)
         frame_seleccion1 = tk.LabelFrame(frame_principal, text="Información Insumos", padx=10, pady=10)
         frame_seleccion1.grid(row=1, column=0, sticky="nsew", padx=5, pady=5)
+        frame_seleccion1.grid_columnconfigure(0, weight=1)
+        frame_seleccion1.grid_columnconfigure(1, weight=1)
 
         # Variables para los combobox
         distrito_var = tk.StringVar()
@@ -175,12 +182,14 @@ def abrir_ingreso_insumos(ventana_principal):
             entradas[campo] = entrada
 
         # Ajustar las columnas para que se expandan uniformemente
-        for col in range(3):
-            frame_movimiento.columnconfigure(col, weight=1)
+        for i in range(3):
+            frame_movimiento.grid_columnconfigure(i, weight=1)
 
         # Frame contenedor para Treeview y botones (columna derecha)
         frame_derecho = tk.Frame(frame_principal)
         frame_derecho.grid(row=0, column=1, rowspan=3, sticky="nsew", padx=5, pady=5)
+        frame_derecho.grid_columnconfigure(0, weight=1)
+        frame_derecho.grid_rowconfigure(0, weight=1)
 
         # Frame para el Treeview
         frame_tabla = tk.LabelFrame(frame_derecho, text="Movimientos", padx=10, pady=10)
