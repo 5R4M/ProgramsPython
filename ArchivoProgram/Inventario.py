@@ -4,6 +4,15 @@ from tkinter import PhotoImage
 import sqlite3
 import os
 
+def centrar_ventana(ventana):
+    """Centra una ventana en la pantalla."""
+    ventana.update_idletasks()
+    ancho = ventana.winfo_width()
+    alto = ventana.winfo_height()
+    x = (ventana.winfo_screenwidth() // 2) - (ancho // 2)
+    y = (ventana.winfo_screenheight() // 2) - (alto // 2)
+    ventana.geometry(f'{ancho}x{alto}+{x}+{y}')
+
 # Función para inicializar la base de datos SQLite
 def inicializar_base_datos():
     conexion = sqlite3.connect("insumos.db")
@@ -73,7 +82,10 @@ def cargar_datos_combobox(combobox, tabla):
     conexion.close()
 
 # Función para abrir la ventana de "Ingreso de Insumos"
-def abrir_ingreso_insumos():
+def abrir_ingreso_insumos(ventana_principal):
+    
+    ventana_principal.withdraw()  # Ocultar ventana principal
+    
     import tkinter as tk
     from tkinter import ttk, messagebox
 
@@ -83,17 +95,33 @@ def abrir_ingreso_insumos():
         # Crear la ventana principal
         ventana = tk.Toplevel()
         ventana.title("Ingreso de Insumos")
-        ventana.geometry("550x850")
+        ventana.geometry("1300x600")
         ventana.resizable(False, False)
+        centrar_ventana(ventana)
+        
+        def on_closing():
+            ventana.destroy()
+            ventana_principal.deiconify()  # Mostrar ventana principal
+
+        ventana.protocol("WM_DELETE_WINDOW", on_closing)
         
         tk.Label(ventana, text="Ingreso de Insumos", font=("Arial", 14)).pack(pady=10)
         
-        # Crear un marco para organizar los elementos en dos filas y dos columnas
-        frame_seleccion = tk.LabelFrame(ventana, text="Información Servicios", padx=10, pady=10)
-        frame_seleccion.pack(fill="x", padx=10, pady=10)
-        
-        frame_seleccion1 = tk.LabelFrame(ventana, text="Información Insumos", padx=10, pady=10)
-        frame_seleccion1.pack(fill="x", padx=10, pady=10)
+        # Crear frame contenedor principal que dividirá la ventana en dos columnas
+        frame_principal = tk.Frame(ventana)
+        frame_principal.pack(fill="both", expand=True, padx=10, pady=10)
+
+        # Configurar las columnas del frame principal
+        frame_principal.grid_columnconfigure(0, weight=1)  # Columna izquierda
+        frame_principal.grid_columnconfigure(1, weight=1)  # Columna derecha
+
+        # Frame Información Servicios (columna izquierda)
+        frame_seleccion = tk.LabelFrame(frame_principal, text="Información Servicios", padx=10, pady=10)
+        frame_seleccion.grid(row=0, column=0, sticky="nsew", padx=5, pady=5)
+
+        # Frame Información Insumos (columna izquierda)
+        frame_seleccion1 = tk.LabelFrame(frame_principal, text="Información Insumos", padx=10, pady=10)
+        frame_seleccion1.grid(row=1, column=0, sticky="nsew", padx=5, pady=5)
 
         # Variables para los combobox
         distrito_var = tk.StringVar()
@@ -130,10 +158,10 @@ def abrir_ingreso_insumos():
         def on_distrito_selected(event):
             cargar_servicios()      
         
-        # Sección: Formulario de movimiento
-        frame_movimiento = tk.LabelFrame(ventana, text="Registrar Movimiento", padx=10, pady=10)
-        frame_movimiento.pack(fill="x", padx=10, pady=10)
-
+        # Frame Registrar Movimiento (columna izquierda)
+        frame_movimiento = tk.LabelFrame(frame_principal, text="Registrar Movimiento", padx=10, pady=10)
+        frame_movimiento.grid(row=2, column=0, sticky="nsew", padx=5, pady=5)
+        
         entradas = {}
         campos = ["Saldo Anterior", "Entrada Nivel Superior", "Entregado", "No Entregado", "Reajuste"]
 
@@ -150,13 +178,17 @@ def abrir_ingreso_insumos():
         for col in range(3):
             frame_movimiento.columnconfigure(col, weight=1)
 
-        # Sección: DataGridView para movimientos temporales
-        frame_tabla = tk.LabelFrame(ventana, text="Movimientos", padx=10, pady=10)
-        frame_tabla.pack(fill="both", expand=False, padx=10, pady=10)
+        # Frame contenedor para Treeview y botones (columna derecha)
+        frame_derecho = tk.Frame(frame_principal)
+        frame_derecho.grid(row=0, column=1, rowspan=3, sticky="nsew", padx=5, pady=5)
 
-        # Crear un contenedor para el Treeview y las barras de desplazamiento
+        # Frame para el Treeview
+        frame_tabla = tk.LabelFrame(frame_derecho, text="Movimientos", padx=10, pady=10)
+        frame_tabla.pack(fill="both", expand=True)
+
+        # Frame para el Treeview y scrollbars
         frame_tree = tk.Frame(frame_tabla)
-        frame_tree.pack(fill="both", expand=False)
+        frame_tree.pack(fill="both", expand=True)
 
         # Crear el Treeview
         tree = ttk.Treeview(
@@ -164,7 +196,7 @@ def abrir_ingreso_insumos():
             columns=("Distrito", "Servicio", "Insumo", "Presentación", "Saldo Anterior",
                     "Entrada Nivel Superior", "Entregado", "No Entregado", "Reajuste", "Saldo Final"),
             show="headings",
-            height=5
+            height=15
         )
 
         # Configurar las columnas del Treeview
@@ -173,7 +205,7 @@ def abrir_ingreso_insumos():
 
         for col in columnas:
             tree.heading(col, text=col)  # Encabezado de la columna
-            tree.column(col, width=150, anchor="center")  # Ancho y alineación de la columna
+            tree.column(col, width=85, anchor="center")  # Ancho y alineación de la columna
 
         # Crear barra de desplazamiento vertical
         scrollbar_vertical = tk.Scrollbar(frame_tree, orient="vertical", command=tree.yview)
@@ -189,17 +221,17 @@ def abrir_ingreso_insumos():
         # Empaquetar el Treeview
         tree.pack(fill="both", expand=False)
 
-        # Sección: Botones debajo del Treeview
-        frame_botones = tk.Frame(ventana)
-        frame_botones.pack(fill="x", padx=10, pady=20)
-
+        # Frame para los botones debajo del Treeview
+        frame_botones = tk.Frame(frame_derecho)
+        frame_botones.pack(fill="x", pady=10)
+        
         # Botón "Modificar Movimiento" con ícono
         tk.Button(
             frame_botones,
             text=" Modificar Movimiento",  # Texto del botón
             image=iconos["icono_modificar"],  # Ícono
             compound="left",  # Posición del texto (a la derecha del ícono)
-            command=lambda: modificar_movimiento(tree),
+            command=lambda: modificar_movimiento(tree, ventana),
             bd=0,  # Sin bordes
             highlightthickness=0  # Sin borde de enfoque
         ).pack(side="left", padx=5)
@@ -224,6 +256,19 @@ def abrir_ingreso_insumos():
             command=lambda: guardar_movimientos(tree, distrito_var),
             bd=0,  # Sin bordes
             highlightthickness=0  # Sin borde de enfoque
+        ).pack(side="left", padx=5)
+        
+        # Botón "Cerrar" con ícono
+        tk.Button(
+            frame_botones,
+            text="Cerrar",
+            image=iconos["icono_cerrar"],
+            compound="left",
+            command=on_closing,
+            padx=10,
+            pady=5,
+            bd=0,
+            highlightthickness=0
         ).pack(side="left", padx=5)
         
        # Función para agregar un movimiento al Treeview
@@ -274,7 +319,7 @@ def abrir_ingreso_insumos():
                 messagebox.showerror("Error", f"Hubo un problema al agregar el movimiento: {e}")
 
         # Función para modificar un movimiento seleccionado
-        def modificar_movimiento(tree):
+        def modificar_movimiento(tree, ventana):
             # Verificar si hay movimientos en el Treeview
             if not tree.get_children():
                 messagebox.showerror("Error", "No hay movimientos para modificar.")
@@ -285,6 +330,8 @@ def abrir_ingreso_insumos():
             if not seleccion:
                 messagebox.showerror("Error", "Debes seleccionar un movimiento para modificar.")
                 return
+            
+            ventana.withdraw()  # Ocultar ventana padre
 
             # Obtener el elemento seleccionado
             item = seleccion[0]
@@ -295,6 +342,13 @@ def abrir_ingreso_insumos():
             ventana_modificar.title("Modificar Movimiento")
             ventana_modificar.geometry("600x550")
             ventana_modificar.resizable(False, False)
+            centrar_ventana(ventana_modificar)
+            
+            def on_closing():
+                ventana_modificar.destroy()
+                ventana.deiconify()  # Mostrar ventana padre
+
+            ventana_modificar.protocol("WM_DELETE_WINDOW", on_closing)
 
             # Variables para los combobox
             distrito_var = tk.StringVar(value=valores[0])  # Distrito actual
@@ -412,6 +466,48 @@ def abrir_ingreso_insumos():
             frame_datos_movimientos.columnconfigure(1, weight=1)
             frame_datos_movimientos.columnconfigure(2, weight=1)
             frame_datos_movimientos.columnconfigure(3, weight=1)
+            
+            # Función para guardar los cambios
+            def guardar_cambios(tree, item, entradas_modificar, distrito_var, servicio_var, insumo_var, presentacion_var):
+                try:
+                    # Obtener los valores numéricos
+                    saldo_anterior = float(entradas_modificar["Saldo Anterior"].get())
+                    entrada_nivel_superior = float(entradas_modificar["Entrada Nivel Superior"].get())
+                    entregado = float(entradas_modificar["Entregado"].get())
+                    no_entregado = float(entradas_modificar["No Entregado"].get())
+                    reajuste = float(entradas_modificar["Reajuste"].get())
+
+                    # Calcular saldo final
+                    saldo_final = saldo_anterior + entrada_nivel_superior - entregado + reajuste
+
+                    # Crear lista de nuevos valores incluyendo el saldo final calculado
+                    nuevos_valores = [
+                        distrito_var.get(),
+                        servicio_var.get(),
+                        insumo_var.get(),
+                        presentacion_var.get(),
+                        saldo_anterior,
+                        entrada_nivel_superior,
+                        entregado,
+                        no_entregado,
+                        reajuste,
+                        saldo_final  # Agregar el saldo final calculado
+                    ]
+
+                    # Validar que todos los campos estén completos
+                    if not all(str(valor) for valor in nuevos_valores):
+                        messagebox.showerror("Error", "Todos los campos deben estar completos.")
+                        return
+
+                    # Actualizar el Treeview con los nuevos valores
+                    tree.item(item, values=nuevos_valores)
+                    messagebox.showinfo("Éxito", "El movimiento ha sido modificado correctamente.")
+                    on_closing()
+
+                except ValueError:
+                    messagebox.showerror("Error", "Los campos numéricos deben contener valores válidos.")
+                except Exception as e:
+                    messagebox.showerror("Error", f"Ocurrió un error al guardar los cambios: {str(e)}")
 
             # Botón para guardar los cambios
             tk.Button(
@@ -430,31 +526,13 @@ def abrir_ingreso_insumos():
                 text="Cerrar",
                 image=iconos["icono_cerrar"],
                 compound="left",
-                command=ventana_modificar.destroy,
+                command=on_closing,
                 padx=10,
                 pady=5,
                 bd=0,
                 highlightthickness=0
             ).pack(pady=10)
-
-        # Función para guardar los cambios
-        def guardar_cambios(tree, item, entradas_modificar, distrito_var, servicio_var, insumo_var, presentacion_var):
-            nuevos_valores = [
-                distrito_var.get(),
-                servicio_var.get(),
-                insumo_var.get(),
-                presentacion_var.get(),
-            ] + [entrada.get() for entrada in entradas_modificar.values()]
-
-            # Validar que todos los campos estén completos
-            if not all(nuevos_valores):
-                messagebox.showerror("Error", "Todos los campos deben estar completos.")
-                return
-
-            # Actualizar el Treeview con los nuevos valores
-            tree.item(item, values=nuevos_valores)
-            messagebox.showinfo("Éxito", "El movimiento ha sido modificado correctamente.")
-    
+                
         # Función para eliminar un movimiento seleccionado
         def eliminar_movimiento(tree):
             seleccion = tree.selection()
@@ -539,10 +617,20 @@ def abrir_ingreso_insumos():
 
         # Botón para agregar un nuevo insumo (debajo del combobox de insumo)
         def abrir_ventana_agregar_insumo():
+            
+            ventana.withdraw()
+            
             ventana_agregar = tk.Toplevel(ventana)
             ventana_agregar.title("Agregar Nuevo Insumo")
             ventana_agregar.geometry("400x200")
             ventana_agregar.resizable(False, False)
+            centrar_ventana(ventana_agregar)
+            
+            def on_closing():
+                ventana_agregar.destroy()
+                ventana.deiconify()  # Mostrar ventana padre
+
+            ventana_agregar.protocol("WM_DELETE_WINDOW", on_closing)
 
             tk.Label(ventana_agregar, text="Nombre del nuevo insumo:").pack(pady=10)
             nuevo_insumo_entry = tk.Entry(ventana_agregar)
@@ -572,7 +660,7 @@ def abrir_ingreso_insumos():
                 cargar_datos_combobox(insumo_combobox, "ListadoInsumos")
                 messagebox.showinfo("Éxito", "El insumo se ha agregado correctamente.")
                 nuevo_insumo_entry.delete(0, tk.END)
-                ventana_agregar.destroy()
+                on_closing()
 
             tk.Button(
                 ventana_agregar,
@@ -589,7 +677,7 @@ def abrir_ingreso_insumos():
                 text="Cerrar",
                 image=iconos["icono_cerrar"],
                 compound="left",
-                command=ventana_agregar.destroy,
+                command=on_closing,
                 padx=10,
                 pady=5,
                 bd=0,
@@ -614,10 +702,20 @@ def abrir_ingreso_insumos():
 
         # Botón para agregar una nueva presentación (debajo del combobox de presentación)
         def abrir_ventana_agregar_presentacion():
+            
+            ventana.withdraw()  # Ocultar ventana padre
+            
             ventana_agregar_presentacion = tk.Toplevel(ventana)
             ventana_agregar_presentacion.title("Agregar Nueva Presentación")
             ventana_agregar_presentacion.geometry("400x200")
             ventana_agregar_presentacion.resizable(False, False)
+            centrar_ventana(ventana_agregar_presentacion)
+            
+            def on_closing():
+                ventana_agregar_presentacion.destroy()
+                ventana.deiconify()  # Mostrar ventana padre
+
+            ventana_agregar_presentacion.protocol("WM_DELETE_WINDOW", on_closing)
 
             tk.Label(ventana_agregar_presentacion, text="Nombre de la nueva presentación:").pack(pady=10)
             nueva_presentacion_entry = tk.Entry(ventana_agregar_presentacion)
@@ -647,7 +745,7 @@ def abrir_ingreso_insumos():
                 cargar_datos_combobox(presentacion_combobox, "Presentaciones")
                 messagebox.showinfo("Éxito", "La presentación se ha agregado correctamente.")
                 nueva_presentacion_entry.delete(0, tk.END)
-                ventana_agregar_presentacion.destroy()
+                on_closing()
 
             tk.Button(
                 ventana_agregar_presentacion,
@@ -664,7 +762,7 @@ def abrir_ingreso_insumos():
                 text="Cerrar",
                 image=iconos["icono_cerrar"],
                 compound="left",
-                command=ventana_agregar_presentacion.destroy,
+                command=on_closing,
                 padx=10,
                 pady=5,
                 bd=0,
@@ -711,11 +809,21 @@ def abrir_ingreso_insumos():
 import pandas as pd
 from tkinter import filedialog, messagebox
 # Función para abrir la ventana de "Gestión de Insumos"
-def abrir_gestion_insumos():
+def abrir_gestion_insumos(ventana_principal):
+    
+    ventana_principal.withdraw()  # Ocultar ventana principal
+    
     ventana_gestion_insumos = tk.Toplevel()
     ventana_gestion_insumos.title("Gestión de Insumos")
     ventana_gestion_insumos.geometry("400x300")
     ventana_gestion_insumos.resizable(False, False)
+    centrar_ventana(ventana_gestion_insumos)
+    
+    def on_closing():
+        ventana_gestion_insumos.destroy()
+        ventana_principal.deiconify()  # Mostrar ventana principal
+
+    ventana_gestion_insumos.protocol("WM_DELETE_WINDOW", on_closing)
 
     tk.Label(ventana_gestion_insumos, text="Gestión de Insumos", font=("Arial", 14)).pack(pady=10)
     
@@ -802,11 +910,21 @@ def abrir_gestion_insumos():
     ).pack(pady=20)
     
 # Función para abrir la ventana de "Gestión de Servicios"
-def abrir_gestion_servicios():
+def abrir_gestion_servicios(ventana_principal):
+    
+    ventana_principal.withdraw()  # Ocultar ventana principal
+    
     ventana_gestion_servicios = tk.Toplevel()
     ventana_gestion_servicios.title("Gestión de Servicios")
     ventana_gestion_servicios.geometry("400x300")
     ventana_gestion_servicios.resizable(False, False)
+    centrar_ventana(ventana_gestion_servicios)
+    
+    def on_closing():
+        ventana_gestion_servicios.destroy()
+        ventana_principal.deiconify()  # Mostrar ventana principal
+
+    ventana_gestion_servicios.protocol("WM_DELETE_WINDOW", on_closing)
 
     tk.Label(ventana_gestion_servicios, text="Gestión de Servicios", font=("Arial", 14)).pack(pady=10)
 
@@ -906,64 +1024,20 @@ from openpyxl.styles import Font, Alignment, Border, Side
 from openpyxl.utils import get_column_letter
 
 # Función para abrir la ventana de "Reportes"
-def abrir_reportes():
+def abrir_reportes(ventana_principal):
+    ventana_principal.withdraw()  # Ocultar ventana principal
+
     ventana_reportes = tk.Toplevel()
     ventana_reportes.title("Reportes")
     ventana_reportes.geometry("400x400")
     ventana_reportes.resizable(False, False)
+    centrar_ventana(ventana_reportes)
 
-    tk.Label(ventana_reportes, text="Reporte de Movimientos", font=("Arial", 14)).pack(pady=10)
+    def on_closing():
+        ventana_reportes.destroy()
+        ventana_principal.deiconify()  # Mostrar ventana principal
 
-    frame_reportes = tk.LabelFrame(ventana_reportes, text="Generar Reporte", padx=5, pady=5, font=("Arial", 10))
-    frame_reportes.pack(fill="x", padx=10, pady=10)
-
-    # Combobox para seleccionar el distrito
-    tk.Label(frame_reportes, text="Selecciona un distrito:").pack(anchor="w", padx=10, pady=5)
-    distrito_var = tk.StringVar()
-    distrito_combobox = ttk.Combobox(frame_reportes, textvariable=distrito_var, state="readonly")
-    cargar_datos_combobox(distrito_combobox, "Distritos")
-    distrito_combobox.pack(fill="x", padx=10, pady=5)
-
-    # Combobox para seleccionar el servicio
-    tk.Label(frame_reportes, text="Selecciona un servicio (opcional):").pack(anchor="w", padx=10, pady=5)
-    servicio_var = tk.StringVar()
-    servicio_combobox = ttk.Combobox(frame_reportes, textvariable=servicio_var, state="readonly")
-    servicio_combobox.pack(fill="x", padx=10, pady=5)
-
-    # Función para cargar servicios relacionados con el distrito seleccionado
-    def cargar_servicios():
-        distrito_seleccionado = distrito_var.get()
-        if not distrito_seleccionado:
-            servicio_combobox["values"] = []
-            servicio_combobox.set("Selecciona un distrito primero")
-            return
-
-        conexion = sqlite3.connect("insumos.db")
-        cursor = conexion.cursor()
-        cursor.execute("""
-            SELECT Servicios.nombre
-            FROM Servicios
-            INNER JOIN Distritos ON Servicios.distrito_id = Distritos.id
-            WHERE Distritos.nombre = ?
-        """, (distrito_seleccionado,))
-        servicios = [fila[0] for fila in cursor.fetchall()]
-        conexion.close()
-
-        servicio_combobox["values"] = servicios
-        if servicios:
-            servicio_combobox.set(servicios[0])
-        else:
-            servicio_combobox.set("No hay servicios disponibles")
-
-    # Cargar servicios cuando se seleccione un distrito
-    distrito_combobox.bind("<<ComboboxSelected>>", lambda event: cargar_servicios())
-
-   # Función para abrir la ventana de "Reportes"
-def abrir_reportes():
-    ventana_reportes = tk.Toplevel()
-    ventana_reportes.title("Reportes")
-    ventana_reportes.geometry("400x400")
-    ventana_reportes.resizable(False, False)
+    ventana_reportes.protocol("WM_DELETE_WINDOW", on_closing)
 
     tk.Label(ventana_reportes, text="Reporte de Movimientos", font=("Arial", 14)).pack(pady=10)
 
@@ -1031,10 +1105,9 @@ def abrir_reportes():
             """, (distrito_seleccionado, servicio_seleccionado))
             movimientos = cursor.fetchall()
             nombre_pestana = f"{distrito_seleccionado[:3]}_{servicio_seleccionado[:6]}"
-            # Nombre del archivo para un reporte específico
             archivo_excel = f"Reporte_{distrito_seleccionado}_{servicio_seleccionado}.xlsx"
         else:
-            # Obtener los datos del distrito seleccionado (consolidado de todos los servicios)
+            # Obtener los datos del distrito seleccionado (consolidado)
             cursor.execute("""
                 SELECT insumo, presentacion, saldo_anterior, entrada_nivel_superior, entregado,
                     no_entregado, reajuste, saldo_final
@@ -1043,7 +1116,6 @@ def abrir_reportes():
             """, (distrito_seleccionado,))
             movimientos = cursor.fetchall()
             nombre_pestana = f"{distrito_seleccionado[:3]}_Consolidado"
-            # Nombre del archivo para un reporte consolidado
             archivo_excel = f"Reporte_{distrito_seleccionado}_Consolidado.xlsx"
 
         conexion.close()
@@ -1052,45 +1124,40 @@ def abrir_reportes():
             messagebox.showerror("Error", f"No hay movimientos registrados para el distrito '{distrito_seleccionado}' y servicio '{servicio_seleccionado}'.")
             return
 
-        # Crear un DataFrame con los datos
+        # Crear y formatear el Excel
         columnas = ["Insumo", "Presentación", "Saldo Anterior", "Entrada Nivel Superior",
                     "Entregado", "No Entregado", "Reajuste", "Saldo Final"]
         df = pd.DataFrame(movimientos, columns=columnas)
 
-        # Crear un archivo de Excel
         with pd.ExcelWriter(archivo_excel, engine="openpyxl") as writer:
             df.to_excel(writer, index=False, sheet_name=nombre_pestana)
 
-            # Obtener la hoja de trabajo
             workbook = writer.book
             worksheet = writer.sheets[nombre_pestana]
-
-            # Ocultar las líneas de cuadrícula
             worksheet.sheet_view.showGridLines = False
 
-            # Aplicar formato a los encabezados
+            # Formato de encabezados y celdas
             header_font = Font(bold=True)
             thin_border = Border(
-                left=Side(style="thin"),
-                right=Side(style="thin"),
-                top=Side(style="thin"),
-                bottom=Side(style="thin")
+                left=Side(style="thin"), right=Side(style="thin"),
+                top=Side(style="thin"), bottom=Side(style="thin")
             )
+
+            # Aplicar formato a encabezados
             for col_num, column_title in enumerate(df.columns, 1):
                 cell = worksheet.cell(row=1, column=col_num)
                 cell.font = header_font
                 cell.alignment = Alignment(horizontal="center", vertical="center")
                 cell.border = thin_border
 
-            # Ajustar el ancho de las columnas
-            for col_num, column_title in enumerate(df.columns, 1):
+                # Ajustar ancho de columnas
                 max_length = max(
-                    len(str(column_title)),  # Longitud del encabezado
-                    *(len(str(value)) for value in df[column_title])  # Longitud de los valores
+                    len(str(column_title)),
+                    *(len(str(value)) for value in df[column_title])
                 )
                 worksheet.column_dimensions[get_column_letter(col_num)].width = max_length + 2
 
-            # Aplicar bordes a las celdas
+            # Aplicar bordes a todas las celdas
             for row in worksheet.iter_rows(min_row=2, max_row=worksheet.max_row,
                                         min_col=1, max_col=worksheet.max_column):
                 for cell in row:
@@ -1098,50 +1165,44 @@ def abrir_reportes():
 
         messagebox.showinfo("Éxito", f"El reporte se ha generado correctamente: {archivo_excel}")
 
-    # Botón para generar el reporte
+    # Botones
     tk.Button(
         frame_reportes,
-        text="Generar Reporte",  # Texto del botón
-        image=iconos["icono_reporte_excel"],  # Ícono
-        compound="left",  # Posición del texto (a la derecha del ícono)
-        font=("Arial", 12),  # Fuente del texto
-        command=generar_reporte,  # Acción al hacer clic
-        padx=10,  # Espaciado horizontal entre ícono y texto
-        pady=5,  # Espaciado vertical
-        bd=0,  # Sin bordes
-        highlightthickness=0  # Sin borde de enfoque
+        text="Generar Reporte",
+        image=iconos["icono_reporte_excel"],
+        compound="left",
+        font=("Arial", 12),
+        command=generar_reporte,
+        padx=10, pady=5,
+        bd=0, highlightthickness=0
     ).pack(pady=5)
 
-    # Botón para cerrar la ventana
     tk.Button(
         frame_reportes,
         text="Cerrar",
         image=iconos["icono_cerrar"],
         compound="left",
-        command=ventana_reportes.destroy,
+        command=on_closing,
         font=("Arial", 12),
-        padx=10,
-        pady=5,
-        bd=0,
-        highlightthickness=0
+        padx=10, pady=5,
+        bd=0, highlightthickness=0
     ).pack(pady=10)
 
-# Ventana principal
 def ventana_principal():
     ventana = tk.Tk()
     ventana.title("Menú Principal")
-    ventana.geometry("400x700")
+    ventana.geometry("800x400")  # Ajustado para mejor distribución en 2x2
     ventana.resizable(False, False)
-    
-    # Cargar los íconos como variables globales
+    centrar_ventana(ventana)
 
+    # Cargar los íconos como variables globales
     def cargar_icono(ruta):
         if os.path.exists(ruta):
             return PhotoImage(file=ruta)
         else:
             print(f"Advertencia: El archivo {ruta} no existe.")
-            return None  # O un ícono predeterminado
-    
+            return None
+
     global iconos
     iconos = {
         "icono_ingreso_insumos": PhotoImage(file="icon_ingreso_insumos.png"),
@@ -1165,83 +1226,93 @@ def ventana_principal():
     # Título
     tk.Label(ventana, text="Menú Principal", font=("Arial", 14)).pack(pady=10)
 
-    # Sección 1: Ingreso de Insumos
-    frame_insumos = tk.LabelFrame(ventana, text="Ingreso de Insumos", padx=5, pady=5, font=("Arial", 10))
-    frame_insumos.pack(fill="x", padx=10, pady=10)
+    # Frame contenedor para la cuadrícula
+    frame_contenedor = tk.Frame(ventana)
+    frame_contenedor.pack(expand=True, fill="both", padx=10, pady=10)
+
+    # Configurar el grid
+    frame_contenedor.grid_columnconfigure(0, weight=1, pad=10)
+    frame_contenedor.grid_columnconfigure(1, weight=1, pad=10)
+
+    # Sección 1: Ingreso de Insumos (Fila 0, Columna 0)
+    frame_insumos = tk.LabelFrame(frame_contenedor, text="Ingreso de Insumos", padx=5, pady=5, font=("Arial", 10))
+    frame_insumos.grid(row=0, column=0, padx=5, pady=5, sticky="nsew")
 
     boton_insumos = tk.Button(
         frame_insumos,
-        text="Ingreso de Insumos",  # Texto del botón
-        image=iconos["icono_ingreso_insumos"],  # Ícono
-        compound="left",  # Posición del texto (a la derecha del ícono)
-        font=("Arial", 14),  # Fuente del texto
-        command=abrir_ingreso_insumos,  # Acción al hacer clic
-        padx=10,  # Espaciado horizontal entre ícono y texto
-        pady=5,  # Espaciado vertical
-        bd=0,  # Sin bordes
-        highlightthickness=0  # Sin borde de enfoque
+        text="Ingreso de Insumos",
+        image=iconos["icono_ingreso_insumos"],
+        compound="left",
+        font=("Arial", 14),
+        command=lambda:abrir_ingreso_insumos(ventana),
+        padx=10,
+        pady=5,
+        bd=0,
+        highlightthickness=0
     )
-    boton_insumos.pack(pady=5)
+    boton_insumos.pack(pady=5, expand=True)
 
-    # Sección 2: Gestión de Insumos
-    frame_gestion = tk.LabelFrame(ventana, text="Gestión de Insumos", padx=5, pady=5, font=("Arial", 10))
-    frame_gestion.pack(fill="x", padx=10, pady=10)
+    # Sección 2: Gestión de Insumos (Fila 0, Columna 1)
+    frame_gestion = tk.LabelFrame(frame_contenedor, text="Gestión de Insumos", padx=5, pady=5, font=("Arial", 10))
+    frame_gestion.grid(row=0, column=1, padx=5, pady=5, sticky="nsew")
 
     boton_gestion = tk.Button(
         frame_gestion,
-        text="Gestión de Insumos",  # Texto del botón
-        image=iconos["icono_gestion_insumos"],  # Ícono
-        compound="left",  # Posición del texto (a la derecha del ícono)
-        font=("Arial", 14),  # Fuente del texto
-        command=abrir_gestion_insumos,  # Acción al hacer clic
-        padx=10,  # Espaciado horizontal entre ícono y texto
-        pady=5,  # Espaciado vertical
-        bd=0,  # Sin bordes
-        highlightthickness=0  # Sin borde de enfoque
+        text="Gestión de Insumos",
+        image=iconos["icono_gestion_insumos"],
+        compound="left",
+        font=("Arial", 14),
+        command=lambda:abrir_gestion_insumos(ventana),
+        padx=10,
+        pady=5,
+        bd=0,
+        highlightthickness=0
     )
-    boton_gestion.pack(pady=5)
+    boton_gestion.pack(pady=5, expand=True)
 
-    # Sección 3: Gestión de Servicios
-    frame_servicios = tk.LabelFrame(ventana, text="Gestión de Servicios", padx=5, pady=5, font=("Arial", 10))
-    frame_servicios.pack(fill="x", padx=10, pady=10)
+    # Sección 3: Gestión de Servicios (Fila 1, Columna 0)
+    frame_servicios = tk.LabelFrame(frame_contenedor, text="Gestión de Servicios", padx=5, pady=5, font=("Arial", 10))
+    frame_servicios.grid(row=1, column=0, padx=5, pady=5, sticky="nsew")
 
     boton_servicios = tk.Button(
         frame_servicios,
-        text="Gestión de Servicios",  # Texto del botón
-        image=iconos["icono_gestion_servicios"],  # Ícono
-        compound="left",  # Posición del texto (a la derecha del ícono)
-        font=("Arial", 14),  # Fuente del texto
-        command=abrir_gestion_servicios,  # Acción al hacer clic
-        padx=10,  # Espaciado horizontal entre ícono y texto
-        pady=5,  # Espaciado vertical
-        bd=0,  # Sin bordes
-        highlightthickness=0  # Sin borde de enfoque
+        text="Gestión de Servicios",
+        image=iconos["icono_gestion_servicios"],
+        compound="left",
+        font=("Arial", 14),
+        command=lambda:abrir_gestion_servicios(ventana),
+        padx=10,
+        pady=5,
+        bd=0,
+        highlightthickness=0
     )
-    boton_servicios.pack(pady=5)
-    
-    # Botón para abrir la sección de reportes
-    frame_reportes = tk.LabelFrame(ventana, text="Reportes de Movimientos", padx=5, pady=5, font=("Arial", 10))
-    frame_reportes.pack(fill="x", padx=10, pady=10)
-    
+    boton_servicios.pack(pady=5, expand=True)
+
+    # Sección 4: Reportes (Fila 1, Columna 1)
+    frame_reportes = tk.LabelFrame(frame_contenedor, text="Reportes de Movimientos", padx=5, pady=5, font=("Arial", 10))
+    frame_reportes.grid(row=1, column=1, padx=5, pady=5, sticky="nsew")
+
     boton_reportes = tk.Button(
         frame_reportes,
-        text="Reportes de Movimientos",  # Texto del botón
-        image=iconos["icono_reporte"],  # Puedes agregar un ícono si lo deseas
-        compound="left",  # Posición del texto (a la derecha del ícono)
-        font=("Arial", 14),  # Fuente del texto
-        command=abrir_reportes,  # Acción al hacer clic
-        padx=10,  # Espaciado horizontal entre ícono y texto
-        pady=5,  # Espaciado vertical
-        bd=0,  # Sin bordes
-        highlightthickness=0  # Sin borde de enfoque
+        text="Reportes de Movimientos",
+        image=iconos["icono_reporte"],
+        compound="left",
+        font=("Arial", 14),
+        command=lambda:abrir_reportes(ventana),
+        padx=10,
+        pady=5,
+        bd=0,
+        highlightthickness=0
     )
-    boton_reportes.pack(pady=5)
+    boton_reportes.pack(pady=5, expand=True)
 
-    # Ejecutar la ventana principal
-    ventana.mainloop()
+    return ventana
 
+   
 # Ejecutar la función para limpiar la base de datos
 inicializar_base_datos()
 
 # Ejecutar el programa
-ventana_principal()
+ventana_main = ventana_principal()
+ # Ejecutar la ventana principal
+ventana_main.mainloop()
