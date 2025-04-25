@@ -26,7 +26,16 @@ def abrir_ingreso_insumos(ventana_principal):
     # Crear ventana de insumos
     ventana = tk.Toplevel()
     ventana.title("Ingreso de Insumos")
-    ventana.geometry("1200x800")
+    ventana.geometry("1000x800")
+    
+    # Función para manejar el cierre de la ventana
+    def on_closing():
+        if messagebox.askokcancel("Confirmar", "¿Está seguro que desea cerrar la ventana?"):
+            ventana.destroy()
+            ventana_principal.deiconify()
+
+    # Configurar el protocolo de cierre
+    ventana.protocol("WM_DELETE_WINDOW", on_closing)
 
     def centrar_ventana(ventana):
         ventana.update_idletasks()
@@ -47,115 +56,188 @@ def abrir_ingreso_insumos(ventana_principal):
     presentacion_var = tk.StringVar()
     tipo_movimiento_var = tk.StringVar()
 
+    # Primero, definimos algunas constantes para mantener consistencia
+    LABEL_WIDTH = 15  # Ancho para todas las etiquetas
+    WIDGET_WIDTH = 25  # Ancho para todos los widgets de entrada
+    PADDING_X = 10    # Padding horizontal
+    PADDING_Y = 5     # Padding vertical
+
+    # Función auxiliar para crear etiquetas con estilo consistente
+    def create_label(parent, text):
+        return ttk.Label(parent, text=text, anchor="w", width=LABEL_WIDTH)
+
+    # Función auxiliar para configurar el grid de un frame
+    def configure_grid(frame):
+        for i in range(6):
+            if i % 2 == 0:  # Columnas de etiquetas
+                frame.grid_columnconfigure(i, weight=0, minsize=120)
+            else:  # Columnas de campos
+                frame.grid_columnconfigure(i, weight=1, minsize=200)
+  
     # Frame Servicios
     frame_servicios = ttk.LabelFrame(ventana, text="Servicios")
-    frame_servicios.pack(fill="x", padx=10, pady=5)
+    frame_servicios.pack(fill="x", padx=10, pady=10)
+    
+    # Agregar padding interno al frame
+    for widget in frame_servicios.winfo_children():
+        widget.grid_configure(pady=10)
 
     # Distrito
-    ttk.Label(frame_servicios, text="Distrito:").grid(row=0, column=0, padx=5, pady=5)
-    distrito_cb = ttk.Combobox(frame_servicios, textvariable=distrito_var, state="readonly")
+    ttk.Label(frame_servicios, text="Distrito:", anchor="w").grid(
+        row=0, column=0, padx=5, pady=5, sticky="w")
+    distrito_cb = ttk.Combobox(frame_servicios, textvariable=distrito_var,
+                            state="readonly", width=25)
     distrito_cb['values'] = [d['nombre'] for d in obtener_distritos() or []]
-    distrito_cb.grid(row=0, column=1, padx=5, pady=5)
+    distrito_cb.grid(row=0, column=1, padx=5, pady=5, sticky="w")
 
     # Tipo de Servicio
-    ttk.Label(frame_servicios, text="Tipo de Servicio:").grid(row=0, column=2, padx=5, pady=5)
-    tipo_servicio_cb = ttk.Combobox(frame_servicios, textvariable=tipo_servicio_var, state="readonly")
-    tipo_servicio_cb.grid(row=0, column=3, padx=5, pady=5)
+    ttk.Label(frame_servicios, text="Tipo de Servicio:", anchor="w").grid(
+        row=0, column=2, padx=5, pady=5, sticky="w")
+    tipo_servicio_cb = ttk.Combobox(frame_servicios, textvariable=tipo_servicio_var,
+                                state="readonly", width=25)
+    tipo_servicio_cb.grid(row=0, column=3, padx=5, pady=5, sticky="w")
 
     # Servicio
-    ttk.Label(frame_servicios, text="Servicio:").grid(row=0, column=4, padx=5, pady=5)
-    servicio_cb = ttk.Combobox(frame_servicios, textvariable=servicio_var, state="readonly")
-    servicio_cb.grid(row=0, column=5, padx=5, pady=5)
+    ttk.Label(frame_servicios, text="Servicio:", anchor="w").grid(
+        row=0, column=4, padx=5, pady=5, sticky="w")
+    servicio_cb = ttk.Combobox(frame_servicios, textvariable=servicio_var,
+                            state="readonly", width=25)
+    servicio_cb.grid(row=0, column=5, padx=5, pady=5, sticky="w")
 
     # Frame Insumos
     frame_insumos = ttk.LabelFrame(ventana, text="Insumos")
-    frame_insumos.pack(fill="x", padx=10, pady=5)
+    frame_insumos.pack(fill="x", padx=10, pady=10)
+    
+    # Agregar padding interno al frame
+    for widget in frame_insumos.winfo_children():
+        widget.grid_configure(pady=10)
 
     # Tipo de Insumo
-    ttk.Label(frame_insumos, text="Tipo de Insumo:").grid(row=0, column=0, padx=5, pady=5)
-    tipo_insumo_cb = ttk.Combobox(frame_insumos, textvariable=tipo_insumo_var, state="readonly")
+    ttk.Label(frame_insumos, text="Tipo de Insumo:", anchor="w").grid(
+        row=0, column=0, padx=5, pady=5, sticky="w")
+    tipo_insumo_cb = ttk.Combobox(frame_insumos, textvariable=tipo_insumo_var,
+                                state="readonly", width=25)
     tipo_insumo_cb['values'] = [ti['descripcion'] for ti in obtener_tipos_insumo() or []]
-    tipo_insumo_cb.grid(row=0, column=1, padx=5, pady=5)
+    tipo_insumo_cb.grid(row=0, column=1, padx=5, pady=5, sticky="w")
 
     # Insumo
-    ttk.Label(frame_insumos, text="Insumo:").grid(row=0, column=2, padx=5, pady=5)
-    insumo_cb = ttk.Combobox(frame_insumos, textvariable=insumo_var, state="readonly")
-    insumo_cb.grid(row=0, column=3, padx=5, pady=5)
+    ttk.Label(frame_insumos, text="Insumo:", anchor="w").grid(
+        row=0, column=2, padx=5, pady=5, sticky="w")
+    insumo_cb = ttk.Combobox(frame_insumos, textvariable=insumo_var,
+                            state="readonly", width=25)
+    insumo_cb.grid(row=0, column=3, padx=5, pady=5, sticky="w")
 
     # Presentación
-    ttk.Label(frame_insumos, text="Presentación:").grid(row=0, column=4, padx=5, pady=5)
-    presentacion_cb = ttk.Combobox(frame_insumos, textvariable=presentacion_var, state="readonly")
+    ttk.Label(frame_insumos, text="Presentación:", anchor="w").grid(
+        row=0, column=4, padx=5, pady=5, sticky="w")
+    presentacion_cb = ttk.Combobox(frame_insumos, textvariable=presentacion_var,
+                                state="readonly", width=25)
     presentacion_cb['values'] = [p['nombre'] for p in obtener_presentaciones() or []]
-    presentacion_cb.grid(row=0, column=5, padx=5, pady=5)
+    presentacion_cb.grid(row=0, column=5, padx=5, pady=5, sticky="w")
 
     # Lote
-    ttk.Label(frame_insumos, text="Lote:").grid(row=1, column=0, padx=5, pady=5)
-    lote_entry = ttk.Entry(frame_insumos)
-    lote_entry.grid(row=1, column=1, padx=5, pady=5)
+    ttk.Label(frame_insumos, text="Lote:", anchor="w").grid(
+        row=1, column=0, padx=5, pady=5, sticky="w")
+    lote_entry = ttk.Entry(frame_insumos, width=27)
+    lote_entry.grid(row=1, column=1, padx=5, pady=5, sticky="w")
 
     # Fecha de Vencimiento
-    ttk.Label(frame_insumos, text="Fecha de Vencimiento:").grid(row=1, column=2, padx=5, pady=5)
-    fecha_venc = DateEntry(frame_insumos, width=12, background='darkblue',
-                          foreground='white', borderwidth=2, date_pattern='dd/mm/yyyy')
-    fecha_venc.grid(row=1, column=3, padx=5, pady=5)
-
-    # Botón Agregar Movimiento
-    ttk.Button(ventana, text="Agregar Movimiento").pack(pady=5)
+    ttk.Label(frame_insumos, text="Fecha de Vencimiento:", anchor="w").grid(
+        row=1, column=2, padx=5, pady=5, sticky="w")
+    fecha_venc = DateEntry(frame_insumos, width=25, background='darkblue',
+                        foreground='white', borderwidth=2, date_pattern='dd/mm/yyyy')
+    fecha_venc.grid(row=1, column=3, padx=5, pady=5, sticky="w")
 
     # Frame Registro de Movimiento
     frame_registro = ttk.LabelFrame(ventana, text="Registro de Movimiento")
-    frame_registro.pack(fill="x", padx=10, pady=5)
+    frame_registro.pack(fill="x", padx=10, pady=10)
+    
+    for widget in frame_registro.winfo_children():
+        widget.grid_configure(pady=10)
 
+    # Primera fila
     # Fecha de Registro
-    ttk.Label(frame_registro, text="Fecha de Registro:").grid(row=0, column=0, padx=5, pady=5)
-    fecha_reg = DateEntry(frame_registro, width=12, background='darkblue',
-                         foreground='white', borderwidth=2, date_pattern='dd/mm/yyyy')
-    fecha_reg.grid(row=0, column=1, padx=5, pady=5)
+    ttk.Label(frame_registro, text="Fecha de Registro:", anchor="w").grid(
+        row=0, column=0, padx=5, pady=5, sticky="w")
+    fecha_reg = DateEntry(frame_registro, width=25, background='darkblue',
+                        foreground='white', borderwidth=2, date_pattern='dd/mm/yyyy')
+    fecha_reg.grid(row=0, column=1, padx=5, pady=5, sticky="w")
+
+    # Referencia
+    ttk.Label(frame_registro, text="Referencia:", anchor="w").grid(
+        row=0, column=2, padx=5, pady=5, sticky="w")
+    referencia_entry = ttk.Entry(frame_registro, width=27)
+    referencia_entry.grid(row=0, column=3, padx=5, pady=5, sticky="w")
 
     # Tipo de Movimiento
-    ttk.Label(frame_registro, text="Tipo de Movimiento:").grid(row=0, column=2, padx=5, pady=5)
-    tipo_mov_cb = ttk.Combobox(frame_registro, textvariable=tipo_movimiento_var, state="readonly")
+    ttk.Label(frame_registro, text="Tipo de Movimiento:", anchor="w").grid(
+        row=0, column=4, padx=5, pady=5, sticky="w")
+    tipo_mov_cb = ttk.Combobox(frame_registro, textvariable=tipo_movimiento_var,
+                            state="readonly", width=25)
     tipo_mov_cb['values'] = [tm['descripcion'] for tm in obtener_tipos_movimiento() or []]
-    tipo_mov_cb.grid(row=0, column=3, padx=5, pady=5)
+    tipo_mov_cb.grid(row=0, column=5, padx=5, pady=5, sticky="w")
 
+    # Segunda fila
     # Cantidad
-    ttk.Label(frame_registro, text="Cantidad:").grid(row=0, column=4, padx=5, pady=5)
-    cantidad_entry = ttk.Entry(frame_registro)
-    cantidad_entry.grid(row=0, column=5, padx=5, pady=5)
+    ttk.Label(frame_registro, text="Cantidad:", anchor="w").grid(
+        row=1, column=0, padx=5, pady=5, sticky="w")
+    cantidad_entry = ttk.Entry(frame_registro, width=27)
+    cantidad_entry.grid(row=1, column=1, padx=5, pady=5, sticky="w")
 
+    # Observaciones (alineado con el tipo de movimiento)
+    ttk.Label(frame_registro, text="Observaciones:", anchor="w").grid(
+        row=1, column=2, padx=5, pady=5, sticky="w")
+    observaciones_entry = ttk.Entry(frame_registro, width=60)  # Ancho fijo para alinear con tipo de movimiento
+    observaciones_entry.grid(row=1, column=3, columnspan=3, padx=5, pady=5, sticky="w")  # Cambiado a sticky="w"
+
+    # Botón Agregar Movimiento
+    ttk.Button(ventana, text="Agregar Movimiento").pack(pady=10)
+  
     # Frame Movimientos (Treeview)
     frame_movimientos = ttk.LabelFrame(ventana, text="Movimientos")
-    frame_movimientos.pack(fill="both", expand=True, padx=10, pady=5)
+    frame_movimientos.pack(fill="both", expand=True, padx=10, pady=10)
+    
+    # Frame contenedor para Treeview y scrollbars
+    tree_frame = ttk.Frame(frame_movimientos)
+    tree_frame.pack(fill="both", expand=True, padx=5, pady=5)
 
     # Crear Treeview
-    columns = ('fecha_registro', 'tipo_movimiento', 'insumo', 'presentacion',
-               'lote', 'fecha_vencimiento', 'cantidad')
-    tree = ttk.Treeview(frame_movimientos, columns=columns, show='headings')
+    columns = ('fecha_registro','referencia','tipo_movimiento', 'insumo', 'presentacion',
+               'lote', 'fecha_vencimiento', 'cantidad','observaciones')
+    tree = ttk.Treeview(tree_frame, columns=columns, show='headings')
 
     # Definir los encabezados
     tree.heading('fecha_registro', text='Fecha de Registro')
+    tree.heading('referencia', text='Referencia')
     tree.heading('tipo_movimiento', text='Tipo de Movimiento')
     tree.heading('insumo', text='Insumo')
     tree.heading('presentacion', text='Presentación')
     tree.heading('lote', text='Lote')
     tree.heading('fecha_vencimiento', text='Fecha de Vencimiento')
     tree.heading('cantidad', text='Cantidad')
+    tree.heading('observaciones', text='Observaciones')
 
     # Configurar el ancho de las columnas
     for col in columns:
         tree.column(col, width=150)
 
-    # Agregar scrollbar
-    scrollbar = ttk.Scrollbar(frame_movimientos, orient="vertical", command=tree.yview)
-    tree.configure(yscrollcommand=scrollbar.set)
+    # Scrollbars
+    scrollbar_y = ttk.Scrollbar(tree_frame, orient="vertical", command=tree.yview)
+    scrollbar_x = ttk.Scrollbar(tree_frame, orient="horizontal", command=tree.xview)
+    tree.configure(yscrollcommand=scrollbar_y.set, xscrollcommand=scrollbar_x.set)
 
-    # Empaquetar Treeview y scrollbar
-    tree.pack(side="left", fill="both", expand=True)
-    scrollbar.pack(side="right", fill="y")
+    # Ubicar con grid
+    tree.grid(row=0, column=0, sticky="nsew")
+    scrollbar_y.grid(row=0, column=1, sticky="ns")
+    scrollbar_x.grid(row=1, column=0, sticky="ew")
+
+    # Configurar expansión del grid
+    tree_frame.grid_rowconfigure(0, weight=1)
+    tree_frame.grid_columnconfigure(0, weight=1)
 
     # Frame para botones
     frame_botones = ttk.Frame(ventana)
-    frame_botones.pack(fill="x", padx=10, pady=5)
+    frame_botones.pack(fill="x", padx=10, pady=10)
 
     # Botones
     ttk.Button(frame_botones, text="Editar").pack(side="left", padx=5)
@@ -207,21 +289,25 @@ def abrir_ingreso_insumos(ventana_principal):
             lote = lote_entry.get()
             fecha_venc_str = fecha_venc.get_date().strftime('%d/%m/%Y')
             cantidad = float(cantidad_entry.get())
+            referencia = referencia_entry.get()
+            observaciones = observaciones_entry.get()
 
             # Validar campos requeridos
-            if not all([tipo_movimiento, insumo, presentacion, lote, cantidad]):
-                messagebox.showerror("Error", "Todos los campos son requeridos")
+            if not all([tipo_movimiento, insumo, presentacion, lote, cantidad, referencia]):
+                messagebox.showerror("Error", "Los campos son requeridos excepto observaciones")
                 return
 
             # Insertar en Treeview
             tree.insert('', 'end', values=(
-                fecha_registro, tipo_movimiento, insumo, presentacion,
-                lote, fecha_venc_str, cantidad
+                fecha_registro, referencia, tipo_movimiento, insumo,
+                presentacion, lote, fecha_venc_str, cantidad, observaciones
             ))
 
             # Limpiar campos
             tipo_movimiento_var.set('')
             cantidad_entry.delete(0, 'end')
+            referencia_entry.delete(0, 'end')
+            observaciones_entry.delete(0, 'end')
 
         except ValueError:
             messagebox.showerror("Error", "La cantidad debe ser un número válido")
@@ -291,9 +377,9 @@ def abrir_ingreso_insumos(ventana_principal):
         if isinstance(widget, ttk.Button) and widget['text'] == "Agregar Movimiento":
             widget.configure(command=agregar_movimiento)
 
-    ventana.mainloop()
 
 if __name__ == "__main__":
     root = tk.Tk()
     root.withdraw()
     abrir_ingreso_insumos(root)
+    root.mainloop()

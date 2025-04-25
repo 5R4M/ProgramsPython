@@ -66,14 +66,27 @@ def actualizar_distrito(id_distrito, nuevo_nombre):
             conn.close()
 
 def eliminar_distrito(id_distrito):
-    """Elimina un distrito."""
+    """Elimina un distrito y todos sus servicios relacionados."""
     conn = conectar_db()
     if conn:
         try:
             cursor = conn.cursor()
+            # Primero obtener todos los tipos de servicio del distrito
+            cursor.execute("SELECT id FROM tipo_servicio WHERE id_distrito = ?", (id_distrito,))
+            tipos_servicio = cursor.fetchall()
+
+            # Eliminar servicios de cada tipo de servicio
+            for tipo in tipos_servicio:
+                cursor.execute("DELETE FROM servicio WHERE id_tipo_servicio = ?", (tipo['id'],))
+
+            # Eliminar tipos de servicio
+            cursor.execute("DELETE FROM tipo_servicio WHERE id_distrito = ?", (id_distrito,))
+
+            # Finalmente eliminar el distrito
             cursor.execute("DELETE FROM distrito WHERE id = ?", (id_distrito,))
+
             conn.commit()
-            return cursor.rowcount > 0
+            return True
         except sqlite3.Error as e:
             print(f"Error al eliminar distrito: {e}")
             conn.rollback()
@@ -119,6 +132,46 @@ def agregar_tipo_servicio(id_distrito, descripcion):
         finally:
             conn.close()
 
+def actualizar_tipo_servicio(id_tipo_servicio, nueva_descripcion):
+    """Actualiza la descripción de un tipo de servicio."""
+    conn = conectar_db()
+    if conn:
+        try:
+            cursor = conn.cursor()
+            cursor.execute("""
+                UPDATE tipo_servicio
+                SET descripcion = ?
+                WHERE id = ?""", (nueva_descripcion, id_tipo_servicio))
+            conn.commit()
+            return cursor.rowcount > 0
+        except sqlite3.Error as e:
+            print(f"Error al actualizar tipo de servicio: {e}")
+            conn.rollback()
+            return False
+        finally:
+            conn.close()
+
+def eliminar_tipo_servicio(id_tipo_servicio):
+    """Elimina un tipo de servicio y sus servicios relacionados."""
+    conn = conectar_db()
+    if conn:
+        try:
+            cursor = conn.cursor()
+            # Primero eliminar servicios relacionados
+            cursor.execute("DELETE FROM servicio WHERE id_tipo_servicio = ?",
+                         (id_tipo_servicio,))
+            # Luego eliminar el tipo de servicio
+            cursor.execute("DELETE FROM tipo_servicio WHERE id = ?",
+                         (id_tipo_servicio,))
+            conn.commit()
+            return True
+        except sqlite3.Error as e:
+            print(f"Error al eliminar tipo de servicio: {e}")
+            conn.rollback()
+            return False
+        finally:
+            conn.close()
+
 # -------------------- OPERACIONES SERVICIO --------------------
 
 def obtener_servicios_por_tipo(id_tipo_servicio):
@@ -157,6 +210,96 @@ def agregar_servicio(id_tipo_servicio, nombre):
         finally:
             conn.close()
 
+def actualizar_servicio(id_servicio, nuevo_nombre):
+    """Actualiza el nombre de un servicio."""
+    conn = conectar_db()
+    if conn:
+        try:
+            cursor = conn.cursor()
+            cursor.execute("""
+                UPDATE servicio
+                SET nombre = ?
+                WHERE id = ?""", (nuevo_nombre, id_servicio))
+            conn.commit()
+            return cursor.rowcount > 0
+        except sqlite3.Error as e:
+            print(f"Error al actualizar servicio: {e}")
+            conn.rollback()
+            return False
+        finally:
+            conn.close()
+
+def eliminar_servicio(id_servicio):
+    """Elimina un servicio."""
+    conn = conectar_db()
+    if conn:
+        try:
+            cursor = conn.cursor()
+            cursor.execute("DELETE FROM servicio WHERE id = ?", (id_servicio,))
+            conn.commit()
+            return cursor.rowcount > 0
+        except sqlite3.Error as e:
+            print(f"Error al eliminar servicio: {e}")
+            conn.rollback()
+            return False
+        finally:
+            conn.close()
+
+# -------------------- FUNCIONES DE BÚSQUEDA POR NOMBRE --------------------
+
+def obtener_tipo_servicio_por_descripcion(descripcion, id_distrito):
+    """Obtiene un tipo de servicio por su descripción y distrito."""
+    conn = conectar_db()
+    if conn:
+        try:
+            cursor = conn.cursor()
+            cursor.execute("""
+                SELECT id, descripcion
+                FROM tipo_servicio
+                WHERE descripcion = ? AND id_distrito = ?""",
+                (descripcion, id_distrito))
+            return cursor.fetchone()
+        except sqlite3.Error as e:
+            print(f"Error al obtener tipo de servicio: {e}")
+            return None
+        finally:
+            conn.close()
+
+def obtener_servicio_por_nombre(nombre, id_tipo_servicio):
+    """Obtiene un servicio por su nombre y tipo de servicio."""
+    conn = conectar_db()
+    if conn:
+        try:
+            cursor = conn.cursor()
+            cursor.execute("""
+                SELECT id, nombre
+                FROM servicio
+                WHERE nombre = ? AND id_tipo_servicio = ?""",
+                (nombre, id_tipo_servicio))
+            return cursor.fetchone()
+        except sqlite3.Error as e:
+            print(f"Error al obtener servicio: {e}")
+            return None
+        finally:
+            conn.close()
+
+def obtener_distrito_por_nombre(nombre):
+    """Obtiene un distrito por su nombre."""
+    conn = conectar_db()
+    if conn:
+        try:
+            cursor = conn.cursor()
+            cursor.execute("""
+                SELECT id, nombre
+                FROM distrito
+                WHERE nombre = ?""", (nombre,))
+            return cursor.fetchone()
+        except sqlite3.Error as e:
+            print(f"Error al obtener distrito: {e}")
+            return None
+        finally:
+            conn.close()
+
 # -------------------- OPERACIONES TIPO INSUMO --------------------
 
 def obtener_tipos_insumo():
@@ -187,6 +330,44 @@ def agregar_tipo_insumo(descripcion):
             print(f"Error al agregar tipo de insumo: {e}")
             conn.rollback()
             return None
+        finally:
+            conn.close()
+
+def actualizar_tipo_insumo(id_tipo_insumo, nueva_descripcion):
+    """Actualiza la descripción de un tipo de insumo."""
+    conn = conectar_db()
+    if conn:
+        try:
+            cursor = conn.cursor()
+            cursor.execute("""
+                UPDATE tipo_insumo
+                SET descripcion = ?
+                WHERE id = ?""", (nueva_descripcion, id_tipo_insumo))
+            conn.commit()
+            return cursor.rowcount > 0
+        except sqlite3.Error as e:
+            print(f"Error al actualizar tipo de insumo: {e}")
+            conn.rollback()
+            return False
+        finally:
+            conn.close()
+
+def eliminar_tipo_insumo(id_tipo_insumo):
+    """Elimina un tipo de insumo y sus insumos relacionados."""
+    conn = conectar_db()
+    if conn:
+        try:
+            cursor = conn.cursor()
+            # Primero eliminar insumos relacionados
+            cursor.execute("DELETE FROM insumo WHERE id_tipo_insumo = ?", (id_tipo_insumo,))
+            # Luego eliminar el tipo de insumo
+            cursor.execute("DELETE FROM tipo_insumo WHERE id = ?", (id_tipo_insumo,))
+            conn.commit()
+            return True
+        except sqlite3.Error as e:
+            print(f"Error al eliminar tipo de insumo: {e}")
+            conn.rollback()
+            return False
         finally:
             conn.close()
 
@@ -264,10 +445,11 @@ def obtener_insumos_por_tipo(id_tipo_insumo):
         try:
             cursor = conn.cursor()
             cursor.execute("""
-                SELECT i.id, i.nombre, i.lote, p.nombre as presentacion,
+                SELECT i.id, i.nombre, i.lote,
+                       COALESCE(p.nombre, '') as presentacion,
                        i.fecha_vencimiento
                 FROM insumo i
-                JOIN presentacion p ON i.id_presentacion = p.id
+                LEFT JOIN presentacion p ON i.id_presentacion = p.id
                 WHERE i.id_tipo_insumo = ?
                 ORDER BY i.nombre""", (id_tipo_insumo,))
             return cursor.fetchall()
@@ -343,6 +525,59 @@ def obtener_insumo_por_id(id_insumo):
         finally:
             conn.close()
 
+def eliminar_insumo(id_insumo):
+    """Elimina un insumo."""
+    conn = conectar_db()
+    if conn:
+        try:
+            cursor = conn.cursor()
+            cursor.execute("DELETE FROM insumo WHERE id = ?", (id_insumo,))
+            conn.commit()
+            return cursor.rowcount > 0
+        except sqlite3.Error as e:
+            print(f"Error al eliminar insumo: {e}")
+            conn.rollback()
+            return False
+        finally:
+            conn.close()
+
+# -------------------- FUNCIONES DE BÚSQUEDA POR NOMBRE (ADICIONALES) --------------------
+
+def obtener_tipo_insumo_por_descripcion(descripcion):
+    """Obtiene un tipo de insumo por su descripción."""
+    conn = conectar_db()
+    if conn:
+        try:
+            cursor = conn.cursor()
+            cursor.execute("""
+                SELECT id, descripcion
+                FROM tipo_insumo
+                WHERE descripcion = ?""", (descripcion,))
+            return cursor.fetchone()
+        except sqlite3.Error as e:
+            print(f"Error al obtener tipo de insumo: {e}")
+            return None
+        finally:
+            conn.close()
+
+def obtener_insumo_por_nombre(nombre, id_tipo_insumo):
+    """Obtiene un insumo por su nombre y tipo de insumo."""
+    conn = conectar_db()
+    if conn:
+        try:
+            cursor = conn.cursor()
+            cursor.execute("""
+                SELECT id, nombre
+                FROM insumo
+                WHERE nombre = ? AND id_tipo_insumo = ?""",
+                (nombre, id_tipo_insumo))
+            return cursor.fetchone()
+        except sqlite3.Error as e:
+            print(f"Error al obtener insumo: {e}")
+            return None
+        finally:
+            conn.close()
+
 # -------------------- OPERACIONES MOVIMIENTO --------------------
 
 def obtener_tipos_movimiento():
@@ -359,7 +594,7 @@ def obtener_tipos_movimiento():
         finally:
             conn.close()
 
-def registrar_movimiento(id_insumo, id_servicio, cantidad, id_tipo_movimiento):
+def registrar_movimiento(id_insumo, id_servicio, cantidad, id_tipo_movimiento, referencia, observaciones=None):
     """Registra un nuevo movimiento."""
     conn = conectar_db()
     if conn:
@@ -368,9 +603,11 @@ def registrar_movimiento(id_insumo, id_servicio, cantidad, id_tipo_movimiento):
             cursor = conn.cursor()
             cursor.execute("""
                 INSERT INTO movimiento (id_insumo, id_servicio, fecha_registro,
-                                      cantidad, id_tipo_movimiento)
-                VALUES (?, ?, ?, ?, ?)""",
-                (id_insumo, id_servicio, fecha_actual, cantidad, id_tipo_movimiento))
+                                      cantidad, id_tipo_movimiento, referencia,
+                                      observaciones)
+                VALUES (?, ?, ?, ?, ?, ?, ?)""",
+                (id_insumo, id_servicio, fecha_actual, cantidad,
+                 id_tipo_movimiento, referencia, observaciones))
             conn.commit()
             return cursor.lastrowid
         except sqlite3.Error as e:
@@ -397,6 +634,108 @@ def obtener_movimientos_por_servicio(id_servicio):
             return cursor.fetchall()
         except sqlite3.Error as e:
             print(f"Error al obtener movimientos: {e}")
+            return None
+        finally:
+            conn.close()
+            
+def obtener_movimientos_kardex(fecha_inicial, fecha_final, distrito=None, tipo_servicio=None,
+                             servicio=None, tipo_insumo=None, insumo=None, presentacion=None):
+    """Obtiene los movimientos para el reporte Kardex."""
+    conn = conectar_db()
+    if conn:
+        try:
+            cursor = conn.cursor()
+
+            # Construir la consulta base
+            query = """
+                SELECT
+                    strftime('%d/%m/%Y', m.fecha_registro) as fecha,
+                    m.id as numero_referencia,
+                    tm.descripcion as remitente_destinatario,
+                    CASE
+                        WHEN tm.descripcion = 'Entrada' THEN m.cantidad
+                        ELSE NULL
+                    END as entrada,
+                    i.lote,
+                    CASE
+                        WHEN i.fecha_vencimiento IS NOT NULL
+                        THEN strftime('%d/%m/%Y', i.fecha_vencimiento)
+                        ELSE NULL
+                    END as fecha_vencimiento,
+                    CASE
+                        WHEN tm.descripcion IN ('Salida', 'Entregado') THEN m.cantidad
+                        ELSE NULL
+                    END as salida,
+                    CASE
+                        WHEN tm.descripcion = 'Reajuste Negativo' THEN -m.cantidad
+                        WHEN tm.descripcion = 'Reajuste Positivo' THEN m.cantidad
+                        ELSE NULL
+                    END as reajuste,
+                    m.observaciones,
+                    i.nombre as insumo,
+                    p.nombre as presentacion,
+                    ti.descripcion as tipo_insumo,
+                    s.nombre as servicio,
+                    ts.descripcion as tipo_servicio,
+                    d.nombre as distrito
+                FROM movimiento m
+                JOIN insumo i ON m.id_insumo = i.id
+                JOIN tipo_movimiento tm ON m.id_tipo_movimiento = tm.id
+                JOIN servicio s ON m.id_servicio = s.id
+                JOIN tipo_servicio ts ON s.id_tipo_servicio = ts.id
+                JOIN distrito d ON ts.id_distrito = d.id
+                JOIN tipo_insumo ti ON i.id_tipo_insumo = ti.id
+                LEFT JOIN presentacion p ON i.id_presentacion = p.id
+                WHERE m.fecha_registro BETWEEN ? AND ?
+            """
+
+            params = [fecha_inicial, fecha_final]
+
+            # Agregar filtros adicionales si se proporcionan
+            if distrito:
+                query += " AND d.nombre = ?"
+                params.append(distrito)
+            if tipo_servicio:
+                query += " AND ts.descripcion = ?"
+                params.append(tipo_servicio)
+            if servicio:
+                query += " AND s.nombre = ?"
+                params.append(servicio)
+            if tipo_insumo:
+                query += " AND ti.descripcion = ?"
+                params.append(tipo_insumo)
+            if insumo:
+                query += " AND i.nombre = ?"
+                params.append(insumo)
+            if presentacion:
+                query += " AND p.nombre = ?"
+                params.append(presentacion)
+
+            query += " ORDER BY m.fecha_registro"
+
+            cursor.execute(query, params)
+            movimientos = cursor.fetchall()
+
+            # Calcular saldos acumulados
+            saldo = 0
+            movimientos_con_saldo = []
+
+            for mov in movimientos:
+                mov_dict = dict(mov)
+                # Calcular el saldo
+                entrada = mov_dict['entrada'] or 0
+                salida = mov_dict['salida'] or 0
+                reajuste = mov_dict['reajuste'] or 0
+
+                saldo += entrada - salida + reajuste
+                mov_dict['saldo'] = saldo
+
+                movimientos_con_saldo.append(mov_dict)
+
+            return movimientos_con_saldo
+
+        except sqlite3.Error as e:
+            print(f"Error al obtener movimientos Kardex: {e}")
             return None
         finally:
             conn.close()
