@@ -11,6 +11,7 @@ def conectar_db():
     try:
         conn = sqlite3.connect(DB_PATH)
         conn.row_factory = sqlite3.Row  # Permite acceder a las columnas por nombre
+        conn.execute("PRAGMA foreign_keys = ON")  # Habilitar foreign keys
         return conn
     except sqlite3.Error as e:
         print(f"Error al conectar a la base de datos: {e}")
@@ -185,10 +186,10 @@ def obtener_servicios_por_tipo(id_tipo_servicio):
                 FROM servicio
                 WHERE id_tipo_servicio = ?
                 ORDER BY nombre""", (id_tipo_servicio,))
-            return cursor.fetchall()
+            return cursor.fetchall() or []  # Retorna lista vacía si no hay resultados
         except sqlite3.Error as e:
             print(f"Error al obtener servicios: {e}")
-            return None
+            return []  # Retorna lista vacía en caso de error
         finally:
             conn.close()
 
@@ -312,7 +313,7 @@ def obtener_tipos_insumo():
             return cursor.fetchall()
         except sqlite3.Error as e:
             print(f"Error al obtener tipos de insumo: {e}")
-            return None
+            return []  # Retornar lista vacía en lugar de None
         finally:
             conn.close()
 
@@ -380,10 +381,10 @@ def obtener_presentaciones():
         try:
             cursor = conn.cursor()
             cursor.execute("SELECT id, nombre FROM presentacion ORDER BY nombre")
-            return cursor.fetchall()
+            return cursor.fetchall() or []  # Retorna lista vacía si no hay resultados
         except sqlite3.Error as e:
             print(f"Error al obtener presentaciones: {e}")
-            return None
+            return []  # Retorna lista vacía en caso de error
         finally:
             conn.close()
 
@@ -438,6 +439,165 @@ def eliminar_presentacion(id_presentacion):
 
 # -------------------- OPERACIONES INSUMO --------------------
 
+def obtener_id_distrito(nombre_distrito):
+    """Obtiene el ID de un distrito por su nombre."""
+    conn = conectar_db()
+    if conn:
+        try:
+            cursor = conn.cursor()
+            cursor.execute("SELECT id FROM distrito WHERE nombre = ?", (nombre_distrito,))
+            resultado = cursor.fetchone()
+            return resultado['id'] if resultado else None
+        except sqlite3.Error as e:
+            print(f"Error al obtener ID del distrito: {e}")
+            return None
+        finally:
+            conn.close()
+
+def obtener_id_tipo_servicio(descripcion):
+    """Obtiene el ID de un tipo de servicio por su descripción."""
+    conn = conectar_db()
+    if conn:
+        try:
+            cursor = conn.cursor()
+            cursor.execute("SELECT id FROM tipo_servicio WHERE descripcion = ?", (descripcion,))
+            resultado = cursor.fetchone()
+            return resultado['id'] if resultado else None
+        except sqlite3.Error as e:
+            print(f"Error al obtener ID del tipo de servicio: {e}")
+            return None
+        finally:
+            conn.close()
+
+def obtener_id_servicio(nombre):
+    """Obtiene el ID de un servicio por su nombre."""
+    conn = conectar_db()
+    if conn:
+        try:
+            cursor = conn.cursor()
+            cursor.execute("SELECT id FROM servicio WHERE nombre = ?", (nombre,))
+            resultado = cursor.fetchone()
+            return resultado['id'] if resultado else None
+        except sqlite3.Error as e:
+            print(f"Error al obtener ID del servicio: {e}")
+            return None
+        finally:
+            conn.close()
+
+def obtener_id_tipo_insumo(descripcion):
+    """Obtiene el ID de un tipo de insumo por su descripción."""
+    conn = conectar_db()
+    if conn:
+        try:
+            cursor = conn.cursor()
+            cursor.execute("SELECT id FROM tipo_insumo WHERE descripcion = ?", (descripcion,))
+            resultado = cursor.fetchone()
+            return resultado['id'] if resultado else None
+        except sqlite3.Error as e:
+            print(f"Error al obtener ID del tipo de insumo: {e}")
+            return None
+        finally:
+            conn.close()
+
+def obtener_id_insumo(nombre):
+    """Obtiene el ID de un insumo por su nombre."""
+    conn = conectar_db()
+    if conn:
+        try:
+            cursor = conn.cursor()
+            cursor.execute("SELECT id FROM insumo WHERE nombre = ?", (nombre,))
+            resultado = cursor.fetchone()
+            return resultado['id'] if resultado else None
+        except sqlite3.Error as e:
+            print(f"Error al obtener ID del insumo: {e}")
+            return None
+        finally:
+            conn.close()
+
+def obtener_id_presentacion(nombre):
+    """Obtiene el ID de una presentación por su nombre."""
+    conn = conectar_db()
+    if conn:
+        try:
+            cursor = conn.cursor()
+            cursor.execute("SELECT id FROM presentacion WHERE nombre = ?", (nombre,))
+            resultado = cursor.fetchone()
+            return resultado['id'] if resultado else None
+        except sqlite3.Error as e:
+            print(f"Error al obtener ID de la presentación: {e}")
+            return None
+        finally:
+            conn.close()
+
+def obtener_id_tipo_movimiento(descripcion):
+    """Obtiene el ID de un tipo de movimiento por su descripción."""
+    conn = conectar_db()
+    if conn:
+        try:
+            cursor = conn.cursor()
+            cursor.execute("SELECT id FROM tipo_movimiento WHERE descripcion = ?", (descripcion,))
+            resultado = cursor.fetchone()
+            return resultado['id'] if resultado else None
+        except sqlite3.Error as e:
+            print(f"Error al obtener ID del tipo de movimiento: {e}")
+            return None
+        finally:
+            conn.close()
+
+def guardar_movimiento(movimiento_data):
+    """
+    Guarda un nuevo movimiento en la base de datos.
+
+    Args:
+        movimiento_data (dict): Diccionario con los datos del movimiento
+    """
+    conn = conectar_db()
+    if conn:
+        try:
+            cursor = conn.cursor()
+            query = """
+            INSERT INTO movimiento (
+                fecha_registro,
+                referencia,
+                id_tipo_movimiento,
+                id_distrito,
+                id_tipo_servicio,
+                id_servicio,
+                id_tipo_insumo,
+                id_insumo,
+                id_presentacion,
+                lote,
+                fecha_vencimiento,
+                cantidad,
+                observaciones
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """
+
+            cursor.execute(query, (
+                movimiento_data['fecha_registro'],
+                movimiento_data['referencia'],
+                movimiento_data['tipo_movimiento_id'],
+                movimiento_data['distrito_id'],
+                movimiento_data['tipo_servicio_id'],
+                movimiento_data['servicio_id'],
+                movimiento_data['tipo_insumo_id'],
+                movimiento_data['insumo_id'],
+                movimiento_data['presentacion_id'],
+                movimiento_data['lote'],
+                movimiento_data['fecha_vencimiento'],
+                movimiento_data['cantidad'],
+                movimiento_data['observaciones']
+            ))
+
+            conn.commit()
+            return cursor.lastrowid
+        except sqlite3.Error as e:
+            print(f"Error al guardar el movimiento: {e}")
+            conn.rollback()
+            return None
+        finally:
+            conn.close()
+
 def obtener_insumos_por_tipo(id_tipo_insumo):
     """Obtiene todos los insumos de un tipo específico."""
     conn = conectar_db()
@@ -445,9 +605,8 @@ def obtener_insumos_por_tipo(id_tipo_insumo):
         try:
             cursor = conn.cursor()
             cursor.execute("""
-                SELECT i.id, i.nombre, i.lote,
-                       COALESCE(p.nombre, '') as presentacion,
-                       i.fecha_vencimiento
+                SELECT i.id, i.nombre, i.lote, i.fecha_vencimiento,
+                       p.nombre as presentacion
                 FROM insumo i
                 LEFT JOIN presentacion p ON i.id_presentacion = p.id
                 WHERE i.id_tipo_insumo = ?
@@ -455,7 +614,7 @@ def obtener_insumos_por_tipo(id_tipo_insumo):
             return cursor.fetchall()
         except sqlite3.Error as e:
             print(f"Error al obtener insumos: {e}")
-            return None
+            return []
         finally:
             conn.close()
 
@@ -466,8 +625,7 @@ def agregar_insumo(nombre, lote, id_presentacion, fecha_vencimiento, id_tipo_ins
         try:
             cursor = conn.cursor()
             cursor.execute("""
-                INSERT INTO insumo (nombre, lote, id_presentacion,
-                                  fecha_vencimiento, id_tipo_insumo)
+                INSERT INTO insumo (nombre, lote, id_presentacion, fecha_vencimiento, id_tipo_insumo)
                 VALUES (?, ?, ?, ?, ?)""",
                 (nombre, lote, id_presentacion, fecha_vencimiento, id_tipo_insumo))
             conn.commit()
@@ -587,10 +745,10 @@ def obtener_tipos_movimiento():
         try:
             cursor = conn.cursor()
             cursor.execute("SELECT id, descripcion FROM tipo_movimiento ORDER BY descripcion")
-            return cursor.fetchall()
+            return cursor.fetchall() or []  # Retorna lista vacía si no hay resultados
         except sqlite3.Error as e:
             print(f"Error al obtener tipos de movimiento: {e}")
-            return None
+            return []  # Retorna lista vacía en caso de error
         finally:
             conn.close()
 
@@ -602,10 +760,15 @@ def registrar_movimiento(id_insumo, id_servicio, cantidad, id_tipo_movimiento, r
             fecha_actual = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
             cursor = conn.cursor()
             cursor.execute("""
-                INSERT INTO movimiento (id_insumo, id_servicio, fecha_registro,
-                                      cantidad, id_tipo_movimiento, referencia,
-                                      observaciones)
-                VALUES (?, ?, ?, ?, ?, ?, ?)""",
+                INSERT INTO movimiento (
+                    id_insumo,
+                    id_servicio,
+                    fecha_registro,
+                    cantidad,
+                    id_tipo_movimiento,
+                    referencia,
+                    observaciones
+                ) VALUES (?, ?, ?, ?, ?, ?, ?)""",
                 (id_insumo, id_servicio, fecha_actual, cantidad,
                  id_tipo_movimiento, referencia, observaciones))
             conn.commit()
@@ -739,3 +902,51 @@ def obtener_movimientos_kardex(fecha_inicial, fecha_final, distrito=None, tipo_s
             return None
         finally:
             conn.close()
+
+# -------------------- VERIFICACION DE DATOS BD --------------------
+
+def verificar_conexion():
+    """Verifica si se puede establecer conexión con la base de datos."""
+    conn = conectar_db()
+    if conn:
+        try:
+            cursor = conn.cursor()
+            cursor.execute("SELECT 1")
+            return True
+        except sqlite3.Error:
+            return False
+        finally:
+            conn.close()
+    return False
+
+def verificar_tablas():
+    """Verifica que todas las tablas necesarias existan."""
+    conn = conectar_db()
+    if conn:
+        try:
+            cursor = conn.cursor()
+            tablas = [
+                'distrito',
+                'tipo_servicio',
+                'servicio',
+                'tipo_insumo',
+                'presentacion',
+                'tipo_movimiento',
+                'insumo',
+                'movimiento'
+            ]
+
+            for tabla in tablas:
+                cursor.execute(f"""
+                    SELECT name FROM sqlite_master
+                    WHERE type='table' AND name='{tabla}'
+                """)
+                if not cursor.fetchone():
+                    return False
+            return True
+        except sqlite3.Error as e:
+            print(f"Error al verificar tablas: {e}")
+            return False
+        finally:
+            conn.close()
+    return False
