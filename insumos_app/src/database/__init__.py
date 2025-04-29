@@ -131,16 +131,18 @@ def crear_base_datos():
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS movimiento (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
-                id_insumo INTEGER NOT NULL,
-                id_servicio INTEGER NOT NULL,
-                fecha_registro TEXT NOT NULL,
+                fecha_registro DATE NOT NULL,
                 referencia TEXT NOT NULL,
+                tipo_movimiento_id INTEGER NOT NULL,
+                servicio_id INTEGER NOT NULL,
+                insumo_id INTEGER NOT NULL,
+                lote TEXT NOT NULL,
+                fecha_vencimiento DATE NOT NULL,
                 cantidad REAL NOT NULL,
                 observaciones TEXT,
-                id_tipo_movimiento INTEGER NOT NULL,
-                FOREIGN KEY (id_insumo) REFERENCES insumo(id),
-                FOREIGN KEY (id_servicio) REFERENCES servicio(id),
-                FOREIGN KEY (id_tipo_movimiento) REFERENCES tipo_movimiento(id)
+                FOREIGN KEY (tipo_movimiento_id) REFERENCES tipo_movimiento(id),
+                FOREIGN KEY (servicio_id) REFERENCES servicio(id),
+                FOREIGN KEY (insumo_id) REFERENCES insumo(id)
             );
         """)
 

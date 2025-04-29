@@ -318,13 +318,28 @@ def obtener_tipos_insumo():
             conn.close()
 
 def agregar_tipo_insumo(descripcion):
-    """Agrega un nuevo tipo de insumo."""
+    """Agrega un nuevo tipo de insumo o retorna el existente."""
     conn = conectar_db()
     if conn:
         try:
             cursor = conn.cursor()
-            cursor.execute("INSERT INTO tipo_insumo (descripcion) VALUES (?)",
-                         (descripcion,))
+
+            # Primero verificar si ya existe
+            cursor.execute("""
+                SELECT id FROM tipo_insumo
+                WHERE descripcion = ?
+            """, (descripcion,))
+
+            existente = cursor.fetchone()
+            if existente:
+                return existente['id']  # Retorna el ID si ya existe
+
+            # Si no existe, lo inserta
+            cursor.execute("""
+                INSERT INTO tipo_insumo (descripcion)
+                VALUES (?)
+            """, (descripcion,))
+
             conn.commit()
             return cursor.lastrowid
         except sqlite3.Error as e:
@@ -389,12 +404,28 @@ def obtener_presentaciones():
             conn.close()
 
 def agregar_presentacion(nombre):
-    """Agrega una nueva presentación."""
+    """Agrega una nueva presentación o retorna la existente."""
     conn = conectar_db()
     if conn:
         try:
             cursor = conn.cursor()
-            cursor.execute("INSERT INTO presentacion (nombre) VALUES (?)", (nombre,))
+
+            # Primero verificar si ya existe
+            cursor.execute("""
+                SELECT id FROM presentacion
+                WHERE nombre = ?
+            """, (nombre,))
+
+            existente = cursor.fetchone()
+            if existente:
+                return existente['id']  # Retorna el ID si ya existe
+
+            # Si no existe, la inserta
+            cursor.execute("""
+                INSERT INTO presentacion (nombre)
+                VALUES (?)
+            """, (nombre,))
+
             conn.commit()
             return cursor.lastrowid
         except sqlite3.Error as e:
@@ -547,49 +578,44 @@ def obtener_id_tipo_movimiento(descripcion):
 def guardar_movimiento(movimiento_data):
     """
     Guarda un nuevo movimiento en la base de datos.
-
-    Args:
-        movimiento_data (dict): Diccionario con los datos del movimiento
     """
     conn = conectar_db()
     if conn:
         try:
             cursor = conn.cursor()
+            
+            # Convertir las fechas a formato SQLite (YYYY-MM-DD)
+            fecha_registro = movimiento_data['fecha_registro'].strftime('%Y-%m-%d')
+            fecha_vencimiento = movimiento_data['fecha_vencimiento'].strftime('%Y-%m-%d')
+            
             query = """
             INSERT INTO movimiento (
                 fecha_registro,
                 referencia,
-                id_tipo_movimiento,
-                id_distrito,
-                id_tipo_servicio,
-                id_servicio,
-                id_tipo_insumo,
-                id_insumo,
-                id_presentacion,
+                tipo_movimiento_id,
+                servicio_id,
+                insumo_id,
                 lote,
                 fecha_vencimiento,
                 cantidad,
                 observaciones
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
             """
 
             cursor.execute(query, (
-                movimiento_data['fecha_registro'],
+                fecha_registro,
                 movimiento_data['referencia'],
                 movimiento_data['tipo_movimiento_id'],
-                movimiento_data['distrito_id'],
-                movimiento_data['tipo_servicio_id'],
                 movimiento_data['servicio_id'],
-                movimiento_data['tipo_insumo_id'],
                 movimiento_data['insumo_id'],
-                movimiento_data['presentacion_id'],
                 movimiento_data['lote'],
-                movimiento_data['fecha_vencimiento'],
+                fecha_vencimiento,
                 movimiento_data['cantidad'],
                 movimiento_data['observaciones']
             ))
 
             conn.commit()
+            print(f"Movimiento guardado con ID: {cursor.lastrowid}")
             return cursor.lastrowid
         except sqlite3.Error as e:
             print(f"Error al guardar el movimiento: {e}")
@@ -818,38 +844,68 @@ def obtener_movimientos_kardex(fecha_inicial, fecha_final, distrito=None, tipo_s
             query = """
                 SELECT
                     strftime('%d/%m/%Y', m.fecha_registro) as fecha,
-                    m.id as numero_referencia,
-                    tm.descripcion as remitente_destinatario,
+                    m.referencia,
+                    tm.descripcion as tipo_movimiento,
+                    COALESCE(
+                        CASE
+                            WHEN UPPER(tm.descripcion) IN ('ENTRADA NIVEL SUPERIOR', 'INVENTARIO INICIAL') THEN m.cantidad
+                            ELSE 0
+                        END, 0
+                    ) AS entrada,
+                    m.lote,
                     CASE
-                        WHEN tm.descripcion = 'Entrada' THEN m.cantidad
-                        ELSE NULL
-                    END as entrada,
-                    i.lote,
-                    CASE
-                        WHEN i.fecha_vencimiento IS NOT NULL
-                        THEN strftime('%d/%m/%Y', i.fecha_vencimiento)
-                        ELSE NULL
+                        WHEN m.fecha_vencimiento IS NOT NULL
+                        THEN strftime('%d/%m/%Y', m.fecha_vencimiento)
+                        ELSE ''
                     END as fecha_vencimiento,
-                    CASE
-                        WHEN tm.descripcion IN ('Salida', 'Entregado') THEN m.cantidad
-                        ELSE NULL
-                    END as salida,
-                    CASE
-                        WHEN tm.descripcion = 'Reajuste Negativo' THEN -m.cantidad
-                        WHEN tm.descripcion = 'Reajuste Positivo' THEN m.cantidad
-                        ELSE NULL
-                    END as reajuste,
+                    COALESCE(
+                        CASE
+                            WHEN UPPER(tm.descripcion) IN ('SALIDA NIVEL SUPERIOR', 'ENTREGADO') THEN m.cantidad
+                            ELSE 0
+                        END, 0
+                    ) AS salida,
+                    COALESCE(
+                        CASE
+                            WHEN UPPER(tm.descripcion) = 'REAJUSTE NEGATIVO' THEN -m.cantidad
+                            WHEN UPPER(tm.descripcion) = 'REAJUSTE POSITIVO' THEN m.cantidad
+                            ELSE 0
+                        END, 0
+                    ) AS reajuste,
                     m.observaciones,
                     i.nombre as insumo,
                     p.nombre as presentacion,
                     ti.descripcion as tipo_insumo,
                     s.nombre as servicio,
                     ts.descripcion as tipo_servicio,
-                    d.nombre as distrito
+                    d.nombre as distrito,
+                    SUM(
+                        COALESCE(
+                            CASE
+                                WHEN UPPER(tm.descripcion) IN ('ENTRADA NIVEL SUPERIOR', 'INVENTARIO INICIAL') THEN m.cantidad
+                                ELSE 0
+                            END, 0
+                        )
+                        - COALESCE(
+                            CASE
+                                WHEN UPPER(tm.descripcion) IN ('SALIDA NIVEL SUPERIOR', 'ENTREGADO') THEN m.cantidad
+                                ELSE 0
+                            END, 0
+                        )
+                        + COALESCE(
+                            CASE
+                                WHEN UPPER(tm.descripcion) = 'REAJUSTE NEGATIVO' THEN -m.cantidad
+                                WHEN UPPER(tm.descripcion) = 'REAJUSTE POSITIVO' THEN m.cantidad
+                                ELSE 0
+                            END, 0
+                        )
+                    ) OVER (
+                        ORDER BY m.fecha_registro, m.id
+                        ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
+                    ) AS saldo
                 FROM movimiento m
-                JOIN insumo i ON m.id_insumo = i.id
-                JOIN tipo_movimiento tm ON m.id_tipo_movimiento = tm.id
-                JOIN servicio s ON m.id_servicio = s.id
+                JOIN insumo i ON m.insumo_id = i.id
+                JOIN tipo_movimiento tm ON m.tipo_movimiento_id = tm.id
+                JOIN servicio s ON m.servicio_id = s.id
                 JOIN tipo_servicio ts ON s.id_tipo_servicio = ts.id
                 JOIN distrito d ON ts.id_distrito = d.id
                 JOIN tipo_insumo ti ON i.id_tipo_insumo = ti.id
@@ -884,22 +940,19 @@ def obtener_movimientos_kardex(fecha_inicial, fecha_final, distrito=None, tipo_s
             cursor.execute(query, params)
             movimientos = cursor.fetchall()
 
-            # Calcular saldos acumulados
+            # Calcular saldo acumulado
             saldo = 0
             movimientos_con_saldo = []
-
             for mov in movimientos:
                 mov_dict = dict(mov)
-                # Calcular el saldo
-                entrada = mov_dict['entrada'] or 0
-                salida = mov_dict['salida'] or 0
-                reajuste = mov_dict['reajuste'] or 0
+                # Convertir a float y manejar valores nulos
+                entrada = float(mov_dict.get('entrada', 0))
+                salida = float(mov_dict.get('salida', 0))
+                reajuste = float(mov_dict.get('reajuste', 0))
 
                 saldo += entrada - salida + reajuste
                 mov_dict['saldo'] = saldo
-
                 movimientos_con_saldo.append(mov_dict)
-
             return movimientos_con_saldo
 
         except sqlite3.Error as e:

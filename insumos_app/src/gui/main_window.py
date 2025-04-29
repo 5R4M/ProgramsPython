@@ -13,11 +13,11 @@ sys.path.append(project_root)
 
 # Importar las funciones de la base de datos
 from src.database import DB_PATH, crear_base_datos, verificar_tablas
-from insumos import IngresoInsumos
-from gestion import GestionInsumos
-from servicios import GestionServicios
-from movimientos import Movimientos
-from reportes import Reportes
+from insumos_app.src.gui.ingreso_insumos import IngresoInsumos
+from insumos_app.src.gui.gestion_insumos import GestionInsumos
+from insumos_app.src.gui.gestion_servicios import GestionServicios
+from insumos_app.src.gui.gestion_movimientos import GestionMovimientos
+from insumos_app.src.gui.reporte_kardex import ReporteKardex
 
 class MainWindow:
     def __init__(self):
@@ -180,7 +180,7 @@ class MainWindow:
             return
         for widget in self.main_content_frame.winfo_children():
             widget.destroy()
-        Movimientos(self.main_content_frame, self)
+        GestionMovimientos(self.main_content_frame, self)
 
     def load_reportes(self):
         if not self.verify_database_connection():
@@ -188,7 +188,7 @@ class MainWindow:
             return
         for widget in self.main_content_frame.winfo_children():
             widget.destroy()
-        Reportes(self.main_content_frame, self)
+        ReporteKardex(self.main_content_frame, self)
 
     def create_menu(self):
         # Frame para el menú lateral
@@ -259,10 +259,10 @@ class MainWindow:
                             self.load_gestion_insumos)
         self.create_menu_button("Gestión de Servicios",
                             self.load_gestion_servicios)
-        self.create_menu_button("Movimientos",
-                            self.load_movimientos)
-        self.create_menu_button("Reportes",
-                            self.load_reportes)
+        self.create_menu_button("Gestión de Movimientos",
+                            self.load_gestion_movimientos)
+        self.create_menu_button("Reporte Kardex",
+                            self.load_reporte_kardex)
 
 
         # Botón de salir en la parte inferior

@@ -16,7 +16,7 @@ from src.database.db_manager import (
     eliminar_tipo_movimiento,
 )
 
-class Movimientos:
+class GestionMovimientos:
     def __init__(self, parent_frame, main_window):
         self.parent = parent_frame
         self.main_window = main_window
@@ -157,7 +157,7 @@ class Movimientos:
         frame_campos = ttk.Frame(ventana)
         frame_campos.pack(padx=10, pady=5, fill='x')
 
-        ttk.Label(frame_campos, text="Descripción:").pack(pady=5)
+        ttk.Label(frame_campos, text="Tipo de Movimiento:").pack(pady=5)
         descripcion = ttk.Entry(frame_campos, width=40)
         descripcion.pack(pady=5, fill='x')
 

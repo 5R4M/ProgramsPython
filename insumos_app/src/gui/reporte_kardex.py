@@ -27,7 +27,13 @@ from src.database.db_manager import (
     obtener_movimientos_kardex
 )
 
-class Reportes:
+class ReporteKardex:
+    # Definir las columnas como atributo de la clase
+    COLUMNAS = [
+        'Fecha', 'Referencia', 'Remitente/Destinatario', 'Entrada',
+        'Lote', 'Fecha Vencimiento', 'Salidas', 'Reajustes', 'Saldo', 'Observaciones'
+    ]
+    
     def __init__(self, parent_frame, main_window=None):
         self.parent = parent_frame
         self.main_window = main_window
@@ -92,10 +98,30 @@ class Reportes:
         self.tree_frame.pack(fill="both", expand=True, padx=5, pady=5)
 
         # Crear el Treeview con scrollbars
-        self.tree = ttk.Treeview(self.tree_frame)
+        self.tree = ttk.Treeview(self.tree_frame, show="headings")
         self.scrolly = ttk.Scrollbar(self.tree_frame, orient="vertical", command=self.tree.yview)
         self.scrollx = ttk.Scrollbar(self.tree_frame, orient="horizontal", command=self.tree.xview)
         self.tree.configure(yscrollcommand=self.scrolly.set, xscrollcommand=self.scrollx.set)
+        
+        # Configurar columnas usando el atributo de la clase
+        self.tree["columns"] = self.COLUMNAS 
+        self.tree.column("#0", width=0, stretch=tk.NO)
+
+        # Configurar encabezados y anchos
+        for col in self.COLUMNAS:
+            self.tree.heading(col, text=col, anchor=tk.CENTER)
+            ancho = 160
+            if col in ['Fecha', 'Referencia', 'Lote', 'Observaciones']:
+                ancho = 120
+            elif col in ['Entrada', 'Salidas', 'Reajustes', 'Saldo']:
+                ancho = 80
+
+            self.tree.column(col,
+                width=ancho,
+                minwidth=80,
+                anchor=tk.CENTER,
+                stretch=tk.NO 
+            )
 
         # Colocar el Treeview y scrollbars
         self.tree.grid(row=0, column=0, sticky="nsew")
@@ -165,13 +191,29 @@ class Reportes:
 
     def cargar_insumos(self, event=None):
         self.combo_insumo.set('')
+        self.combo_presentacion.set('')  # Limpiar presentación
         if self.combo_tipo_insumo.get():
             tipos = obtener_tipos_insumo()
             id_tipo = next(t['id'] for t in tipos
-                         if t['descripcion'] == self.combo_tipo_insumo.get())
+                        if t['descripcion'] == self.combo_tipo_insumo.get())
             insumos = obtener_insumos_por_tipo(id_tipo)
             if insumos:
                 self.combo_insumo['values'] = [''] + [i['nombre'] for i in insumos]
+
+        # Agregar binding para actualizar presentación
+        self.combo_insumo.bind('<<ComboboxSelected>>', self.actualizar_presentacion)
+        
+    
+    def actualizar_presentacion(self, event=None):
+        self.combo_presentacion.set('')
+        if self.combo_insumo.get():
+            tipos = obtener_tipos_insumo()
+            id_tipo = next(t['id'] for t in tipos
+                        if t['descripcion'] == self.combo_tipo_insumo.get())
+            insumos = obtener_insumos_por_tipo(id_tipo)
+            insumo_seleccionado = next((i for i in insumos if i['nombre'] == self.combo_insumo.get()), None)
+            if insumo_seleccionado and insumo_seleccionado['nombre_presentacion']:
+                self.combo_presentacion.set(insumo_seleccionado['nombre_presentacion'])
 
     def cargar_presentaciones(self):
         presentaciones = obtener_presentaciones()
@@ -213,18 +255,24 @@ class Reportes:
             for item in self.tree.get_children():
                 self.tree.delete(item)
 
-            # Configurar columnas
-            columns = list(self.movimientos_data[0].keys())
-            self.tree["columns"] = columns
+            # Configurar columnas del Treeview
+            self.tree.column("#0", width=0, stretch=tk.NO)  # Ocultar columna vacía
 
-            # Configurar encabezados
-            for col in columns:
-                self.tree.heading(col, text=col)
-                self.tree.column(col, width=100)  # Ajusta el ancho según necesites
-
-            # Insertar datos
-            for row in self.movimientos_data:
-                self.tree.insert("", "end", values=[row[col] for col in columns])
+          # Insertar datos con formato
+            for mov in self.movimientos_data:
+                row = [
+                    mov['fecha'],
+                    mov['referencia'] or "",
+                    mov['tipo_movimiento'],
+                    f"{mov['entrada']:.2f}",
+                    mov['lote'] or "",
+                    mov['fecha_vencimiento'] or "",
+                    f"{mov['salida']:.2f}",
+                    f"{mov['reajuste']:+.2f}" if mov['reajuste'] != 0 else "",
+                    f"{mov['saldo']:.2f}",
+                    mov['observaciones'] or ""
+                ]
+                self.tree.insert("", "end", values=row)
 
         except Exception as e:
             messagebox.showerror("Error", f"Error al generar vista previa: {str(e)}")
@@ -235,82 +283,144 @@ class Reportes:
             return
 
         try:
-            # Crear el documento PDF
+           # Generar nombre de archivo con fecha y hora
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            file_name = f"Reporte_Kardex_{timestamp}.pdf"
+
+            # Ruta a la carpeta Descargas
+            downloads_path = os.path.expanduser("~/Downloads")
+            full_path = os.path.join(downloads_path, file_name)
+            
             doc = SimpleDocTemplate(
-                "Kardex.pdf",
+                full_path,
                 pagesize=landscape(letter),
-                rightMargin=72,
-                leftMargin=72,
-                topMargin=72,
-                bottomMargin=72
+                rightMargin=36,
+                leftMargin=36,
+                topMargin=36,
+                bottomMargin=36
             )
 
-            # Contenedor para los elementos del PDF
             elements = []
-
-            # Estilos
             styles = getSampleStyleSheet()
+
+            # Estilos personalizados
             title_style = ParagraphStyle(
                 'CustomTitle',
                 parent=styles['Heading1'],
-                alignment=1,  # Centrado
-                spaceAfter=30
+                alignment=1,
+                spaceAfter=15,
+                fontSize=12
+            )
+            subtitle_style = ParagraphStyle(
+                'CustomSubtitle',
+                parent=styles['Heading2'],
+                alignment=1,
+                spaceAfter=10,
+                fontSize=10
+            )
+            timestamp_style = ParagraphStyle(
+                'TimestampStyle',
+                parent=styles['Normal'],
+                alignment=1,
+                spaceAfter=15,
+                fontSize=9
             )
 
-            # Títulos
+            # Títulos principales
             elements.append(Paragraph(
-                "DIRECCIÓN DEPARTAMENTAL DE REDES INTEGRADAS DE SERVICIOS DE SALUD DE GUATEMALA",
+                "DIRECCIÓN DEPARTAMENTAL DE REDES INTEGRADAS DE SERVICIOS DE SALUD DE GUATEMALA,",
                 title_style))
-            elements.append(Paragraph("ÁREA NOR ORIENTE", title_style))
-            elements.append(Paragraph("TARJETA DE CONTROL DE SUMINISTROS", title_style))
-            elements.append(Spacer(1, 20))
-
-            # Información de filtros
+            elements.append(Paragraph("ÁREA NOR ORIENTE", subtitle_style))
+            elements.append(Paragraph("TARJETA DE CONTROL DE SUMINISTROS", subtitle_style))
+            elements.append(Paragraph(
+                f"Generado el: {datetime.now().strftime('%d/%m/%Y %H:%M:%S')}",
+                timestamp_style)) 
+            
+            # Filtros en dos filas horizontales
             filtros = [
                 f"Distrito: {self.combo_distrito.get()}",
                 f"Tipo de Servicio: {self.combo_tipo_servicio.get()}",
                 f"Servicio: {self.combo_servicio.get()}",
-                f"Tipo de Insumo: {self.combo_tipo_insumo.get()}",
                 f"Insumo: {self.combo_insumo.get()}",
                 f"Presentación: {self.combo_presentacion.get()}"
             ]
+            
+            # Crear estilo para alineación izquierda
+            left_style = ParagraphStyle(
+                name="LeftAlign",
+                alignment=0,  # 0 = LEFT
+                fontSize=9,
+                fontName='Helvetica'
+            )
+            
+            # Crear tabla con una sola fila y 5 columnas
+            data_filtros = [[Paragraph(item, left_style) for item in filtros]]
 
-            for filtro in filtros:
-                elements.append(Paragraph(filtro, styles['Normal']))
-            elements.append(Spacer(1, 20))
+            # Anchos de columna (ajustar según necesidad)
+            col_widths = [125, 125, 125, 125, 125]
 
-            # Crear tabla de datos
-            headers = list(self.movimientos_data[0].keys())
-            data = [headers]  # Primera fila son los encabezados
-            for row in self.movimientos_data:
-                data.append([str(row[col]) for col in headers])
-
-            # Crear tabla
-            table = Table(data)
-            table.setStyle(TableStyle([
-                ('BACKGROUND', (0, 0), (-1, 0), colors.grey),
-                ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
-                ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
-                ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-                ('FONTSIZE', (0, 0), (-1, 0), 14),
-                ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
-                ('BACKGROUND', (0, 1), (-1, -1), colors.beige),
-                ('TEXTCOLOR', (0, 1), (-1, -1), colors.black),
-                ('FONTNAME', (0, 1), (-1, -1), 'Helvetica'),
-                ('FONTSIZE', (0, 1), (-1, -1), 12),
-                ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
-                ('GRID', (0, 0), (-1, -1), 1, colors.black)
+            table_filtros = Table(data_filtros, colWidths=col_widths)
+            table_filtros.setStyle(TableStyle([
+                ('ALIGN', (0,0), (-1,-1), 'LEFT'),
+                ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
+                ('FONTSIZE', (0,0), (-1,-1), 9),
+                ('GRID', (0,0), (-1,-1), 0.5, colors.lightgrey)
             ]))
 
+            elements.append(table_filtros)
+            elements.append(Spacer(1, 20))
+
+            # Encabezados de la tabla
+            headers = [
+                'Fecha',
+                'Referencia',
+                'Remitente/Destinatario',
+                'Entrada',
+                'Lote',
+                'Fecha Vencimiento',
+                'Salidas',
+                'Reajustes',
+                'Saldo',
+                'Observaciones'
+            ]
+
+            # Datos del reporte
+            data = [headers]
+            for mov in self.movimientos_data:
+                row = [
+                    mov['fecha'],
+                    mov['referencia'] or "",
+                    mov['tipo_movimiento'],
+                    f"{mov['entrada']:.2f}",
+                    mov['lote'] or "",
+                    mov['fecha_vencimiento'] or "",
+                    f"{mov['salida']:.2f}",
+                    f"{mov['reajuste']:+.2f}" if mov['reajuste'] != 0 else "",
+                    f"{mov['saldo']:.2f}",
+                    mov['observaciones'] or ""
+                ]
+                data.append(row)
+
+            # Crear tabla con formato
+            table = Table(data)
+            table.setStyle(TableStyle([
+                ('BACKGROUND', (0,0), (-1,0), colors.lightblue),
+                ('TEXTCOLOR', (0,0), (-1,0), colors.black),
+                ('ALIGN', (0,0), (-1,-1), 'CENTER'),
+                ('FONTNAME', (0,0), (-1,0), 'Helvetica-Bold'),
+                ('FONTSIZE', (0,0), (-1,0), 9),
+                ('GRID', (0,0), (-1,-1), 0.5, colors.grey),
+                ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
+                ('TOPPADDING', (0,0), (-1,-1), 3),
+                ('BOTTOMPADDING', (0,0), (-1,-1), 3)
+            ]))
             elements.append(table)
 
-            # Generar PDF
             doc.build(elements)
-            messagebox.showinfo("Éxito", "PDF generado correctamente")
-        
+            messagebox.showinfo("Éxito", f"PDF guardado en:\n{full_path}")
+
         except Exception as e:
             messagebox.showerror("Error", f"Error al generar PDF: {str(e)}")
-            print(f"Error detallado: {e}")
 
     def generar_kardex(self):
         try:
@@ -350,46 +460,84 @@ class Reportes:
             messagebox.showerror("Error", f"Error al generar reporte: {str(e)}")
 
     def generar_excel(self, movimientos):
-        # Crear DataFrame
-        df = pd.DataFrame(movimientos)
+        # Filtrar y renombrar columnas
+        columnas_relevantes = [
+            'fecha', 'referencia', 'tipo_movimiento', 'entrada',
+            'lote', 'fecha_vencimiento', 'salida', 'reajuste', 'saldo', 'observaciones'
+        ]
+        df = pd.DataFrame(movimientos)[columnas_relevantes]
+        df.columns = [
+            'Fecha', 'Referencia', 'Remitente/Destinatario', 'Entrada',
+            'Lote', 'Fecha Vencimiento', 'Salidas', 'Reajustes', 'Saldo', 'Observaciones'
+        ]
+        
+        # Generar nombre de archivo con fecha y hora
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        file_name = f"Reporte_Kardex_{timestamp}.xlsx"
+
+        # Ruta a la carpeta Descargas
+        downloads_path = os.path.expanduser("~/Downloads")  # <<<< CORREGIDO
+        full_path = os.path.join(downloads_path, file_name)
 
         # Crear archivo Excel
-        writer = pd.ExcelWriter('Kardex.xlsx', engine='xlsxwriter')
-        df.to_excel(writer, sheet_name='Kardex', startrow=7, index=False)
+        writer = pd.ExcelWriter(full_path, engine='xlsxwriter')
+        df.to_excel(writer, sheet_name='Kardex', startrow=8, index=False)
 
         # Obtener el objeto workbook y worksheet
         workbook = writer.book
         worksheet = writer.sheets['Kardex']
 
         # Formato para títulos
-        titulo_format = workbook.add_format({
+        title_format = workbook.add_format({
             'bold': True,
             'align': 'center',
-            'font_size': 14
+            'font_size': 12
+        })
+        subtitle_format = workbook.add_format({
+            'bold': True,
+            'align': 'center',
+            'font_size': 10
+        })
+        timestamp_format = workbook.add_format({
+            'align': 'center',
+            'font_size': 9
         })
 
-        # Escribir títulos
+        # Escribir títulos y fecha/hora
         worksheet.merge_range('A1:J1',
-            'DIRECCION DEPARTAMENTAL DE REDES INTEGRADAS DE SERVICIOS DE SALUD DE GUATEMALA',
-            titulo_format)
-        worksheet.merge_range('A2:J2', 'AREA NOR ORIENTE', titulo_format)
-        worksheet.merge_range('A3:J3', 'TARJETA DE CONTROL DE SUMINISTROS', titulo_format)
+            'DIRECCIÓN DEPARTAMENTAL DE REDES INTEGRADAS DE SERVICIOS DE SALUD DE GUATEMALA,',
+            title_format)
+        worksheet.merge_range('A2:J2', 'ÁREA NOR ORIENTE', subtitle_format)
+        worksheet.merge_range('A3:J3', 'TARJETA DE CONTROL DE SUMINISTROS', subtitle_format)
+        worksheet.merge_range('A4:J4', f"Generado el: {datetime.now().strftime('%d/%m/%Y %H:%M:%S')}", timestamp_format)
 
         # Escribir filtros
-        filtros_format = workbook.add_format({'bold': True})
-        worksheet.write('A5', f'Distrito: {self.combo_distrito.get()}', filtros_format)
-        worksheet.write('C5', f'Tipo de Servicio: {self.combo_tipo_servicio.get()}', filtros_format)
-        worksheet.write('E5', f'Servicio: {self.combo_servicio.get()}', filtros_format)
-        worksheet.write('A6', f'Tipo de Insumo: {self.combo_tipo_insumo.get()}', filtros_format)
-        worksheet.write('C6', f'Insumo: {self.combo_insumo.get()}', filtros_format)
-        worksheet.write('E6', f'Presentación: {self.combo_presentacion.get()}', filtros_format)
+        worksheet.write('A6', f"Distrito: {self.combo_distrito.get()}", subtitle_format)
+        worksheet.write('C6', f"Tipo de Servicio: {self.combo_tipo_servicio.get()}", subtitle_format)
+        worksheet.write('E6', f"Servicio: {self.combo_servicio.get()}", subtitle_format)
+        worksheet.write('G6', f"Insumo: {self.combo_insumo.get()}", subtitle_format)
+        worksheet.write('I6', f"Presentación: {self.combo_presentacion.get()}", subtitle_format)
+
+        # Configuración de página
+        worksheet.set_landscape()
+        worksheet.set_paper(9) 
+        worksheet.fit_to_pages(1, 1)
 
         # Ajustar anchos de columna
-        worksheet.set_column('A:J', 15)
+        worksheet.set_column('A:A', 12)    # Fecha
+        worksheet.set_column('B:B', 15)    # Referencia
+        worksheet.set_column('C:C', 25)    # Remitente/Destinatario
+        worksheet.set_column('D:D', 10)    # Entrada
+        worksheet.set_column('E:E', 12)    # Lote
+        worksheet.set_column('F:F', 12)    # Fecha Venc.
+        worksheet.set_column('G:G', 10)    # Salidas
+        worksheet.set_column('H:H', 10)    # Reajustes
+        worksheet.set_column('I:I', 10)    # Saldo
+        worksheet.set_column('J:J', 20)    # Observaciones
 
         # Guardar archivo
         writer.close()
-        messagebox.showinfo("Éxito", "Reporte generado correctamente")
+        messagebox.showinfo("Éxito", f"Reporte guardado en:\n{full_path}")
 
     def cerrar_ventana(self):
         if messagebox.askyesno("Confirmar", "¿Está seguro que desea cerrar esta ventana?"):

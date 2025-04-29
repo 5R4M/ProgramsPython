@@ -160,24 +160,13 @@ class IngresoInsumos:
         self.frame_movimientos = ttk.LabelFrame(self.parent, text="Movimientos")
         self.frame_movimientos.pack(fill="both", expand=True, padx=10, pady=10)
 
-        # Frame contenedor para Treeview y scrollbars
-        self.tree_frame = ttk.Frame(self.frame_movimientos)
-        self.tree_frame.pack(fill="both", expand=True, padx=5, pady=5)
-
-        # Crear contenedor interno para el Treeview y scrollbars
-        self.tree_container = ttk.Frame(self.tree_frame)
-        self.tree_container.pack(fill="both", expand=True)
-
-        # Configurar el grid del contenedor interno
-        self.tree_container.grid_rowconfigure(0, weight=1)
-        self.tree_container.grid_columnconfigure(0, weight=1)
-
         # Crear Treeview con scrollbars
         columns = ('fecha_registro', 'referencia', 'tipo_movimiento', 'insumo', 'presentacion',
                 'lote', 'fecha_vencimiento', 'cantidad', 'observaciones')
 
-        # Crear el Treeview
-        self.tree = ttk.Treeview(self.tree_container, columns=columns, show='headings', height=10)
+        # Crear el Treeview directamente en el frame_movimientos
+        self.tree = ttk.Treeview(self.frame_movimientos, columns=columns, show='headings')
+        self.tree.pack(fill="both", expand=True, padx=5, pady=5)
 
         # Definir los encabezados y configurar las columnas
         encabezados = {
@@ -197,22 +186,16 @@ class IngresoInsumos:
             self.tree.heading(col, text=encabezados[col])
             self.tree.column(col, width=150, minwidth=150)
 
-        # Crear los scrollbars
-        self.scrollbar_y = ttk.Scrollbar(self.tree_container, orient="vertical", command=self.tree.yview)
-        self.scrollbar_x = ttk.Scrollbar(self.tree_container, orient="horizontal", command=self.tree.xview)
-        self.tree.configure(yscrollcommand=self.scrollbar_y.set, xscrollcommand=self.scrollbar_x.set)
+        # Crear y configurar scrollbars
+        scrollbar_y = ttk.Scrollbar(self.frame_movimientos, orient="vertical", command=self.tree.yview)
+        scrollbar_x = ttk.Scrollbar(self.frame_movimientos, orient="horizontal", command=self.tree.xview)
+        self.tree.configure(yscrollcommand=scrollbar_y.set, xscrollcommand=scrollbar_x.set)
 
-        # Colocar el Treeview y los scrollbars usando grid
-        self.tree.grid(row=0, column=0, sticky="nsew")
-        self.scrollbar_y.grid(row=0, column=1, sticky="ns")
-        self.scrollbar_x.grid(row=1, column=0, sticky="ew")
+        # Posicionar scrollbars
+        scrollbar_y.pack(side="right", fill="y")
+        scrollbar_x.pack(side="bottom", fill="x")
 
-        # Configurar el tamaño mínimo del frame contenedor
-        self.tree_frame.update()
-        min_height = 300  # altura mínima en píxeles
-        self.tree_frame.configure(height=min_height)
-
-        # Agregar binding para el evento de configuración
+        # Configurar el evento de redimensionamiento
         def on_treeview_configure(event):
             # Ajustar el ancho de las columnas proporcionalmente
             width = event.width
@@ -474,6 +457,13 @@ class IngresoInsumos:
                     if tipo_servicio_id:
                         servicios = obtener_servicios_por_tipo(tipo_servicio_id)
                         servicio_cb['values'] = [s['nombre'] for s in servicios or []]
+
+                        # Verificar si el servicio actual está en la lista de servicios
+                        servicio_actual = self.servicio_var.get()
+                        if servicio_actual in [s['nombre'] for s in servicios]:
+                            edit_servicio_var.set(servicio_actual)
+                        else:
+                            edit_servicio_var.set('')
             except Exception as e:
                 print(f"Error al actualizar servicios: {e}")
                 servicio_cb['values'] = []
@@ -510,28 +500,53 @@ class IngresoInsumos:
         # Primero establecemos el distrito actual
         edit_distrito_var.set(self.distrito_var.get())
 
-        # Esperamos un momento para que se actualicen los tipos de servicio
-        editar_ventana.after(200, lambda: [
-            # Establecer tipo de servicio
-            edit_tipo_servicio_var.set(self.tipo_servicio_var.get()),
-            # Esperamos otro momento para que se actualicen los servicios
-            editar_ventana.after(200, lambda: [
-                # Establecer servicio
-                edit_servicio_var.set(self.servicio_var.get()),
-                # Establecer tipo de insumo
-                edit_tipo_insumo_var.set(self.tipo_insumo_var.get()),
-                # Esperamos otro momento para que se actualicen los insumos
-                editar_ventana.after(200, lambda: [
-                    # Establecer insumo
-                    edit_insumo_var.set(valores[3]),
-                    # Esperamos otro momento para que se actualice la presentación
-                    editar_ventana.after(200, lambda: [
-                        # Establecer presentación
-                        edit_presentacion_var.set(valores[4])
-                    ])
-                ])
-            ])
-        ])
+        # Cargar los valores actuales
+        def cargar_valores_iniciales():
+            # Primero cargamos el distrito y esperamos que se actualicen los tipos de servicio
+            edit_distrito_var.set(self.distrito_var.get())
+
+            def cargar_tipo_servicio():
+                # Cargamos el tipo de servicio y esperamos que se actualicen los servicios
+                edit_tipo_servicio_var.set(self.tipo_servicio_var.get())
+
+                def cargar_servicio():
+                    # Cargamos el servicio
+                    edit_servicio_var.set(self.servicio_var.get())
+
+                    def cargar_resto_valores():
+                        # Cargamos el tipo de insumo
+                        edit_tipo_insumo_var.set(self.tipo_insumo_var.get())
+
+                        def cargar_insumo():
+                            # Cargamos el insumo y la presentación
+                            edit_insumo_var.set(valores[3])
+                            edit_presentacion_var.set(valores[4])
+
+                            # Cargamos el resto de los valores
+                            fecha_actual = datetime.strptime(valores[0], '%d/%m/%Y').date()
+                            fecha_edit.set_date(fecha_actual)
+                            referencia_entry.delete(0, tk.END)
+                            referencia_entry.insert(0, valores[1])
+                            edit_tipo_movimiento_var.set(valores[2])
+                            lote_entry.delete(0, tk.END)
+                            lote_entry.insert(0, valores[5])
+                            fecha_venc = datetime.strptime(valores[6], '%d/%m/%Y').date()
+                            fecha_venc_edit.set_date(fecha_venc)
+                            cantidad_entry.delete(0, tk.END)
+                            cantidad_entry.insert(0, valores[7])
+                            if valores[8]:
+                                observaciones_entry.insert(0, valores[8])
+
+                        editar_ventana.after(100, cargar_insumo)
+
+                    editar_ventana.after(100, cargar_resto_valores)
+
+                editar_ventana.after(100, cargar_servicio)
+
+            editar_ventana.after(100, cargar_tipo_servicio)
+
+        # Iniciar la carga de valores
+        cargar_valores_iniciales()
 
         # Establecer el resto de los valores
         fecha_actual = datetime.strptime(valores[0], '%d/%m/%Y').date()

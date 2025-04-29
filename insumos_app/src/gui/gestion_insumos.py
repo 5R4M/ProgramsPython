@@ -32,7 +32,6 @@ from src.database.db_manager import (
     agregar_presentacion,
     agregar_insumo,
     actualizar_tipo_insumo,
-    actualizar_presentacion,
     actualizar_insumo,
     eliminar_tipo_insumo,
     eliminar_presentacion,
