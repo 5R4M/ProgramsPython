@@ -102,7 +102,7 @@ class GestionServicios:
         frame_lista.pack(fill="both", expand=True, padx=5, pady=5)
 
         self.tree_distritos = ttk.Treeview(frame_lista, columns=('nombre',), show='headings')
-        self.tree_distritos.heading('nombre', text='Nombre')
+        self.tree_distritos.heading('nombre', text='Distrito')
         self.tree_distritos.grid(row=0, column=0, sticky="nsew")
         scrolly = ttk.Scrollbar(frame_lista, orient="vertical", command=self.tree_distritos.yview)
         self.tree_distritos.configure(yscrollcommand=scrolly.set)
@@ -143,9 +143,14 @@ class GestionServicios:
         ventana.title("Agregar Distrito")
         ventana.geometry("350x120")
         self.centrar_ventana(ventana)
-        ttk.Label(ventana, text="Nombre:").pack(pady=5)
-        nombre = ttk.Entry(ventana, width=40)
-        nombre.pack(pady=5)
+
+        frame_campos = ttk.Frame(ventana)
+        frame_campos.pack(padx=10, pady=5, fill='x')
+
+        ttk.Label(frame_campos, text="Nombre:").pack(pady=5)
+        nombre = ttk.Entry(frame_campos, width=40)
+        nombre.pack(pady=5, fill='x')
+
         def guardar():
             if nombre.get().strip():
                 agregar_distrito(nombre.get().strip())
@@ -154,6 +159,7 @@ class GestionServicios:
                 messagebox.showinfo("Éxito", "Distrito agregado correctamente")
             else:
                 messagebox.showwarning("Advertencia", "Ingrese un nombre")
+
         frame_botones = ttk.Frame(ventana)
         frame_botones.pack(pady=10)
         ttk.Button(frame_botones, text="Guardar", command=guardar).pack(side="left", padx=5)
@@ -164,21 +170,28 @@ class GestionServicios:
         if not selected:
             messagebox.showwarning("Advertencia", "Seleccione un distrito para editar")
             return
+
         item = self.tree_distritos.item(selected[0])
         ventana = tk.Toplevel(self.parent)
         ventana.title("Editar Distrito")
         ventana.geometry("350x120")
         self.centrar_ventana(ventana)
-        ttk.Label(ventana, text="Nuevo nombre:").pack(pady=5)
-        nuevo_nombre = ttk.Entry(ventana, width=40)
+
+        frame_campos = ttk.Frame(ventana)
+        frame_campos.pack(padx=10, pady=5, fill='x')
+
+        ttk.Label(frame_campos, text="Nuevo nombre:").pack(pady=5)
+        nuevo_nombre = ttk.Entry(frame_campos, width=40)
         nuevo_nombre.insert(0, item['values'][0])
-        nuevo_nombre.pack(pady=5)
+        nuevo_nombre.pack(pady=5, fill='x')
+
         def guardar():
             id_distrito = self.obtener_id_distrito(item['values'][0])
             actualizar_distrito(id_distrito, nuevo_nombre.get())
             self.actualizar_distritos()
             ventana.destroy()
             messagebox.showinfo("Éxito", "Distrito actualizado correctamente")
+
         frame_botones = ttk.Frame(ventana)
         frame_botones.pack(pady=10)
         ttk.Button(frame_botones, text="Guardar", command=guardar).pack(side="left", padx=5)
@@ -234,23 +247,62 @@ class GestionServicios:
         ttk.Button(frame_botones, text="Eliminar", command=self.eliminar_tipo).pack(side="left", padx=5)
 
     def cargar_excel_tipos(self):
-        filename = filedialog.askopenfilename(title="Seleccionar archivo Excel de Tipos de Servicio", filetypes=[("Excel files", "*.xlsx *.xls")])
+        filename = filedialog.askopenfilename(
+            title="Seleccionar archivo Excel de Tipos de Servicio",
+            filetypes=[("Excel files", "*.xlsx *.xls")]
+        )
         if not filename:
             return
-        df = pd.read_excel(filename)
-        required_columns = ['Distrito', 'Tipo de Servicio']
-        if not all(col in df.columns for col in required_columns):
-            messagebox.showerror("Error", "El archivo debe tener las columnas: Distrito, Tipo de Servicio")
-            return
-        for _, row in df.iterrows():
-            distrito = str(row['Distrito']).strip()
-            tipo = str(row['Tipo de Servicio']).strip()
-            id_distrito = self.obtener_id_distrito(distrito)
-            if not id_distrito:
-                id_distrito = agregar_distrito(distrito)
-            agregar_tipo_servicio(id_distrito, tipo)
-        messagebox.showinfo("Éxito", "Tipos de servicio cargados correctamente")
-        self.actualizar_tipos()
+
+        try:
+            df = pd.read_excel(filename)
+            required_columns = ['Distrito', 'Tipo de Servicio']
+            if not all(col in df.columns for col in required_columns):
+                messagebox.showerror("Error",
+                    "El archivo debe tener las columnas: Distrito, Tipo de Servicio")
+                return
+
+            registros_procesados = 0
+            registros_existentes = 0
+
+            for _, row in df.iterrows():
+                try:
+                    distrito = str(row['Distrito']).strip()
+                    tipo = str(row['Tipo de Servicio']).strip()
+
+                    if not distrito or not tipo:
+                        continue
+
+                    # Obtener o crear el distrito
+                    id_distrito = self.obtener_id_distrito(distrito)
+                    if not id_distrito:
+                        id_distrito = agregar_distrito(distrito)
+
+                    # Verificar si el tipo de servicio ya existe
+                    tipo_existente = self.obtener_id_tipo_servicio(tipo, distrito)
+                    if tipo_existente:
+                        registros_existentes += 1
+                        continue
+
+                    # Agregar el nuevo tipo de servicio
+                    agregar_tipo_servicio(id_distrito, tipo)
+                    registros_procesados += 1
+
+                except Exception as e:
+                    print(f"Error al procesar fila: {str(e)}")
+                    continue
+
+            self.actualizar_tipos()
+
+            # Mostrar mensaje con el resumen
+            mensaje = f"Proceso completado:\n"
+            mensaje += f"- Registros nuevos agregados: {registros_procesados}\n"
+            mensaje += f"- Registros existentes omitidos: {registros_existentes}"
+            messagebox.showinfo("Éxito", mensaje)
+
+        except Exception as e:
+            messagebox.showerror("Error",
+                f"Error al cargar el archivo: {str(e)}")
 
     def exportar_excel_tipos(self):
         filename = filedialog.asksaveasfilename(defaultextension=".xlsx", filetypes=[("Excel files", "*.xlsx")])
@@ -269,23 +321,44 @@ class GestionServicios:
         ventana.title("Agregar Tipo de Servicio")
         ventana.geometry("350x180")
         self.centrar_ventana(ventana)
-        ttk.Label(ventana, text="Distrito:").pack(pady=5)
-        combo_distrito = ttk.Combobox(ventana, state="readonly")
+
+        frame_campos = ttk.Frame(ventana)
+        frame_campos.pack(padx=10, pady=5, fill='x')
+
+        ttk.Label(frame_campos, text="Distrito:").pack(pady=5)
+        combo_distrito = ttk.Combobox(frame_campos, state="readonly", width=38)
         distritos = obtener_distritos()
         combo_distrito['values'] = [d['nombre'] for d in distritos]
-        combo_distrito.pack(pady=5)
-        ttk.Label(ventana, text="Tipo de Servicio:").pack(pady=5)
-        descripcion = ttk.Entry(ventana, width=40)
-        descripcion.pack(pady=5)
+        combo_distrito.pack(pady=5, fill='x')
+
+        ttk.Label(frame_campos, text="Tipo de Servicio:").pack(pady=5)
+        descripcion = ttk.Entry(frame_campos, width=40)
+        descripcion.pack(pady=5, fill='x')
+
         def guardar():
-            if combo_distrito.get() and descripcion.get().strip():
+            if not combo_distrito.get() or not descripcion.get().strip():
+                messagebox.showwarning("Advertencia", "Complete todos los campos")
+                return
+
+            try:
                 id_distrito = self.obtener_id_distrito(combo_distrito.get())
-                agregar_tipo_servicio(id_distrito, descripcion.get().strip())
+                tipo = descripcion.get().strip()
+
+                # Verificar si ya existe
+                tipo_existente = self.obtener_id_tipo_servicio(tipo, combo_distrito.get())
+                if tipo_existente:
+                    messagebox.showwarning("Advertencia",
+                        "Ya existe un tipo de servicio con ese nombre en el distrito seleccionado")
+                    return
+
+                agregar_tipo_servicio(id_distrito, tipo)
                 self.actualizar_tipos()
                 ventana.destroy()
                 messagebox.showinfo("Éxito", "Tipo de servicio agregado correctamente")
-            else:
-                messagebox.showwarning("Advertencia", "Complete todos los campos")
+            except Exception as e:
+                messagebox.showerror("Error",
+                    f"Error al agregar tipo de servicio: {str(e)}")
+
         frame_botones = ttk.Frame(ventana)
         frame_botones.pack(pady=10)
         ttk.Button(frame_botones, text="Guardar", command=guardar).pack(side="left", padx=5)
@@ -301,16 +374,22 @@ class GestionServicios:
         ventana.title("Editar Tipo de Servicio")
         ventana.geometry("350x180")
         self.centrar_ventana(ventana)
-        ttk.Label(ventana, text="Distrito:").pack(pady=5)
-        combo_distrito = ttk.Combobox(ventana, state="readonly")
+
+        frame_campos = ttk.Frame(ventana)
+        frame_campos.pack(padx=10, pady=5, fill='x')
+
+        ttk.Label(frame_campos, text="Distrito:").pack(pady=5)
+        combo_distrito = ttk.Combobox(frame_campos, state="readonly", width=38)
         distritos = obtener_distritos()
         combo_distrito['values'] = [d['nombre'] for d in distritos]
         combo_distrito.set(item['values'][0])
-        combo_distrito.pack(pady=5)
-        ttk.Label(ventana, text="Tipo de Servicio:").pack(pady=5)
-        descripcion = ttk.Entry(ventana, width=40)
+        combo_distrito.pack(pady=5, fill='x')
+
+        ttk.Label(frame_campos, text="Tipo de Servicio:").pack(pady=5)
+        descripcion = ttk.Entry(frame_campos, width=40)
         descripcion.insert(0, item['values'][1])
-        descripcion.pack(pady=5)
+        descripcion.pack(pady=5, fill='x')
+
         def guardar():
             id_distrito = self.obtener_id_distrito(combo_distrito.get())
             id_tipo = self.obtener_id_tipo_servicio(item['values'][1], item['values'][0])
@@ -318,6 +397,7 @@ class GestionServicios:
             self.actualizar_tipos()
             ventana.destroy()
             messagebox.showinfo("Éxito", "Tipo de servicio actualizado correctamente")
+
         frame_botones = ttk.Frame(ventana)
         frame_botones.pack(pady=10)
         ttk.Button(frame_botones, text="Guardar", command=guardar).pack(side="left", padx=5)
@@ -417,23 +497,32 @@ class GestionServicios:
         ventana.title("Agregar Servicio")
         ventana.geometry("350x250")
         self.centrar_ventana(ventana)
-        ttk.Label(ventana, text="Distrito:").pack(pady=5)
-        combo_distrito = ttk.Combobox(ventana, state="readonly")
+
+        frame_campos = ttk.Frame(ventana)
+        frame_campos.pack(padx=10, pady=5, fill='x')
+
+        ttk.Label(frame_campos, text="Distrito:").pack(pady=5)
+        combo_distrito = ttk.Combobox(frame_campos, state="readonly", width=38)
         distritos = obtener_distritos()
         combo_distrito['values'] = [d['nombre'] for d in distritos]
-        combo_distrito.pack(pady=5)
-        ttk.Label(ventana, text="Tipo de Servicio:").pack(pady=5)
-        combo_tipo = ttk.Combobox(ventana, state="readonly")
-        combo_tipo.pack(pady=5)
+        combo_distrito.pack(pady=5, fill='x')
+
+        ttk.Label(frame_campos, text="Tipo de Servicio:").pack(pady=5)
+        combo_tipo = ttk.Combobox(frame_campos, state="readonly", width=38)
+        combo_tipo.pack(pady=5, fill='x')
+
         def actualizar_tipos(event):
             id_distrito = self.obtener_id_distrito(combo_distrito.get())
             tipos = obtener_tipos_servicio_por_distrito(id_distrito) if id_distrito else []
             combo_tipo['values'] = [t['descripcion'] for t in tipos]
             combo_tipo.set('')
+
         combo_distrito.bind("<<ComboboxSelected>>", actualizar_tipos)
-        ttk.Label(ventana, text="Servicio:").pack(pady=5)
-        nombre = ttk.Entry(ventana, width=40)
-        nombre.pack(pady=5)
+
+        ttk.Label(frame_campos, text="Servicio:").pack(pady=5)
+        nombre = ttk.Entry(frame_campos, width=40)
+        nombre.pack(pady=5, fill='x')
+
         def guardar():
             if combo_distrito.get() and combo_tipo.get() and nombre.get().strip():
                 id_tipo = self.obtener_id_tipo_servicio(combo_tipo.get(), combo_distrito.get())
@@ -443,6 +532,7 @@ class GestionServicios:
                 messagebox.showinfo("Éxito", "Servicio agregado correctamente")
             else:
                 messagebox.showwarning("Advertencia", "Complete todos los campos")
+
         frame_botones = ttk.Frame(ventana)
         frame_botones.pack(pady=10)
         ttk.Button(frame_botones, text="Guardar", command=guardar).pack(side="left", padx=5)
@@ -458,26 +548,35 @@ class GestionServicios:
         ventana.title("Editar Servicio")
         ventana.geometry("350x250")
         self.centrar_ventana(ventana)
-        ttk.Label(ventana, text="Distrito:").pack(pady=5)
-        combo_distrito = ttk.Combobox(ventana, state="readonly")
+
+        frame_campos = ttk.Frame(ventana)
+        frame_campos.pack(padx=10, pady=5, fill='x')
+
+        ttk.Label(frame_campos, text="Distrito:").pack(pady=5)
+        combo_distrito = ttk.Combobox(frame_campos, state="readonly", width=38)
         distritos = obtener_distritos()
         combo_distrito['values'] = [d['nombre'] for d in distritos]
         combo_distrito.set(item['values'][0])
-        combo_distrito.pack(pady=5)
-        ttk.Label(ventana, text="Tipo de Servicio:").pack(pady=5)
-        combo_tipo = ttk.Combobox(ventana, state="readonly")
-        combo_tipo.pack(pady=5)
-        def actualizar_tipos(event):
+        combo_distrito.pack(pady=5, fill='x')
+
+        ttk.Label(frame_campos, text="Tipo de Servicio:").pack(pady=5)
+        combo_tipo = ttk.Combobox(frame_campos, state="readonly", width=38)
+        combo_tipo.pack(pady=5, fill='x')
+
+        def actualizar_tipos(event=None):
             id_distrito = self.obtener_id_distrito(combo_distrito.get())
             tipos = obtener_tipos_servicio_por_distrito(id_distrito) if id_distrito else []
             combo_tipo['values'] = [t['descripcion'] for t in tipos]
             combo_tipo.set(item['values'][1])
+
         combo_distrito.bind("<<ComboboxSelected>>", actualizar_tipos)
-        actualizar_tipos(None)
-        ttk.Label(ventana, text="Servicio:").pack(pady=5)
-        nombre = ttk.Entry(ventana, width=40)
+        actualizar_tipos()
+
+        ttk.Label(frame_campos, text="Servicio:").pack(pady=5)
+        nombre = ttk.Entry(frame_campos, width=40)
         nombre.insert(0, item['values'][2])
-        nombre.pack(pady=5)
+        nombre.pack(pady=5, fill='x')
+
         def guardar():
             id_tipo = self.obtener_id_tipo_servicio(combo_tipo.get(), combo_distrito.get())
             id_servicio = self.obtener_id_servicio(item['values'][2], item['values'][1], item['values'][0])
@@ -485,6 +584,7 @@ class GestionServicios:
             self.actualizar_servicios()
             ventana.destroy()
             messagebox.showinfo("Éxito", "Servicio actualizado correctamente")
+
         frame_botones = ttk.Frame(ventana)
         frame_botones.pack(pady=10)
         ttk.Button(frame_botones, text="Guardar", command=guardar).pack(side="left", padx=5)

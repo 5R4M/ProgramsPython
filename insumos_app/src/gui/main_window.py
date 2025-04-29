@@ -1,4 +1,5 @@
 import tkinter as tk
+import sqlite3
 from tkinter import ttk
 from tkinter import messagebox
 import sys
@@ -7,16 +8,25 @@ from PIL import Image, ImageTk
 from ttkthemes import ThemedStyle
 
 # Agregar el directorio raíz del proyecto al PATH de Python
-project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.append(project_root)
 
+# Importar las funciones de la base de datos
+from src.database import DB_PATH, crear_base_datos, verificar_tablas
 from insumos import IngresoInsumos
 from gestion import GestionInsumos
 from servicios import GestionServicios
+from movimientos import Movimientos
 from reportes import Reportes
 
 class MainWindow:
     def __init__(self):
+        
+        # Inicializar la base de datos antes de crear la ventana
+        if not self.initialize_database():
+            messagebox.showerror("Error Fatal",
+                "No se pudo inicializar la base de datos. El programa se cerrará.")
+            sys.exit(1)
         
         self.root = tk.Tk()
         self.root.title("Sistema de Gestión de Insumos")
@@ -39,7 +49,49 @@ class MainWindow:
         
         # Manejar el cierre de la ventana principal
         self.root.protocol("WM_DELETE_WINDOW", self.on_closing)
-      
+    
+    def initialize_database(self):
+        """Inicializa la base de datos y verifica su estructura"""
+        try:
+            # Verificar si la base de datos existe
+            if not os.path.exists(DB_PATH):
+                print("La base de datos no existe. Creándola...")
+                if not crear_base_datos():
+                    raise Exception("No se pudo crear la base de datos")
+                print("Base de datos creada correctamente")
+
+            # Verificar la estructura de la base de datos
+            if not verificar_tablas():
+                print("La estructura de la base de datos es incorrecta. Recreándola...")
+                # Eliminar la base de datos existente
+                if os.path.exists(DB_PATH):
+                    os.remove(DB_PATH)
+                # Crear nueva base de datos
+                if not crear_base_datos():
+                    raise Exception("No se pudo recrear la base de datos")
+                print("Base de datos recreada correctamente")
+
+            return True
+
+        except Exception as e:
+            print(f"Error al inicializar la base de datos: {e}")
+            messagebox.showerror("Error",
+                f"Error al inicializar la base de datos: {str(e)}")
+            return False
+
+    def verify_database_connection(self):
+        """Verifica la conexión a la base de datos"""
+        try:
+            conn = sqlite3.connect(DB_PATH)
+            cursor = conn.cursor()
+            cursor.execute("SELECT 1")
+            cursor.fetchone()
+            conn.close()
+            return True
+        except Exception as e:
+            print(f"Error al verificar conexión a la base de datos: {e}")
+            return False
+     
     def on_closing(self):
         """Maneja el cierre de la ventana principal"""
         if messagebox.askokcancel("Salir", "¿Desea salir del sistema?"):
@@ -86,6 +138,7 @@ class MainWindow:
         Este sistema permite:
         • Gestionar el ingreso y control de insumos
         • Administrar servicios y tipos de servicio
+        • Registrar movimientos de insumos
         • Generar reportes y tarjetas Kardex
         • Mantener un registro detallado de movimientos
 
@@ -98,26 +151,41 @@ class MainWindow:
                  justify='left').pack()
 
     def load_ingreso_insumos(self):
-        # Limpiar el contenido actual
+        if not self.verify_database_connection():
+            messagebox.showerror("Error", "No se puede conectar a la base de datos")
+            return
         for widget in self.main_content_frame.winfo_children():
             widget.destroy()
         IngresoInsumos(self.main_content_frame, self)
 
     def load_gestion_insumos(self):
-        # Limpiar el contenido actual
+        if not self.verify_database_connection():
+            messagebox.showerror("Error", "No se puede conectar a la base de datos")
+            return
         for widget in self.main_content_frame.winfo_children():
             widget.destroy()
         GestionInsumos(self.main_content_frame, self)
 
     def load_gestion_servicios(self):
-        # Limpiar el contenido actual
+        if not self.verify_database_connection():
+            messagebox.showerror("Error", "No se puede conectar a la base de datos")
+            return
         for widget in self.main_content_frame.winfo_children():
             widget.destroy()
-        # Cargar el contenido de gestión de servicios
         GestionServicios(self.main_content_frame, self)
+        
+    def load_movimientos(self):
+        if not self.verify_database_connection():
+            messagebox.showerror("Error", "No se puede conectar a la base de datos")
+            return
+        for widget in self.main_content_frame.winfo_children():
+            widget.destroy()
+        Movimientos(self.main_content_frame, self)
 
     def load_reportes(self):
-        # Limpiar el contenido actual
+        if not self.verify_database_connection():
+            messagebox.showerror("Error", "No se puede conectar a la base de datos")
+            return
         for widget in self.main_content_frame.winfo_children():
             widget.destroy()
         Reportes(self.main_content_frame, self)
@@ -186,13 +254,15 @@ class MainWindow:
 
         # Botones del menú
         self.create_menu_button("Ingreso de Insumos",
-                              self.load_ingreso_insumos)
+                          self.load_ingreso_insumos)
         self.create_menu_button("Gestión de Insumos",
-                              self.load_gestion_insumos)
+                            self.load_gestion_insumos)
         self.create_menu_button("Gestión de Servicios",
-                              self.load_gestion_servicios)
+                            self.load_gestion_servicios)
+        self.create_menu_button("Movimientos",
+                            self.load_movimientos)
         self.create_menu_button("Reportes",
-                              self.load_reportes)
+                            self.load_reportes)
 
 
         # Botón de salir en la parte inferior

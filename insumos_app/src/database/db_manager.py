@@ -600,22 +600,27 @@ def guardar_movimiento(movimiento_data):
 
 def obtener_insumos_por_tipo(id_tipo_insumo):
     """Obtiene todos los insumos de un tipo específico."""
-    conn = conectar_db()
-    if conn:
-        try:
-            cursor = conn.cursor()
-            cursor.execute("""
-                SELECT i.id, i.nombre, i.lote, i.fecha_vencimiento,
-                       p.nombre as presentacion
-                FROM insumo i
-                LEFT JOIN presentacion p ON i.id_presentacion = p.id
-                WHERE i.id_tipo_insumo = ?
-                ORDER BY i.nombre""", (id_tipo_insumo,))
-            return cursor.fetchall()
-        except sqlite3.Error as e:
-            print(f"Error al obtener insumos: {e}")
-            return []
-        finally:
+    try:
+        conn = sqlite3.connect(DB_PATH)
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+
+        cursor.execute("""
+            SELECT i.id, i.nombre, i.lote, i.fecha_vencimiento,
+                   p.nombre as nombre_presentacion
+            FROM insumo i
+            LEFT JOIN presentacion p ON i.id_presentacion = p.id
+            WHERE i.id_tipo_insumo = ?
+        """, (id_tipo_insumo,))
+
+        insumos = [dict(row) for row in cursor.fetchall()]
+        return insumos
+
+    except sqlite3.Error as e:
+        print(f"Error al obtener insumos: {e}")
+        return None
+    finally:
+        if conn:
             conn.close()
 
 def agregar_insumo(nombre, lote, id_presentacion, fecha_vencimiento, id_tipo_insumo):
@@ -900,6 +905,82 @@ def obtener_movimientos_kardex(fecha_inicial, fecha_final, distrito=None, tipo_s
         except sqlite3.Error as e:
             print(f"Error al obtener movimientos Kardex: {e}")
             return None
+        finally:
+            conn.close()
+
+def obtener_tipos_movimiento():
+    """Obtiene todos los tipos de movimiento."""
+    conn = conectar_db()
+    if conn:
+        try:
+            cursor = conn.cursor()
+            cursor.execute("""
+                SELECT id, descripcion
+                FROM tipo_movimiento
+                ORDER BY descripcion
+            """)
+            tipos = cursor.fetchall()
+            return [{'id': t['id'], 'descripcion': t['descripcion']} for t in tipos]
+        except sqlite3.Error as e:
+            print(f"Error al obtener tipos de movimiento: {e}")
+            return None
+        finally:
+            conn.close()
+
+def agregar_tipo_movimiento(descripcion):
+    """Agrega un nuevo tipo de movimiento."""
+    conn = conectar_db()
+    if conn:
+        try:
+            cursor = conn.cursor()
+            cursor.execute("""
+                INSERT INTO tipo_movimiento (descripcion)
+                VALUES (?)
+            """, (descripcion,))
+            conn.commit()
+            return cursor.lastrowid
+        except sqlite3.Error as e:
+            print(f"Error al agregar tipo de movimiento: {e}")
+            conn.rollback()
+            return None
+        finally:
+            conn.close()
+
+def actualizar_tipo_movimiento(id_tipo, descripcion):
+    """Actualiza un tipo de movimiento existente."""
+    conn = conectar_db()
+    if conn:
+        try:
+            cursor = conn.cursor()
+            cursor.execute("""
+                UPDATE tipo_movimiento
+                SET descripcion = ?
+                WHERE id = ?
+            """, (descripcion, id_tipo))
+            conn.commit()
+            return cursor.rowcount > 0
+        except sqlite3.Error as e:
+            print(f"Error al actualizar tipo de movimiento: {e}")
+            conn.rollback()
+            return False
+        finally:
+            conn.close()
+
+def eliminar_tipo_movimiento(id_tipo):
+    """Elimina un tipo de movimiento."""
+    conn = conectar_db()
+    if conn:
+        try:
+            cursor = conn.cursor()
+            cursor.execute("""
+                DELETE FROM tipo_movimiento WHERE id = ?
+            """, (id_tipo,))
+            conn.commit()
+            return cursor.rowcount > 0
+        except sqlite3.Error as e:
+            print(f"Error al eliminar tipo de movimiento: {e}")
+            conn.rollback()
+            return False
         finally:
             conn.close()
 

@@ -14,6 +14,39 @@ def asegurar_directorio():
         print(f"Error al crear el directorio: {e}")
         return False
 
+def verificar_tablas():
+    """Verifica que todas las tablas necesarias existan"""
+    try:
+        conn = sqlite3.connect(DB_PATH)
+        cursor = conn.cursor()
+
+        tablas_requeridas = [
+            'distrito',
+            'tipo_servicio',
+            'servicio',
+            'tipo_insumo',
+            'presentacion',
+            'insumo',
+            'tipo_movimiento',
+            'movimiento'
+        ]
+
+        for tabla in tablas_requeridas:
+            cursor.execute(f"""
+                SELECT name FROM sqlite_master
+                WHERE type='table' AND name='{tabla}'
+            """)
+            if not cursor.fetchone():
+                return False
+        return True
+
+    except sqlite3.Error as e:
+        print(f"Error al verificar tablas: {e}")
+        return False
+    finally:
+        if conn:
+            conn.close()
+
 def crear_base_datos():
     """Crea la base de datos y sus tablas"""
     if not asegurar_directorio():
@@ -79,7 +112,7 @@ def crear_base_datos():
                 descripcion TEXT NOT NULL UNIQUE
             );
         """)
-
+                
         # Tabla de Insumo
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS insumo (
@@ -122,5 +155,5 @@ def crear_base_datos():
         if conn:
             conn.close()
 
-if __name__ == "__main__":
-    crear_base_datos()
+# Exportar las funciones necesarias
+__all__ = ['DB_PATH', 'crear_base_datos', 'verificar_tablas', 'asegurar_directorio']

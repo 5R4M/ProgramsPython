@@ -5,7 +5,11 @@ import pandas as pd
 import sqlite3
 import sys
 import os
-from datetime import datetime
+from src.database import (
+    DB_PATH,
+    verificar_tablas,
+    crear_base_datos
+)
 
 # Validar que las dependencias necesarias estén instaladas
 try:
@@ -36,14 +40,49 @@ from src.database.db_manager import (
     verificar_conexion
 )
 
+from src.database import crear_base_datos, DB_PATH, verificar_tablas
+
 class GestionInsumos:
+    
+    def verificar_base_datos(self):
+        """Verifica que la base de datos exista y tenga la estructura correcta"""
+        try:
+            # Verificar si la base de datos existe
+            if not os.path.exists(DB_PATH):
+                if not crear_base_datos():
+                    raise Exception("No se pudo crear la base de datos")
+                print("Base de datos creada correctamente")
+
+            # Verificar la estructura de la base de datos
+            if not verificar_tablas():
+                print("La estructura de la base de datos es incorrecta. Recreándola...")
+                if os.path.exists(DB_PATH):
+                    os.remove(DB_PATH)
+                if not crear_base_datos():
+                    raise Exception("No se pudo recrear la base de datos")
+                print("Base de datos recreada correctamente")
+
+            return True
+
+        except Exception as e:
+            print(f"Error al verificar la base de datos: {e}")
+            return False
+    
     def __init__(self, parent_frame, main_window):
         self.parent = parent_frame
         self.main_window = main_window
         
+        # Verificar la base de datos antes de continuar
+        if not self.verificar_base_datos():
+            messagebox.showerror("Error",
+                "Error en la base de datos. La aplicación no puede continuar.")
+            self.cerrar_ventana()
+            return
+
         # Verificar conexión a la base de datos
         if not self.verificar_conexion_db():
-            messagebox.showerror("Error", "No se pudo conectar a la base de datos")
+            messagebox.showerror("Error",
+                "No se pudo conectar a la base de datos")
             self.cerrar_ventana()
             return
 
@@ -131,7 +170,7 @@ class GestionInsumos:
         frame_lista.pack(fill="both", expand=True, padx=5, pady=5)
 
         self.tree_tipos = ttk.Treeview(frame_lista, columns=('descripcion',), show='headings')
-        self.tree_tipos.heading('descripcion', text='Descripción')
+        self.tree_tipos.heading('descripcion', text='Tipo Insumo')
         self.tree_tipos.grid(row=0, column=0, sticky="nsew")
         scrolly = ttk.Scrollbar(frame_lista, orient="vertical", command=self.tree_tipos.yview)
         self.tree_tipos.configure(yscrollcommand=scrolly.set)
@@ -179,25 +218,50 @@ class GestionInsumos:
         messagebox.showinfo("Éxito", "Tipos de insumo exportados correctamente")
 
     def agregar_tipo(self):
-        ventana = tk.Toplevel(self.parent)
-        ventana.title("Agregar Tipo de Insumo")
-        ventana.geometry("350x120")
-        self.centrar_ventana(ventana)
-        ttk.Label(ventana, text="Descripción:").pack(pady=5)
-        descripcion = ttk.Entry(ventana, width=40)
-        descripcion.pack(pady=5)
-        def guardar():
-            if descripcion.get().strip():
-                agregar_tipo_insumo(descripcion.get().strip())
-                self.actualizar_tipos()
-                ventana.destroy()
-                messagebox.showinfo("Éxito", "Tipo de insumo agregado correctamente")
-            else:
-                messagebox.showwarning("Advertencia", "Ingrese una descripción")
-        frame_botones = ttk.Frame(ventana)
-        frame_botones.pack(pady=10)
-        ttk.Button(frame_botones, text="Guardar", command=guardar).pack(side="left", padx=5)
-        ttk.Button(frame_botones, text="Cerrar", command=ventana.destroy).pack(side="left", padx=5)
+        try:
+            ventana = tk.Toplevel(self.parent)
+            ventana.title("Agregar Tipo de Insumo")
+            ventana.geometry("350x120")
+            self.centrar_ventana(ventana)
+
+            ttk.Label(ventana, text="Descripción:").pack(pady=5)
+            descripcion = ttk.Entry(ventana, width=40)
+            descripcion.pack(pady=5)
+
+            def guardar():
+                try:
+                    if not descripcion.get().strip():
+                        messagebox.showwarning("Advertencia",
+                            "Ingrese una descripción")
+                        return
+
+                    if not self.verificar_conexion_db():
+                        messagebox.showerror("Error",
+                            "No hay conexión con la base de datos")
+                        return
+
+                    agregar_tipo_insumo(descripcion.get().strip())
+                    self.actualizar_tipos()
+                    ventana.destroy()
+                    messagebox.showinfo("Éxito",
+                        "Tipo de insumo agregado correctamente")
+                except sqlite3.IntegrityError:
+                    messagebox.showerror("Error",
+                        "Ya existe un tipo de insumo con esa descripción")
+                except Exception as e:
+                    messagebox.showerror("Error",
+                        f"Error al agregar tipo de insumo: {str(e)}")
+
+            frame_botones = ttk.Frame(ventana)
+            frame_botones.pack(pady=10)
+            ttk.Button(frame_botones, text="Guardar",
+                    command=guardar).pack(side="left", padx=5)
+            ttk.Button(frame_botones, text="Cerrar",
+                    command=ventana.destroy).pack(side="left", padx=5)
+
+        except Exception as e:
+            messagebox.showerror("Error",
+                f"Error al crear ventana: {str(e)}")
 
     def editar_tipo(self):
         selected = self.tree_tipos.selection()
@@ -237,9 +301,17 @@ class GestionInsumos:
             messagebox.showinfo("Éxito", "Tipo de insumo eliminado correctamente")
 
     def actualizar_tipos(self):
-        self.tree_tipos.delete(*self.tree_tipos.get_children())
-        for tipo in obtener_tipos_insumo():
-            self.tree_tipos.insert('', 'end', values=(tipo['descripcion'],))
+        """Actualiza la lista de tipos de insumo en el TreeView"""
+        try:
+            self.tree_tipos.delete(*self.tree_tipos.get_children())
+            tipos = obtener_tipos_insumo()
+            if tipos is None:
+                raise Exception("No se pudieron obtener los tipos de insumo")
+            for tipo in tipos:
+                self.tree_tipos.insert('', 'end', values=(tipo['descripcion'],))
+        except Exception as e:
+            messagebox.showerror("Error",
+                f"Error al actualizar tipos de insumo: {str(e)}")
 
     def obtener_id_tipo_insumo(self, descripcion):
         tipos = obtener_tipos_insumo()
@@ -258,10 +330,9 @@ class GestionInsumos:
         frame_lista = ttk.LabelFrame(self.tab_insumos, text="Insumos")
         frame_lista.pack(fill="both", expand=True, padx=5, pady=5)
 
-        self.tree_insumos = ttk.Treeview(frame_lista, columns=('tipo', 'nombre', 'presentacion'), show='headings')
+        self.tree_insumos = ttk.Treeview(frame_lista, columns=('tipo', 'nombre'), show='headings')
         self.tree_insumos.heading('tipo', text='Tipo de Insumo')
-        self.tree_insumos.heading('nombre', text='Nombre')
-        self.tree_insumos.heading('presentacion', text='Presentación')
+        self.tree_insumos.heading('nombre', text='Insumo')
         self.tree_insumos.grid(row=0, column=0, sticky="nsew")
         scrolly = ttk.Scrollbar(frame_lista, orient="vertical", command=self.tree_insumos.yview)
         self.tree_insumos.configure(yscrollcommand=scrolly.set)
@@ -375,7 +446,7 @@ class GestionInsumos:
     def agregar_insumo(self):
         ventana = tk.Toplevel(self.parent)
         ventana.title("Agregar Insumo")
-        ventana.geometry("350x250")
+        ventana.geometry("350x200")
         self.centrar_ventana(ventana)
 
         # Frame para los campos
@@ -394,13 +465,6 @@ class GestionInsumos:
         nombre = ttk.Entry(frame_campos)
         nombre.pack(pady=5, fill='x')
 
-        # Presentación
-        ttk.Label(frame_campos, text="Presentación:").pack(pady=5)
-        combo_presentacion = ttk.Combobox(frame_campos, state="readonly")
-        presentaciones = obtener_presentaciones()
-        combo_presentacion['values'] = [p['nombre'] for p in presentaciones]
-        combo_presentacion.pack(pady=5, fill='x')
-
         def guardar():
             if not combo_tipo.get():
                 messagebox.showwarning("Advertencia", "Seleccione un tipo de insumo")
@@ -408,18 +472,14 @@ class GestionInsumos:
             if not nombre.get().strip():
                 messagebox.showwarning("Advertencia", "Ingrese un nombre")
                 return
-            if not combo_presentacion.get():
-                messagebox.showwarning("Advertencia", "Seleccione una presentación")
-                return
 
             id_tipo = self.obtener_id_tipo_insumo(combo_tipo.get())
-            id_presentacion = self.obtener_id_presentacion(combo_presentacion.get())
 
             try:
                 agregar_insumo(
                     nombre=nombre.get().strip(),
                     lote=None,
-                    id_presentacion=id_presentacion,
+                    id_presentacion=None,
                     fecha_vencimiento=None,
                     id_tipo_insumo=id_tipo
                 )
@@ -444,7 +504,7 @@ class GestionInsumos:
         item = self.tree_insumos.item(selected[0])
         ventana = tk.Toplevel(self.parent)
         ventana.title("Editar Insumo")
-        ventana.geometry("350x250")
+        ventana.geometry("350x200")
         self.centrar_ventana(ventana)
 
         # Frame para los campos
@@ -465,33 +525,21 @@ class GestionInsumos:
         nombre.insert(0, item['values'][1])  # Nombre actual
         nombre.pack(pady=5, fill='x')
 
-        # Presentación
-        ttk.Label(frame_campos, text="Presentación:").pack(pady=5)
-        combo_presentacion = ttk.Combobox(frame_campos, state="readonly")
-        presentaciones = obtener_presentaciones()
-        combo_presentacion['values'] = [p['nombre'] for p in presentaciones]
-        # Obtener la presentación actual del insumo
-        id_insumo = self.obtener_id_insumo(item['values'][1], self.obtener_id_tipo_insumo(item['values'][0]))
-        insumo_actual = obtener_insumo_por_id(id_insumo)
-        if insumo_actual:
-            combo_presentacion.set(insumo_actual['nombre_presentacion'])
-        combo_presentacion.pack(pady=5, fill='x')
 
         def guardar():
-            if not combo_tipo.get() or not nombre.get().strip() or not combo_presentacion.get():
+            if not combo_tipo.get() or not nombre.get().strip():
                 messagebox.showwarning("Advertencia", "Complete todos los campos")
                 return
 
             try:
                 id_tipo = self.obtener_id_tipo_insumo(combo_tipo.get())
                 id_insumo = self.obtener_id_insumo(item['values'][1], self.obtener_id_tipo_insumo(item['values'][0]))
-                id_presentacion = self.obtener_id_presentacion(combo_presentacion.get())
 
                 actualizar_insumo(
                     id_insumo=id_insumo,
                     nombre=nombre.get().strip(),
                     lote=None,
-                    id_presentacion=id_presentacion,
+                    id_presentacion=None,
                     fecha_vencimiento=None,
                     id_tipo_insumo=id_tipo
                 )
@@ -533,13 +581,16 @@ class GestionInsumos:
                 insumos = obtener_insumos_por_tipo(tipo['id'])
                 if insumos:
                     for insumo in insumos:
+                        if isinstance(insumo, sqlite3.Row):
+                            insumo = dict(insumo)
+                        nombre = insumo['nombre'] if 'nombre' in insumo else 'N/A'
                         self.tree_insumos.insert('', 'end', values=(
                             tipo['descripcion'],
-                            insumo['nombre'],
-                            insumo.get('presentacion', 'N/A')
+                            nombre
                         ))
 
         except Exception as e:
+            print(f"Error específico al actualizar insumos: {str(e)}")
             messagebox.showerror("Error", f"Error al actualizar insumos: {str(e)}")
                 
     def obtener_id_insumo(self, nombre_insumo, id_tipo_insumo):
@@ -559,8 +610,11 @@ class GestionInsumos:
         frame_lista = ttk.LabelFrame(self.tab_presentaciones, text="Presentaciones")
         frame_lista.pack(fill="both", expand=True, padx=5, pady=5)
 
-        self.tree_presentaciones = ttk.Treeview(frame_lista, columns=('nombre',), show='headings')
-        self.tree_presentaciones.heading('nombre', text='Nombre')
+        self.tree_presentaciones = ttk.Treeview(frame_lista,
+        columns=('tipo', 'insumo', 'presentacion'), show='headings')
+        self.tree_presentaciones.heading('tipo', text='Tipo de Insumo')
+        self.tree_presentaciones.heading('insumo', text='Insumo')
+        self.tree_presentaciones.heading('presentacion', text='Presentación')
         self.tree_presentaciones.grid(row=0, column=0, sticky="nsew")
         scrolly = ttk.Scrollbar(frame_lista, orient="vertical", command=self.tree_presentaciones.yview)
         self.tree_presentaciones.configure(yscrollcommand=scrolly.set)
@@ -610,19 +664,66 @@ class GestionInsumos:
     def agregar_presentacion(self):
         ventana = tk.Toplevel(self.parent)
         ventana.title("Agregar Presentación")
-        ventana.geometry("350x120")
+        ventana.geometry("350x250")
         self.centrar_ventana(ventana)
-        ttk.Label(ventana, text="Nombre:").pack(pady=5)
-        nombre = ttk.Entry(ventana, width=40)
-        nombre.pack(pady=5)
+
+        frame_campos = ttk.Frame(ventana)
+        frame_campos.pack(padx=10, pady=5, fill='x')
+
+        # Tipo de Insumo
+        ttk.Label(frame_campos, text="Tipo de Insumo:").pack(pady=5)
+        combo_tipo = ttk.Combobox(frame_campos, state="readonly")
+        tipos = obtener_tipos_insumo()
+        combo_tipo['values'] = [t['descripcion'] for t in tipos]
+        combo_tipo.pack(pady=5, fill='x')
+
+        # Insumo (se actualizará cuando se seleccione el tipo)
+        ttk.Label(frame_campos, text="Insumo:").pack(pady=5)
+        combo_insumo = ttk.Combobox(frame_campos, state="readonly")
+        combo_insumo.pack(pady=5, fill='x')
+
+        # Actualizar insumos cuando cambie el tipo
+        def actualizar_insumos(*args):
+            combo_insumo['values'] = []
+            if combo_tipo.get():
+                id_tipo = self.obtener_id_tipo_insumo(combo_tipo.get())
+                insumos = obtener_insumos_por_tipo(id_tipo)
+                combo_insumo['values'] = [i['nombre'] for i in insumos]
+
+        combo_tipo.bind('<<ComboboxSelected>>', actualizar_insumos)
+
+        # Presentación
+        ttk.Label(frame_campos, text="Presentación:").pack(pady=5)
+        nombre = ttk.Entry(frame_campos)
+        nombre.pack(pady=5, fill='x')
+
         def guardar():
-            if nombre.get().strip():
-                agregar_presentacion(nombre.get().strip())
+            if not all([combo_tipo.get(), combo_insumo.get(), nombre.get().strip()]):
+                messagebox.showwarning("Advertencia", "Complete todos los campos")
+                return
+
+            try:
+                id_tipo = self.obtener_id_tipo_insumo(combo_tipo.get())
+                id_insumo = self.obtener_id_insumo(combo_insumo.get(), id_tipo)
+
+                # Agregar presentación y asociarla al insumo
+                id_presentacion = agregar_presentacion(nombre.get().strip())
+                actualizar_insumo(
+                    id_insumo=id_insumo,
+                    nombre=combo_insumo.get(),
+                    lote=None,
+                    id_presentacion=id_presentacion,
+                    fecha_vencimiento=None,
+                    id_tipo_insumo=id_tipo
+                )
+
                 self.actualizar_presentaciones()
                 ventana.destroy()
                 messagebox.showinfo("Éxito", "Presentación agregada correctamente")
-            else:
-                messagebox.showwarning("Advertencia", "Ingrese un nombre")
+            except Exception as e:
+                messagebox.showerror("Error", f"Error al agregar presentación: {str(e)}")
+
+        # Frame para los botones
         frame_botones = ttk.Frame(ventana)
         frame_botones.pack(pady=10)
         ttk.Button(frame_botones, text="Guardar", command=guardar).pack(side="left", padx=5)
@@ -633,21 +734,76 @@ class GestionInsumos:
         if not selected:
             messagebox.showwarning("Advertencia", "Seleccione una presentación para editar")
             return
+
         item = self.tree_presentaciones.item(selected[0])
         ventana = tk.Toplevel(self.parent)
         ventana.title("Editar Presentación")
-        ventana.geometry("350x120")
+        ventana.geometry("350x250")
         self.centrar_ventana(ventana)
-        ttk.Label(ventana, text="Nuevo nombre:").pack(pady=5)
-        nuevo_nombre = ttk.Entry(ventana, width=40)
-        nuevo_nombre.insert(0, item['values'][0])
-        nuevo_nombre.pack(pady=5)
+
+        frame_campos = ttk.Frame(ventana)
+        frame_campos.pack(padx=10, pady=5, fill='x')
+
+        # Tipo de Insumo
+        ttk.Label(frame_campos, text="Tipo de Insumo:").pack(pady=5)
+        combo_tipo = ttk.Combobox(frame_campos, state="readonly")
+        tipos = obtener_tipos_insumo()
+        combo_tipo['values'] = [t['descripcion'] for t in tipos]
+        combo_tipo.set(item['values'][0])  # Tipo actual
+        combo_tipo.pack(pady=5, fill='x')
+
+        # Insumo
+        ttk.Label(frame_campos, text="Insumo:").pack(pady=5)
+        combo_insumo = ttk.Combobox(frame_campos, state="readonly")
+        combo_insumo.pack(pady=5, fill='x')
+
+        def actualizar_insumos(*args):
+            combo_insumo['values'] = []
+            if combo_tipo.get():
+                id_tipo = self.obtener_id_tipo_insumo(combo_tipo.get())
+                insumos = obtener_insumos_por_tipo(id_tipo)
+                combo_insumo['values'] = [i['nombre'] for i in insumos]
+
+        combo_tipo.bind('<<ComboboxSelected>>', actualizar_insumos)
+
+        # Establecer valores iniciales
+        actualizar_insumos()
+        combo_insumo.set(item['values'][1])  # Insumo actual
+
+        # Presentación
+        ttk.Label(frame_campos, text="Presentación:").pack(pady=5)
+        nuevo_nombre = ttk.Entry(frame_campos)
+        nuevo_nombre.insert(0, item['values'][2])  # Presentación actual
+        nuevo_nombre.pack(pady=5, fill='x')
+
         def guardar():
-            id_pres = self.obtener_id_presentacion(item['values'][0])
-            actualizar_presentacion(id_pres, nuevo_nombre.get())
-            self.actualizar_presentaciones()
-            ventana.destroy()
-            messagebox.showinfo("Éxito", "Presentación actualizada correctamente")
+            if not all([combo_tipo.get(), combo_insumo.get(), nuevo_nombre.get().strip()]):
+                messagebox.showwarning("Advertencia", "Complete todos los campos")
+                return
+
+            try:
+                id_tipo = self.obtener_id_tipo_insumo(combo_tipo.get())
+                id_insumo = self.obtener_id_insumo(combo_insumo.get(), id_tipo)
+
+                # Actualizar la presentación
+                id_presentacion = agregar_presentacion(nuevo_nombre.get().strip())
+
+                # Actualizar el insumo con la nueva presentación
+                actualizar_insumo(
+                    id_insumo=id_insumo,
+                    nombre=combo_insumo.get(),
+                    lote=None,
+                    id_presentacion=id_presentacion,
+                    fecha_vencimiento=None,
+                    id_tipo_insumo=id_tipo
+                )
+
+                self.actualizar_presentaciones()
+                ventana.destroy()
+                messagebox.showinfo("Éxito", "Presentación actualizada correctamente")
+            except Exception as e:
+                messagebox.showerror("Error", f"Error al actualizar presentación: {str(e)}")
+
         frame_botones = ttk.Frame(ventana)
         frame_botones.pack(pady=10)
         ttk.Button(frame_botones, text="Guardar", command=guardar).pack(side="left", padx=5)
@@ -666,9 +822,33 @@ class GestionInsumos:
             messagebox.showinfo("Éxito", "Presentación eliminada correctamente")
 
     def actualizar_presentaciones(self):
-        self.tree_presentaciones.delete(*self.tree_presentaciones.get_children())
-        for pres in obtener_presentaciones():
-            self.tree_presentaciones.insert('', 'end', values=(pres['nombre'],))
+        """Actualiza la lista de presentaciones en el TreeView"""
+        try:
+            self.tree_presentaciones.delete(*self.tree_presentaciones.get_children())
+            tipos = obtener_tipos_insumo()
+
+            if not tipos:
+                return
+
+            for tipo in tipos:
+                insumos = obtener_insumos_por_tipo(tipo['id'])
+                if insumos:
+                    for insumo in insumos:
+                        if isinstance(insumo, sqlite3.Row):
+                            insumo = dict(insumo)
+
+                        # Obtener la presentación del insumo
+                        presentacion = insumo.get('nombre_presentacion', 'N/A')
+
+                        self.tree_presentaciones.insert('', 'end', values=(
+                            tipo['descripcion'],
+                            insumo['nombre'],
+                            presentacion
+                        ))
+
+        except Exception as e:
+            messagebox.showerror("Error",
+                f"Error al actualizar presentaciones: {str(e)}")
 
     def obtener_id_presentacion(self, nombre):
         presentaciones = obtener_presentaciones()
@@ -678,9 +858,10 @@ class GestionInsumos:
         return None
 
     def cerrar_ventana(self):
-        """Cierra la ventana de gestión y muestra la pantalla de bienvenida."""
+        """Cierra la ventana de gestión y muestra la pantalla de bienvenida"""
         try:
-            if messagebox.askyesno("Confirmar", "¿Está seguro que desea cerrar esta ventana?"):
+            if messagebox.askyesno("Confirmar",
+                "¿Está seguro que desea cerrar esta ventana?"):
                 # Limpiar widgets
                 for widget in self.parent.winfo_children():
                     widget.destroy()
@@ -690,12 +871,11 @@ class GestionInsumos:
                     self.main_window.show_welcome_screen()
                 else:
                     print("Advertencia: método show_welcome_screen no encontrado")
-
+                    # Intentar cerrar la ventana de todas formas
+                    self.parent.destroy()
         except Exception as e:
             print(f"Error al cerrar ventana: {e}")
-            # Intentar cerrar de todas formas
-            for widget in self.parent.winfo_children():
-                try:
-                    widget.destroy()
-                except:
-                    pass
+            try:
+                self.parent.destroy()
+            except:
+                pass
