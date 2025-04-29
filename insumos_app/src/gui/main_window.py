@@ -117,21 +117,25 @@ class MainWindow:
             widget.destroy()
 
         # Contenido de bienvenida
-        welcome_frame = ttk.Frame(self.main_content_frame)
+        welcome_frame = ttk.Frame(self.main_content_frame, style='Card.TFrame')
         welcome_frame.place(relx=0.5, rely=0.5, anchor='center')
 
         ttk.Label(welcome_frame,
-                 text="Bienvenido al Sistema de Gestión",
-                 font=('Helvetica', 24, 'bold')).pack(pady=10)
+                text="Bienvenido al Sistema de Gestión",
+                font=('Helvetica', 24, 'bold'),
+                background='white',
+                anchor='center').pack(pady=10)
 
         ttk.Label(welcome_frame,
-                 text="DIRECCIÓN DEPARTAMENTAL DE REDES INTEGRADAS\n" +
+                text="DIRECCIÓN DEPARTAMENTAL DE REDES INTEGRADAS\n" +
                       "DE SERVICIOS DE SALUD DE GUATEMALA\n" +
                       "ÁREA NOR ORIENTE",
-                 font=('Helvetica', 14),
-                 justify='center').pack(pady=20)
+                font=('Helvetica', 14),
+                justify='center',
+                background='white', 
+                anchor='center').pack(pady=20)
 
-        info_frame = ttk.Frame(welcome_frame)
+        info_frame = ttk.Frame(welcome_frame, style='Card.TFrame')
         info_frame.pack(pady=30)
 
         info_text = """
@@ -146,9 +150,11 @@ class MainWindow:
         """
 
         ttk.Label(info_frame,
-                 text=info_text,
-                 font=('Helvetica', 12),
-                 justify='left').pack()
+                text=info_text,
+                font=('Helvetica', 12),
+                justify='left',
+                background='white', 
+                anchor='w').pack(padx=10)
 
     def load_ingreso_insumos(self):
         if not self.verify_database_connection():
@@ -224,14 +230,13 @@ class MainWindow:
                     relief='flat')
         
         # Frame simple para el título, sin borde y con ancho reducido
-        title_frame = tk.Frame(self.menu_frame, bg='white', bd=0, highlightthickness=0)
+        title_frame = tk.Frame(self.menu_frame, bd=0, highlightthickness=0)
         title_frame.pack(pady=20)
 
         tk.Label(
             title_frame,
             text="SISTEMA DE GESTIÓN",
             font=('Helvetica', 12, 'bold'),
-            bg='white',
             bd=0,
             relief='flat',
             width=18,  # Ajusta este valor según lo que desees
@@ -243,7 +248,6 @@ class MainWindow:
             title_frame,
             text="DE INSUMOS",
             font=('Helvetica', 12, 'bold'),
-            bg='white',
             bd=0,
             relief='flat',
             width=18,  # Igual que arriba
