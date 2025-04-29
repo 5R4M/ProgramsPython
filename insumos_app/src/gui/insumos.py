@@ -15,7 +15,6 @@ from src.database.db_manager import (
     obtener_servicios_por_tipo,
     obtener_tipos_insumo,
     obtener_insumos_por_tipo,
-    obtener_presentaciones,
     obtener_tipos_movimiento,
     obtener_id_distrito,
     obtener_id_tipo_servicio,
@@ -339,7 +338,15 @@ class IngresoInsumos:
 
         editar_ventana = tk.Toplevel(self.parent)
         editar_ventana.title("Editar Movimiento")
-        editar_ventana.geometry("800x600")
+        editar_ventana.geometry("900x700")  # Ventana más grande
+
+        # Centrar la ventana
+        editar_ventana.update_idletasks()
+        width = editar_ventana.winfo_width()
+        height = editar_ventana.winfo_height()
+        x = (editar_ventana.winfo_screenwidth() // 2) - (width // 2)
+        y = (editar_ventana.winfo_screenheight() // 2) - (height // 2)
+        editar_ventana.geometry(f'{width}x{height}+{x}+{y}')
 
         # Variables para los combobox en la ventana de edición
         edit_distrito_var = tk.StringVar()
@@ -350,95 +357,104 @@ class IngresoInsumos:
         edit_presentacion_var = tk.StringVar()
         edit_tipo_movimiento_var = tk.StringVar()
 
+        # Constantes de diseño
+        ANCHO_LABEL = 20
+        ANCHO_CAMPO = 60
+        PADDING = 10
+
         # Frame principal con padding
-        main_frame = ttk.Frame(editar_ventana, padding="10")
+        main_frame = ttk.Frame(editar_ventana, padding=PADDING)
         main_frame.pack(fill="both", expand=True)
 
         # Frame Servicios
-        frame_servicios = ttk.LabelFrame(main_frame, text="Servicios", padding="5")
+        frame_servicios = ttk.LabelFrame(main_frame, text="Servicios", padding=PADDING)
         frame_servicios.pack(fill="x", pady=5)
 
         # Distrito
-        ttk.Label(frame_servicios, text="Distrito:", width=15).grid(row=0, column=0, padx=5, pady=5)
-        distrito_cb = ttk.Combobox(frame_servicios, textvariable=edit_distrito_var, state="readonly", width=40)
+        ttk.Label(frame_servicios, text="Distrito:", width=ANCHO_LABEL, anchor="e").grid(row=0, column=0, padx=5, pady=5)
+        distrito_cb = ttk.Combobox(frame_servicios, textvariable=edit_distrito_var, state="readonly", width=ANCHO_CAMPO)
         distrito_cb['values'] = [d['nombre'] for d in obtener_distritos() or []]
-        distrito_cb.grid(row=0, column=1, padx=5, pady=5)
+        distrito_cb.grid(row=0, column=1, padx=5, pady=5, sticky="ew")
 
         # Tipo de Servicio
-        ttk.Label(frame_servicios, text="Tipo de Servicio:", width=15).grid(row=1, column=0, padx=5, pady=5)
-        tipo_servicio_cb = ttk.Combobox(frame_servicios, textvariable=edit_tipo_servicio_var, state="readonly", width=40)
-        tipo_servicio_cb.grid(row=1, column=1, padx=5, pady=5)
+        ttk.Label(frame_servicios, text="Tipo de Servicio:", width=ANCHO_LABEL, anchor="e").grid(row=1, column=0, padx=5, pady=5)
+        tipo_servicio_cb = ttk.Combobox(frame_servicios, textvariable=edit_tipo_servicio_var, state="readonly", width=ANCHO_CAMPO)
+        tipo_servicio_cb.grid(row=1, column=1, padx=5, pady=5, sticky="ew")
 
         # Servicio
-        ttk.Label(frame_servicios, text="Servicio:", width=15).grid(row=2, column=0, padx=5, pady=5)
-        servicio_cb = ttk.Combobox(frame_servicios, textvariable=edit_servicio_var, state="readonly", width=40)
-        servicio_cb.grid(row=2, column=1, padx=5, pady=5)
+        ttk.Label(frame_servicios, text="Servicio:", width=ANCHO_LABEL, anchor="e").grid(row=2, column=0, padx=5, pady=5)
+        servicio_cb = ttk.Combobox(frame_servicios, textvariable=edit_servicio_var, state="readonly", width=ANCHO_CAMPO)
+        servicio_cb.grid(row=2, column=1, padx=5, pady=5, sticky="ew")
 
         # Frame Insumos
-        frame_insumos = ttk.LabelFrame(main_frame, text="Insumos", padding="5")
+        frame_insumos = ttk.LabelFrame(main_frame, text="Insumos", padding=PADDING)
         frame_insumos.pack(fill="x", pady=5)
 
         # Tipo de Insumo
-        ttk.Label(frame_insumos, text="Tipo de Insumo:", width=15).grid(row=0, column=0, padx=5, pady=5)
-        tipo_insumo_cb = ttk.Combobox(frame_insumos, textvariable=edit_tipo_insumo_var, state="readonly", width=40)
+        ttk.Label(frame_insumos, text="Tipo de Insumo:", width=ANCHO_LABEL, anchor="e").grid(row=0, column=0, padx=5, pady=5)
+        tipo_insumo_cb = ttk.Combobox(frame_insumos, textvariable=edit_tipo_insumo_var, state="readonly", width=ANCHO_CAMPO)
         tipo_insumo_cb['values'] = [ti['descripcion'] for ti in obtener_tipos_insumo() or []]
-        tipo_insumo_cb.grid(row=0, column=1, padx=5, pady=5)
+        tipo_insumo_cb.grid(row=0, column=1, padx=5, pady=5, sticky="ew")
 
         # Insumo
-        ttk.Label(frame_insumos, text="Insumo:", width=15).grid(row=1, column=0, padx=5, pady=5)
-        insumo_cb = ttk.Combobox(frame_insumos, textvariable=edit_insumo_var, state="readonly", width=40)
-        insumo_cb.grid(row=1, column=1, padx=5, pady=5)
+        ttk.Label(frame_insumos, text="Insumo:", width=ANCHO_LABEL, anchor="e").grid(row=1, column=0, padx=5, pady=5)
+        insumo_cb = ttk.Combobox(frame_insumos, textvariable=edit_insumo_var, state="readonly", width=ANCHO_CAMPO)
+        insumo_cb.grid(row=1, column=1, padx=5, pady=5, sticky="ew")
 
         # Presentación
-        ttk.Label(frame_insumos, text="Presentación:", width=15).grid(row=2, column=0, padx=5, pady=5)
-        presentacion_cb = ttk.Combobox(frame_insumos, textvariable=edit_presentacion_var, state="readonly", width=40)
-        presentacion_cb.grid(row=2, column=1, padx=5, pady=5)
+        ttk.Label(frame_insumos, text="Presentación:", width=ANCHO_LABEL, anchor="e").grid(row=2, column=0, padx=5, pady=5)
+        presentacion_cb = ttk.Combobox(frame_insumos, textvariable=edit_presentacion_var, state="readonly", width=ANCHO_CAMPO)
+        presentacion_cb.grid(row=2, column=1, padx=5, pady=5, sticky="ew")
 
         # Frame Detalles
-        frame_detalles = ttk.LabelFrame(main_frame, text="Detalles del Movimiento", padding="5")
+        frame_detalles = ttk.LabelFrame(main_frame, text="Detalles del Movimiento", padding=PADDING)
         frame_detalles.pack(fill="x", pady=5)
 
         # Fecha de Registro
-        ttk.Label(frame_detalles, text="Fecha de Registro:", width=15).grid(row=0, column=0, padx=5, pady=5)
-        fecha_edit = DateEntry(frame_detalles, width=38, background='darkblue',
+        ttk.Label(frame_detalles, text="Fecha de Registro:", width=ANCHO_LABEL, anchor="e").grid(row=0, column=0, padx=5, pady=5)
+        fecha_edit = DateEntry(frame_detalles, width=ANCHO_CAMPO, background='darkblue',
                             foreground='white', borderwidth=2, date_pattern='dd/mm/yyyy')
-        fecha_edit.grid(row=0, column=1, padx=5, pady=5)
+        fecha_edit.grid(row=0, column=1, padx=5, pady=5, sticky="ew")
 
         # Referencia
-        ttk.Label(frame_detalles, text="Referencia:", width=15).grid(row=1, column=0, padx=5, pady=5)
-        referencia_entry = ttk.Entry(frame_detalles, width=40)
-        referencia_entry.grid(row=1, column=1, padx=5, pady=5)
+        ttk.Label(frame_detalles, text="Referencia:", width=ANCHO_LABEL, anchor="e").grid(row=1, column=0, padx=5, pady=5)
+        referencia_entry = ttk.Entry(frame_detalles, width=ANCHO_CAMPO)
+        referencia_entry.grid(row=1, column=1, padx=5, pady=5, sticky="ew")
 
         # Tipo de Movimiento
-        ttk.Label(frame_detalles, text="Tipo Movimiento:", width=15).grid(row=2, column=0, padx=5, pady=5)
-        tipo_mov_cb = ttk.Combobox(frame_detalles, textvariable=edit_tipo_movimiento_var, state="readonly", width=40)
+        ttk.Label(frame_detalles, text="Tipo Movimiento:", width=ANCHO_LABEL, anchor="e").grid(row=2, column=0, padx=5, pady=5)
+        tipo_mov_cb = ttk.Combobox(frame_detalles, textvariable=edit_tipo_movimiento_var, state="readonly", width=ANCHO_CAMPO)
         tipo_mov_cb['values'] = [tm['descripcion'] for tm in obtener_tipos_movimiento() or []]
-        tipo_mov_cb.grid(row=2, column=1, padx=5, pady=5)
+        tipo_mov_cb.grid(row=2, column=1, padx=5, pady=5, sticky="ew")
 
         # Lote
-        ttk.Label(frame_detalles, text="Lote:", width=15).grid(row=3, column=0, padx=5, pady=5)
-        lote_entry = ttk.Entry(frame_detalles, width=40)
-        lote_entry.grid(row=3, column=1, padx=5, pady=5)
+        ttk.Label(frame_detalles, text="Lote:", width=ANCHO_LABEL, anchor="e").grid(row=3, column=0, padx=5, pady=5)
+        lote_entry = ttk.Entry(frame_detalles, width=ANCHO_CAMPO)
+        lote_entry.grid(row=3, column=1, padx=5, pady=5, sticky="ew")
 
         # Fecha de Vencimiento
-        ttk.Label(frame_detalles, text="Fecha Vencimiento:", width=15).grid(row=4, column=0, padx=5, pady=5)
-        fecha_venc_edit = DateEntry(frame_detalles, width=38, background='darkblue',
+        ttk.Label(frame_detalles, text="Fecha Vencimiento:", width=ANCHO_LABEL, anchor="e").grid(row=4, column=0, padx=5, pady=5)
+        fecha_venc_edit = DateEntry(frame_detalles, width=ANCHO_CAMPO, background='darkblue',
                                 foreground='white', borderwidth=2, date_pattern='dd/mm/yyyy')
-        fecha_venc_edit.grid(row=4, column=1, padx=5, pady=5)
+        fecha_venc_edit.grid(row=4, column=1, padx=5, pady=5, sticky="ew")
 
         # Cantidad
-        ttk.Label(frame_detalles, text="Cantidad:", width=15).grid(row=5, column=0, padx=5, pady=5)
-        cantidad_entry = ttk.Entry(frame_detalles, width=40)
-        cantidad_entry.grid(row=5, column=1, padx=5, pady=5)
+        ttk.Label(frame_detalles, text="Cantidad:", width=ANCHO_LABEL, anchor="e").grid(row=5, column=0, padx=5, pady=5)
+        cantidad_entry = ttk.Entry(frame_detalles, width=ANCHO_CAMPO)
+        cantidad_entry.grid(row=5, column=1, padx=5, pady=5, sticky="ew")
 
         # Observaciones
-        ttk.Label(frame_detalles, text="Observaciones:", width=15).grid(row=6, column=0, padx=5, pady=5)
-        observaciones_entry = ttk.Entry(frame_detalles, width=40)
-        observaciones_entry.grid(row=6, column=1, padx=5, pady=5)
+        ttk.Label(frame_detalles, text="Observaciones:", width=ANCHO_LABEL, anchor="e").grid(row=6, column=0, padx=5, pady=5)
+        observaciones_entry = ttk.Entry(frame_detalles, width=ANCHO_CAMPO)
+        observaciones_entry.grid(row=6, column=1, padx=5, pady=5, sticky="ew")
+
+        # Configurar el grid para expandirse
+        for frame in [frame_servicios, frame_insumos, frame_detalles]:
+            frame.grid_columnconfigure(1, weight=1)
 
         # Frame Botones
         frame_botones = ttk.Frame(main_frame)
-        frame_botones.pack(pady=10)
+        frame_botones.pack(pady=PADDING)
 
         def actualizar_tipos_servicio_edit(*args):
             distrito_id = next((d['id'] for d in obtener_distritos()
@@ -449,13 +465,17 @@ class IngresoInsumos:
 
         def actualizar_servicios_edit(*args):
             try:
-                tipo_servicio_id = next((ts['id'] for ts in obtener_tipos_servicio_por_distrito(
-                    next(d['id'] for d in obtener_distritos() if d['nombre'] == edit_distrito_var.get()))
-                    if ts['descripcion'] == edit_tipo_servicio_var.get()), None)
-                if tipo_servicio_id:
-                    servicios = obtener_servicios_por_tipo(tipo_servicio_id)
-                    servicio_cb['values'] = [s['nombre'] for s in servicios or []]
-            except Exception:
+                distrito_id = next((d['id'] for d in obtener_distritos()
+                                if d['nombre'] == edit_distrito_var.get()), None)
+                if distrito_id:
+                    tipos_servicio = obtener_tipos_servicio_por_distrito(distrito_id)
+                    tipo_servicio_id = next((ts['id'] for ts in tipos_servicio
+                                        if ts['descripcion'] == edit_tipo_servicio_var.get()), None)
+                    if tipo_servicio_id:
+                        servicios = obtener_servicios_por_tipo(tipo_servicio_id)
+                        servicio_cb['values'] = [s['nombre'] for s in servicios or []]
+            except Exception as e:
+                print(f"Error al actualizar servicios: {e}")
                 servicio_cb['values'] = []
 
         def actualizar_insumos_edit(*args):
@@ -486,13 +506,38 @@ class IngresoInsumos:
         edit_tipo_insumo_var.trace('w', actualizar_insumos_edit)
         edit_insumo_var.trace('w', actualizar_presentacion_edit)
 
-        # Establecer valores actuales
+        # Cargar los valores actuales
+        # Primero establecemos el distrito actual
+        edit_distrito_var.set(self.distrito_var.get())
+
+        # Esperamos un momento para que se actualicen los tipos de servicio
+        editar_ventana.after(200, lambda: [
+            # Establecer tipo de servicio
+            edit_tipo_servicio_var.set(self.tipo_servicio_var.get()),
+            # Esperamos otro momento para que se actualicen los servicios
+            editar_ventana.after(200, lambda: [
+                # Establecer servicio
+                edit_servicio_var.set(self.servicio_var.get()),
+                # Establecer tipo de insumo
+                edit_tipo_insumo_var.set(self.tipo_insumo_var.get()),
+                # Esperamos otro momento para que se actualicen los insumos
+                editar_ventana.after(200, lambda: [
+                    # Establecer insumo
+                    edit_insumo_var.set(valores[3]),
+                    # Esperamos otro momento para que se actualice la presentación
+                    editar_ventana.after(200, lambda: [
+                        # Establecer presentación
+                        edit_presentacion_var.set(valores[4])
+                    ])
+                ])
+            ])
+        ])
+
+        # Establecer el resto de los valores
         fecha_actual = datetime.strptime(valores[0], '%d/%m/%Y').date()
         fecha_edit.set_date(fecha_actual)
         referencia_entry.insert(0, valores[1])
         edit_tipo_movimiento_var.set(valores[2])
-        edit_insumo_var.set(valores[3])
-        edit_presentacion_var.set(valores[4])
         lote_entry.insert(0, valores[5])
         fecha_venc = datetime.strptime(valores[6], '%d/%m/%Y').date()
         fecha_venc_edit.set_date(fecha_venc)
@@ -513,6 +558,19 @@ class IngresoInsumos:
                     cantidad_entry.get(),
                     observaciones_entry.get()
                 )
+
+                # Validar que los campos requeridos no estén vacíos
+                if not all(nuevos_valores[:8]):  # Todos menos observaciones
+                    messagebox.showerror("Error", "Todos los campos son requeridos excepto observaciones")
+                    return
+
+                # Validar que la cantidad sea un número válido
+                try:
+                    float(nuevos_valores[7])
+                except ValueError:
+                    messagebox.showerror("Error", "La cantidad debe ser un número válido")
+                    return
+
                 self.tree.item(selected_item, values=nuevos_valores)
                 editar_ventana.destroy()
                 messagebox.showinfo("Éxito", "Movimiento actualizado correctamente")
@@ -521,7 +579,7 @@ class IngresoInsumos:
 
         ttk.Button(frame_botones, text="Guardar", command=guardar_cambios).pack(side="left", padx=5)
         ttk.Button(frame_botones, text="Cerrar", command=editar_ventana.destroy).pack(side="left", padx=5)
-
+    
     def eliminar_movimiento(self):
         selected_item = self.tree.selection()
         if not selected_item:
