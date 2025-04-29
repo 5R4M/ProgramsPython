@@ -13,11 +13,11 @@ sys.path.append(project_root)
 
 # Importar las funciones de la base de datos
 from src.database import DB_PATH, crear_base_datos, verificar_tablas
-from insumos_app.src.gui.ingreso_insumos import IngresoInsumos
-from insumos_app.src.gui.gestion_insumos import GestionInsumos
-from insumos_app.src.gui.gestion_servicios import GestionServicios
-from insumos_app.src.gui.gestion_movimientos import GestionMovimientos
-from insumos_app.src.gui.reporte_kardex import ReporteKardex
+from src.gui.ingreso_insumos import IngresoInsumos
+from src.gui.gestion_insumos import GestionInsumos
+from src.gui.gestion_servicios import GestionServicios
+from src.gui.gestion_movimientos import GestionMovimientos
+from src.gui.reporte_kardex import ReporteKardex
 
 class MainWindow:
     def __init__(self):
@@ -174,7 +174,7 @@ class MainWindow:
             widget.destroy()
         GestionServicios(self.main_content_frame, self)
         
-    def load_movimientos(self):
+    def load_gestion_movimientos(self):
         if not self.verify_database_connection():
             messagebox.showerror("Error", "No se puede conectar a la base de datos")
             return
@@ -182,7 +182,7 @@ class MainWindow:
             widget.destroy()
         GestionMovimientos(self.main_content_frame, self)
 
-    def load_reportes(self):
+    def load_reporte_kardex(self):
         if not self.verify_database_connection():
             messagebox.showerror("Error", "No se puede conectar a la base de datos")
             return
