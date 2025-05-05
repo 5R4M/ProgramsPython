@@ -5,6 +5,7 @@ from tkcalendar import DateEntry
 from datetime import datetime
 import sys
 import os
+from ttkwidgets.autocomplete import AutocompleteCombobox
 
 # Agregar el directorio raíz del proyecto al PATH de Python
 sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
@@ -57,23 +58,38 @@ class IngresoInsumos:
         # Distrito
         ttk.Label(self.frame_servicios, text="Distrito:", anchor="w").grid(
             row=0, column=0, padx=5, pady=5, sticky="w")
-        self.distrito_cb = ttk.Combobox(self.frame_servicios, textvariable=self.distrito_var,
-                                state="readonly", width=25)
-        self.distrito_cb['values'] = [d['nombre'] for d in obtener_distritos() or []]
+        distritos = [d['nombre'] for d in obtener_distritos() or []]
+        self.distrito_cb = AutocompleteCombobox(
+            self.frame_servicios,
+            textvariable=self.distrito_var,
+            width=25,
+            completevalues=distritos,
+            state="normal"
+        )
         self.distrito_cb.grid(row=0, column=1, padx=5, pady=5, sticky="w")
 
         # Tipo de Servicio
         ttk.Label(self.frame_servicios, text="Tipo de Servicio:", anchor="w").grid(
             row=0, column=2, padx=5, pady=5, sticky="w")
-        self.tipo_servicio_cb = ttk.Combobox(self.frame_servicios, textvariable=self.tipo_servicio_var,
-                                    state="readonly", width=25)
+        self.tipo_servicio_cb = AutocompleteCombobox(
+            self.frame_servicios,
+            textvariable=self.tipo_servicio_var,
+            width=25,
+            completevalues=[],
+            state="normal"
+        )
         self.tipo_servicio_cb.grid(row=0, column=3, padx=5, pady=5, sticky="w")
 
         # Servicio
         ttk.Label(self.frame_servicios, text="Servicio:", anchor="w").grid(
             row=0, column=4, padx=5, pady=5, sticky="w")
-        self.servicio_cb = ttk.Combobox(self.frame_servicios, textvariable=self.servicio_var,
-                                state="readonly", width=25)
+        self.servicio_cb = AutocompleteCombobox(
+            self.frame_servicios,
+            textvariable=self.servicio_var,
+            width=25,
+            completevalues=[],
+            state="normal"
+        )
         self.servicio_cb.grid(row=0, column=5, padx=5, pady=5, sticky="w")
 
         # Frame Insumos
@@ -83,23 +99,38 @@ class IngresoInsumos:
         # Tipo de Insumo
         ttk.Label(self.frame_insumos, text="Tipo de Insumo:", anchor="w").grid(
             row=0, column=0, padx=5, pady=5, sticky="w")
-        self.tipo_insumo_cb = ttk.Combobox(self.frame_insumos, textvariable=self.tipo_insumo_var,
-                                    state="readonly", width=25)
-        self.tipo_insumo_cb['values'] = [ti['descripcion'] for ti in obtener_tipos_insumo() or []]
+        tipos_insumo = [ti['descripcion'] for ti in obtener_tipos_insumo() or []]
+        self.tipo_insumo_cb = AutocompleteCombobox(
+            self.frame_insumos,
+            textvariable=self.tipo_insumo_var,
+            width=25,
+            completevalues=tipos_insumo,
+            state="normal"
+        )
         self.tipo_insumo_cb.grid(row=0, column=1, padx=5, pady=5, sticky="w")
 
         # Insumo
         ttk.Label(self.frame_insumos, text="Insumo:", anchor="w").grid(
             row=0, column=2, padx=5, pady=5, sticky="w")
-        self.insumo_cb = ttk.Combobox(self.frame_insumos, textvariable=self.insumo_var,
-                                state="readonly", width=25)
+        self.insumo_cb = AutocompleteCombobox(
+            self.frame_insumos,
+            textvariable=self.insumo_var,
+            width=25,
+            completevalues=[],
+            state="normal"
+        )
         self.insumo_cb.grid(row=0, column=3, padx=5, pady=5, sticky="w")
 
         # Presentación
         ttk.Label(self.frame_insumos, text="Presentación:", anchor="w").grid(
             row=0, column=4, padx=5, pady=5, sticky="w")
-        self.presentacion_cb = ttk.Combobox(self.frame_insumos, textvariable=self.presentacion_var,
-                                    state="readonly", width=25)
+        self.presentacion_cb = AutocompleteCombobox(
+            self.frame_insumos,
+            textvariable=self.presentacion_var,
+            width=25,
+            completevalues=[],
+            state="normal"
+        )
         self.presentacion_cb.grid(row=0, column=5, padx=5, pady=5, sticky="w")
 
         # Lote
@@ -135,9 +166,14 @@ class IngresoInsumos:
         # Tipo de Movimiento
         ttk.Label(self.frame_registro, text="Tipo de Movimiento:", anchor="w").grid(
             row=0, column=4, padx=5, pady=5, sticky="w")
-        self.tipo_mov_cb = ttk.Combobox(self.frame_registro, textvariable=self.tipo_movimiento_var,
-                                state="readonly", width=25)
-        self.tipo_mov_cb['values'] = [tm['descripcion'] for tm in obtener_tipos_movimiento() or []]
+        tipos_movimiento = [tm['descripcion'] for tm in obtener_tipos_movimiento() or []]
+        self.tipo_mov_cb = AutocompleteCombobox(
+            self.frame_registro,
+            textvariable=self.tipo_movimiento_var,
+            width=25,
+            completevalues=tipos_movimiento,
+            state="normal"
+        )
         self.tipo_mov_cb.grid(row=0, column=5, padx=5, pady=5, sticky="w")
 
         # Cantidad
@@ -230,7 +266,9 @@ class IngresoInsumos:
                         if d['nombre'] == self.distrito_var.get()), None)
         if distrito_id:
             tipos_servicio = obtener_tipos_servicio_por_distrito(distrito_id)
-            self.tipo_servicio_cb['values'] = [ts['descripcion'] for ts in tipos_servicio or []]
+            opciones = [ts['descripcion'] for ts in tipos_servicio or []]
+            # Usar completevalues en lugar de values
+            self.tipo_servicio_cb.config(completevalues=opciones)
             self.tipo_servicio_var.set('')
             self.servicio_var.set('')
 
@@ -241,10 +279,11 @@ class IngresoInsumos:
                 if ts['descripcion'] == self.tipo_servicio_var.get()), None)
             if tipo_servicio_id:
                 servicios = obtener_servicios_por_tipo(tipo_servicio_id)
-                self.servicio_cb['values'] = [s['nombre'] for s in servicios or []]
+                opciones = [s['nombre'] for s in servicios or []]
+                self.servicio_cb.config(completevalues=opciones)  # <--- ¡¡¡Aquí!!!
                 self.servicio_var.set('')
         except Exception:
-            self.servicio_cb['values'] = []
+            self.servicio_cb.config(completevalues=[])  # Reiniciar si hay error
             self.servicio_var.set('')
 
     def actualizar_insumos(self, *args):
@@ -252,32 +291,22 @@ class IngresoInsumos:
                             if ti['descripcion'] == self.tipo_insumo_var.get()), None)
         if tipo_insumo_id:
             insumos = obtener_insumos_por_tipo(tipo_insumo_id)
-            self.insumo_cb['values'] = [i['nombre'] for i in insumos or []]
+            opciones = [i['nombre'] for i in insumos or []]
+            self.insumo_cb.config(completevalues=opciones)  # <--- ¡¡¡Aquí!!!
             self.insumo_var.set('')
     
     def actualizar_presentacion(self, *args):
-        """Actualiza el combobox de presentación según el insumo seleccionado."""
         try:
             tipo_insumo_id = next((ti['id'] for ti in obtener_tipos_insumo()
                                 if ti['descripcion'] == self.tipo_insumo_var.get()), None)
-
             if tipo_insumo_id and self.insumo_var.get():
-                insumos = obtener_insumos_por_tipo(tipo_insumo_id)
-                insumo_seleccionado = next((i for i in insumos
+                insumo_seleccionado = next((i for i in obtener_insumos_por_tipo(tipo_insumo_id)
                                         if i['nombre'] == self.insumo_var.get()), None)
-
-                if insumo_seleccionado:
-                    # Limpiar el combobox de presentación
-                    self.presentacion_cb['values'] = []
-                    self.presentacion_var.set('')
-
-                    # Si el insumo tiene una presentación asociada
-                    if insumo_seleccionado['nombre_presentacion']:
-                        self.presentacion_cb['values'] = [insumo_seleccionado['nombre_presentacion']]
-                        self.presentacion_var.set(insumo_seleccionado['nombre_presentacion'])
+                if insumo_seleccionado and insumo_seleccionado['nombre_presentacion']:
+                    self.presentacion_cb.config(completevalues=[insumo_seleccionado['nombre_presentacion']])
+                    self.presentacion_var.set(insumo_seleccionado['nombre_presentacion'])
         except Exception as e:
-            print(f"Error al actualizar presentación: {e}")
-            self.presentacion_cb['values'] = []
+            self.presentacion_cb.config(completevalues=[])  # Reiniciar si hay error
             self.presentacion_var.set('')
 
     def agregar_movimiento(self):
@@ -355,18 +384,33 @@ class IngresoInsumos:
 
         # Distrito
         ttk.Label(frame_servicios, text="Distrito:", width=ANCHO_LABEL, anchor="e").grid(row=0, column=0, padx=5, pady=5)
-        distrito_cb = ttk.Combobox(frame_servicios, textvariable=edit_distrito_var, state="readonly", width=ANCHO_CAMPO)
-        distrito_cb['values'] = [d['nombre'] for d in obtener_distritos() or []]
+        distrito_cb = AutocompleteCombobox(
+            frame_servicios,
+            textvariable=edit_distrito_var,
+            width=ANCHO_CAMPO,
+            state="normal"
+        )
+        distrito_cb.set_completion_list([d['nombre'] for d in obtener_distritos() or []])
         distrito_cb.grid(row=0, column=1, padx=5, pady=5, sticky="ew")
 
         # Tipo de Servicio
         ttk.Label(frame_servicios, text="Tipo de Servicio:", width=ANCHO_LABEL, anchor="e").grid(row=1, column=0, padx=5, pady=5)
-        tipo_servicio_cb = ttk.Combobox(frame_servicios, textvariable=edit_tipo_servicio_var, state="readonly", width=ANCHO_CAMPO)
+        tipo_servicio_cb = AutocompleteCombobox(
+            frame_servicios,
+            textvariable=edit_tipo_servicio_var,
+            width=ANCHO_CAMPO,
+            state="normal"
+        )
         tipo_servicio_cb.grid(row=1, column=1, padx=5, pady=5, sticky="ew")
 
         # Servicio
         ttk.Label(frame_servicios, text="Servicio:", width=ANCHO_LABEL, anchor="e").grid(row=2, column=0, padx=5, pady=5)
-        servicio_cb = ttk.Combobox(frame_servicios, textvariable=edit_servicio_var, state="readonly", width=ANCHO_CAMPO)
+        servicio_cb = AutocompleteCombobox(
+            frame_servicios,
+            textvariable=edit_servicio_var,
+            width=ANCHO_CAMPO,
+            state="normal"
+        )
         servicio_cb.grid(row=2, column=1, padx=5, pady=5, sticky="ew")
 
         # Frame Insumos
@@ -375,18 +419,33 @@ class IngresoInsumos:
 
         # Tipo de Insumo
         ttk.Label(frame_insumos, text="Tipo de Insumo:", width=ANCHO_LABEL, anchor="e").grid(row=0, column=0, padx=5, pady=5)
-        tipo_insumo_cb = ttk.Combobox(frame_insumos, textvariable=edit_tipo_insumo_var, state="readonly", width=ANCHO_CAMPO)
-        tipo_insumo_cb['values'] = [ti['descripcion'] for ti in obtener_tipos_insumo() or []]
+        tipo_insumo_cb = AutocompleteCombobox(
+            frame_insumos,
+            textvariable=edit_tipo_insumo_var,
+            width=ANCHO_CAMPO,
+            state="normal"
+        )
+        tipo_insumo_cb.set_completion_list([ti['descripcion'] for ti in obtener_tipos_insumo() or []])
         tipo_insumo_cb.grid(row=0, column=1, padx=5, pady=5, sticky="ew")
 
         # Insumo
         ttk.Label(frame_insumos, text="Insumo:", width=ANCHO_LABEL, anchor="e").grid(row=1, column=0, padx=5, pady=5)
-        insumo_cb = ttk.Combobox(frame_insumos, textvariable=edit_insumo_var, state="readonly", width=ANCHO_CAMPO)
+        insumo_cb = AutocompleteCombobox(
+            frame_insumos,
+            textvariable=edit_insumo_var,
+            width=ANCHO_CAMPO,
+            state="normal"
+        )
         insumo_cb.grid(row=1, column=1, padx=5, pady=5, sticky="ew")
 
         # Presentación
         ttk.Label(frame_insumos, text="Presentación:", width=ANCHO_LABEL, anchor="e").grid(row=2, column=0, padx=5, pady=5)
-        presentacion_cb = ttk.Combobox(frame_insumos, textvariable=edit_presentacion_var, state="readonly", width=ANCHO_CAMPO)
+        presentacion_cb = AutocompleteCombobox(
+            frame_insumos,
+            textvariable=edit_presentacion_var,
+            width=ANCHO_CAMPO,
+            state="normal"
+        )
         presentacion_cb.grid(row=2, column=1, padx=5, pady=5, sticky="ew")
 
         # Frame Detalles
@@ -406,8 +465,13 @@ class IngresoInsumos:
 
         # Tipo de Movimiento
         ttk.Label(frame_detalles, text="Tipo Movimiento:", width=ANCHO_LABEL, anchor="e").grid(row=2, column=0, padx=5, pady=5)
-        tipo_mov_cb = ttk.Combobox(frame_detalles, textvariable=edit_tipo_movimiento_var, state="readonly", width=ANCHO_CAMPO)
-        tipo_mov_cb['values'] = [tm['descripcion'] for tm in obtener_tipos_movimiento() or []]
+        tipo_mov_cb = AutocompleteCombobox(
+            frame_detalles,
+            textvariable=edit_tipo_movimiento_var,
+            width=ANCHO_CAMPO,
+            state="normal"
+        )
+        tipo_mov_cb.set_completion_list([tm['descripcion'] for tm in obtener_tipos_movimiento() or []])
         tipo_mov_cb.grid(row=2, column=1, padx=5, pady=5, sticky="ew")
 
         # Lote
@@ -444,7 +508,7 @@ class IngresoInsumos:
                             if d['nombre'] == edit_distrito_var.get()), None)
             if distrito_id:
                 tipos_servicio = obtener_tipos_servicio_por_distrito(distrito_id)
-                tipo_servicio_cb['values'] = [ts['descripcion'] for ts in tipos_servicio or []]
+                tipo_servicio_cb.set_completion_list([ts['descripcion'] for ts in tipos_servicio or []])
 
         def actualizar_servicios_edit(*args):
             try:
@@ -456,7 +520,7 @@ class IngresoInsumos:
                                         if ts['descripcion'] == edit_tipo_servicio_var.get()), None)
                     if tipo_servicio_id:
                         servicios = obtener_servicios_por_tipo(tipo_servicio_id)
-                        servicio_cb['values'] = [s['nombre'] for s in servicios or []]
+                        servicio_cb.set_completion_list([s['nombre'] for s in servicios or []])
 
                         # Verificar si el servicio actual está en la lista de servicios
                         servicio_actual = self.servicio_var.get()
@@ -473,22 +537,21 @@ class IngresoInsumos:
                                 if ti['descripcion'] == edit_tipo_insumo_var.get()), None)
             if tipo_insumo_id:
                 insumos = obtener_insumos_por_tipo(tipo_insumo_id)
-                insumo_cb['values'] = [i['nombre'] for i in insumos or []]
+                insumo_cb.set_completion_list([i['nombre'] for i in insumos or []])
 
         def actualizar_presentacion_edit(*args):
             try:
                 tipo_insumo_id = next((ti['id'] for ti in obtener_tipos_insumo()
                                     if ti['descripcion'] == edit_tipo_insumo_var.get()), None)
                 if tipo_insumo_id and edit_insumo_var.get():
-                    insumos = obtener_insumos_por_tipo(tipo_insumo_id)
-                    insumo_seleccionado = next((i for i in insumos
+                    insumo_seleccionado = next((i for i in obtener_insumos_por_tipo(tipo_insumo_id)
                                             if i['nombre'] == edit_insumo_var.get()), None)
                     if insumo_seleccionado and insumo_seleccionado['nombre_presentacion']:
-                        presentacion_cb['values'] = [insumo_seleccionado['nombre_presentacion']]
+                        presentacion_cb.set_completion_list([insumo_seleccionado['nombre_presentacion']])
                         edit_presentacion_var.set(insumo_seleccionado['nombre_presentacion'])
             except Exception as e:
                 print(f"Error al actualizar presentación: {e}")
-                presentacion_cb['values'] = []
+                presentacion_cb.set_completion_list([])
 
         # Configurar bindings
         edit_distrito_var.trace('w', actualizar_tipos_servicio_edit)
@@ -557,8 +620,6 @@ class IngresoInsumos:
         fecha_venc = datetime.strptime(valores[6], '%d/%m/%Y').date()
         fecha_venc_edit.set_date(fecha_venc)
         cantidad_entry.insert(0, valores[7])
-        if valores[8]:
-            observaciones_entry.insert(0, valores[8])
 
         def guardar_cambios():
             try:
