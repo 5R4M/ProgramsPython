@@ -3,12 +3,18 @@ from tkinter import ttk, filedialog, messagebox
 import pandas as pd
 import sys
 import os
+import sqlite3
 from tkinter.scrolledtext import ScrolledText
 
 # Agregar el directorio raíz del proyecto al PATH de Python
 sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
 from src.database.db_manager import (
+    conectar_db,
+    agregar_area, 
+    obtener_areas,
+    actualizar_area,
+    eliminar_area,
     obtener_distritos,
     obtener_tipos_servicio_por_distrito,
     obtener_servicios_por_tipo,
@@ -72,24 +78,159 @@ class GestionServicios:
     def setup_ui(self):
         self.notebook = ttk.Notebook(self.parent)
         self.notebook.pack(fill="both", expand=True, padx=10, pady=5)
-
+        
+        self.tab_areas = ttk.Frame(self.notebook)
         self.tab_distritos = ttk.Frame(self.notebook)
         self.tab_tipos = ttk.Frame(self.notebook)
         self.tab_servicios = ttk.Frame(self.notebook)
-
+        
+        self.notebook.add(self.tab_areas, text="Áreas")
         self.notebook.add(self.tab_distritos, text="Distritos")
         self.notebook.add(self.tab_tipos, text="Tipos de Servicio")
         self.notebook.add(self.tab_servicios, text="Servicios")
 
+        self.setup_areas_tab()
         self.setup_distritos_tab()
         self.setup_tipos_tab()
         self.setup_servicios_tab()
 
         ttk.Button(self.parent, text="Cerrar", command=self.cerrar_ventana).pack(pady=10)
-
+        
+        self.actualizar_areas()
         self.actualizar_distritos()
         self.actualizar_tipos()
         self.actualizar_servicios()
+        
+    # --------- ÁREAS ---------
+    def setup_areas_tab(self):
+        frame_excel = ttk.LabelFrame(self.tab_areas, text="Carga desde Excel")
+        frame_excel.pack(fill="x", padx=5, pady=5)
+        ttk.Button(frame_excel, text="Cargar Excel", command=self.cargar_excel_areas).pack(side="left", padx=5, pady=5)
+        ttk.Button(frame_excel, text="Exportar a Excel", command=self.exportar_excel_areas).pack(side="left", padx=5, pady=5)
+
+        frame_lista = ttk.LabelFrame(self.tab_areas, text="Áreas")
+        frame_lista.pack(fill="both", expand=True, padx=5, pady=5)
+
+        self.tree_areas = ttk.Treeview(frame_lista, columns=('nombre',), show='headings')
+        self.tree_areas.heading('nombre', text='Área')
+        self.tree_areas.grid(row=0, column=0, sticky="nsew")
+        scrolly = ttk.Scrollbar(frame_lista, orient="vertical", command=self.tree_areas.yview)
+        self.tree_areas.configure(yscrollcommand=scrolly.set)
+        scrolly.grid(row=0, column=1, sticky="ns")
+        frame_lista.grid_rowconfigure(0, weight=1)
+        frame_lista.grid_columnconfigure(0, weight=1)
+
+        frame_botones = ttk.Frame(frame_lista)
+        frame_botones.grid(row=1, column=0, columnspan=2, pady=5)
+        ttk.Button(frame_botones, text="Agregar", command=self.agregar_area).pack(side="left", padx=5)
+        ttk.Button(frame_botones, text="Editar", command=self.editar_area).pack(side="left", padx=5)
+        ttk.Button(frame_botones, text="Eliminar", command=self.eliminar_area).pack(side="left", padx=5)
+
+    def cargar_excel_areas(self):
+        filename = filedialog.askopenfilename(title="Seleccionar archivo Excel de Áreas", filetypes=[("Excel files", "*.xlsx *.xls")])
+        if not filename:
+            return
+        df = pd.read_excel(filename)
+        if 'Área' not in df.columns:
+            messagebox.showerror("Error", "El archivo debe tener la columna: Área")
+            return
+        for area in df['Área'].dropna().unique():
+            agregar_area(str(area).strip())
+        messagebox.showinfo("Éxito", "Áreas cargadas correctamente")
+        self.actualizar_areas()
+
+    def exportar_excel_areas(self):
+        filename = filedialog.asksaveasfilename(defaultextension=".xlsx", filetypes=[("Excel files", "*.xlsx")])
+        if not filename:
+            return
+        areas = obtener_areas()
+        df = pd.DataFrame([{'Área': a['nombre']} for a in areas])
+        df.to_excel(filename, index=False)
+        messagebox.showinfo("Éxito", "Áreas exportadas correctamente")
+
+    def agregar_area(self):
+        ventana = tk.Toplevel(self.parent)
+        ventana.title("Agregar Área")
+        ventana.geometry("350x120")
+        self.centrar_ventana(ventana)
+
+        frame_campos = ttk.Frame(ventana)
+        frame_campos.pack(padx=10, pady=5, fill='x')
+
+        ttk.Label(frame_campos, text="Nombre:").pack(pady=5)
+        nombre = ttk.Entry(frame_campos, width=40)
+        nombre.pack(pady=5, fill='x')
+
+        def guardar():
+            if nombre.get().strip():
+                agregar_area(nombre.get().strip())
+                self.actualizar_areas()
+                ventana.destroy()
+                messagebox.showinfo("Éxito", "Área agregada correctamente")
+            else:
+                messagebox.showwarning("Advertencia", "Ingrese un nombre")
+
+        frame_botones = ttk.Frame(ventana)
+        frame_botones.pack(pady=10)
+        ttk.Button(frame_botones, text="Guardar", command=guardar).pack(side="left", padx=5)
+        ttk.Button(frame_botones, text="Cerrar", command=ventana.destroy).pack(side="left", padx=5)
+
+    def editar_area(self):
+        selected = self.tree_areas.selection()
+        if not selected:
+            messagebox.showwarning("Advertencia", "Seleccione un área para editar")
+            return
+
+        item = self.tree_areas.item(selected[0])
+        ventana = tk.Toplevel(self.parent)
+        ventana.title("Editar Área")
+        ventana.geometry("350x120")
+        self.centrar_ventana(ventana)
+
+        frame_campos = ttk.Frame(ventana)
+        frame_campos.pack(padx=10, pady=5, fill='x')
+
+        ttk.Label(frame_campos, text="Nuevo nombre:").pack(pady=5)
+        nuevo_nombre = ttk.Entry(frame_campos, width=40)
+        nuevo_nombre.insert(0, item['values'][0])
+        nuevo_nombre.pack(pady=5, fill='x')
+
+        def guardar():
+            id_area = self.obtener_id_area(item['values'][0])
+            actualizar_area(id_area, nuevo_nombre.get())
+            self.actualizar_areas()
+            ventana.destroy()
+            messagebox.showinfo("Éxito", "Área actualizada correctamente")
+
+        frame_botones = ttk.Frame(ventana)
+        frame_botones.pack(pady=10)
+        ttk.Button(frame_botones, text="Guardar", command=guardar).pack(side="left", padx=5)
+        ttk.Button(frame_botones, text="Cerrar", command=ventana.destroy).pack(side="left", padx=5)
+
+    def eliminar_area(self):
+        selected = self.tree_areas.selection()
+        if not selected:
+            messagebox.showwarning("Advertencia", "Seleccione un área para eliminar")
+            return
+        item = self.tree_areas.item(selected[0])
+        if messagebox.askyesno("Confirmar", "¿Está seguro de eliminar esta área?"):
+            id_area = self.obtener_id_area(item['values'][0])
+            eliminar_area(id_area)
+            self.actualizar_areas()
+            messagebox.showinfo("Éxito", "Área eliminada correctamente")
+
+    def actualizar_areas(self):
+        self.tree_areas.delete(*self.tree_areas.get_children())
+        areas = obtener_areas()
+        if areas:
+            for area in areas:
+                self.tree_areas.insert('', 'end', values=(area['nombre'],))
+
+    def obtener_id_area(self, nombre):
+        for a in obtener_areas():
+            if a['nombre'] == nombre:
+                return a['id']
+        return None
 
     # --------- DISTRITOS ---------
     def setup_distritos_tab(self):
@@ -101,8 +242,9 @@ class GestionServicios:
         frame_lista = ttk.LabelFrame(self.tab_distritos, text="Distritos")
         frame_lista.pack(fill="both", expand=True, padx=5, pady=5)
 
-        self.tree_distritos = ttk.Treeview(frame_lista, columns=('nombre',), show='headings')
+        self.tree_distritos = ttk.Treeview(frame_lista, columns=('nombre','area'), show='headings')
         self.tree_distritos.heading('nombre', text='Distrito')
+        self.tree_distritos.heading('area', text='Área')
         self.tree_distritos.grid(row=0, column=0, sticky="nsew")
         scrolly = ttk.Scrollbar(frame_lista, orient="vertical", command=self.tree_distritos.yview)
         self.tree_distritos.configure(yscrollcommand=scrolly.set)
@@ -121,11 +263,14 @@ class GestionServicios:
         if not filename:
             return
         df = pd.read_excel(filename)
-        if 'Distrito' not in df.columns:
-            messagebox.showerror("Error", "El archivo debe tener la columna: Distrito")
+        if 'Distrito' not in df.columns or 'Área' not in df.columns:
+            messagebox.showerror("Error", "El archivo debe tener las columnas: Distrito y Área")
             return
-        for distrito in df['Distrito'].dropna().unique():
-            agregar_distrito(str(distrito).strip())
+        for _, row in df.iterrows():
+            distrito = str(row['Distrito']).strip()
+            area_nombre = str(row['Área']).strip()
+            id_area = self.obtener_id_area(area_nombre) if area_nombre else None
+            agregar_distrito(distrito, id_area)
         messagebox.showinfo("Éxito", "Distritos cargados correctamente")
         self.actualizar_distritos()
 
@@ -141,24 +286,31 @@ class GestionServicios:
     def agregar_distrito(self):
         ventana = tk.Toplevel(self.parent)
         ventana.title("Agregar Distrito")
-        ventana.geometry("350x120")
+        ventana.geometry("350x150")
         self.centrar_ventana(ventana)
 
         frame_campos = ttk.Frame(ventana)
         frame_campos.pack(padx=10, pady=5, fill='x')
+
+        ttk.Label(frame_campos, text="Área:").pack(pady=5)
+        combo_area = ttk.Combobox(frame_campos, state="readonly", width=38)
+        combo_area['values'] = [a['nombre'] for a in obtener_areas()]
+        combo_area.pack(pady=5, fill='x')
 
         ttk.Label(frame_campos, text="Nombre:").pack(pady=5)
         nombre = ttk.Entry(frame_campos, width=40)
         nombre.pack(pady=5, fill='x')
 
         def guardar():
-            if nombre.get().strip():
-                agregar_distrito(nombre.get().strip())
+            if nombre.get().strip() and combo_area.get():
+                area_nombre = combo_area.get()
+                id_area = self.obtener_id_area(area_nombre)
+                agregar_distrito(nombre.get().strip(), id_area)
                 self.actualizar_distritos()
                 ventana.destroy()
                 messagebox.showinfo("Éxito", "Distrito agregado correctamente")
             else:
-                messagebox.showwarning("Advertencia", "Ingrese un nombre")
+                messagebox.showwarning("Advertencia", "Complete todos los campos")
 
         frame_botones = ttk.Frame(ventana)
         frame_botones.pack(pady=10)
@@ -174,11 +326,20 @@ class GestionServicios:
         item = self.tree_distritos.item(selected[0])
         ventana = tk.Toplevel(self.parent)
         ventana.title("Editar Distrito")
-        ventana.geometry("350x120")
+        ventana.geometry("350x150")
         self.centrar_ventana(ventana)
 
         frame_campos = ttk.Frame(ventana)
         frame_campos.pack(padx=10, pady=5, fill='x')
+
+        ttk.Label(frame_campos, text="Área:").pack(pady=5)
+        combo_area = ttk.Combobox(frame_campos, state="readonly", width=38)
+        areas = obtener_areas()
+        combo_area['values'] = [a['nombre'] for a in areas]
+        # Seleccionar el área actual
+        current_area = item['values'][1] if len(item['values']) > 1 else ''
+        combo_area.set(current_area)
+        combo_area.pack(pady=5, fill='x')
 
         ttk.Label(frame_campos, text="Nuevo nombre:").pack(pady=5)
         nuevo_nombre = ttk.Entry(frame_campos, width=40)
@@ -187,7 +348,9 @@ class GestionServicios:
 
         def guardar():
             id_distrito = self.obtener_id_distrito(item['values'][0])
-            actualizar_distrito(id_distrito, nuevo_nombre.get())
+            area_nombre = combo_area.get()
+            id_area = self.obtener_id_area(area_nombre) if area_nombre else None
+            actualizar_distrito(id_distrito, nuevo_nombre.get().strip(), id_area)
             self.actualizar_distritos()
             ventana.destroy()
             messagebox.showinfo("Éxito", "Distrito actualizado correctamente")
@@ -211,14 +374,37 @@ class GestionServicios:
 
     def actualizar_distritos(self):
         self.tree_distritos.delete(*self.tree_distritos.get_children())
-        for d in obtener_distritos():
-            self.tree_distritos.insert('', 'end', values=(d['nombre'],))
+        # Obtener distritos con su área
+        conn = conectar_db()
+        if conn:
+            try:
+                cursor = conn.cursor()
+                cursor.execute("""
+                    SELECT d.nombre, a.nombre AS area_nombre
+                    FROM distrito d
+                    LEFT JOIN area a ON d.id_area = a.id
+                """)
+                distritos = cursor.fetchall()
+                for d in distritos:
+                    self.tree_distritos.insert('', 'end', values=(d['nombre'], d['area_nombre']))
+            except sqlite3.Error as e:
+                print(f"Error al obtener distritos: {e}")
+            finally:
+                conn.close()
 
     def obtener_id_distrito(self, nombre):
-        for d in obtener_distritos():
-            if d['nombre'] == nombre:
-                return d['id']
-        return None
+        conn = conectar_db()
+        if conn:
+            try:
+                cursor = conn.cursor()
+                cursor.execute("SELECT id FROM distrito WHERE nombre = ?", (nombre,))
+                resultado = cursor.fetchone()
+                return resultado['id'] if resultado else None
+            except sqlite3.Error as e:
+                print(f"Error al obtener ID del distrito: {e}")
+                return None
+            finally:
+                conn.close()
 
     # --------- TIPOS DE SERVICIO ---------
     def setup_tipos_tab(self):

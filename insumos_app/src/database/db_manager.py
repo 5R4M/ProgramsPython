@@ -16,30 +16,156 @@ def conectar_db():
     except sqlite3.Error as e:
         print(f"Error al conectar a la base de datos: {e}")
         return None
+    
+# -------------------- OPERACIONES ÁREA --------------------
 
-# -------------------- OPERACIONES DISTRITO --------------------
-
-def obtener_distritos():
-    """Obtiene todos los distritos."""
+def obtener_areas():
+    """Obtiene todas las áreas."""
     conn = conectar_db()
     if conn:
         try:
             cursor = conn.cursor()
-            cursor.execute("SELECT id, nombre FROM distrito ORDER BY nombre")
+            cursor.execute("SELECT id, nombre FROM area ORDER BY nombre")
             return cursor.fetchall()
         except sqlite3.Error as e:
-            print(f"Error al obtener distritos: {e}")
+            print(f"Error al obtener áreas: {e}")
+            return []
+        finally:
+            conn.close()
+
+def agregar_area(nombre):
+    """Agrega un nuevo área o retorna el id si ya existe."""
+    conn = conectar_db()
+    if conn:
+        try:
+            cursor = conn.cursor()
+            # Verificar si ya existe el área
+            cursor.execute("SELECT id FROM area WHERE nombre = ?", (nombre,))
+            existente = cursor.fetchone()
+            if existente:
+                return existente['id']  # Retorna el id existente
+
+            # Insertar nueva área
+            cursor.execute("INSERT INTO area (nombre) VALUES (?)", (nombre,))
+            conn.commit()
+            return cursor.lastrowid
+        except sqlite3.Error as e:
+            print(f"Error al agregar área: {e}")
+            conn.rollback()
             return None
         finally:
             conn.close()
 
-def agregar_distrito(nombre):
-    """Agrega un nuevo distrito."""
+def actualizar_area(id_area, nuevo_nombre):
+    """Actualiza el nombre de un área."""
     conn = conectar_db()
     if conn:
         try:
             cursor = conn.cursor()
-            cursor.execute("INSERT INTO distrito (nombre) VALUES (?)", (nombre,))
+            cursor.execute("UPDATE area SET nombre = ? WHERE id = ?", (nuevo_nombre, id_area))
+            conn.commit()
+            return cursor.rowcount > 0
+        except sqlite3.Error as e:
+            print(f"Error al actualizar área: {e}")
+            conn.rollback()
+            return False
+        finally:
+            conn.close()
+
+def eliminar_area(id_area):
+    """Elimina un área y todos sus distritos, tipos de servicio y servicios relacionados."""
+    conn = conectar_db()
+    if conn:
+        try:
+            cursor = conn.cursor()
+
+            # Obtener todos los distritos asociados al área
+            cursor.execute("SELECT id FROM distrito WHERE id_area = ?", (id_area,))
+            distritos = cursor.fetchall()
+
+            for distrito in distritos:
+                id_distrito = distrito['id']
+
+                # Obtener todos los tipos de servicio del distrito
+                cursor.execute("SELECT id FROM tipo_servicio WHERE id_distrito = ?", (id_distrito,))
+                tipos_servicio = cursor.fetchall()
+
+                # Eliminar servicios de cada tipo de servicio
+                for tipo in tipos_servicio:
+                    cursor.execute("DELETE FROM servicio WHERE id_tipo_servicio = ?", (tipo['id'],))
+
+                # Eliminar tipos de servicio
+                cursor.execute("DELETE FROM tipo_servicio WHERE id_distrito = ?", (id_distrito,))
+
+                # Finalmente eliminar el distrito
+                cursor.execute("DELETE FROM distrito WHERE id = ?", (id_distrito,))
+
+            # Luego eliminar el área
+            cursor.execute("DELETE FROM area WHERE id = ?", (id_area,))
+
+            conn.commit()
+            return True
+        except sqlite3.Error as e:
+            print(f"Error al eliminar área: {e}")
+            conn.rollback()
+            return False
+        finally:
+            conn.close()
+
+# -------------------- OPERACIONES DISTRITO --------------------
+
+def obtener_distritos():
+    """Obtiene todos los distritos con su área."""
+    conn = conectar_db()
+    if conn:
+        try:
+            cursor = conn.cursor()
+            cursor.execute("""
+                SELECT d.id, d.nombre, a.nombre AS area_nombre
+                FROM distrito d
+                LEFT JOIN area a ON d.id_area = a.id
+                ORDER BY d.nombre
+            """)
+            return cursor.fetchall()
+        except sqlite3.Error as e:
+            print(f"Error al obtener distritos: {e}")
+            return []
+        finally:
+            conn.close()  
+
+def obtener_distritos_por_area(id_area):
+    """Obtiene todos los distritos asociados a un área específica."""
+    conn = conectar_db()
+    if conn:
+        try:
+            cursor = conn.cursor()
+            cursor.execute("""
+                SELECT id, nombre FROM distrito WHERE id_area = ? ORDER BY nombre
+            """, (id_area,))
+            return cursor.fetchall()
+        except sqlite3.Error as e:
+            print(f"Error al obtener distritos por área: {e}")
+            return []
+        finally:
+            conn.close()
+    return []  
+
+def agregar_distrito(nombre, id_area=None):
+    """Agrega un nuevo distrito con área, evitando duplicados."""
+    conn = conectar_db()
+    if conn:
+        try:
+            cursor = conn.cursor()
+            # Verificar si ya existe el distrito con ese nombre y área
+            cursor.execute("""
+                SELECT id FROM distrito WHERE nombre = ? AND id_area IS ?
+            """, (nombre, id_area))
+            existente = cursor.fetchone()
+            if existente:
+                return existente['id']  # Ya existe, retornar id existente
+
+            # Insertar nuevo distrito
+            cursor.execute("INSERT INTO distrito (nombre, id_area) VALUES (?, ?)", (nombre, id_area))
             conn.commit()
             return cursor.lastrowid
         except sqlite3.Error as e:
@@ -49,14 +175,16 @@ def agregar_distrito(nombre):
         finally:
             conn.close()
 
-def actualizar_distrito(id_distrito, nuevo_nombre):
-    """Actualiza el nombre de un distrito."""
+def actualizar_distrito(id_distrito, nuevo_nombre, id_area=None):
+    """Actualiza el nombre y área de un distrito."""
     conn = conectar_db()
     if conn:
         try:
             cursor = conn.cursor()
-            cursor.execute("UPDATE distrito SET nombre = ? WHERE id = ?",
-                         (nuevo_nombre, id_distrito))
+            if id_area is not None:
+                cursor.execute("UPDATE distrito SET nombre = ?, id_area = ? WHERE id = ?", (nuevo_nombre, id_area, id_distrito))
+            else:
+                cursor.execute("UPDATE distrito SET nombre = ? WHERE id = ?", (nuevo_nombre, id_distrito))
             conn.commit()
             return cursor.rowcount > 0
         except sqlite3.Error as e:
@@ -453,11 +581,20 @@ def actualizar_presentacion(id_presentacion, nuevo_nombre):
             conn.close()
 
 def eliminar_presentacion(id_presentacion):
-    """Elimina una presentación."""
+    """Elimina una presentación solo si no hay insumos asociados."""
     conn = conectar_db()
     if conn:
         try:
             cursor = conn.cursor()
+
+            # Verificar si hay insumos asociados a esta presentación
+            cursor.execute("SELECT COUNT(*) as count FROM insumo WHERE id_presentacion = ?", (id_presentacion,))
+            resultado = cursor.fetchone()
+            if resultado['count'] > 0:
+                print(f"No se puede eliminar la presentación porque hay {resultado['count']} insumos asociados.")
+                return False
+
+            # Si no hay insumos asociados, eliminar la presentación
             cursor.execute("DELETE FROM presentacion WHERE id = ?", (id_presentacion,))
             conn.commit()
             return cursor.rowcount > 0
@@ -1060,6 +1197,7 @@ def verificar_tablas():
         try:
             cursor = conn.cursor()
             tablas = [
+                'area',
                 'distrito',
                 'tipo_servicio',
                 'servicio',

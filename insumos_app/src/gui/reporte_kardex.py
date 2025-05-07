@@ -19,6 +19,7 @@ from reportlab.lib.units import inch
 sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
 from src.database.db_manager import (
+    obtener_areas,
     obtener_distritos,
     obtener_tipos_servicio_por_distrito,
     obtener_servicios_por_tipo,
@@ -39,6 +40,14 @@ class ReporteKardex:
         self.parent = parent_frame
         self.main_window = main_window
         self.movimientos_data = None
+        
+        self.areas = []
+        self.distritos = []       
+        self.tipos_servicio = []  
+        self.tipos_insumo = []
+        self.insumos = []
+        self.presentaciones = []
+        
         self.setup_ui()
 
     def setup_ui(self):
@@ -66,7 +75,17 @@ class ReporteKardex:
         self.frame_combos1 = ttk.Frame(self.frame_combos)
         self.frame_combos1.pack(fill="x", pady=5)
 
-        ttk.Label(self.frame_combos1, text="Distrito:").grid(row=0, column=0, padx=5)
+        ttk.Label(self.frame_combos1, text="Área:").grid(row=0, column=0, padx=5, sticky='w')
+        self.area_var = tk.StringVar()
+        self.combo_area = AutocompleteCombobox(
+            self.frame_combos1,
+            textvariable=self.area_var,
+            state="normal",
+            width=20
+        )
+        self.combo_area.grid(row=0, column=1, padx=5, sticky='w')
+
+        ttk.Label(self.frame_combos1, text="Distrito:").grid(row=0, column=2, padx=5, sticky='w')
         self.distrito_var = tk.StringVar()
         self.combo_distrito = AutocompleteCombobox(
             self.frame_combos1,
@@ -74,9 +93,12 @@ class ReporteKardex:
             state="normal",
             width=20
         )
-        self.combo_distrito.grid(row=0, column=1, padx=5)
+        self.combo_distrito.grid(row=0, column=3, padx=5, sticky='w')
+        self.combo_area.bind('<Return>', lambda e: self.cargar_distritos_por_area())
+        self.combo_area.bind('<FocusOut>', lambda e: self.cargar_distritos_por_area())
+        self.combo_area.bind('<FocusIn>', lambda e: self.cargar_distritos_por_area())
 
-        ttk.Label(self.frame_combos1, text="Tipo de Servicio:").grid(row=0, column=2, padx=5)
+        ttk.Label(self.frame_combos1, text="Tipo de Servicio:").grid(row=0, column=4, padx=5, sticky='w')
         self.tipo_servicio_var = tk.StringVar()
         self.combo_tipo_servicio = AutocompleteCombobox(
             self.frame_combos1,
@@ -84,9 +106,12 @@ class ReporteKardex:
             state="normal",
             width=20
         )
-        self.combo_tipo_servicio.grid(row=0, column=3, padx=5)
+        self.combo_tipo_servicio.grid(row=0, column=5, padx=5, sticky='w')
+        self.combo_distrito.bind('<Return>', lambda e: self.cargar_tipos_servicio())
+        self.combo_distrito.bind('<FocusOut>', lambda e: self.cargar_tipos_servicio())
+        self.combo_distrito.bind('<FocusIn>', lambda e: self.cargar_tipos_servicio())
 
-        ttk.Label(self.frame_combos1, text="Servicio:").grid(row=0, column=4, padx=5)
+        ttk.Label(self.frame_combos1, text="Servicio:").grid(row=0, column=6, padx=5, sticky='w')
         self.servicio_var = tk.StringVar()
         self.combo_servicio = AutocompleteCombobox(
             self.frame_combos1,
@@ -94,7 +119,10 @@ class ReporteKardex:
             state="normal",
             width=20
         )
-        self.combo_servicio.grid(row=0, column=5, padx=5)
+        self.combo_servicio.grid(row=0, column=7, padx=5, sticky='w')
+        self.combo_tipo_servicio.bind('<Return>', lambda e: self.cargar_servicios())
+        self.combo_tipo_servicio.bind('<FocusOut>', lambda e: self.cargar_servicios())
+        self.combo_tipo_servicio.bind('<FocusIn>', lambda e: self.cargar_servicios())
 
         # Segunda fila de combos
         self.frame_combos2 = ttk.Frame(self.frame_combos)
@@ -119,6 +147,9 @@ class ReporteKardex:
             width=20
         )
         self.combo_insumo.grid(row=0, column=3, padx=5)
+        self.combo_tipo_insumo.bind('<Return>', lambda e: self.cargar_insumos())
+        self.combo_tipo_insumo.bind('<FocusOut>', lambda e: self.cargar_insumos())
+        self.combo_tipo_insumo.bind('<FocusIn>', lambda e: self.cargar_insumos())
 
         ttk.Label(self.frame_combos2, text="Presentación:").grid(row=0, column=4, padx=5)
         self.presentacion_var = tk.StringVar()
@@ -129,6 +160,9 @@ class ReporteKardex:
             width=20
         )
         self.combo_presentacion.grid(row=0, column=5, padx=5)
+        self.combo_insumo.bind('<Return>', lambda e: self.actualizar_presentacion())
+        self.combo_insumo.bind('<FocusOut>', lambda e: self.actualizar_presentacion())
+        self.combo_insumo.bind('<FocusIn>', lambda e: self.actualizar_presentacion())
 
         # Agregar frame para el Treeview
         self.tree_frame = ttk.Frame(self.frame_principal)
@@ -184,82 +218,102 @@ class ReporteKardex:
                   command=self.cerrar_ventana).pack(side="right", padx=5)
         
         # Vincular eventos de cambio
+        self.combo_area.bind('<<ComboboxSelected>>', self.cargar_distritos_por_area)
         self.combo_distrito.bind('<<ComboboxSelected>>', self.cargar_tipos_servicio)
         self.combo_tipo_servicio.bind('<<ComboboxSelected>>', self.cargar_servicios)
         self.combo_tipo_insumo.bind('<<ComboboxSelected>>', self.cargar_insumos)
+        self.combo_insumo.bind('<<ComboboxSelected>>', self.actualizar_presentacion)
 
         # Cargar datos iniciales
-        self.cargar_distritos()
+        self.cargar_areas()
+        self.distritos = []
+        self.combo_distrito.set_completion_list([''])
         self.cargar_tipos_insumo()
         self.cargar_presentaciones()
+        
+    def cargar_areas(self):
+        self.areas = obtener_areas()
+        if self.areas:
+            opciones = [''] + [a['nombre'] for a in self.areas]
+            self.combo_area.set_completion_list(opciones)
 
     def cargar_distritos(self):
-        distritos = obtener_distritos()
-        if distritos:
-            opciones = [''] + [d['nombre'] for d in distritos]
-            self.combo_distrito.set_completion_list(opciones) 
+        self.distritos = obtener_distritos()
+        if self.distritos:
+            opciones = [''] + [d['nombre'] for d in self.distritos]
+            self.combo_distrito.set_completion_list(opciones)
+    
+    def cargar_distritos_por_area(self, event=None):
+        area_nombre = self.combo_area.get().strip()
+        if area_nombre:
+            area = next((a for a in self.areas if a['nombre'] == area_nombre), None)
+            if area:
+                from src.database.db_manager import obtener_distritos_por_area
+                distritos = obtener_distritos_por_area(area['id'])
+                self.distritos = distritos or []
+                opciones = [''] + [d['nombre'] for d in self.distritos]
+                self.combo_distrito.set_completion_list(opciones)
+                # No borrar texto actual para no interferir con la escritura del usuario
+                # self.combo_distrito.set('')  # <-- comentar o eliminar esta línea
+            else:
+                self.distritos = []
+                self.combo_distrito.set_completion_list([''])
+                self.combo_distrito.set('')
+        else:
+            self.distritos = []
+            self.combo_distrito.set_completion_list([''])
+            self.combo_distrito.set('')
 
     def cargar_tipos_servicio(self, event=None):
-        self.combo_tipo_servicio.set('')  # Limpiar valor
-        if self.combo_distrito.get():
-            distritos = obtener_distritos()
-            id_distrito = next(d['id'] for d in distritos if d['nombre'] == self.combo_distrito.get())
-            tipos = obtener_tipos_servicio_por_distrito(id_distrito)
-            if tipos:
-                opciones = [''] + [t['descripcion'] for t in tipos]
+        self.combo_tipo_servicio.set('')
+        distrito_nombre = self.combo_distrito.get().strip()
+        if distrito_nombre:
+            distrito = next((d for d in self.distritos if d['nombre'] == distrito_nombre), None)
+            if distrito:
+                self.tipos_servicio = obtener_tipos_servicio_por_distrito(distrito['id'])
+                opciones = [''] + [t['descripcion'] for t in self.tipos_servicio]
                 self.combo_tipo_servicio.set_completion_list(opciones)
 
     def cargar_servicios(self, event=None):
         self.combo_servicio.set('')
-        if self.combo_tipo_servicio.get():
-            tipos = obtener_tipos_servicio_por_distrito(
-                next(d['id'] for d in obtener_distritos()
-                     if d['nombre'] == self.combo_distrito.get())
-            )
-            id_tipo = next(t['id'] for t in tipos
-                         if t['descripcion'] == self.combo_tipo_servicio.get())
-            servicios = obtener_servicios_por_tipo(id_tipo)
-            if servicios:
+        tipo_servicio_desc = self.combo_tipo_servicio.get().strip()
+        if tipo_servicio_desc:
+            tipo_servicio = next((t for t in self.tipos_servicio if t['descripcion'] == tipo_servicio_desc), None)
+            if tipo_servicio:
+                servicios = obtener_servicios_por_tipo(tipo_servicio['id'])
                 opciones = [''] + [s['nombre'] for s in servicios]
                 self.combo_servicio.set_completion_list(opciones)
 
     def cargar_tipos_insumo(self):
-        tipos = obtener_tipos_insumo()
-        if tipos:
-            opciones = [''] + [t['descripcion'] for t in tipos]
+        self.tipos_insumo = obtener_tipos_insumo()
+        if self.tipos_insumo:
+            opciones = [''] + [t['descripcion'] for t in self.tipos_insumo]
             self.combo_tipo_insumo.set_completion_list(opciones)
 
     def cargar_insumos(self, event=None):
         self.combo_insumo.set('')
-        self.combo_presentacion.set('')  # Limpiar presentación
-        if self.combo_tipo_insumo.get():
-            tipos = obtener_tipos_insumo()
-            id_tipo = next(t['id'] for t in tipos
-                        if t['descripcion'] == self.combo_tipo_insumo.get())
-            insumos = obtener_insumos_por_tipo(id_tipo)
-            if insumos:
-                opciones = [''] + [i['nombre'] for i in insumos]
-                self.combo_insumo.set_completion_list(opciones)
-
-        # Agregar binding para actualizar presentación
-        self.combo_insumo.bind('<<ComboboxSelected>>', self.actualizar_presentacion)
-        
-    
-    def actualizar_presentacion(self, event=None):
         self.combo_presentacion.set('')
-        if self.combo_insumo.get():
-            tipos = obtener_tipos_insumo()
-            id_tipo = next(t['id'] for t in tipos
-                        if t['descripcion'] == self.combo_tipo_insumo.get())
-            insumos = obtener_insumos_por_tipo(id_tipo)
-            insumo_seleccionado = next((i for i in insumos if i['nombre'] == self.combo_insumo.get()), None)
-            if insumo_seleccionado and insumo_seleccionado['nombre_presentacion']:
-                self.combo_presentacion.set(insumo_seleccionado['nombre_presentacion'])
+        tipo_insumo_desc = self.combo_tipo_insumo.get().strip()
+        if tipo_insumo_desc:
+            tipo_insumo = next((t for t in self.tipos_insumo if t['descripcion'] == tipo_insumo_desc), None)
+            if tipo_insumo:
+                self.insumos = obtener_insumos_por_tipo(tipo_insumo['id'])
+                opciones = [''] + [i['nombre'] for i in self.insumos]
+                self.combo_insumo.set_completion_list(opciones)
+           
+    def actualizar_presentacion(self, event=None):
+        insumo_nombre = self.combo_insumo.get().strip()
+        if insumo_nombre and self.insumos:
+            insumo = next((i for i in self.insumos if i['nombre'] == insumo_nombre), None)
+            if insumo:
+                self.combo_presentacion.set(insumo.get('nombre_presentacion', ''))
+            else:
+                self.combo_presentacion.set('')
 
     def cargar_presentaciones(self):
-        presentaciones = obtener_presentaciones()
-        if presentaciones:
-            opciones = [''] + [p['nombre'] for p in presentaciones]
+        self.presentaciones = obtener_presentaciones()
+        if self.presentaciones:
+            opciones = [''] + [p['nombre'] for p in self.presentaciones]
             self.combo_presentacion.set_completion_list(opciones)
 
     def generar_vista_previa(self):

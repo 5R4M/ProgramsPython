@@ -58,12 +58,23 @@ def crear_base_datos():
 
         # Habilitar las foreign keys
         cursor.execute("PRAGMA foreign_keys = ON;")
+        
+        # Nueva tabla ÁREA
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS area (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                nombre TEXT NOT NULL UNIQUE
+            );
+        """)
 
         # Tabla de Distritos
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS distrito (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
-                nombre TEXT NOT NULL UNIQUE
+                nombre TEXT NOT NULL UNIQUE,
+                id_area INTEGER NOT NULL,
+                FOREIGN KEY (id_area) REFERENCES area(id),
+                UNIQUE(id_area, nombre)
             );
         """)
 

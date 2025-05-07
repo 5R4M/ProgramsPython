@@ -11,6 +11,8 @@ from ttkwidgets.autocomplete import AutocompleteCombobox
 sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
 from src.database.db_manager import (
+    obtener_areas,
+    obtener_distritos_por_area,
     obtener_distritos,
     obtener_tipos_servicio_por_distrito,
     obtener_servicios_por_tipo,
@@ -54,43 +56,67 @@ class IngresoInsumos:
         # Frame Servicios
         self.frame_servicios = ttk.LabelFrame(self.parent, text="Servicios")
         self.frame_servicios.pack(fill="x", padx=10, pady=10)
+        
+        # Área
+        ttk.Label(self.frame_servicios, text="Área:", anchor="w").grid(
+            row=0, column=0, padx=5, pady=5, sticky="w")
+        areas = [a['nombre'] for a in obtener_areas() or []]
+        self.area_var = tk.StringVar()
+        self.area_cb = AutocompleteCombobox(
+            self.frame_servicios,
+            textvariable=self.area_var,
+            width=20,
+            completevalues=areas,
+            state="normal"
+        )
+        self.area_cb.grid(row=0, column=1, padx=5, pady=5, sticky="w")
 
         # Distrito
         ttk.Label(self.frame_servicios, text="Distrito:", anchor="w").grid(
-            row=0, column=0, padx=5, pady=5, sticky="w")
+            row=0, column=2, padx=5, pady=5, sticky="w")
+        self.distrito_var = tk.StringVar()
         distritos = [d['nombre'] for d in obtener_distritos() or []]
         self.distrito_cb = AutocompleteCombobox(
             self.frame_servicios,
             textvariable=self.distrito_var,
-            width=25,
+            width=20,
             completevalues=distritos,
             state="normal"
         )
-        self.distrito_cb.grid(row=0, column=1, padx=5, pady=5, sticky="w")
+        self.distrito_cb.grid(row=0, column=3, padx=5, pady=5, sticky="w")
 
         # Tipo de Servicio
         ttk.Label(self.frame_servicios, text="Tipo de Servicio:", anchor="w").grid(
-            row=0, column=2, padx=5, pady=5, sticky="w")
+            row=0, column=4, padx=5, pady=5, sticky="w")
+        self.tipo_servicio_var = tk.StringVar()
         self.tipo_servicio_cb = AutocompleteCombobox(
             self.frame_servicios,
             textvariable=self.tipo_servicio_var,
-            width=25,
+            width=20,
             completevalues=[],
             state="normal"
         )
-        self.tipo_servicio_cb.grid(row=0, column=3, padx=5, pady=5, sticky="w")
+        self.tipo_servicio_cb.grid(row=0, column=5, padx=5, pady=5, sticky="w")
 
         # Servicio
         ttk.Label(self.frame_servicios, text="Servicio:", anchor="w").grid(
-            row=0, column=4, padx=5, pady=5, sticky="w")
+            row=0, column=6, padx=5, pady=5, sticky="w")
+        self.servicio_var = tk.StringVar()
         self.servicio_cb = AutocompleteCombobox(
             self.frame_servicios,
             textvariable=self.servicio_var,
-            width=25,
+            width=20,
             completevalues=[],
             state="normal"
         )
-        self.servicio_cb.grid(row=0, column=5, padx=5, pady=5, sticky="w")
+        self.servicio_cb.grid(row=0, column=7, padx=5, pady=5, sticky="w")
+
+        # Vincular evento para actualizar distritos al cambiar área
+        self.area_var.trace_add('write', self.on_area_selected)
+
+        # Inicializar distritos vacíos
+        self.distrito_cb.config(completevalues=[])
+        self.distrito_var.set('')
 
         # Frame Insumos
         self.frame_insumos = ttk.LabelFrame(self.parent, text="Insumos")
@@ -259,7 +285,26 @@ class IngresoInsumos:
         self.distrito_var.trace('w', self.actualizar_tipos_servicio)
         self.tipo_servicio_var.trace('w', self.actualizar_servicios)
         self.tipo_insumo_var.trace('w', self.actualizar_insumos)
-        self.insumo_var.trace('w', self.actualizar_presentacion)  # Agregar esta línea
+        self.insumo_var.trace('w', self.actualizar_presentacion) 
+        
+    def on_area_selected(self, *args):
+        area_nombre = self.area_var.get()
+        # Obtener id del área seleccionada
+        areas = obtener_areas()
+        area_id = None
+        for a in areas:
+            if a['nombre'] == area_nombre:
+                area_id = a['id']
+                break
+
+        if area_id:
+            distritos = obtener_distritos_por_area(area_id)
+            distritos_nombres = [d['nombre'] for d in distritos]
+            self.distrito_cb.config(completevalues=distritos_nombres)
+            self.distrito_var.set('')  # Limpiar selección previa
+        else:
+            self.distrito_cb.config(completevalues=[])
+            self.distrito_var.set('')
 
     def actualizar_tipos_servicio(self, *args):
         distrito_id = next((d['id'] for d in obtener_distritos()
@@ -350,7 +395,7 @@ class IngresoInsumos:
 
         editar_ventana = tk.Toplevel(self.parent)
         editar_ventana.title("Editar Movimiento")
-        editar_ventana.geometry("900x700")  # Ventana más grande
+        editar_ventana.geometry("900x725")  # Ventana más grande
 
         # Centrar la ventana
         editar_ventana.update_idletasks()
@@ -361,6 +406,7 @@ class IngresoInsumos:
         editar_ventana.geometry(f'{width}x{height}+{x}+{y}')
 
         # Variables para los combobox en la ventana de edición
+        edit_area_var = tk.StringVar()
         edit_distrito_var = tk.StringVar()
         edit_tipo_servicio_var = tk.StringVar()
         edit_servicio_var = tk.StringVar()
@@ -382,8 +428,20 @@ class IngresoInsumos:
         frame_servicios = ttk.LabelFrame(main_frame, text="Servicios", padding=PADDING)
         frame_servicios.pack(fill="x", pady=5)
 
+        # Área
+        ttk.Label(frame_servicios, text="Área:", width=ANCHO_LABEL, anchor="e").grid(row=0, column=0, padx=5, pady=5)
+        area_cb = AutocompleteCombobox(
+            frame_servicios,
+            textvariable=edit_area_var,
+            width=ANCHO_CAMPO,
+            state="normal"
+        )
+        areas = [a['nombre'] for a in obtener_areas() or []]
+        area_cb.set_completion_list(areas)
+        area_cb.grid(row=0, column=1, padx=5, pady=5, sticky="ew")
+
         # Distrito
-        ttk.Label(frame_servicios, text="Distrito:", width=ANCHO_LABEL, anchor="e").grid(row=0, column=0, padx=5, pady=5)
+        ttk.Label(frame_servicios, text="Distrito:", width=ANCHO_LABEL, anchor="e").grid(row=1, column=0, padx=5, pady=5)
         distrito_cb = AutocompleteCombobox(
             frame_servicios,
             textvariable=edit_distrito_var,
@@ -391,27 +449,27 @@ class IngresoInsumos:
             state="normal"
         )
         distrito_cb.set_completion_list([d['nombre'] for d in obtener_distritos() or []])
-        distrito_cb.grid(row=0, column=1, padx=5, pady=5, sticky="ew")
+        distrito_cb.grid(row=1, column=1, padx=5, pady=5, sticky="ew")
 
         # Tipo de Servicio
-        ttk.Label(frame_servicios, text="Tipo de Servicio:", width=ANCHO_LABEL, anchor="e").grid(row=1, column=0, padx=5, pady=5)
+        ttk.Label(frame_servicios, text="Tipo de Servicio:", width=ANCHO_LABEL, anchor="e").grid(row=2, column=0, padx=5, pady=5)
         tipo_servicio_cb = AutocompleteCombobox(
             frame_servicios,
             textvariable=edit_tipo_servicio_var,
             width=ANCHO_CAMPO,
             state="normal"
         )
-        tipo_servicio_cb.grid(row=1, column=1, padx=5, pady=5, sticky="ew")
+        tipo_servicio_cb.grid(row=2, column=1, padx=5, pady=5, sticky="ew")
 
         # Servicio
-        ttk.Label(frame_servicios, text="Servicio:", width=ANCHO_LABEL, anchor="e").grid(row=2, column=0, padx=5, pady=5)
+        ttk.Label(frame_servicios, text="Servicio:", width=ANCHO_LABEL, anchor="e").grid(row=3, column=0, padx=5, pady=5)
         servicio_cb = AutocompleteCombobox(
             frame_servicios,
             textvariable=edit_servicio_var,
             width=ANCHO_CAMPO,
             state="normal"
         )
-        servicio_cb.grid(row=2, column=1, padx=5, pady=5, sticky="ew")
+        servicio_cb.grid(row=3, column=1, padx=5, pady=5, sticky="ew")
 
         # Frame Insumos
         frame_insumos = ttk.LabelFrame(main_frame, text="Insumos", padding=PADDING)
@@ -502,6 +560,27 @@ class IngresoInsumos:
         # Frame Botones
         frame_botones = ttk.Frame(main_frame)
         frame_botones.pack(pady=PADDING)
+        
+        def actualizar_distritos_edit(*args):
+            area_nombre = edit_area_var.get()
+            areas = obtener_areas()
+            area_id = None
+            for a in areas:
+                if a['nombre'] == area_nombre:
+                    area_id = a['id']
+                    break
+            if area_id:
+                distritos = obtener_distritos_por_area(area_id)
+                distritos_nombres = [d['nombre'] for d in distritos]
+                distrito_cb.set_completion_list(distritos_nombres)
+                # Si el distrito actual no está en la lista, limpiar selección
+                if edit_distrito_var.get() not in distritos_nombres:
+                    edit_distrito_var.set('')
+            else:
+                distrito_cb.set_completion_list([])
+                edit_distrito_var.set('')
+
+        edit_area_var.trace_add('write', actualizar_distritos_edit)
 
         def actualizar_tipos_servicio_edit(*args):
             distrito_id = next((d['id'] for d in obtener_distritos()
@@ -563,50 +642,60 @@ class IngresoInsumos:
         # Primero establecemos el distrito actual
         edit_distrito_var.set(self.distrito_var.get())
 
-        # Cargar los valores actuales
         def cargar_valores_iniciales():
-            # Primero cargamos el distrito y esperamos que se actualicen los tipos de servicio
-            edit_distrito_var.set(self.distrito_var.get())
+            distrito_actual = self.distrito_var.get()
+            area_actual = ''
 
-            def cargar_tipo_servicio():
-                # Cargamos el tipo de servicio y esperamos que se actualicen los servicios
-                edit_tipo_servicio_var.set(self.tipo_servicio_var.get())
+            if distrito_actual:
+                distritos = obtener_distritos()
+                for d in distritos:
+                    if d['nombre'] == distrito_actual:
+                        # Aquí usamos 'area_nombre' que sí existe en el resultado
+                        area_actual = d['area_nombre'] if d['area_nombre'] else ''
+                        break
 
-                def cargar_servicio():
-                    # Cargamos el servicio
-                    edit_servicio_var.set(self.servicio_var.get())
+            # Establecer el área primero para que se actualicen los distritos en el combobox de edición
+            edit_area_var.set(area_actual)
 
-                    def cargar_resto_valores():
-                        # Cargamos el tipo de insumo
-                        edit_tipo_insumo_var.set(self.tipo_insumo_var.get())
+            def set_distrito():
+                edit_distrito_var.set(distrito_actual)
 
-                        def cargar_insumo():
-                            # Cargamos el insumo y la presentación
-                            edit_insumo_var.set(valores[3])
-                            edit_presentacion_var.set(valores[4])
+                def cargar_tipo_servicio():
+                    edit_tipo_servicio_var.set(self.tipo_servicio_var.get())
 
-                            # Cargamos el resto de los valores
-                            fecha_actual = datetime.strptime(valores[0], '%d/%m/%Y').date()
-                            fecha_edit.set_date(fecha_actual)
-                            referencia_entry.delete(0, tk.END)
-                            referencia_entry.insert(0, valores[1])
-                            edit_tipo_movimiento_var.set(valores[2])
-                            lote_entry.delete(0, tk.END)
-                            lote_entry.insert(0, valores[5])
-                            fecha_venc = datetime.strptime(valores[6], '%d/%m/%Y').date()
-                            fecha_venc_edit.set_date(fecha_venc)
-                            cantidad_entry.delete(0, tk.END)
-                            cantidad_entry.insert(0, valores[7])
-                            if valores[8]:
-                                observaciones_entry.insert(0, valores[8])
+                    def cargar_servicio():
+                        edit_servicio_var.set(self.servicio_var.get())
 
-                        editar_ventana.after(100, cargar_insumo)
+                        def cargar_resto_valores():
+                            edit_tipo_insumo_var.set(self.tipo_insumo_var.get())
 
-                    editar_ventana.after(100, cargar_resto_valores)
+                            def cargar_insumo():
+                                edit_insumo_var.set(valores[3])
+                                edit_presentacion_var.set(valores[4])
 
-                editar_ventana.after(100, cargar_servicio)
+                                fecha_actual = datetime.strptime(valores[0], '%d/%m/%Y').date()
+                                fecha_edit.set_date(fecha_actual)
+                                referencia_entry.delete(0, tk.END)
+                                referencia_entry.insert(0, valores[1])
+                                edit_tipo_movimiento_var.set(valores[2])
+                                lote_entry.delete(0, tk.END)
+                                lote_entry.insert(0, valores[5])
+                                fecha_venc = datetime.strptime(valores[6], '%d/%m/%Y').date()
+                                fecha_venc_edit.set_date(fecha_venc)
+                                cantidad_entry.delete(0, tk.END)
+                                cantidad_entry.insert(0, valores[7])
+                                if valores[8]:
+                                    observaciones_entry.insert(0, valores[8])
 
-            editar_ventana.after(100, cargar_tipo_servicio)
+                            editar_ventana.after(100, cargar_insumo)
+
+                        editar_ventana.after(100, cargar_resto_valores)
+
+                    editar_ventana.after(100, cargar_servicio)
+
+                editar_ventana.after(100, cargar_tipo_servicio)
+
+            editar_ventana.after(150, set_distrito)
 
         # Iniciar la carga de valores
         cargar_valores_iniciales()

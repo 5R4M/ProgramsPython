@@ -62,7 +62,7 @@ class GestionMovimientos:
         self.tree_tipos = ttk.Treeview(frame_lista,
                                      columns=('descripcion',),
                                      show='headings')
-        self.tree_tipos.heading('descripcion', text='Descripción')
+        self.tree_tipos.heading('descripcion', text='Tipos Movimiento')
         self.tree_tipos.grid(row=0, column=0, sticky="nsew")
 
         scrolly = ttk.Scrollbar(frame_lista, orient="vertical",
