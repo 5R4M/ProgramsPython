@@ -58,8 +58,8 @@ def crear_base_datos():
 
         # Habilitar las foreign keys
         cursor.execute("PRAGMA foreign_keys = ON;")
-        
-        # Nueva tabla ÁREA
+
+        # Tabla ÁREA (se mantiene igual)
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS area (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -67,7 +67,7 @@ def crear_base_datos():
             );
         """)
 
-        # Tabla de Distritos
+        # Tabla DISTRICTO (se mantiene igual)
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS distrito (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -78,7 +78,7 @@ def crear_base_datos():
             );
         """)
 
-        # Tabla de Tipo de Servicio
+        # Tabla TIPO_SERVICIO (se mantiene igual)
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS tipo_servicio (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -89,7 +89,7 @@ def crear_base_datos():
             );
         """)
 
-        # Tabla de Servicios
+        # Tabla SERVICIO (se mantiene igual)
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS servicio (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -100,7 +100,7 @@ def crear_base_datos():
             );
         """)
 
-        # Tabla de Tipo de Insumo
+        # Tabla TIPO_INSUMO (se mantiene igual)
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS tipo_insumo (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -108,7 +108,7 @@ def crear_base_datos():
             );
         """)
 
-        # Tabla de Presentación
+        # Tabla PRESENTACION (se mantiene igual)
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS presentacion (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -116,15 +116,18 @@ def crear_base_datos():
             );
         """)
 
-        # Tabla de Tipo de Movimiento
+        # NUEVA TABLA INTERMEDIA INSUMO_PRESENTACION (nueva)
         cursor.execute("""
-            CREATE TABLE IF NOT EXISTS tipo_movimiento (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                descripcion TEXT NOT NULL UNIQUE
+            CREATE TABLE IF NOT EXISTS insumo_presentacion (
+                insumo_id INTEGER NOT NULL,
+                presentacion_id INTEGER NOT NULL,
+                PRIMARY KEY (insumo_id, presentacion_id),
+                FOREIGN KEY (insumo_id) REFERENCES insumo(id),
+                FOREIGN KEY (presentacion_id) REFERENCES presentacion(id)
             );
         """)
-                
-        # Tabla de Insumo
+
+        # Tabla INSUMO (eliminamos id_presentacion)
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS insumo (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -132,13 +135,19 @@ def crear_base_datos():
                 lote TEXT,
                 fecha_vencimiento DATE,
                 id_tipo_insumo INTEGER NOT NULL,
-                id_presentacion INTEGER NOT NULL,
-                FOREIGN KEY (id_tipo_insumo) REFERENCES tipo_insumo(id),
-                FOREIGN KEY (id_presentacion) REFERENCES presentacion(id)
+                FOREIGN KEY (id_tipo_insumo) REFERENCES tipo_insumo(id)
             );
         """)
 
-        # Tabla de Movimiento
+        # Tabla TIPO_MOVIMIENTO (se mantiene igual)
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS tipo_movimiento (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                descripcion TEXT NOT NULL UNIQUE
+            );
+        """)
+
+        # Tabla MOVIMIENTO (se mantiene igual, pero ahora debe referenciar presentacion_id si es necesario)
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS movimiento (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,

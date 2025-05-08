@@ -3,15 +3,13 @@ from tkinter import ttk, filedialog, messagebox
 import pandas as pd
 import sys
 import os
-import sqlite3
-from tkinter.scrolledtext import ScrolledText
 
 # Agregar el directorio raíz del proyecto al PATH de Python
-sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+sys.path.append(project_root)
 
 from src.database.db_manager import (
-    conectar_db,
-    agregar_area, 
+    agregar_area,
     obtener_areas,
     actualizar_area,
     eliminar_area,
@@ -34,9 +32,8 @@ class GestionServicios:
         self.parent = parent_frame
         self.main_window = main_window
         self.setup_ui()
-        
+
     def centrar_ventana(self, ventana):
-        """Centra una ventana en la pantalla."""
         ventana.update_idletasks()
         width = ventana.winfo_width()
         height = ventana.winfo_height()
@@ -44,17 +41,22 @@ class GestionServicios:
         y = (ventana.winfo_screenheight() // 2) - (height // 2)
         ventana.geometry(f'{width}x{height}+{x}+{y}')
 
-    def obtener_id_distrito(self, nombre_distrito):
-        """Obtiene el ID de un distrito por su nombre."""
+    # --- Obtención de IDs ---
+    def obtener_id_area(self, nombre):
+        for a in obtener_areas():
+            if a['nombre'] == nombre:
+                return a['id']
+        return None
+
+    def obtener_id_distrito(self, nombre):
         distritos = obtener_distritos()
         if distritos:
             for distrito in distritos:
-                if distrito['nombre'] == nombre_distrito:
+                if distrito['nombre'] == nombre:
                     return distrito['id']
         return None
 
     def obtener_id_tipo_servicio(self, nombre_tipo, nombre_distrito):
-        """Obtiene el ID de un tipo de servicio por su nombre y distrito."""
         id_distrito = self.obtener_id_distrito(nombre_distrito)
         if id_distrito:
             tipos_servicio = obtener_tipos_servicio_por_distrito(id_distrito)
@@ -64,9 +66,8 @@ class GestionServicios:
                         return tipo['id']
         return None
 
-    def obtener_id_servicio(self, nombre_servicio, nombre_tipo_servicio):
-        """Obtiene el ID de un servicio por su nombre y tipo de servicio."""
-        id_tipo = self.obtener_id_tipo_servicio(nombre_tipo_servicio)
+    def obtener_id_servicio(self, nombre_servicio, nombre_tipo, nombre_distrito):
+        id_tipo = self.obtener_id_tipo_servicio(nombre_tipo, nombre_distrito)
         if id_tipo:
             servicios = obtener_servicios_por_tipo(id_tipo)
             if servicios:
@@ -75,15 +76,16 @@ class GestionServicios:
                         return servicio['id']
         return None
 
+    # --- Configuración UI ---
     def setup_ui(self):
         self.notebook = ttk.Notebook(self.parent)
         self.notebook.pack(fill="both", expand=True, padx=10, pady=5)
-        
+
         self.tab_areas = ttk.Frame(self.notebook)
         self.tab_distritos = ttk.Frame(self.notebook)
         self.tab_tipos = ttk.Frame(self.notebook)
         self.tab_servicios = ttk.Frame(self.notebook)
-        
+
         self.notebook.add(self.tab_areas, text="Áreas")
         self.notebook.add(self.tab_distritos, text="Distritos")
         self.notebook.add(self.tab_tipos, text="Tipos de Servicio")
@@ -95,13 +97,13 @@ class GestionServicios:
         self.setup_servicios_tab()
 
         ttk.Button(self.parent, text="Cerrar", command=self.cerrar_ventana).pack(pady=10)
-        
+
         self.actualizar_areas()
         self.actualizar_distritos()
         self.actualizar_tipos()
         self.actualizar_servicios()
-        
-    # --------- ÁREAS ---------
+
+    # --- ÁREAS ---
     def setup_areas_tab(self):
         frame_excel = ttk.LabelFrame(self.tab_areas, text="Carga desde Excel")
         frame_excel.pack(fill="x", padx=5, pady=5)
@@ -226,13 +228,7 @@ class GestionServicios:
             for area in areas:
                 self.tree_areas.insert('', 'end', values=(area['nombre'],))
 
-    def obtener_id_area(self, nombre):
-        for a in obtener_areas():
-            if a['nombre'] == nombre:
-                return a['id']
-        return None
-
-    # --------- DISTRITOS ---------
+    # --- DISTRITOS ---
     def setup_distritos_tab(self):
         frame_excel = ttk.LabelFrame(self.tab_distritos, text="Carga desde Excel")
         frame_excel.pack(fill="x", padx=5, pady=5)
@@ -279,7 +275,7 @@ class GestionServicios:
         if not filename:
             return
         distritos = obtener_distritos()
-        df = pd.DataFrame([{'Distrito': d['nombre']} for d in distritos])
+        df = pd.DataFrame([{'Distrito': d['nombre'], 'Área': d['area_nombre']} for d in distritos])
         df.to_excel(filename, index=False)
         messagebox.showinfo("Éxito", "Distritos exportados correctamente")
 
@@ -336,7 +332,6 @@ class GestionServicios:
         combo_area = ttk.Combobox(frame_campos, state="readonly", width=38)
         areas = obtener_areas()
         combo_area['values'] = [a['nombre'] for a in areas]
-        # Seleccionar el área actual
         current_area = item['values'][1] if len(item['values']) > 1 else ''
         combo_area.set(current_area)
         combo_area.pack(pady=5, fill='x')
@@ -374,39 +369,12 @@ class GestionServicios:
 
     def actualizar_distritos(self):
         self.tree_distritos.delete(*self.tree_distritos.get_children())
-        # Obtener distritos con su área
-        conn = conectar_db()
-        if conn:
-            try:
-                cursor = conn.cursor()
-                cursor.execute("""
-                    SELECT d.nombre, a.nombre AS area_nombre
-                    FROM distrito d
-                    LEFT JOIN area a ON d.id_area = a.id
-                """)
-                distritos = cursor.fetchall()
-                for d in distritos:
-                    self.tree_distritos.insert('', 'end', values=(d['nombre'], d['area_nombre']))
-            except sqlite3.Error as e:
-                print(f"Error al obtener distritos: {e}")
-            finally:
-                conn.close()
+        distritos = obtener_distritos()
+        if distritos:
+            for d in distritos:
+                self.tree_distritos.insert('', 'end', values=(d['nombre'], d['area_nombre']))
 
-    def obtener_id_distrito(self, nombre):
-        conn = conectar_db()
-        if conn:
-            try:
-                cursor = conn.cursor()
-                cursor.execute("SELECT id FROM distrito WHERE nombre = ?", (nombre,))
-                resultado = cursor.fetchone()
-                return resultado['id'] if resultado else None
-            except sqlite3.Error as e:
-                print(f"Error al obtener ID del distrito: {e}")
-                return None
-            finally:
-                conn.close()
-
-    # --------- TIPOS DE SERVICIO ---------
+    # --- TIPOS DE SERVICIO ---
     def setup_tipos_tab(self):
         frame_excel = ttk.LabelFrame(self.tab_tipos, text="Carga desde Excel")
         frame_excel.pack(fill="x", padx=5, pady=5)
@@ -459,36 +427,28 @@ class GestionServicios:
                     if not distrito or not tipo:
                         continue
 
-                    # Obtener o crear el distrito
                     id_distrito = self.obtener_id_distrito(distrito)
                     if not id_distrito:
                         id_distrito = agregar_distrito(distrito)
 
-                    # Verificar si el tipo de servicio ya existe
                     tipo_existente = self.obtener_id_tipo_servicio(tipo, distrito)
                     if tipo_existente:
                         registros_existentes += 1
                         continue
 
-                    # Agregar el nuevo tipo de servicio
                     agregar_tipo_servicio(id_distrito, tipo)
                     registros_procesados += 1
 
-                except Exception as e:
-                    print(f"Error al procesar fila: {str(e)}")
+                except Exception:
                     continue
 
             self.actualizar_tipos()
 
-            # Mostrar mensaje con el resumen
-            mensaje = f"Proceso completado:\n"
-            mensaje += f"- Registros nuevos agregados: {registros_procesados}\n"
-            mensaje += f"- Registros existentes omitidos: {registros_existentes}"
+            mensaje = f"Proceso completado:\n- Registros nuevos agregados: {registros_procesados}\n- Registros existentes omitidos: {registros_existentes}"
             messagebox.showinfo("Éxito", mensaje)
 
         except Exception as e:
-            messagebox.showerror("Error",
-                f"Error al cargar el archivo: {str(e)}")
+            messagebox.showerror("Error", f"Error al cargar el archivo: {str(e)}")
 
     def exportar_excel_tipos(self):
         filename = filedialog.asksaveasfilename(defaultextension=".xlsx", filetypes=[("Excel files", "*.xlsx")])
@@ -526,30 +486,24 @@ class GestionServicios:
                 messagebox.showwarning("Advertencia", "Complete todos los campos")
                 return
 
-            try:
-                id_distrito = self.obtener_id_distrito(combo_distrito.get())
-                tipo = descripcion.get().strip()
+            id_distrito = self.obtener_id_distrito(combo_distrito.get())
+            tipo = descripcion.get().strip()
 
-                # Verificar si ya existe
-                tipo_existente = self.obtener_id_tipo_servicio(tipo, combo_distrito.get())
-                if tipo_existente:
-                    messagebox.showwarning("Advertencia",
-                        "Ya existe un tipo de servicio con ese nombre en el distrito seleccionado")
-                    return
+            tipo_existente = self.obtener_id_tipo_servicio(tipo, combo_distrito.get())
+            if tipo_existente:
+                messagebox.showwarning("Advertencia", "Ya existe un tipo de servicio con ese nombre en el distrito seleccionado")
+                return
 
-                agregar_tipo_servicio(id_distrito, tipo)
-                self.actualizar_tipos()
-                ventana.destroy()
-                messagebox.showinfo("Éxito", "Tipo de servicio agregado correctamente")
-            except Exception as e:
-                messagebox.showerror("Error",
-                    f"Error al agregar tipo de servicio: {str(e)}")
+            agregar_tipo_servicio(id_distrito, tipo)
+            self.actualizar_tipos()
+            ventana.destroy()
+            messagebox.showinfo("Éxito", "Tipo de servicio agregado correctamente")
 
         frame_botones = ttk.Frame(ventana)
         frame_botones.pack(pady=10)
         ttk.Button(frame_botones, text="Guardar", command=guardar).pack(side="left", padx=5)
         ttk.Button(frame_botones, text="Cerrar", command=ventana.destroy).pack(side="left", padx=5)
-        
+
     def editar_tipo(self):
         selected = self.tree_tipos.selection()
         if not selected:
@@ -607,15 +561,7 @@ class GestionServicios:
             for t in obtener_tipos_servicio_por_distrito(d['id']):
                 self.tree_tipos.insert('', 'end', values=(d['nombre'], t['descripcion']))
 
-    def obtener_id_tipo_servicio(self, nombre_tipo, nombre_distrito):
-        id_distrito = self.obtener_id_distrito(nombre_distrito)
-        if id_distrito:
-            for tipo in obtener_tipos_servicio_por_distrito(id_distrito):
-                if tipo['descripcion'] == nombre_tipo:
-                    return tipo['id']
-        return None
-
-    # --------- SERVICIOS ---------
+    # --- SERVICIOS ---
     def setup_servicios_tab(self):
         frame_excel = ttk.LabelFrame(self.tab_servicios, text="Carga desde Excel")
         frame_excel.pack(fill="x", padx=5, pady=5)
@@ -794,14 +740,6 @@ class GestionServicios:
             for t in obtener_tipos_servicio_por_distrito(d['id']):
                 for s in obtener_servicios_por_tipo(t['id']):
                     self.tree_servicios.insert('', 'end', values=(d['nombre'], t['descripcion'], s['nombre']))
-
-    def obtener_id_servicio(self, nombre_servicio, nombre_tipo, nombre_distrito):
-        id_tipo = self.obtener_id_tipo_servicio(nombre_tipo, nombre_distrito)
-        if id_tipo:
-            for s in obtener_servicios_por_tipo(id_tipo):
-                if s['nombre'] == nombre_servicio:
-                    return s['id']
-        return None
 
     def cerrar_ventana(self):
         if messagebox.askyesno("Confirmar", "¿Está seguro que desea cerrar esta ventana?"):
