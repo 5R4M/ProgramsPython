@@ -282,7 +282,7 @@ class GestionServicios:
     def agregar_distrito(self):
         ventana = tk.Toplevel(self.parent)
         ventana.title("Agregar Distrito")
-        ventana.geometry("350x150")
+        ventana.geometry("350x190")
         self.centrar_ventana(ventana)
 
         frame_campos = ttk.Frame(ventana)
@@ -465,7 +465,7 @@ class GestionServicios:
     def agregar_tipo(self):
         ventana = tk.Toplevel(self.parent)
         ventana.title("Agregar Tipo de Servicio")
-        ventana.geometry("350x180")
+        ventana.geometry("350x190")
         self.centrar_ventana(ventana)
 
         frame_campos = ttk.Frame(ventana)

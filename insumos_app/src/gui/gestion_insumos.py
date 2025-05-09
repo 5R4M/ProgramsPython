@@ -377,7 +377,7 @@ class GestionInsumos:
     def agregar_insumo(self):
         ventana = tk.Toplevel(self.parent)
         ventana.title("Agregar Insumo")
-        ventana.geometry("350x180")
+        ventana.geometry("350x190")
         self.centrar_ventana(ventana)
 
         frame_campos = ttk.Frame(ventana)
@@ -716,8 +716,8 @@ class GestionInsumos:
         for tipo in tipos:
             insumos = obtener_insumos_por_tipo(tipo['id'])
             for insumo in insumos:
-                presentacion = insumo.get('nombre_presentacion', 'N/A') if isinstance(insumo, dict) else 'N/A'
-                nombre_insumo = insumo['nombre'] if isinstance(insumo, dict) else insumo['nombre']
+                presentacion = insumo['nombre_presentacion'] if insumo['nombre_presentacion'] else 'N/A'
+                nombre_insumo = insumo['nombre']
                 self.tree_presentaciones.insert('', 'end', values=(tipo['descripcion'], nombre_insumo, presentacion))
 
     # --- Cierre ---
