@@ -639,8 +639,10 @@ def guardar_movimiento(movimiento_data):
                     lote,
                     fecha_vencimiento,
                     cantidad,
+                    salida_distrito_id,
+                    salida_servicio_id,
                     observaciones
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 (
                     fecha_registro,
                     movimiento_data['referencia'],
@@ -650,6 +652,8 @@ def guardar_movimiento(movimiento_data):
                     movimiento_data['lote'],
                     fecha_vencimiento,
                     movimiento_data['cantidad'],
+                    movimiento_data.get('salida_distrito_id'),
+                    movimiento_data.get('salida_servicio_id'),
                     movimiento_data['observaciones']
                 ))
             conn.commit()

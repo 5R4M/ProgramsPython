@@ -160,9 +160,13 @@ def crear_base_datos():
                 fecha_vencimiento DATE NOT NULL,
                 cantidad REAL NOT NULL,
                 observaciones TEXT,
+                salida_distrito_id INTEGER,
+                salida_servicio_id INTEGER,
                 FOREIGN KEY (tipo_movimiento_id) REFERENCES tipo_movimiento(id),
                 FOREIGN KEY (servicio_id) REFERENCES servicio(id),
-                FOREIGN KEY (insumo_id) REFERENCES insumo(id)
+                FOREIGN KEY (insumo_id) REFERENCES insumo(id),
+                FOREIGN KEY (salida_distrito_id) REFERENCES distrito(id),
+                FOREIGN KEY (salida_servicio_id) REFERENCES servicio(id)
             );
         """)
 

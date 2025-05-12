@@ -14,6 +14,7 @@ from src.database.db_manager import (
     actualizar_area,
     eliminar_area,
     obtener_distritos,
+    obtener_distritos_por_area,
     obtener_tipos_servicio_por_distrito,
     obtener_servicios_por_tipo,
     agregar_distrito,
@@ -322,7 +323,7 @@ class GestionServicios:
         item = self.tree_distritos.item(selected[0])
         ventana = tk.Toplevel(self.parent)
         ventana.title("Editar Distrito")
-        ventana.geometry("350x150")
+        ventana.geometry("350x190")
         self.centrar_ventana(ventana)
 
         frame_campos = ttk.Frame(ventana)
@@ -465,24 +466,41 @@ class GestionServicios:
     def agregar_tipo(self):
         ventana = tk.Toplevel(self.parent)
         ventana.title("Agregar Tipo de Servicio")
-        ventana.geometry("350x190")
+        ventana.geometry("400x250")  # Más alto para los nuevos campos
         self.centrar_ventana(ventana)
 
         frame_campos = ttk.Frame(ventana)
         frame_campos.pack(padx=10, pady=5, fill='x')
 
+        ttk.Label(frame_campos, text="Área:").pack(pady=5)
+        combo_area = ttk.Combobox(frame_campos, state="readonly", width=38)
+        areas = obtener_areas()
+        combo_area['values'] = [a['nombre'] for a in areas]
+        combo_area.pack(pady=5, fill='x')
+
         ttk.Label(frame_campos, text="Distrito:").pack(pady=5)
         combo_distrito = ttk.Combobox(frame_campos, state="readonly", width=38)
-        distritos = obtener_distritos()
-        combo_distrito['values'] = [d['nombre'] for d in distritos]
         combo_distrito.pack(pady=5, fill='x')
+
+        def actualizar_distritos(event):
+            area_nombre = combo_area.get()
+            id_area = next((a['id'] for a in areas if a['nombre'] == area_nombre), None)
+            if id_area:
+                distritos = obtener_distritos_por_area(id_area)
+                combo_distrito['values'] = [d['nombre'] for d in distritos]
+                combo_distrito.set('')
+            else:
+                combo_distrito['values'] = []
+                combo_distrito.set('')
+
+        combo_area.bind("<<ComboboxSelected>>", actualizar_distritos)
 
         ttk.Label(frame_campos, text="Tipo de Servicio:").pack(pady=5)
         descripcion = ttk.Entry(frame_campos, width=40)
         descripcion.pack(pady=5, fill='x')
 
         def guardar():
-            if not combo_distrito.get() or not descripcion.get().strip():
+            if not combo_area.get() or not combo_distrito.get() or not descripcion.get().strip():
                 messagebox.showwarning("Advertencia", "Complete todos los campos")
                 return
 
@@ -512,18 +530,46 @@ class GestionServicios:
         item = self.tree_tipos.item(selected[0])
         ventana = tk.Toplevel(self.parent)
         ventana.title("Editar Tipo de Servicio")
-        ventana.geometry("350x180")
+        ventana.geometry("400x260")
         self.centrar_ventana(ventana)
 
         frame_campos = ttk.Frame(ventana)
         frame_campos.pack(padx=10, pady=5, fill='x')
 
+        ttk.Label(frame_campos, text="Área:").pack(pady=5)
+        combo_area = ttk.Combobox(frame_campos, state="readonly", width=38)
+        areas = obtener_areas()
+        combo_area['values'] = [a['nombre'] for a in areas]
+        combo_area.pack(pady=5, fill='x')
+
         ttk.Label(frame_campos, text="Distrito:").pack(pady=5)
         combo_distrito = ttk.Combobox(frame_campos, state="readonly", width=38)
-        distritos = obtener_distritos()
-        combo_distrito['values'] = [d['nombre'] for d in distritos]
-        combo_distrito.set(item['values'][0])
         combo_distrito.pack(pady=5, fill='x')
+
+        def actualizar_distritos(event):
+            area_nombre = combo_area.get()
+            id_area = next((a['id'] for a in areas if a['nombre'] == area_nombre), None)
+            if id_area:
+                distritos = obtener_distritos_por_area(id_area)
+                combo_distrito['values'] = [d['nombre'] for d in distritos]
+            else:
+                combo_distrito['values'] = []
+
+        combo_area.bind("<<ComboboxSelected>>", actualizar_distritos)
+
+        # Establecer valores iniciales
+        distrito_actual = item['values'][0]
+        # Obtener área del distrito actual
+        distritos = obtener_distritos()
+        area_actual = ''
+        for d in distritos:
+            if d['nombre'] == distrito_actual:
+                area_actual = d['area_nombre'] if 'area_nombre' in d.keys() else ''
+                break
+
+        combo_area.set(area_actual)
+        actualizar_distritos(None)
+        combo_distrito.set(distrito_actual)
 
         ttk.Label(frame_campos, text="Tipo de Servicio:").pack(pady=5)
         descripcion = ttk.Entry(frame_campos, width=40)
@@ -531,6 +577,10 @@ class GestionServicios:
         descripcion.pack(pady=5, fill='x')
 
         def guardar():
+            if not combo_area.get() or not combo_distrito.get() or not descripcion.get().strip():
+                messagebox.showwarning("Advertencia", "Complete todos los campos")
+                return
+
             id_distrito = self.obtener_id_distrito(combo_distrito.get())
             id_tipo = self.obtener_id_tipo_servicio(item['values'][1], item['values'][0])
             actualizar_tipo_servicio(id_tipo, descripcion.get().strip())
@@ -542,7 +592,7 @@ class GestionServicios:
         frame_botones.pack(pady=10)
         ttk.Button(frame_botones, text="Guardar", command=guardar).pack(side="left", padx=5)
         ttk.Button(frame_botones, text="Cerrar", command=ventana.destroy).pack(side="left", padx=5)
-
+    
     def eliminar_tipo(self):
         selected = self.tree_tipos.selection()
         if not selected:
@@ -627,21 +677,40 @@ class GestionServicios:
     def agregar_servicio(self):
         ventana = tk.Toplevel(self.parent)
         ventana.title("Agregar Servicio")
-        ventana.geometry("350x250")
+        ventana.geometry("400x320")
         self.centrar_ventana(ventana)
 
         frame_campos = ttk.Frame(ventana)
         frame_campos.pack(padx=10, pady=5, fill='x')
 
+        ttk.Label(frame_campos, text="Área:").pack(pady=5)
+        combo_area = ttk.Combobox(frame_campos, state="readonly", width=38)
+        areas = obtener_areas()
+        combo_area['values'] = [a['nombre'] for a in areas]
+        combo_area.pack(pady=5, fill='x')
+
         ttk.Label(frame_campos, text="Distrito:").pack(pady=5)
         combo_distrito = ttk.Combobox(frame_campos, state="readonly", width=38)
-        distritos = obtener_distritos()
-        combo_distrito['values'] = [d['nombre'] for d in distritos]
         combo_distrito.pack(pady=5, fill='x')
 
         ttk.Label(frame_campos, text="Tipo de Servicio:").pack(pady=5)
         combo_tipo = ttk.Combobox(frame_campos, state="readonly", width=38)
         combo_tipo.pack(pady=5, fill='x')
+
+        def actualizar_distritos(event):
+            area_nombre = combo_area.get()
+            id_area = next((a['id'] for a in areas if a['nombre'] == area_nombre), None)
+            if id_area:
+                distritos = obtener_distritos_por_area(id_area)
+                combo_distrito['values'] = [d['nombre'] for d in distritos]
+                combo_distrito.set('')
+                combo_tipo.set('')
+                combo_tipo['values'] = []
+            else:
+                combo_distrito['values'] = []
+                combo_distrito.set('')
+                combo_tipo['values'] = []
+                combo_tipo.set('')
 
         def actualizar_tipos(event):
             id_distrito = self.obtener_id_distrito(combo_distrito.get())
@@ -649,6 +718,7 @@ class GestionServicios:
             combo_tipo['values'] = [t['descripcion'] for t in tipos]
             combo_tipo.set('')
 
+        combo_area.bind("<<ComboboxSelected>>", actualizar_distritos)
         combo_distrito.bind("<<ComboboxSelected>>", actualizar_tipos)
 
         ttk.Label(frame_campos, text="Servicio:").pack(pady=5)
@@ -656,14 +726,15 @@ class GestionServicios:
         nombre.pack(pady=5, fill='x')
 
         def guardar():
-            if combo_distrito.get() and combo_tipo.get() and nombre.get().strip():
-                id_tipo = self.obtener_id_tipo_servicio(combo_tipo.get(), combo_distrito.get())
-                agregar_servicio(id_tipo, nombre.get().strip())
-                self.actualizar_servicios()
-                ventana.destroy()
-                messagebox.showinfo("Éxito", "Servicio agregado correctamente")
-            else:
+            if not combo_area.get() or not combo_distrito.get() or not combo_tipo.get() or not nombre.get().strip():
                 messagebox.showwarning("Advertencia", "Complete todos los campos")
+                return
+
+            id_tipo = self.obtener_id_tipo_servicio(combo_tipo.get(), combo_distrito.get())
+            agregar_servicio(id_tipo, nombre.get().strip())
+            self.actualizar_servicios()
+            ventana.destroy()
+            messagebox.showinfo("Éxito", "Servicio agregado correctamente")
 
         frame_botones = ttk.Frame(ventana)
         frame_botones.pack(pady=10)
@@ -678,31 +749,64 @@ class GestionServicios:
         item = self.tree_servicios.item(selected[0])
         ventana = tk.Toplevel(self.parent)
         ventana.title("Editar Servicio")
-        ventana.geometry("350x250")
+        ventana.geometry("400x330")
         self.centrar_ventana(ventana)
 
         frame_campos = ttk.Frame(ventana)
         frame_campos.pack(padx=10, pady=5, fill='x')
 
+        ttk.Label(frame_campos, text="Área:").pack(pady=5)
+        combo_area = ttk.Combobox(frame_campos, state="readonly", width=38)
+        areas = obtener_areas()
+        combo_area['values'] = [a['nombre'] for a in areas]
+        combo_area.pack(pady=5, fill='x')
+
         ttk.Label(frame_campos, text="Distrito:").pack(pady=5)
         combo_distrito = ttk.Combobox(frame_campos, state="readonly", width=38)
-        distritos = obtener_distritos()
-        combo_distrito['values'] = [d['nombre'] for d in distritos]
-        combo_distrito.set(item['values'][0])
         combo_distrito.pack(pady=5, fill='x')
 
         ttk.Label(frame_campos, text="Tipo de Servicio:").pack(pady=5)
         combo_tipo = ttk.Combobox(frame_campos, state="readonly", width=38)
         combo_tipo.pack(pady=5, fill='x')
 
-        def actualizar_tipos(event=None):
+        def actualizar_distritos(event):
+            area_nombre = combo_area.get()
+            id_area = next((a['id'] for a in areas if a['nombre'] == area_nombre), None)
+            if id_area:
+                distritos = obtener_distritos_por_area(id_area)
+                combo_distrito['values'] = [d['nombre'] for d in distritos]
+                # Si el distrito actual no está en la lista, limpiar selección
+                if item['values'][0] not in [d['nombre'] for d in distritos]:
+                    combo_distrito.set('')
+            else:
+                combo_distrito['values'] = []
+                combo_distrito.set('')
+
+        def actualizar_tipos(event):
             id_distrito = self.obtener_id_distrito(combo_distrito.get())
             tipos = obtener_tipos_servicio_por_distrito(id_distrito) if id_distrito else []
             combo_tipo['values'] = [t['descripcion'] for t in tipos]
-            combo_tipo.set(item['values'][1])
+            # Si el tipo actual no está en la lista, limpiar selección
+            if item['values'][1] not in [t['descripcion'] for t in tipos]:
+                combo_tipo.set('')
 
+        combo_area.bind("<<ComboboxSelected>>", actualizar_distritos)
         combo_distrito.bind("<<ComboboxSelected>>", actualizar_tipos)
-        actualizar_tipos()
+
+        # Establecer valores iniciales
+        # Obtener área del distrito actual
+        distritos = obtener_distritos()
+        area_actual = ''
+        for d in distritos:
+            if d['nombre'] == item['values'][0]:
+                area_actual = d['area_nombre'] if 'area_nombre' in d.keys() else ''
+                break
+
+        combo_area.set(area_actual)
+        actualizar_distritos(None)
+        combo_distrito.set(item['values'][0])
+        actualizar_tipos(None)
+        combo_tipo.set(item['values'][1])
 
         ttk.Label(frame_campos, text="Servicio:").pack(pady=5)
         nombre = ttk.Entry(frame_campos, width=40)
@@ -710,6 +814,10 @@ class GestionServicios:
         nombre.pack(pady=5, fill='x')
 
         def guardar():
+            if not combo_area.get() or not combo_distrito.get() or not combo_tipo.get() or not nombre.get().strip():
+                messagebox.showwarning("Advertencia", "Complete todos los campos")
+                return
+
             id_tipo = self.obtener_id_tipo_servicio(combo_tipo.get(), combo_distrito.get())
             id_servicio = self.obtener_id_servicio(item['values'][2], item['values'][1], item['values'][0])
             actualizar_servicio(id_servicio, nombre.get().strip())

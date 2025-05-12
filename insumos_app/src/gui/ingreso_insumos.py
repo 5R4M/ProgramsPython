@@ -41,6 +41,12 @@ class IngresoInsumos:
         self.insumo_var = tk.StringVar()
         self.presentacion_var = tk.StringVar()
         self.tipo_movimiento_var = tk.StringVar()
+        self.salida_distrito_var = tk.StringVar()
+        self.salida_tipo_servicio_var = tk.StringVar()
+        self.salida_servicio_var = tk.StringVar()
+        
+        # Variable para radio buttons nivel de bodega
+        self.nivel_bodega_var = tk.StringVar(value="area")  
 
         # Constantes para el diseño
         self.LABEL_WIDTH = 15
@@ -50,9 +56,24 @@ class IngresoInsumos:
 
         self.setup_ui()
         self.setup_bindings()
+        self.actualizar_estado_comboboxes()  
 
     def setup_ui(self):
         # --- Tu código GUI original sin cambios ---
+        # Frame Nivel de Bodega (radio buttons)
+        self.frame_nivel_bodega = ttk.LabelFrame(self.parent, text="Nivel de Bodega")
+        self.frame_nivel_bodega.pack(fill="x", padx=10, pady=(10, 0))
+
+        # Radio buttons
+        rb_area = ttk.Radiobutton(self.frame_nivel_bodega, text="Área", variable=self.nivel_bodega_var, value="area", command=self.actualizar_estado_comboboxes)
+        rb_distrito = ttk.Radiobutton(self.frame_nivel_bodega, text="Distrito", variable=self.nivel_bodega_var, value="distrito", command=self.actualizar_estado_comboboxes)
+        rb_servicio = ttk.Radiobutton(self.frame_nivel_bodega, text="Servicio", variable=self.nivel_bodega_var, value="servicio", command=self.actualizar_estado_comboboxes)
+
+        # Layout radio buttons horizontal con espacio uniforme
+        rb_area.grid(row=0, column=0, padx=10, pady=5, sticky="w")
+        rb_distrito.grid(row=0, column=1, padx=10, pady=5, sticky="w")
+        rb_servicio.grid(row=0, column=2, padx=10, pady=5, sticky="w")
+        
         # Frame Servicios
         self.frame_servicios = ttk.LabelFrame(self.parent, text="Servicios")
         self.frame_servicios.pack(fill="x", padx=10, pady=10)
@@ -146,7 +167,32 @@ class IngresoInsumos:
         ttk.Label(self.frame_registro, text="Observaciones:", anchor="w").grid(row=1, column=2, padx=5, pady=5, sticky="w")
         self.observaciones_entry = ttk.Entry(self.frame_registro, width=60)
         self.observaciones_entry.grid(row=1, column=3, columnspan=3, padx=5, pady=5, sticky="w")
+        
+        # Salida Nivel Inferior
+        self.frame_salida_nivel_inferior = ttk.LabelFrame(self.parent, text="Salida Nivel Inferior")
 
+        # Distrito
+        ttk.Label(self.frame_salida_nivel_inferior, text="Distrito:", anchor="w").grid(row=0, column=0, padx=5, pady=5, sticky="w")
+        distritos = [d['nombre'] for d in obtener_distritos() or []]
+        self.salida_distrito_cb = AutocompleteCombobox(self.frame_salida_nivel_inferior, textvariable=self.salida_distrito_var, width=25, completevalues=distritos, state="disabled")
+        self.salida_distrito_cb.grid(row=0, column=1, padx=5, pady=5, sticky="w")
+
+        # Tipo de Servicio
+        ttk.Label(self.frame_salida_nivel_inferior, text="Tipo de Servicio:", anchor="w").grid(row=0, column=2, padx=5, pady=5, sticky="w")
+        self.salida_tipo_servicio_cb = AutocompleteCombobox(self.frame_salida_nivel_inferior, textvariable=self.salida_tipo_servicio_var, width=25, completevalues=[], state="disabled")
+        self.salida_tipo_servicio_cb.grid(row=0, column=3, padx=5, pady=5, sticky="w")
+
+        # Servicio
+        ttk.Label(self.frame_salida_nivel_inferior, text="Servicio:", anchor="w").grid(row=0, column=4, padx=5, pady=5, sticky="w")
+        self.salida_servicio_cb = AutocompleteCombobox(self.frame_salida_nivel_inferior, textvariable=self.salida_servicio_var, width=25, completevalues=[], state="disabled")
+        self.salida_servicio_cb.grid(row=0, column=5, padx=5, pady=5, sticky="w")
+
+        # Inicializar combobox vacíos
+        self.salida_tipo_servicio_cb.config(completevalues=[])
+        self.salida_tipo_servicio_var.set('')
+        self.salida_servicio_cb.config(completevalues=[])
+        self.salida_servicio_var.set('')
+        
         # Botón Agregar Movimiento
         self.btn_agregar = ttk.Button(self.parent, text="Agregar Movimiento", command=self.agregar_movimiento)
         self.btn_agregar.pack(pady=10)
@@ -156,7 +202,7 @@ class IngresoInsumos:
         self.frame_movimientos.pack(fill="both", expand=True, padx=10, pady=10)
 
         columns = ('fecha_registro', 'referencia', 'tipo_movimiento', 'insumo', 'presentacion',
-                   'lote', 'fecha_vencimiento', 'cantidad', 'observaciones')
+                   'lote', 'fecha_vencimiento', 'cantidad', 'salida_distrito', 'salida_servicio', 'observaciones')
 
         self.tree = ttk.Treeview(self.frame_movimientos, columns=columns, show='headings')
         self.tree.pack(fill="both", expand=True, padx=5, pady=5)
@@ -170,6 +216,8 @@ class IngresoInsumos:
             'lote': 'Lote',
             'fecha_vencimiento': 'Fecha de Vencimiento',
             'cantidad': 'Cantidad',
+            'salida_distrito': 'Salida Distrito',
+            'salida_servicio': 'Salida Servicio',
             'observaciones': 'Observaciones'
         }
 
@@ -203,14 +251,10 @@ class IngresoInsumos:
         self.btn_guardar.pack(side="left", padx=5)
         self.btn_cerrar = ttk.Button(self.frame_botones, text="Cerrar", command=self.cerrar_ventana)
         self.btn_cerrar.pack(side="right", padx=5)
-
-    def setup_bindings(self):
-        self.area_var.trace_add('write', self.on_area_selected)
-        self.distrito_var.trace_add('write', self.actualizar_tipos_servicio)
-        self.tipo_servicio_var.trace_add('write', self.actualizar_servicios)
-        self.tipo_insumo_var.trace_add('write', self.actualizar_insumos)
-        self.insumo_var.trace_add('write', self.actualizar_presentacion)
-
+        
+        # Ocultar inicialmente el frame de salida nivel inferior
+        self.frame_salida_nivel_inferior.pack_forget()
+        
     def on_area_selected(self, *args):
         area_nombre = self.area_var.get()
         areas = obtener_areas() or []
@@ -224,6 +268,161 @@ class IngresoInsumos:
         else:
             self.distrito_cb.config(completevalues=[])
             self.distrito_var.set('')
+
+    def setup_bindings(self):
+        self.area_var.trace_add('write', self.on_area_selected)
+        self.distrito_var.trace_add('write', self.actualizar_tipos_servicio)
+        self.tipo_servicio_var.trace_add('write', self.actualizar_servicios)
+        self.tipo_insumo_var.trace_add('write', self.actualizar_insumos)
+        self.insumo_var.trace_add('write', self.actualizar_presentacion)
+    
+        # Bind para tipo de movimiento para actualizar estado del frame salida nivel inferior
+        self.tipo_movimiento_var.trace_add('write', lambda *args: self.actualizar_estado_salida_nivel_inferior())
+      
+        # También bind para radio buttons nivel de bodega
+        self.nivel_bodega_var.trace_add('write', lambda *args: self.actualizar_estado_salida_nivel_inferior())
+        
+        # Bind para salida distrito para actualizar tipos servicio en salida nivel inferior
+        self.salida_distrito_var.trace_add('write', self.actualizar_tipos_servicio_salida)
+
+        # Bind para salida tipo servicio para actualizar servicios en salida nivel inferior
+        self.salida_tipo_servicio_var.trace_add('write', self.actualizar_servicios_salida)
+
+    def actualizar_estado_comboboxes(self):
+        nivel = self.nivel_bodega_var.get()
+        if nivel == "area":
+            self.area_cb.config(state="normal")
+            self.distrito_cb.config(state="disabled")
+            self.tipo_servicio_cb.config(state="disabled")
+            self.servicio_cb.config(state="disabled")
+        elif nivel == "distrito":
+            self.area_cb.config(state="normal")
+            self.distrito_cb.config(state="normal")
+            self.tipo_servicio_cb.config(state="disabled")
+            self.servicio_cb.config(state="disabled")
+        elif nivel == "servicio":
+            self.area_cb.config(state="normal")
+            self.distrito_cb.config(state="normal")
+            self.tipo_servicio_cb.config(state="normal")
+            self.servicio_cb.config(state="normal")
+
+        # Actualizar tipos de movimiento filtrados según nivel
+        self.actualizar_tipos_movimiento_filtrados()
+
+        # Ajustar tamaño de ventana si el frame salida nivel inferior está visible
+        if self.frame_salida_nivel_inferior.winfo_ismapped():
+            self.ajustar_tamano_ventana(mostrar_salida=True)
+        else:
+            self.ajustar_tamano_ventana(mostrar_salida=False)
+            
+    def actualizar_tipos_movimiento_filtrados(self):
+        nivel = self.nivel_bodega_var.get()
+        tipos_movimiento = [tm['descripcion'] for tm in obtener_tipos_movimiento() or []]
+
+        if nivel in ("area", "distrito"):
+            # Excluir "ENTREGADO" y "NO ENTREGADO"
+            tipos_movimiento = [tm for tm in tipos_movimiento if tm not in ("ENTREGADO", "NO ENTREGADO")]
+        elif nivel == "servicio":
+            # Excluir "SALIDA NIVEL INFERIOR"
+            tipos_movimiento = [tm for tm in tipos_movimiento if tm != "SALIDA NIVEL INFERIOR"]
+
+        self.tipo_mov_cb.config(completevalues=tipos_movimiento)
+
+        # Limpiar selección si el valor actual no está en la lista filtrada
+        if self.tipo_movimiento_var.get() not in tipos_movimiento:
+            self.tipo_movimiento_var.set('')
+    
+    def actualizar_estado_salida_nivel_inferior(self):
+        tipo_mov = self.tipo_movimiento_var.get().strip().upper()
+        nivel = self.nivel_bodega_var.get()
+
+        if tipo_mov == "SALIDA NIVEL INFERIOR":
+            if not self.frame_salida_nivel_inferior.winfo_ismapped():
+                self.frame_salida_nivel_inferior.pack(fill="x", padx=10, pady=10, before=self.btn_agregar)
+
+            if nivel == "area":
+                self.salida_distrito_cb.config(state="normal")
+                self.salida_tipo_servicio_cb.config(state="disabled")
+                self.salida_servicio_cb.config(state="disabled")
+            elif nivel == "distrito":
+                self.salida_distrito_cb.config(state="normal")
+                self.salida_tipo_servicio_cb.config(state="normal")
+                self.salida_servicio_cb.config(state="normal")
+            else:
+                self.salida_distrito_cb.config(state="disabled")
+                self.salida_tipo_servicio_cb.config(state="disabled")
+                self.salida_servicio_cb.config(state="disabled")
+
+            self.ajustar_tamano_ventana(mostrar_salida=True)
+
+        else:
+            self.frame_salida_nivel_inferior.pack_forget()
+            self.salida_distrito_var.set('')
+            self.salida_tipo_servicio_var.set('')
+            self.salida_servicio_var.set('')
+
+            self.ajustar_tamano_ventana(mostrar_salida=False)
+
+
+    def ajustar_tamano_ventana(self, mostrar_salida):
+        ventana = self.main_window.root  # Ventana principal Tk
+
+        # Tamaño base fijo (ajusta según tu diseño)
+        ancho_base = 1200
+        alto_base = 800
+
+        self.parent.update_idletasks()
+        altura_frame = self.frame_salida_nivel_inferior.winfo_reqheight() + 50  # margen extra
+
+        if mostrar_salida:
+            nuevo_alto = alto_base + altura_frame
+        else:
+            nuevo_alto = alto_base
+
+        # Obtener dimensiones de pantalla
+        screen_width = ventana.winfo_screenwidth()
+        screen_height = ventana.winfo_screenheight()
+
+        # Calcular posición para centrar verticalmente y mantener la posición horizontal actual
+        x = max(0, (screen_width - ancho_base) // 2)
+        y = max(0, (screen_height - nuevo_alto) // 2)
+
+        ventana.geometry(f"{ancho_base}x{nuevo_alto}+{x}+{y}")
+
+    def actualizar_tipos_servicio_salida(self, *args):
+        distrito_nombre = self.salida_distrito_var.get()
+        distritos = obtener_distritos() or []
+        distrito_id = next((d['id'] for d in distritos if d['nombre'] == distrito_nombre), None)
+
+        if distrito_id:
+            tipos_servicio = obtener_tipos_servicio_por_distrito(distrito_id) or []
+            opciones = [ts['descripcion'] for ts in tipos_servicio]
+            self.salida_tipo_servicio_cb.config(completevalues=opciones)
+            self.salida_tipo_servicio_var.set('')
+            self.salida_servicio_var.set('')
+        else:
+            self.salida_tipo_servicio_cb.config(completevalues=[])
+            self.salida_tipo_servicio_var.set('')
+            self.salida_servicio_cb.config(completevalues=[])
+            self.salida_servicio_var.set('')
+
+    def actualizar_servicios_salida(self, *args):
+        distrito_nombre = self.salida_distrito_var.get()
+        tipo_servicio_desc = self.salida_tipo_servicio_var.get()
+        distritos = obtener_distritos() or []
+        distrito_id = next((d['id'] for d in distritos if d['nombre'] == distrito_nombre), None)
+
+        if distrito_id:
+            tipos_servicio = obtener_tipos_servicio_por_distrito(distrito_id) or []
+            tipo_servicio_id = next((ts['id'] for ts in tipos_servicio if ts['descripcion'] == tipo_servicio_desc), None)
+            if tipo_servicio_id:
+                servicios = obtener_servicios_por_tipo(tipo_servicio_id) or []
+                opciones = [s['nombre'] for s in servicios]
+                self.salida_servicio_cb.config(completevalues=opciones)
+                self.salida_servicio_var.set('')
+                return
+        self.salida_servicio_cb.config(completevalues=[])
+        self.salida_servicio_var.set('')
 
     def actualizar_tipos_servicio(self, *args):
         distrito_nombre = self.distrito_var.get()
@@ -283,7 +482,7 @@ class IngresoInsumos:
         if tipo_insumo_id and insumo_nombre:
             insumos = obtener_insumos_por_tipo(tipo_insumo_id) or []
             insumo_seleccionado = next((i for i in insumos if i['nombre'] == insumo_nombre), None)
-            if insumo_seleccionado and insumo_seleccionado.get('nombre_presentacion'):
+            if insumo_seleccionado and insumo_seleccionado['nombre_presentacion']:
                 self.presentacion_cb.config(completevalues=[insumo_seleccionado['nombre_presentacion']])
                 self.presentacion_var.set(insumo_seleccionado['nombre_presentacion'])
                 return
@@ -296,11 +495,16 @@ class IngresoInsumos:
             tipo_movimiento = self.tipo_movimiento_var.get()
             insumo = self.insumo_var.get()
             presentacion = self.presentacion_var.get()
-            lote = self.lote_entry.get()
+            lote = self.lote_entry.get().upper()
             fecha_venc_str = self.fecha_venc.get_date().strftime('%d/%m/%Y')
             cantidad_str = self.cantidad_entry.get()
-            referencia = self.referencia_entry.get()
-            observaciones = self.observaciones_entry.get()
+            referencia = self.referencia_entry.get().upper()
+            observaciones = self.observaciones_entry.get().upper()
+            salida_distrito = ''
+            salida_servicio = ''
+            if tipo_movimiento.strip().upper() == "SALIDA NIVEL INFERIOR":
+                salida_distrito = self.salida_distrito_var.get()
+                salida_servicio = self.salida_servicio_var.get()
 
             if not all([tipo_movimiento, insumo, presentacion, lote, cantidad_str, referencia]):
                 messagebox.showerror("Error", "Los campos son requeridos excepto observaciones")
@@ -310,9 +514,11 @@ class IngresoInsumos:
 
             self.tree.insert('', 'end', values=(
                 fecha_registro, referencia, tipo_movimiento, insumo,
-                presentacion, lote, fecha_venc_str, cantidad, observaciones
+                presentacion, lote, fecha_venc_str, cantidad, salida_distrito,
+                salida_servicio, observaciones
             ))
 
+            # Limpiar campos después de insertar
             self.tipo_movimiento_var.set('')
             self.cantidad_entry.delete(0, 'end')
             self.referencia_entry.delete(0, 'end')
@@ -333,17 +539,23 @@ class IngresoInsumos:
 
         editar_ventana = tk.Toplevel(self.parent)
         editar_ventana.title("Editar Movimiento")
-        editar_ventana.geometry("900x725")
 
-        # Centrar la ventana
-        editar_ventana.update_idletasks()
-        width = editar_ventana.winfo_width()
-        height = editar_ventana.winfo_height()
-        x = (editar_ventana.winfo_screenwidth() // 2) - (width // 2)
-        y = (editar_ventana.winfo_screenheight() // 2) - (height // 2)
-        editar_ventana.geometry(f'{width}x{height}+{x}+{y}')
+        # Tamaño inicial amplio para que se vean bien los widgets con los anchos que tienes
+        ancho_ventana = 1000
+        alto_ventana = 400
 
-        # Variables para combobox en ventana edición
+        # Obtener dimensiones de pantalla para centrar
+        screen_width = editar_ventana.winfo_screenwidth()
+        screen_height = editar_ventana.winfo_screenheight()
+
+        x = (screen_width // 2) - (ancho_ventana // 2)
+        y = (screen_height // 2) - (alto_ventana // 2)
+
+        editar_ventana.geometry(f"{ancho_ventana}x{alto_ventana}+{x}+{y}")
+        editar_ventana.resizable(True, True)
+
+        # Variables para edición
+        edit_nivel_bodega_var = tk.StringVar(value="area")  # Default, luego se ajusta
         edit_area_var = tk.StringVar()
         edit_distrito_var = tk.StringVar()
         edit_tipo_servicio_var = tk.StringVar()
@@ -352,232 +564,396 @@ class IngresoInsumos:
         edit_insumo_var = tk.StringVar()
         edit_presentacion_var = tk.StringVar()
         edit_tipo_movimiento_var = tk.StringVar()
+        edit_salida_distrito_var = tk.StringVar()
+        edit_salida_tipo_servicio_var = tk.StringVar()
+        edit_salida_servicio_var = tk.StringVar()
 
-        ANCHO_LABEL = 20
-        ANCHO_CAMPO = 60
         PADDING = 10
 
         main_frame = ttk.Frame(editar_ventana, padding=PADDING)
         main_frame.pack(fill="both", expand=True)
 
-        # Frame Servicios
-        frame_servicios = ttk.LabelFrame(main_frame, text="Servicios", padding=PADDING)
-        frame_servicios.pack(fill="x", pady=5)
+        # Frame Nivel de Bodega (radio buttons)
+        frame_nivel_bodega = ttk.LabelFrame(main_frame, text="Nivel de Bodega")
+        frame_nivel_bodega.pack(fill="x", pady=5)
 
-        ttk.Label(frame_servicios, text="Área:", width=ANCHO_LABEL, anchor="e").grid(row=0, column=0, padx=5, pady=5)
-        area_cb = AutocompleteCombobox(frame_servicios, textvariable=edit_area_var, width=ANCHO_CAMPO, state="normal")
-        areas = [a['nombre'] for a in obtener_areas() or []]
-        area_cb.set_completion_list(areas)
+        rb_area = ttk.Radiobutton(frame_nivel_bodega, text="Área", variable=edit_nivel_bodega_var, value="area")
+        rb_distrito = ttk.Radiobutton(frame_nivel_bodega, text="Distrito", variable=edit_nivel_bodega_var, value="distrito")
+        rb_servicio = ttk.Radiobutton(frame_nivel_bodega, text="Servicio", variable=edit_nivel_bodega_var, value="servicio")
+
+        rb_area.grid(row=0, column=0, padx=10, pady=5, sticky="w")
+        rb_distrito.grid(row=0, column=1, padx=10, pady=5, sticky="w")
+        rb_servicio.grid(row=0, column=2, padx=10, pady=5, sticky="w")
+
+        # Frame Servicios (Área, Distrito, Tipo Servicio, Servicio)
+        frame_servicios = ttk.LabelFrame(main_frame, text="Servicios")
+        frame_servicios.pack(fill="x", pady=PADDING)
+
+        # Configurar columnas sin expansión para que no se estiren
+        for col in range(8):
+            frame_servicios.columnconfigure(col, weight=1)
+
+        ttk.Label(frame_servicios, text="Área:", width=15, anchor="w").grid(row=0, column=0, padx=5, pady=5, sticky="w")
+        area_cb = AutocompleteCombobox(frame_servicios, textvariable=edit_area_var, width=25, state="normal")
+        area_cb.set_completion_list([a['nombre'] for a in obtener_areas() or []])
         area_cb.grid(row=0, column=1, padx=5, pady=5, sticky="ew")
 
-        ttk.Label(frame_servicios, text="Distrito:", width=ANCHO_LABEL, anchor="e").grid(row=1, column=0, padx=5, pady=5)
-        distrito_cb = AutocompleteCombobox(frame_servicios, textvariable=edit_distrito_var, width=ANCHO_CAMPO, state="normal")
+        ttk.Label(frame_servicios, text="Distrito:", width=15, anchor="w").grid(row=0, column=2, padx=5, pady=5, sticky="w")
+        distrito_cb = AutocompleteCombobox(frame_servicios, textvariable=edit_distrito_var, width=25, state="normal")
         distrito_cb.set_completion_list([d['nombre'] for d in obtener_distritos() or []])
-        distrito_cb.grid(row=1, column=1, padx=5, pady=5, sticky="ew")
+        distrito_cb.grid(row=0, column=3, padx=5, pady=5, sticky="ew")
 
-        ttk.Label(frame_servicios, text="Tipo de Servicio:", width=ANCHO_LABEL, anchor="e").grid(row=2, column=0, padx=5, pady=5)
-        tipo_servicio_cb = AutocompleteCombobox(frame_servicios, textvariable=edit_tipo_servicio_var, width=ANCHO_CAMPO, state="normal")
-        tipo_servicio_cb.grid(row=2, column=1, padx=5, pady=5, sticky="ew")
+        ttk.Label(frame_servicios, text="Tipo de Servicio:", width=15, anchor="w").grid(row=0, column=4, padx=5, pady=5, sticky="w")
+        tipo_servicio_cb = AutocompleteCombobox(frame_servicios, textvariable=edit_tipo_servicio_var, width=25, state="normal")
+        tipo_servicio_cb.grid(row=0, column=5, padx=5, pady=5, sticky="ew")
 
-        ttk.Label(frame_servicios, text="Servicio:", width=ANCHO_LABEL, anchor="e").grid(row=3, column=0, padx=5, pady=5)
-        servicio_cb = AutocompleteCombobox(frame_servicios, textvariable=edit_servicio_var, width=ANCHO_CAMPO, state="normal")
-        servicio_cb.grid(row=3, column=1, padx=5, pady=5, sticky="ew")
+        ttk.Label(frame_servicios, text="Servicio:", width=15, anchor="w").grid(row=0, column=6, padx=5, pady=5, sticky="w")
+        servicio_cb = AutocompleteCombobox(frame_servicios, textvariable=edit_servicio_var, width=25, state="normal")
+        servicio_cb.grid(row=0, column=7, padx=5, pady=5, sticky="ew")
 
         # Frame Insumos
-        frame_insumos = ttk.LabelFrame(main_frame, text="Insumos", padding=PADDING)
+        frame_insumos = ttk.LabelFrame(main_frame, text="Insumos")
         frame_insumos.pack(fill="x", pady=5)
 
-        ttk.Label(frame_insumos, text="Tipo de Insumo:", width=ANCHO_LABEL, anchor="e").grid(row=0, column=0, padx=5, pady=5)
-        tipo_insumo_cb = AutocompleteCombobox(frame_insumos, textvariable=edit_tipo_insumo_var, width=ANCHO_CAMPO, state="normal")
+        for col in range(6):
+            frame_insumos.columnconfigure(col, weight=1)
+
+        ttk.Label(frame_insumos, text="Tipo de Insumo:", width=15, anchor="w").grid(row=0, column=0, padx=5, pady=5, sticky="w")
+        tipo_insumo_cb = AutocompleteCombobox(frame_insumos, textvariable=edit_tipo_insumo_var, width=25, state="normal")
         tipo_insumo_cb.set_completion_list([ti['descripcion'] for ti in obtener_tipos_insumo() or []])
         tipo_insumo_cb.grid(row=0, column=1, padx=5, pady=5, sticky="ew")
 
-        ttk.Label(frame_insumos, text="Insumo:", width=ANCHO_LABEL, anchor="e").grid(row=1, column=0, padx=5, pady=5)
-        insumo_cb = AutocompleteCombobox(frame_insumos, textvariable=edit_insumo_var, width=ANCHO_CAMPO, state="normal")
-        insumo_cb.grid(row=1, column=1, padx=5, pady=5, sticky="ew")
+        ttk.Label(frame_insumos, text="Insumo:", width=15, anchor="w").grid(row=0, column=2, padx=5, pady=5, sticky="w")
+        insumo_cb = AutocompleteCombobox(frame_insumos, textvariable=edit_insumo_var, width=25, state="normal")
+        insumo_cb.grid(row=0, column=3, padx=5, pady=5, sticky="ew")
 
-        ttk.Label(frame_insumos, text="Presentación:", width=ANCHO_LABEL, anchor="e").grid(row=2, column=0, padx=5, pady=5)
-        presentacion_cb = AutocompleteCombobox(frame_insumos, textvariable=edit_presentacion_var, width=ANCHO_CAMPO, state="normal")
-        presentacion_cb.grid(row=2, column=1, padx=5, pady=5, sticky="ew")
+        ttk.Label(frame_insumos, text="Presentación:", width=15, anchor="w").grid(row=0, column=4, padx=5, pady=5, sticky="w")
+        presentacion_cb = AutocompleteCombobox(frame_insumos, textvariable=edit_presentacion_var, width=25, state="normal")
+        presentacion_cb.grid(row=0, column=5, padx=5, pady=5, sticky="ew")
 
-        # Frame Detalles
-        frame_detalles = ttk.LabelFrame(main_frame, text="Detalles del Movimiento", padding=PADDING)
+        # Frame Detalles del Movimiento
+        frame_detalles = ttk.LabelFrame(main_frame, text="Detalles del Movimiento")
         frame_detalles.pack(fill="x", pady=5)
 
-        ttk.Label(frame_detalles, text="Fecha de Registro:", width=ANCHO_LABEL, anchor="e").grid(row=0, column=0, padx=5, pady=5)
-        fecha_edit = DateEntry(frame_detalles, width=ANCHO_CAMPO, background='darkblue', foreground='white', borderwidth=2, date_pattern='dd/mm/yyyy')
+        for col in range(6):
+            frame_detalles.columnconfigure(col, weight=1)
+
+        ttk.Label(frame_detalles, text="Fecha de Registro:", width=15, anchor="w").grid(row=0, column=0, padx=5, pady=5, sticky="w")
+        fecha_edit = DateEntry(frame_detalles, width=25, background='darkblue', foreground='white', borderwidth=2, date_pattern='dd/mm/yyyy')
         fecha_edit.grid(row=0, column=1, padx=5, pady=5, sticky="ew")
 
-        ttk.Label(frame_detalles, text="Referencia:", width=ANCHO_LABEL, anchor="e").grid(row=1, column=0, padx=5, pady=5)
-        referencia_entry = ttk.Entry(frame_detalles, width=ANCHO_CAMPO)
-        referencia_entry.grid(row=1, column=1, padx=5, pady=5, sticky="ew")
+        ttk.Label(frame_detalles, text="Referencia:", width=15, anchor="w").grid(row=0, column=2, padx=5, pady=5, sticky="w")
+        referencia_entry = ttk.Entry(frame_detalles, width=27)
+        referencia_entry.grid(row=0, column=3, padx=5, pady=5, sticky="ew")
 
-        ttk.Label(frame_detalles, text="Tipo Movimiento:", width=ANCHO_LABEL, anchor="e").grid(row=2, column=0, padx=5, pady=5)
-        tipo_mov_cb = AutocompleteCombobox(frame_detalles, textvariable=edit_tipo_movimiento_var, width=ANCHO_CAMPO, state="normal")
+        ttk.Label(frame_detalles, text="Tipo Movimiento:", width=15, anchor="w").grid(row=0, column=4, padx=5, pady=5, sticky="w")
+        tipo_mov_cb = AutocompleteCombobox(frame_detalles, textvariable=edit_tipo_movimiento_var, width=25, state="normal")
         tipo_mov_cb.set_completion_list([tm['descripcion'] for tm in obtener_tipos_movimiento() or []])
-        tipo_mov_cb.grid(row=2, column=1, padx=5, pady=5, sticky="ew")
+        tipo_mov_cb.grid(row=0, column=5, padx=5, pady=5, sticky="ew")
 
-        ttk.Label(frame_detalles, text="Lote:", width=ANCHO_LABEL, anchor="e").grid(row=3, column=0, padx=5, pady=5)
-        lote_entry = ttk.Entry(frame_detalles, width=ANCHO_CAMPO)
-        lote_entry.grid(row=3, column=1, padx=5, pady=5, sticky="ew")
+        ttk.Label(frame_detalles, text="Lote:", width=15, anchor="w").grid(row=1, column=0, padx=5, pady=5, sticky="w")
+        lote_entry = ttk.Entry(frame_detalles, width=27)
+        lote_entry.grid(row=1, column=1, padx=5, pady=5, sticky="ew")
 
-        ttk.Label(frame_detalles, text="Fecha Vencimiento:", width=ANCHO_LABEL, anchor="e").grid(row=4, column=0, padx=5, pady=5)
-        fecha_venc_edit = DateEntry(frame_detalles, width=ANCHO_CAMPO, background='darkblue', foreground='white', borderwidth=2, date_pattern='dd/mm/yyyy')
-        fecha_venc_edit.grid(row=4, column=1, padx=5, pady=5, sticky="ew")
+        ttk.Label(frame_detalles, text="Fecha Vencimiento:", width=15, anchor="w").grid(row=1, column=2, padx=5, pady=5, sticky="w")
+        fecha_venc_edit = DateEntry(frame_detalles, width=25, background='darkblue', foreground='white', borderwidth=2, date_pattern='dd/mm/yyyy')
+        fecha_venc_edit.grid(row=1, column=3, padx=5, pady=5, sticky="ew")
 
-        ttk.Label(frame_detalles, text="Cantidad:", width=ANCHO_LABEL, anchor="e").grid(row=5, column=0, padx=5, pady=5)
-        cantidad_entry = ttk.Entry(frame_detalles, width=ANCHO_CAMPO)
-        cantidad_entry.grid(row=5, column=1, padx=5, pady=5, sticky="ew")
+        ttk.Label(frame_detalles, text="Cantidad:", width=15, anchor="w").grid(row=1, column=4, padx=5, pady=5, sticky="w")
+        cantidad_entry = ttk.Entry(frame_detalles, width=27)
+        cantidad_entry.grid(row=1, column=5, padx=5, pady=5, sticky="ew")
 
-        ttk.Label(frame_detalles, text="Observaciones:", width=ANCHO_LABEL, anchor="e").grid(row=6, column=0, padx=5, pady=5)
-        observaciones_entry = ttk.Entry(frame_detalles, width=ANCHO_CAMPO)
-        observaciones_entry.grid(row=6, column=1, padx=5, pady=5, sticky="ew")
+        ttk.Label(frame_detalles, text="Observaciones:", width=15, anchor="w").grid(row=2, column=0, padx=5, pady=5, sticky="w")
+        observaciones_entry = ttk.Entry(frame_detalles, width=80)
+        observaciones_entry.grid(row=2, column=1, columnspan=5, padx=5, pady=5, sticky="ew")
 
-        # Configurar grid para expandirse
-        for frame in [frame_servicios, frame_insumos, frame_detalles]:
-            frame.grid_columnconfigure(1, weight=1)
+        # Frame Salida Nivel Inferior
+        frame_salida_nivel_inferior_edit = ttk.LabelFrame(main_frame, text="Salida Nivel Inferior")
 
-        # Frame Botones
-        frame_botones = ttk.Frame(main_frame)
-        frame_botones.pack(pady=PADDING)
+        ttk.Label(frame_salida_nivel_inferior_edit, text="Distrito:", width=15, anchor="w").grid(row=0, column=0, padx=5, pady=5, sticky="w")
+        salida_distrito_cb = AutocompleteCombobox(frame_salida_nivel_inferior_edit, textvariable=edit_salida_distrito_var, width=25, completevalues=[d['nombre'] for d in obtener_distritos() or []], state="disabled")
+        salida_distrito_cb.grid(row=0, column=1, padx=5, pady=5, sticky="ew")
 
-        # Funciones para actualizar listas según selección en edición
-        def actualizar_distritos_edit(*args):
-            area_nombre = edit_area_var.get()
-            areas = obtener_areas()
-            area_id = next((a['id'] for a in areas if a['nombre'] == area_nombre), None)
-            if area_id:
-                distritos = obtener_distritos_por_area(area_id)
-                distritos_nombres = [d['nombre'] for d in distritos]
-                distrito_cb.set_completion_list(distritos_nombres)
-                if edit_distrito_var.get() not in distritos_nombres:
-                    edit_distrito_var.set('')
+        ttk.Label(frame_salida_nivel_inferior_edit, text="Tipo de Servicio:", width=15, anchor="w").grid(row=0, column=2, padx=5, pady=5, sticky="w")
+        salida_tipo_servicio_cb = AutocompleteCombobox(frame_salida_nivel_inferior_edit, textvariable=edit_salida_tipo_servicio_var, width=25, completevalues=[], state="disabled")
+        salida_tipo_servicio_cb.grid(row=0, column=3, padx=5, pady=5, sticky="ew")
+
+        ttk.Label(frame_salida_nivel_inferior_edit, text="Servicio:", width=15, anchor="w").grid(row=0, column=4, padx=5, pady=5, sticky="w")
+        salida_servicio_cb = AutocompleteCombobox(frame_salida_nivel_inferior_edit, textvariable=edit_salida_servicio_var, width=25, completevalues=[], state="disabled")
+        salida_servicio_cb.grid(row=0, column=5, padx=5, pady=5, sticky="ew")
+
+        # Funciones para actualizar combobox en edición (similar a ventana principal)
+        def actualizar_estado_comboboxes_edit(*args):
+            nivel = edit_nivel_bodega_var.get()
+            if nivel == "area":
+                area_cb.config(state="normal")
+                distrito_cb.config(state="disabled")
+                tipo_servicio_cb.config(state="disabled")
+                servicio_cb.config(state="disabled")
+            elif nivel == "distrito":
+                area_cb.config(state="normal")
+                distrito_cb.config(state="normal")
+                tipo_servicio_cb.config(state="disabled")
+                servicio_cb.config(state="disabled")
+            elif nivel == "servicio":
+                area_cb.config(state="normal")
+                distrito_cb.config(state="normal")
+                tipo_servicio_cb.config(state="normal")
+                servicio_cb.config(state="normal")
+
+            actualizar_tipos_movimiento_filtrados_edit()
+
+        def actualizar_tipos_movimiento_filtrados_edit():
+            nivel = edit_nivel_bodega_var.get()
+            tipos_movimiento = [tm['descripcion'] for tm in obtener_tipos_movimiento() or []]
+
+            if nivel in ("area", "distrito"):
+                tipos_movimiento = [tm for tm in tipos_movimiento if tm not in ("ENTREGADO", "NO ENTREGADO")]
+            elif nivel == "servicio":
+                tipos_movimiento = [tm for tm in tipos_movimiento if tm != "SALIDA NIVEL INFERIOR"]
+
+            tipo_mov_cb.config(completevalues=tipos_movimiento)
+
+            if edit_tipo_movimiento_var.get() not in tipos_movimiento:
+                edit_tipo_movimiento_var.set('')
+
+        # Definir función para ajustar tamaño de ventana emergente
+        def ajustar_tamano_ventana_editar(mostrar_salida):
+            ancho_base = 1000
+            alto_base = 400
+
+            editar_ventana.update_idletasks()
+            altura_frame = frame_salida_nivel_inferior_edit.winfo_reqheight() + 50  # margen extra
+
+            if mostrar_salida:
+                nuevo_alto = alto_base + altura_frame
             else:
-                distrito_cb.set_completion_list([])
-                edit_distrito_var.set('')
+                nuevo_alto = alto_base
 
+            screen_width = editar_ventana.winfo_screenwidth()
+            screen_height = editar_ventana.winfo_screenheight()
+
+            x = max(0, (screen_width - ancho_base) // 2)
+            y = max(0, (screen_height - nuevo_alto) // 2)
+
+            editar_ventana.geometry(f"{ancho_base}x{nuevo_alto}+{x}+{y}")
+        
+        def actualizar_estado_salida_nivel_inferior_edit(*args):
+            tipo_mov = edit_tipo_movimiento_var.get().strip().upper()
+            nivel = edit_nivel_bodega_var.get()
+
+            if tipo_mov == "SALIDA NIVEL INFERIOR":
+                if not frame_salida_nivel_inferior_edit.winfo_ismapped():
+                    try:
+                        frame_salida_nivel_inferior_edit.pack(fill="x", pady=5, before=frame_botones)
+                    except NameError:
+                        frame_salida_nivel_inferior_edit.pack(fill="x", pady=5)
+
+                if nivel == "area":
+                    salida_distrito_cb.config(state="normal")
+                    salida_tipo_servicio_cb.config(state="disabled")
+                    salida_servicio_cb.config(state="disabled")
+                elif nivel == "distrito":
+                    salida_distrito_cb.config(state="normal")
+                    salida_tipo_servicio_cb.config(state="normal")
+                    salida_servicio_cb.config(state="normal")
+                else:
+                    salida_distrito_cb.config(state="disabled")
+                    salida_tipo_servicio_cb.config(state="disabled")
+                    salida_servicio_cb.config(state="disabled")
+
+                editar_ventana.update_idletasks()
+                ajustar_tamano_ventana_editar(True)
+
+            else:
+                frame_salida_nivel_inferior_edit.pack_forget()
+                edit_salida_distrito_var.set('')
+                edit_salida_tipo_servicio_var.set('')
+                edit_salida_servicio_var.set('')
+
+                editar_ventana.update_idletasks()
+                ajustar_tamano_ventana_editar(False)
+
+        # Bindings para actualización dinámica en edición
+        edit_nivel_bodega_var.trace_add('write', actualizar_estado_comboboxes_edit)
+        edit_tipo_movimiento_var.trace_add('write', actualizar_estado_salida_nivel_inferior_edit)
+
+        # Actualizar tipos servicio y servicios según selección en edición (igual que ventana principal)
         def actualizar_tipos_servicio_edit(*args):
             distrito_nombre = edit_distrito_var.get()
-            distritos = obtener_distritos()
+            distritos = obtener_distritos() or []
             distrito_id = next((d['id'] for d in distritos if d['nombre'] == distrito_nombre), None)
+
             if distrito_id:
-                tipos_servicio = obtener_tipos_servicio_por_distrito(distrito_id)
-                tipo_servicio_cb.set_completion_list([ts['descripcion'] for ts in tipos_servicio or []])
+                tipos_servicio = obtener_tipos_servicio_por_distrito(distrito_id) or []
+                opciones = [ts['descripcion'] for ts in tipos_servicio]
+                tipo_servicio_cb.set_completion_list(opciones)
+                if edit_tipo_servicio_var.get() not in opciones:
+                    edit_tipo_servicio_var.set('')
+            else:
+                tipo_servicio_cb.set_completion_list([])
+                edit_tipo_servicio_var.set('')
+                servicio_cb.set_completion_list([])
+                edit_servicio_var.set('')
 
         def actualizar_servicios_edit(*args):
-            try:
-                distrito_nombre = edit_distrito_var.get()
-                distritos = obtener_distritos()
-                distrito_id = next((d['id'] for d in distritos if d['nombre'] == distrito_nombre), None)
-                if distrito_id:
-                    tipos_servicio = obtener_tipos_servicio_por_distrito(distrito_id)
-                    tipo_servicio_id = next((ts['id'] for ts in tipos_servicio if ts['descripcion'] == edit_tipo_servicio_var.get()), None)
-                    if tipo_servicio_id:
-                        servicios = obtener_servicios_por_tipo(tipo_servicio_id)
-                        servicio_cb.set_completion_list([s['nombre'] for s in servicios or []])
-                        servicio_actual = self.servicio_var.get()
-                        if servicio_actual in [s['nombre'] for s in servicios]:
-                            edit_servicio_var.set(servicio_actual)
-                        else:
-                            edit_servicio_var.set('')
-            except Exception as e:
-                print(f"Error al actualizar servicios: {e}")
+            distrito_nombre = edit_distrito_var.get()
+            tipo_servicio_desc = edit_tipo_servicio_var.get()
+            distritos = obtener_distritos() or []
+            distrito_id = next((d['id'] for d in distritos if d['nombre'] == distrito_nombre), None)
+
+            if distrito_id:
+                tipos_servicio = obtener_tipos_servicio_por_distrito(distrito_id) or []
+                tipo_servicio_id = next((ts['id'] for ts in tipos_servicio if ts['descripcion'] == tipo_servicio_desc), None)
+                if tipo_servicio_id:
+                    servicios = obtener_servicios_por_tipo(tipo_servicio_id) or []
+                    opciones = [s['nombre'] for s in servicios]
+                    servicio_cb.set_completion_list(opciones)
+                    if edit_servicio_var.get() not in opciones:
+                        edit_servicio_var.set('')
+            else:
                 servicio_cb.set_completion_list([])
+                edit_servicio_var.set('')
+
+        def actualizar_tipos_servicio_salida_edit(*args):
+            distrito_nombre = edit_salida_distrito_var.get()
+            distritos = obtener_distritos() or []
+            distrito_id = next((d['id'] for d in distritos if d['nombre'] == distrito_nombre), None)
+
+            if distrito_id:
+                tipos_servicio = obtener_tipos_servicio_por_distrito(distrito_id) or []
+                opciones = [ts['descripcion'] for ts in tipos_servicio]
+                salida_tipo_servicio_cb.set_completion_list(opciones)
+                if edit_salida_tipo_servicio_var.get() not in opciones:
+                    edit_salida_tipo_servicio_var.set('')
+                    edit_salida_servicio_var.set('')
+            else:
+                salida_tipo_servicio_cb.set_completion_list([])
+                edit_salida_tipo_servicio_var.set('')
+                salida_servicio_cb.set_completion_list([])
+                edit_salida_servicio_var.set('')
+
+        def actualizar_servicios_salida_edit(*args):
+            distrito_nombre = edit_salida_distrito_var.get()
+            tipo_servicio_desc = edit_salida_tipo_servicio_var.get()
+            distritos = obtener_distritos() or []
+            distrito_id = next((d['id'] for d in distritos if d['nombre'] == distrito_nombre), None)
+
+            if distrito_id:
+                tipos_servicio = obtener_tipos_servicio_por_distrito(distrito_id) or []
+                tipo_servicio_id = next((ts['id'] for ts in tipos_servicio if ts['descripcion'] == tipo_servicio_desc), None)
+                if tipo_servicio_id:
+                    servicios = obtener_servicios_por_tipo(tipo_servicio_id) or []
+                    opciones = [s['nombre'] for s in servicios]
+                    salida_servicio_cb.set_completion_list(opciones)
+                    if edit_salida_servicio_var.get() not in opciones:
+                        edit_salida_servicio_var.set('')
+            else:
+                salida_servicio_cb.set_completion_list([])
+                edit_salida_servicio_var.set('')
 
         def actualizar_insumos_edit(*args):
             tipo_insumo_desc = edit_tipo_insumo_var.get()
-            tipos_insumo = obtener_tipos_insumo()
+            tipos_insumo = obtener_tipos_insumo() or []
             tipo_insumo_id = next((ti['id'] for ti in tipos_insumo if ti['descripcion'] == tipo_insumo_desc), None)
+
             if tipo_insumo_id:
-                insumos = obtener_insumos_por_tipo(tipo_insumo_id)
-                insumo_cb.set_completion_list([i['nombre'] for i in insumos or []])
+                insumos = obtener_insumos_por_tipo(tipo_insumo_id) or []
+                insumo_cb.set_completion_list([i['nombre'] for i in insumos])
+                if edit_insumo_var.get() not in [i['nombre'] for i in insumos]:
+                    edit_insumo_var.set('')
+            else:
+                insumo_cb.set_completion_list([])
+                edit_insumo_var.set('')
 
         def actualizar_presentacion_edit(*args):
-            try:
-                tipo_insumo_desc = edit_tipo_insumo_var.get()
-                tipos_insumo = obtener_tipos_insumo()
-                tipo_insumo_id = next((ti['id'] for ti in tipos_insumo if ti['descripcion'] == tipo_insumo_desc), None)
-                if tipo_insumo_id and edit_insumo_var.get():
-                    insumos = obtener_insumos_por_tipo(tipo_insumo_id)
-                    insumo_seleccionado = next((i for i in insumos if i['nombre'] == edit_insumo_var.get()), None)
-                    if insumo_seleccionado and insumo_seleccionado.get('nombre_presentacion'):
-                        presentacion_cb.set_completion_list([insumo_seleccionado['nombre_presentacion']])
-                        edit_presentacion_var.set(insumo_seleccionado['nombre_presentacion'])
-            except Exception as e:
-                print(f"Error al actualizar presentación: {e}")
-                presentacion_cb.set_completion_list([])
+            tipo_insumo_desc = edit_tipo_insumo_var.get()
+            insumo_nombre = edit_insumo_var.get()
+            tipos_insumo = obtener_tipos_insumo() or []
+            tipo_insumo_id = next((ti['id'] for ti in tipos_insumo if ti['descripcion'] == tipo_insumo_desc), None)
 
-        # Bindings para actualización dinámica
-        edit_area_var.trace_add('write', actualizar_distritos_edit)
+            if tipo_insumo_id and insumo_nombre:
+                insumos = obtener_insumos_por_tipo(tipo_insumo_id) or []
+                insumo_seleccionado = next((i for i in insumos if i['nombre'] == insumo_nombre), None)
+                if insumo_seleccionado and insumo_seleccionado['nombre_presentacion']:
+                    presentacion_cb.set_completion_list([insumo_seleccionado['nombre_presentacion']])
+                    edit_presentacion_var.set(insumo_seleccionado['nombre_presentacion'])
+                    return
+            presentacion_cb.set_completion_list([])
+            edit_presentacion_var.set('')
+
+        # Bindings
+        edit_nivel_bodega_var.trace_add('write', actualizar_estado_comboboxes_edit)
+        edit_tipo_movimiento_var.trace_add('write', actualizar_estado_salida_nivel_inferior_edit)
+        edit_area_var.trace_add('write', lambda *a: self.on_area_selected_edit(edit_area_var, edit_distrito_var, distrito_cb))
         edit_distrito_var.trace_add('write', actualizar_tipos_servicio_edit)
         edit_tipo_servicio_var.trace_add('write', actualizar_servicios_edit)
+        edit_salida_distrito_var.trace_add('write', actualizar_tipos_servicio_salida_edit)
+        edit_salida_tipo_servicio_var.trace_add('write', actualizar_servicios_salida_edit)
         edit_tipo_insumo_var.trace_add('write', actualizar_insumos_edit)
         edit_insumo_var.trace_add('write', actualizar_presentacion_edit)
 
-        # Cargar valores iniciales en los widgets de edición
-        distrito_actual = self.distrito_var.get()
-        area_actual = ''
-        distritos = obtener_distritos()
-        for d in distritos:
-            if d['nombre'] == distrito_actual:
-                area_actual = d.get('area_nombre', '') or ''
-                break
+        # Función para cargar datos iniciales en edición
+        def cargar_datos_iniciales():
+            if valores[8] and valores[9]:  
+                edit_nivel_bodega_var.set("area")
+            else:
+                edit_nivel_bodega_var.set("area")
 
-        edit_area_var.set(area_actual)
+            actualizar_estado_salida_nivel_inferior_edit()
+            
+            # Cargar valores en campos
+            edit_area_var.set(self.area_var.get())
+            edit_distrito_var.set(self.distrito_var.get())
+            edit_tipo_servicio_var.set(self.tipo_servicio_var.get())
+            edit_servicio_var.set(self.servicio_var.get())
+            edit_tipo_insumo_var.set(self.tipo_insumo_var.get())
+            edit_insumo_var.set(valores[3])
+            edit_presentacion_var.set(valores[4])
+            fecha_edit.set_date(datetime.strptime(valores[0], '%d/%m/%Y').date())
+            referencia_entry.delete(0, tk.END)
+            referencia_entry.insert(0, valores[1])
+            edit_tipo_movimiento_var.set(valores[2])
+            lote_entry.delete(0, tk.END)
+            lote_entry.insert(0, valores[5])
+            fecha_venc_edit.set_date(datetime.strptime(valores[6], '%d/%m/%Y').date())
+            cantidad_entry.delete(0, tk.END)
+            cantidad_entry.insert(0, valores[7])
+            observaciones_entry.delete(0, tk.END)
+            if valores[10]:
+                observaciones_entry.insert(0, valores[10])
 
-        def set_distrito():
-            edit_distrito_var.set(distrito_actual)
+            # Salida nivel inferior
+            edit_salida_distrito_var.set(valores[8] if valores[8] else '')
+            edit_salida_tipo_servicio_var.set('')
+            edit_salida_servicio_var.set(valores[9] if valores[9] else '')
 
-            def cargar_tipo_servicio():
-                edit_tipo_servicio_var.set(self.tipo_servicio_var.get())
-
-                def cargar_servicio():
-                    edit_servicio_var.set(self.servicio_var.get())
-
-                    def cargar_resto_valores():
-                        edit_tipo_insumo_var.set(self.tipo_insumo_var.get())
-
-                        def cargar_insumo():
-                            edit_insumo_var.set(valores[3])
-                            edit_presentacion_var.set(valores[4])
-
-                            fecha_actual = datetime.strptime(valores[0], '%d/%m/%Y').date()
-                            fecha_edit.set_date(fecha_actual)
-                            referencia_entry.delete(0, tk.END)
-                            referencia_entry.insert(0, valores[1])
-                            edit_tipo_movimiento_var.set(valores[2])
-                            lote_entry.delete(0, tk.END)
-                            lote_entry.insert(0, valores[5])
-                            fecha_venc = datetime.strptime(valores[6], '%d/%m/%Y').date()
-                            fecha_venc_edit.set_date(fecha_venc)
-                            cantidad_entry.delete(0, tk.END)
-                            cantidad_entry.insert(0, valores[7])
-                            if valores[8]:
-                                observaciones_entry.insert(0, valores[8])
-
-                        editar_ventana.after(100, cargar_insumo)
-
-                    editar_ventana.after(100, cargar_resto_valores)
-
-                editar_ventana.after(100, cargar_servicio)
-
-            editar_ventana.after(150, set_distrito)
-
-        editar_ventana.after(150, set_distrito)
+            # Actualizar estado combos y frame salida
+            actualizar_estado_comboboxes_edit()
+            actualizar_estado_salida_nivel_inferior_edit()
+        
+        editar_ventana.after(100, cargar_datos_iniciales)
+        
+        frame_salida_nivel_inferior_edit.pack(fill="x", pady=5)
 
         # Botones Guardar y Cerrar
+        frame_botones = ttk.Frame(main_frame)
+        frame_botones.pack(pady=10)
+        
         def guardar_cambios():
             try:
                 nuevos_valores = (
                     fecha_edit.get_date().strftime('%d/%m/%Y'),
-                    referencia_entry.get(),
+                    referencia_entry.get().upper(),
                     edit_tipo_movimiento_var.get(),
                     edit_insumo_var.get(),
                     edit_presentacion_var.get(),
-                    lote_entry.get(),
+                    lote_entry.get().upper(),
                     fecha_venc_edit.get_date().strftime('%d/%m/%Y'),
                     cantidad_entry.get(),
-                    observaciones_entry.get()
+                    edit_salida_distrito_var.get(),
+                    edit_salida_servicio_var.get(),
+                    observaciones_entry.get().upper()
                 )
 
                 if not all(nuevos_valores[:8]):
@@ -598,6 +974,22 @@ class IngresoInsumos:
 
         ttk.Button(frame_botones, text="Guardar", command=guardar_cambios).pack(side="left", padx=5)
         ttk.Button(frame_botones, text="Cerrar", command=editar_ventana.destroy).pack(side="left", padx=5)
+
+    # Método auxiliar para actualizar distritos al cambiar área en edición
+    def on_area_selected_edit(self, area_var, distrito_var, distrito_cb):
+        area_nombre = area_var.get()
+        areas = obtener_areas() or []
+        area_id = next((a['id'] for a in areas if a['nombre'] == area_nombre), None)
+
+        if area_id:
+            distritos = obtener_distritos_por_area(area_id) or []
+            distritos_nombres = [d['nombre'] for d in distritos]
+            distrito_cb.set_completion_list(distritos_nombres)
+            if distrito_var.get() not in distritos_nombres:
+                distrito_var.set('')
+        else:
+            distrito_cb.set_completion_list([])
+            distrito_var.set('')
 
     def eliminar_movimiento(self):
         selected_item = self.tree.selection()
@@ -634,6 +1026,12 @@ class IngresoInsumos:
 
                 fecha_registro = datetime.strptime(valores[0], '%d/%m/%Y')
                 fecha_vencimiento = datetime.strptime(valores[6], '%d/%m/%Y')
+                
+                salida_distrito_id = None
+                salida_servicio_id = None
+                if valores[2].strip().upper() == "SALIDA NIVEL INFERIOR":
+                    salida_distrito_id = obtener_id_distrito(valores[8])
+                    salida_servicio_id = obtener_id_servicio(valores[9])
 
                 movimiento_data = {
                     'fecha_registro': fecha_registro,
@@ -648,7 +1046,9 @@ class IngresoInsumos:
                     'lote': valores[5],
                     'fecha_vencimiento': fecha_vencimiento,
                     'cantidad': float(valores[7]),
-                    'observaciones': valores[8] if valores[8] else None
+                    'salida_distrito_id': salida_distrito_id,
+                    'salida_servicio_id': salida_servicio_id,
+                    'observaciones': valores[10] if valores[10] else None
                 }
 
                 guardar_movimiento(movimiento_data)
