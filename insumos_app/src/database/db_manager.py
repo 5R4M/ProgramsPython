@@ -812,10 +812,6 @@ def verificar_tablas():
 def obtener_movimientos_kardex(fecha_inicio, fecha_fin, distrito_nombre=None, tipo_servicio_desc=None,
                                servicio_nombre=None, tipo_insumo_desc=None, insumo_nombre=None,
                                presentacion_nombre=None):
-    """
-    Obtiene movimientos para el reporte Kardex filtrando por fechas y otros parámetros opcionales.
-    Las fechas deben estar en formato 'YYYY-MM-DD'.
-    """
     conn = conectar_db()
     if not conn:
         return []
@@ -823,24 +819,24 @@ def obtener_movimientos_kardex(fecha_inicio, fecha_fin, distrito_nombre=None, ti
     try:
         cursor = conn.cursor()
 
-        # Construir consulta base con joins necesarios
         query = """
             SELECT
                 m.fecha_registro AS fecha,
                 m.referencia,
                 tm.descripcion AS tipo_movimiento,
-                m.cantidad AS entrada,
+                m.cantidad,
                 m.lote,
                 m.fecha_vencimiento,
-                COALESCE(m.salida, 0) AS salida,
-                COALESCE(m.reajuste, 0) AS reajuste,
-                m.saldo,
-                m.observaciones
+                m.observaciones,
+                d_salida.nombre AS distrito_destino,
+                s_salida.nombre AS servicio_destino
             FROM movimiento m
             JOIN tipo_movimiento tm ON m.tipo_movimiento_id = tm.id
             LEFT JOIN servicio s ON m.servicio_id = s.id
             LEFT JOIN tipo_servicio ts ON s.id_tipo_servicio = ts.id
             LEFT JOIN distrito d ON ts.id_distrito = d.id
+            LEFT JOIN distrito d_salida ON m.salida_distrito_id = d_salida.id
+            LEFT JOIN servicio s_salida ON m.salida_servicio_id = s_salida.id
             LEFT JOIN insumo i ON m.insumo_id = i.id
             LEFT JOIN tipo_insumo ti ON i.id_tipo_insumo = ti.id
             LEFT JOIN insumo_presentacion ip ON i.id = ip.insumo_id
@@ -849,8 +845,6 @@ def obtener_movimientos_kardex(fecha_inicio, fecha_fin, distrito_nombre=None, ti
         """
 
         params = [fecha_inicio, fecha_fin]
-
-        # Filtros opcionales
         if distrito_nombre:
             query += " AND d.nombre = ?"
             params.append(distrito_nombre)
@@ -870,27 +864,57 @@ def obtener_movimientos_kardex(fecha_inicio, fecha_fin, distrito_nombre=None, ti
             query += " AND p.nombre = ?"
             params.append(presentacion_nombre)
 
-        query += " ORDER BY m.fecha_registro ASC"
+        query += " ORDER BY m.fecha_registro ASC, m.id ASC"
 
         cursor.execute(query, params)
         resultados = cursor.fetchall()
 
-        # Convertir a lista de diccionarios para facilitar uso
+        # Cálculo de saldo acumulado
+        saldo = 0
         movimientos = []
         for row in resultados:
+            tipo = row['tipo_movimiento'].upper()
+            cantidad = float(row['cantidad']) if row['cantidad'] else 0
+
+            # Determinar el destinatario para SALIDA NIVEL INFERIOR
+            destinatario = row['tipo_movimiento']
+            if tipo == 'SALIDA NIVEL INFERIOR':
+                if row['distrito_destino']:
+                    destinatario = f"Distrito: {row['distrito_destino']}"
+                elif row['servicio_destino']:
+                    destinatario = f"Servicio: {row['servicio_destino']}"
+
+            entrada = cantidad if tipo in ['INVENTARIO INICIAL', 'ENTRADA NIVEL SUPERIOR'] else 0
+
+            # Formatear salida con tipo de movimiento
+            if tipo in ['SALIDA NIVEL INFERIOR', 'ENTREGADO']:
+                salida = f"{cantidad:.2f} ({tipo.title()})"
+            else:
+                salida = ""
+
+            reajuste = cantidad if tipo == 'REAJUSTE POSITIVO' else (-cantidad if tipo == 'REAJUSTE NEGATIVO' else 0)
+            cantidad_col = cantidad if tipo not in ['NO ENTREGADO'] else 0
+
+            if tipo in ['INVENTARIO INICIAL', 'ENTRADA NIVEL SUPERIOR', 'REAJUSTE POSITIVO']:
+                saldo += cantidad
+            elif tipo in ['SALIDA NIVEL INFERIOR', 'ENTREGADO', 'REAJUSTE NEGATIVO']:
+                saldo -= cantidad
+
             movimientos.append({
                 'fecha': row['fecha'],
                 'referencia': row['referencia'],
-                'tipo_movimiento': row['tipo_movimiento'],
-                'entrada': row['entrada'],
+                'tipo_movimiento': destinatario,  
+                'entrada': entrada,
+                'precio_unitario': "",    
+                'valor_total': "",       
                 'lote': row['lote'],
                 'fecha_vencimiento': row['fecha_vencimiento'],
-                'salida': row['salida'],
-                'reajuste': row['reajuste'],
-                'saldo': row['saldo'],
+                'salida': salida,         
+                'reajuste': reajuste,
+                'cantidad_col': cantidad_col,
+                'saldo': saldo,
                 'observaciones': row['observaciones']
             })
-
         return movimientos
 
     except sqlite3.Error as e:
