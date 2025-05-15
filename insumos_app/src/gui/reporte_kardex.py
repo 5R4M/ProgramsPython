@@ -127,15 +127,15 @@ class ReporteKardex:
         # Frame para botones
         self.frame_botones = ttk.Frame(self.frame_principal)
         self.frame_botones.pack(fill="x", pady=10)
-        
-        # Crear un frame para contener los botones y usar grid dentro de él
+
         botones_grid = ttk.Frame(self.frame_botones)
         botones_grid.pack(fill="x")
-        
+
         ttk.Button(botones_grid, text="Generar Vista Previa", command=self.generar_vista_previa).grid(row=0, column=0, padx=5)
-        ttk.Button(botones_grid, text="Exportar a PDF", command=self.generar_pdf).grid(row=0, column=1, padx=5)
-        ttk.Button(botones_grid, text="Exportar a Excel", command=self.generar_kardex).grid(row=0, column=2, padx=5)
-        ttk.Button(botones_grid, text="Cerrar", command=self.cerrar_ventana).grid(row=0, column=3, padx=5)
+        ttk.Button(botones_grid, text="Imprimir", command=self.imprimir_pdf).grid(row=0, column=1, padx=5)
+        ttk.Button(botones_grid, text="Exportar a PDF", command=self.generar_pdf).grid(row=0, column=2, padx=5)
+        ttk.Button(botones_grid, text="Exportar a Excel", command=self.generar_kardex).grid(row=0, column=3, padx=5)
+        ttk.Button(botones_grid, text="Cerrar", command=self.cerrar_ventana).grid(row=0, column=4, padx=5)
 
         # Vincular eventos de cambio
         self.combo_area.bind('<<ComboboxSelected>>', self.cargar_distritos_por_area)
@@ -332,241 +332,11 @@ class ReporteKardex:
                 display_page()
                 page_label.config(text=f"Página {self.current_page + 1} de {self.total_pages}")
 
-            def show_print_options():
-                # Crear ventana de opciones de impresión
-                print_window = tk.Toplevel(self.parent)
-                print_window.title("Opciones de Impresión")
-                print_window.geometry("450x470")
-                print_window.resizable(False, False)
-                print_window.transient(self.parent)  # Hacer que sea modal
-                print_window.grab_set()  # Bloquear otras ventanas
-
-                # Centrar la ventana
-                print_window.update_idletasks()
-                width = print_window.winfo_width()
-                height = print_window.winfo_height()
-                x = (print_window.winfo_screenwidth() // 2) - (width // 2)
-                y = (print_window.winfo_screenheight() // 2) - (height // 2)
-                print_window.geometry('{}x{}+{}+{}'.format(width, height, x, y))
-
-                # Frame principal
-                main_frame = ttk.Frame(print_window, padding=20)
-                main_frame.pack(fill="both", expand=True)
-
-                # Título
-                ttk.Label(main_frame, text="Configuración de Impresión", font=("Helvetica", 12, "bold")).pack(pady=10)
-
-                # Frame para opciones de página
-                page_frame = ttk.LabelFrame(main_frame, text="Opciones de Página", padding=10)
-                page_frame.pack(fill="x", pady=10)
-
-                # Variables para opciones de página
-                orientation_var = tk.StringVar(value="Horizontal")
-                copies_var = tk.StringVar(value="1")
-                all_pages_var = tk.BooleanVar(value=True)
-                page_range_var = tk.StringVar(value=f"1-{self.total_pages}")
-
-                # Orientación
-                ttk.Label(page_frame, text="Orientación:").grid(row=0, column=0, sticky="w", pady=5)
-                ttk.Radiobutton(page_frame, text="Horizontal", variable=orientation_var, value="Horizontal").grid(row=0, column=1, sticky="w")
-                ttk.Radiobutton(page_frame, text="Vertical", variable=orientation_var, value="Vertical").grid(row=0, column=2, sticky="w")
-
-                # Copias
-                ttk.Label(page_frame, text="Número de copias:").grid(row=1, column=0, sticky="w", pady=5)
-                copies_spinbox = ttk.Spinbox(page_frame, from_=1, to=10, textvariable=copies_var, width=5)
-                copies_spinbox.grid(row=1, column=1, sticky="w")
-
-                # Rango de páginas
-                ttk.Radiobutton(page_frame, text="Todas las páginas", variable=all_pages_var, value=True).grid(row=2, column=0, sticky="w", pady=5)
-                ttk.Radiobutton(page_frame, text="Rango:", variable=all_pages_var, value=False).grid(row=3, column=0, sticky="w")
-
-                range_entry = ttk.Entry(page_frame, textvariable=page_range_var, width=15)
-                range_entry.grid(row=3, column=1, sticky="w")
-                ttk.Label(page_frame, text="(ej: 1-5, 8, 11-13)").grid(row=3, column=2, sticky="w")
-
-                # Frame para selección de impresora
-                printer_frame = ttk.LabelFrame(main_frame, text="Impresora", padding=10)
-                printer_frame.pack(fill="x", pady=10)
-
-                # Obtener lista de impresoras disponibles
-                import subprocess
-                import re
-
-                # Función para obtener impresoras en Windows
-                def get_printers():
-                    try:
-                        # Intentar obtener impresoras con wmic (Windows)
-                        result = subprocess.run(['wmic', 'printer', 'get', 'name'],
-                                            capture_output=True, text=True, check=False)
-                        if result.returncode == 0:
-                            printers = result.stdout.strip().split('\n')[1:]  # Omitir la primera línea (encabezado)
-                            return [p.strip() for p in printers if p.strip()]
-                        else:
-                            # Alternativa: usar lpstat (Linux/macOS)
-                            result = subprocess.run(['lpstat', '-p'], capture_output=True, text=True, check=False)
-                            if result.returncode == 0:
-                                pattern = r'printer (.*) is'
-                                printers = re.findall(pattern, result.stdout)
-                                return printers
-                    except Exception:
-                        pass
-
-                    # Si todo falla, devolver una lista predeterminada
-                    return ["Impresora predeterminada"]
-
-                # Obtener impresoras
-                printers = get_printers()
-
-                # Variable para la impresora seleccionada
-                printer_var = tk.StringVar(value=printers[0] if printers else "Impresora predeterminada")
-
-                # Combobox para seleccionar impresora
-                ttk.Label(printer_frame, text="Seleccione impresora:").pack(anchor="w", pady=5)
-                printer_combo = ttk.Combobox(printer_frame, textvariable=printer_var, state="readonly", width=40)
-                printer_combo['values'] = printers
-                printer_combo.pack(fill="x", pady=5)
-
-                # Frame para botones
-                button_frame = ttk.Frame(main_frame)
-                button_frame.pack(fill="x", pady=20)
-
-                # Función para imprimir
-                def print_document():
-                    try:
-                        # Crear una copia temporal del PDF con la orientación correcta
-                        import fitz  # PyMuPDF
-                        import tempfile
-                        import os
-                        import subprocess
-                        import shutil
-
-                        # Crear un nuevo archivo temporal para el PDF modificado
-                        temp_dir = tempfile.gettempdir()
-                        modified_pdf_path = os.path.join(temp_dir, "modified_kardex.pdf")
-
-                        # Abrir el PDF original
-                        doc = fitz.open(self.temp_pdf_path)
-
-                        # Modificar la orientación según la selección
-                        for page in doc:
-                            if orientation_var.get() == "Vertical":
-                                # Rotar 90 grados si se seleccionó vertical (el PDF original es horizontal)
-                                page.set_rotation(90)
-                            else:
-                                # Mantener orientación horizontal (predeterminada)
-                                page.set_rotation(0)
-
-                        # Guardar el PDF modificado
-                        doc.save(modified_pdf_path)
-                        doc.close()
-
-                        # Obtener el número de copias
-                        copies = int(copies_var.get())
-
-                        # Obtener la impresora seleccionada
-                        printer = printer_var.get()
-
-                        # Mostrar mensaje de espera
-                        wait_window = tk.Toplevel(print_window)
-                        wait_window.title("Imprimiendo")
-                        wait_window.geometry("300x100")
-                        wait_window.transient(print_window)
-                        wait_window.grab_set()
-
-                        # Centrar ventana de espera
-                        wait_window.update_idletasks()
-                        w_width = wait_window.winfo_width()
-                        w_height = wait_window.winfo_height()
-                        w_x = (wait_window.winfo_screenwidth() // 2) - (w_width // 2)
-                        w_y = (wait_window.winfo_screenheight() // 2) - (w_height // 2)
-                        wait_window.geometry('{}x{}+{}+{}'.format(w_width, w_height, w_x, w_y))
-
-                        ttk.Label(wait_window, text="Enviando documento a la impresora...\nPor favor espere.",
-                                justify="center").pack(pady=20)
-                        wait_window.update()
-
-                        success = False
-                        error_messages = []
-
-                        # Lista de comandos de impresión a intentar
-                        print_commands = [
-                            # 1. lpr - Comando estándar de impresión en Linux
-                            lambda: subprocess.run(
-                                ['lpr', '-P', printer, '-#', str(copies), modified_pdf_path] if printer != "Impresora predeterminada"
-                                else ['lpr', '-#', str(copies), modified_pdf_path],
-                                check=True
-                            ),
-
-                            # 2. lp - Alternativa a lpr en algunos sistemas
-                            lambda: subprocess.run(
-                                ['lp', '-d', printer, '-n', str(copies), modified_pdf_path] if printer != "Impresora predeterminada"
-                                else ['lp', '-n', str(copies), modified_pdf_path],
-                                check=True
-                            ),
-
-                            # 3. cupsdoprint - Otra alternativa
-                            lambda: subprocess.run(
-                                ['cupsdoprint', '-P', printer, '-n', str(copies), modified_pdf_path] if printer != "Impresora predeterminada"
-                                else ['cupsdoprint', '-n', str(copies), modified_pdf_path],
-                                check=True
-                            ),
-
-                            # 4. Usar evince para imprimir (visor de PDF común en Linux)
-                            lambda: subprocess.run(
-                                ['evince', '--print-settings', f"copies={copies}", '--print', modified_pdf_path],
-                                check=True
-                            )
-                        ]
-
-                        # Intentar cada comando hasta que uno funcione
-                        for cmd_func in print_commands:
-                            try:
-                                cmd_func()
-                                success = True
-                                break
-                            except Exception as e:
-                                error_messages.append(str(e))
-                                continue
-
-                        # Cerrar ventana de espera
-                        wait_window.destroy()
-
-                        if success:
-                            messagebox.showinfo("Impresión", "Documento enviado a la impresora")
-                            print_window.destroy()
-                        else:
-                            # Si todos los métodos fallan, ofrecer abrir el PDF manualmente
-                            error_detail = "\n".join(error_messages)
-                            if messagebox.askyesno("Error de impresión",
-                                                f"No se pudo imprimir automáticamente.\n\n¿Desea abrir el PDF para imprimirlo manualmente?"):
-                                # Intentar abrir con varios métodos
-                                try:
-                                    # Intentar con xdg-open primero (estándar en Linux)
-                                    if shutil.which('xdg-open'):
-                                        subprocess.run(['xdg-open', modified_pdf_path])
-                                    # Si no está disponible, intentar con el módulo webbrowser
-                                    else:
-                                        import webbrowser
-                                        webbrowser.open('file://' + os.path.abspath(modified_pdf_path))
-                                except Exception as e:
-                                    messagebox.showerror("Error", f"No se pudo abrir el PDF: {str(e)}")
-
-                    except Exception as e:
-                        messagebox.showerror("Error", f"Error al preparar el documento: {str(e)}")
-
-                # Botones
-                ttk.Button(button_frame, text="Imprimir", width=10, command=print_document).pack(side="right", padx=5)
-                ttk.Button(button_frame, text="Cancelar", width=10, command=print_window.destroy).pack(side="right", padx=5)
-
             # Botones de navegación
             ttk.Button(control_frame, text="<<", command=lambda: change_page(-1)).pack(side="left", padx=5)
             page_label = ttk.Label(control_frame, text=f"Página 1 de {self.total_pages}")
             page_label.pack(side="left", padx=10)
             ttk.Button(control_frame, text=">>", command=lambda: change_page(1)).pack(side="left", padx=5)
-
-            # Botón de impresión - Agregar texto junto al ícono
-            print_button = ttk.Button(control_frame, text="🖨️ Imprimir", command=show_print_options)
-            print_button.pack(side="right", padx=10)
 
             # Función para mostrar la página actual
             def display_page():
@@ -607,6 +377,22 @@ class ReporteKardex:
                 f"Error al generar vista previa:\n{str(e)}\n\nPor favor, verifique los datos e intente nuevamente."
             )
 
+    def imprimir_pdf(self):
+        try:
+            import os
+            import sys
+            if not hasattr(self, 'temp_pdf_path') or not os.path.exists(self.temp_pdf_path):
+                messagebox.showerror("Error", "Primero debe generar la vista previa del PDF.")
+                return
+            if sys.platform.startswith('win'):
+                os.startfile(self.temp_pdf_path)
+            elif sys.platform.startswith('darwin'):
+                os.system(f'open "{self.temp_pdf_path}"')
+            else:
+                os.system(f'xdg-open "{self.temp_pdf_path}"')
+        except Exception as e:
+            messagebox.showerror("Error", f"No se pudo abrir el PDF: {str(e)}")
+    
     def generar_pdf(self, ruta_pdf, es_vista_previa=False):
         if not self.movimientos_data:
             messagebox.showwarning("Advertencia", "No hay datos para mostrar")
