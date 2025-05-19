@@ -1,4 +1,5 @@
 # Imports existentes
+from calendar import month_name
 import tkinter as tk
 from tkinter import ttk, messagebox
 from tkcalendar import DateEntry
@@ -49,6 +50,11 @@ class ReporteKardex:
         self.main_window = main_window
         self.movimientos_data = None
         
+        # Crear estilos para los frames
+        style = ttk.Style()
+        style.configure('Enabled.TFrame', background='white')
+        style.configure('Disabled.TFrame', background='#f0f0f0')
+        
         self.areas = []
         self.distritos = []       
         self.tipos_servicio = []  
@@ -58,22 +64,124 @@ class ReporteKardex:
         
         self.setup_ui()
 
+    import locale
+
+    # Intentar establecer el locale a español
+    try:
+        locale.setlocale(locale.LC_TIME, 'es_ES.UTF-8')  # Linux
+    except locale.Error:
+        try:
+            locale.setlocale(locale.LC_TIME, 'es_ES')  # Otro sistema
+        except locale.Error:
+            try:
+                locale.setlocale(locale.LC_TIME, 'spanish')  # Windows
+            except locale.Error:
+                print("No se pudo establecer el locale a español")
+
     def setup_ui(self):
         # Frame principal - USAR PACK PARA TODO
         self.frame_principal = ttk.LabelFrame(self.parent, text="Filtros de Reporte")
         self.frame_principal.pack(fill="both", expand=True, padx=10, pady=5)
 
         # Frame para fechas
-        self.frame_fechas = ttk.Frame(self.frame_principal)
+        self.frame_fechas = ttk.LabelFrame(self.frame_principal, text="Selección de Fechas/Corte Logístico")
         self.frame_fechas.pack(fill="x", padx=5, pady=5)
-        
-        # Grid DENTRO del frame_fechas (esto es válido)
-        ttk.Label(self.frame_fechas, text="Fecha Inicial:").grid(row=0, column=0, padx=5)
-        self.fecha_inicial = DateEntry(self.frame_fechas, width=12, date_pattern='dd/mm/yyyy')
-        self.fecha_inicial.grid(row=0, column=1, padx=5)
-        ttk.Label(self.frame_fechas, text="Fecha Final:").grid(row=0, column=2, padx=5)
-        self.fecha_final = DateEntry(self.frame_fechas, width=12, date_pattern='dd/mm/yyyy')
-        self.fecha_final.grid(row=0, column=3, padx=5)
+
+        # Modo de selección de fechas
+        self.modo_fecha_var = tk.StringVar(value="rango")
+
+        # Frame para rango de fechas
+        self.frame_rango = ttk.Frame(self.frame_fechas)
+        self.frame_rango.pack(fill="x", padx=5, pady=2)
+
+        # Radiobutton y controles para rango de fechas
+        self.radio_rango = ttk.Radiobutton(
+            self.frame_rango,
+            text="Rango de Fechas:",
+            variable=self.modo_fecha_var,
+            value="rango",
+            command=self.actualizar_visibilidad_fechas
+        )
+        self.radio_rango.grid(row=0, column=0, padx=5, sticky='w')
+
+        ttk.Label(self.frame_rango, text="Fecha Inicial:").grid(row=0, column=1, padx=5)
+        self.fecha_inicial = DateEntry(
+            self.frame_rango,
+            width=12,
+            date_pattern='dd/mm/yyyy',
+            state='normal'  # Aseguramos que sea editable
+        )
+        self.fecha_inicial.grid(row=0, column=2, padx=5)
+
+        ttk.Label(self.frame_rango, text="Fecha Final:").grid(row=0, column=3, padx=5)
+        self.fecha_final = DateEntry(
+            self.frame_rango,
+            width=12,
+            date_pattern='dd/mm/yyyy',
+            state='normal'  # Aseguramos que sea editable
+        )
+        self.fecha_final.grid(row=0, column=4, padx=5)
+
+        # Frame para corte logístico
+        self.frame_corte = ttk.Frame(self.frame_fechas)
+        self.frame_corte.pack(fill="x", padx=5, pady=2)
+
+        # Radiobutton y controles para corte logístico
+        self.radio_corte = ttk.Radiobutton(
+            self.frame_corte,
+            text="Corte Logístico:",
+            variable=self.modo_fecha_var,
+            value="corte",
+            command=self.actualizar_visibilidad_fechas
+        )
+        self.radio_corte.grid(row=0, column=0, padx=5, sticky='w')
+
+        # Año
+        ttk.Label(self.frame_corte, text="Año:").grid(row=0, column=1, padx=5)
+        self.anio_var = tk.StringVar()
+        anios = [str(a) for a in range(datetime.now().year - 5, datetime.now().year + 2)]
+        self.combo_anio = ttk.Combobox(
+            self.frame_corte,
+            textvariable=self.anio_var,
+            values=anios,
+            width=8
+        )
+        self.combo_anio.grid(row=0, column=2, padx=5)
+        self.combo_anio.set(str(datetime.now().year))  # Año actual por defecto
+
+        # Mes inicio
+        ttk.Label(self.frame_corte, text="Mes Inicio:").grid(row=0, column=3, padx=5)
+        self.mes_inicio_var = tk.StringVar()
+
+        # Obtener nombres de meses en español
+        meses = [datetime(2024, m, 1).strftime("%B").capitalize() for m in range(1, 13)]
+
+        self.combo_mes_inicio = ttk.Combobox(
+            self.frame_corte,
+            textvariable=self.mes_inicio_var,
+            values=meses,
+            width=12
+        )
+        self.combo_mes_inicio.grid(row=0, column=4, padx=5)
+
+        # Mes final
+        ttk.Label(self.frame_corte, text="Mes Final:").grid(row=0, column=5, padx=5)
+        self.mes_final_var = tk.StringVar()
+        self.combo_mes_final = ttk.Combobox(
+            self.frame_corte,
+            textvariable=self.mes_final_var,
+            values=meses,
+            width=12
+        )
+        self.combo_mes_final.grid(row=0, column=6, padx=5)
+
+        # Eventos para actualizar fechas
+        self.combo_anio.bind('<<ComboboxSelected>>', self.actualizar_fechas_por_corte)
+        self.combo_mes_inicio.bind('<<ComboboxSelected>>', self.actualizar_fechas_por_corte)
+        self.combo_mes_final.bind('<<ComboboxSelected>>', self.actualizar_fechas_por_corte)
+
+        # Inicializar visibilidad
+        self.actualizar_visibilidad_fechas()
 
         # Frame para combos
         self.frame_combos = ttk.Frame(self.frame_principal)
@@ -133,7 +241,7 @@ class ReporteKardex:
 
         ttk.Button(botones_grid, text="Generar Vista Previa", command=self.generar_vista_previa).grid(row=0, column=0, padx=5)
         ttk.Button(botones_grid, text="Imprimir", command=self.imprimir_pdf).grid(row=0, column=1, padx=5)
-        ttk.Button(botones_grid, text="Exportar a PDF", command=self.generar_pdf).grid(row=0, column=2, padx=5)
+        ttk.Button(botones_grid, text="Exportar a PDF", command=self.exportar_pdf).grid(row=0, column=2, padx=5)
         ttk.Button(botones_grid, text="Exportar a Excel", command=self.generar_kardex).grid(row=0, column=3, padx=5)
         ttk.Button(botones_grid, text="Cerrar", command=self.cerrar_ventana).grid(row=0, column=4, padx=5)
 
@@ -150,6 +258,91 @@ class ReporteKardex:
         self.combo_distrito.set_completion_list([''])
         self.cargar_tipos_insumo()
         self.cargar_presentaciones()
+        
+    def actualizar_visibilidad_fechas(self):
+        modo = self.modo_fecha_var.get()
+        if modo == "rango":
+            # Habilitar DateEntry
+            self.fecha_inicial.config(state="normal")
+            self.fecha_final.config(state="normal")
+
+            # Deshabilitar combos de corte
+            self.combo_anio.config(state="disabled")
+            self.combo_mes_inicio.config(state="disabled")
+            self.combo_mes_final.config(state="disabled")
+
+            # Resaltar visualmente el frame activo
+            self.frame_rango.configure(style='Enabled.TFrame')
+            self.frame_corte.configure(style='Disabled.TFrame')
+        else:
+            # Deshabilitar DateEntry
+            self.fecha_inicial.config(state="disabled")
+            self.fecha_final.config(state="disabled")
+
+            # Habilitar combos de corte
+            self.combo_anio.config(state="readonly")
+            self.combo_mes_inicio.config(state="readonly")
+            self.combo_mes_final.config(state="readonly")
+
+            # Resaltar visualmente el frame activo
+            self.frame_rango.configure(style='Disabled.TFrame')
+            self.frame_corte.configure(style='Enabled.TFrame')
+
+        # Forzar actualización visual
+        self.frame_fechas.update()
+    
+    def calcular_rango_corte_logistico(self, anio, mes_inicio, mes_final):
+        """
+        Calcula el rango de fechas para el corte logístico.
+        Retorna (fecha_inicial, fecha_final) en formato dd/mm/yyyy
+        """
+        # Diccionario de meses en español a números
+        meses_a_numero = {
+            'Enero': 1, 'Febrero': 2, 'Marzo': 3, 'Abril': 4,
+            'Mayo': 5, 'Junio': 6, 'Julio': 7, 'Agosto': 8,
+            'Septiembre': 9, 'Octubre': 10, 'Noviembre': 11, 'Diciembre': 12
+        }
+
+        # Convertir nombres de meses a números
+        m_ini = meses_a_numero.get(mes_inicio)
+        m_fin = meses_a_numero.get(mes_final)
+
+        if not (m_ini and m_fin):
+            raise ValueError("Mes inicio y mes final deben ser válidos")
+
+        try:
+            anio = int(anio)
+        except ValueError:
+            raise ValueError("Año debe ser un número válido")
+
+        # Calcular fecha inicial (26 del mes anterior)
+        if m_ini == 1:  # Si es enero, el mes anterior es diciembre del año anterior
+            fecha_ini = datetime(anio - 1, 12, 26)
+        else:
+            fecha_ini = datetime(anio, m_ini - 1, 26)
+
+        # Calcular fecha final (25 del mes actual)
+        fecha_fin = datetime(anio, m_fin, 25)
+
+        return fecha_ini.strftime('%d/%m/%Y'), fecha_fin.strftime('%d/%m/%Y')
+    
+    def actualizar_fechas_por_corte(self, event=None):
+        """
+        Actualiza las fechas en los DateEntry cuando se selecciona año y meses
+        """
+        try:
+            anio = self.anio_var.get()
+            mes_inicio = self.mes_inicio_var.get()
+            mes_final = self.mes_final_var.get()
+
+            if anio and mes_inicio and mes_final:
+                fecha_ini, fecha_fin = self.calcular_rango_corte_logistico(anio, mes_inicio, mes_final)
+
+                # Actualizar los DateEntry
+                self.fecha_inicial.set_date(datetime.strptime(fecha_ini, '%d/%m/%Y'))
+                self.fecha_final.set_date(datetime.strptime(fecha_fin, '%d/%m/%Y'))
+        except Exception as e:
+            messagebox.showerror("Error", f"Error al calcular fechas: {str(e)}")
             
     def cargar_areas(self):
         self.areas = obtener_areas()
@@ -240,10 +433,26 @@ class ReporteKardex:
 
     def generar_vista_previa(self):
         try:
-            # Validar fechas
-            fecha_ini = datetime.strptime(self.fecha_inicial.get(), '%d/%m/%Y')
-            fecha_fin = datetime.strptime(self.fecha_final.get(), '%d/%m/%Y')
+            # Obtener fechas según el modo seleccionado
+            if self.modo_fecha_var.get() == "rango":
+                fecha_ini = datetime.strptime(self.fecha_inicial.get(), '%d/%m/%Y')
+                fecha_fin = datetime.strptime(self.fecha_final.get(), '%d/%m/%Y')
+            else:
+                anio = self.anio_var.get()
+                mes_inicio = self.mes_inicio_var.get()
+                mes_final = self.mes_final_var.get()
 
+                if not all([anio, mes_inicio, mes_final]):
+                    messagebox.showerror("Error", "Debe seleccionar Año, Mes Inicio y Mes Final")
+                    return
+
+                fecha_ini_str, fecha_fin_str = self.calcular_rango_corte_logistico(
+                    anio, mes_inicio, mes_final
+                )
+                fecha_ini = datetime.strptime(fecha_ini_str, '%d/%m/%Y')
+                fecha_fin = datetime.strptime(fecha_fin_str, '%d/%m/%Y')
+
+            # Validar fechas
             if fecha_fin < fecha_ini:
                 messagebox.showerror("Error", "La fecha final debe ser mayor a la inicial")
                 return
@@ -371,7 +580,7 @@ class ReporteKardex:
             # Capturar y mostrar cualquier error que ocurra
             import traceback
             error_detallado = traceback.format_exc()
-            print(f"Error detallado:\n{error_detallado}")  # Para debugging
+            print(f"Error detallado:\n{error_detallado}")  # Para deb
             messagebox.showerror(
                 "Error",
                 f"Error al generar vista previa:\n{str(e)}\n\nPor favor, verifique los datos e intente nuevamente."
@@ -392,6 +601,85 @@ class ReporteKardex:
                 os.system(f'xdg-open "{self.temp_pdf_path}"')
         except Exception as e:
             messagebox.showerror("Error", f"No se pudo abrir el PDF: {str(e)}")
+    
+    def exportar_pdf(self):
+        try:
+            import os  # Importar os al inicio del método
+
+            # Obtener fechas según el modo seleccionado
+            if self.modo_fecha_var.get() == "rango":
+                fecha_ini = datetime.strptime(self.fecha_inicial.get(), '%d/%m/%Y')
+                fecha_fin = datetime.strptime(self.fecha_final.get(), '%d/%m/%Y')
+                periodo = f"{fecha_ini.strftime('%d%m%Y')}_{fecha_fin.strftime('%d%m%Y')}"  # Formato para rango
+            else:
+                anio = self.anio_var.get()
+                mes_inicio = self.mes_inicio_var.get()
+                mes_final = self.mes_final_var.get()
+
+                if not all([anio, mes_inicio, mes_final]):
+                    messagebox.showerror("Error", "Debe seleccionar Año, Mes Inicio y Mes Final")
+                    return
+
+                fecha_ini_str, fecha_fin_str = self.calcular_rango_corte_logistico(
+                    anio, mes_inicio, mes_final
+                )
+                fecha_ini = datetime.strptime(fecha_ini_str, '%d/%m/%Y')
+                fecha_fin = datetime.strptime(fecha_fin_str, '%d/%m/%Y')
+                periodo = f"{mes_inicio}_{mes_final}_{anio}"  # Formato para corte
+
+            # Validar fechas
+            if fecha_fin < fecha_ini:
+                messagebox.showerror("Error", "La fecha final debe ser mayor a la inicial")
+                return
+
+            # Validar selección de insumo
+            if not self.combo_insumo.get():
+                messagebox.showerror("Error", "Debe seleccionar un insumo")
+                return
+
+            # Obtener datos si no existen
+            if not self.movimientos_data:
+                self.movimientos_data = obtener_movimientos_kardex(
+                    fecha_ini.strftime('%Y-%m-%d'),
+                    fecha_fin.strftime('%Y-%m-%d'),
+                    self.combo_distrito.get(),
+                    self.combo_tipo_servicio.get(),
+                    self.combo_servicio.get(),
+                    self.combo_tipo_insumo.get(),
+                    self.combo_insumo.get(),
+                    self.combo_presentacion.get()
+                )
+
+            if not self.movimientos_data:
+                messagebox.showinfo("Info", "No hay datos para mostrar")
+                return
+
+            # Generar nombre de archivo con fecha y hora
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            file_name = f"Reporte_Kardex_{periodo}_{timestamp}.pdf"  # Incluir periodo en nombre
+
+            # Ruta a la carpeta Descargas
+            downloads_path = os.path.expanduser("~/Downloads")
+            full_path = os.path.join(downloads_path, file_name)
+
+            # Generar el PDF en la ruta de Descargas
+            self.generar_pdf(full_path)
+
+            # Preguntar si desea abrir el PDF
+            if messagebox.askyesno("PDF Generado", "PDF guardado exitosamente.\n¿Desea abrirlo ahora?"):
+                import sys
+                try:
+                    if sys.platform.startswith('win'):
+                        os.startfile(full_path)
+                    elif sys.platform.startswith('darwin'):
+                        os.system(f'open "{full_path}"')
+                    else:
+                        os.system(f'xdg-open "{full_path}"')
+                except Exception as e:
+                    messagebox.showerror("Error", f"No se pudo abrir el PDF: {str(e)}")
+
+        except Exception as e:
+            messagebox.showerror("Error", f"Error al exportar PDF: {str(e)}")
     
     def generar_pdf(self, ruta_pdf, es_vista_previa=False):
         if not self.movimientos_data:
@@ -564,10 +852,28 @@ class ReporteKardex:
 
     def generar_kardex(self):
         try:
-            # Validar fechas
-            fecha_ini = datetime.strptime(self.fecha_inicial.get(), '%d/%m/%Y')
-            fecha_fin = datetime.strptime(self.fecha_final.get(), '%d/%m/%Y')
+            # Obtener fechas según el modo seleccionado
+            if self.modo_fecha_var.get() == "rango":
+                fecha_ini = datetime.strptime(self.fecha_inicial.get(), '%d/%m/%Y')
+                fecha_fin = datetime.strptime(self.fecha_final.get(), '%d/%m/%Y')
+                periodo = f"{fecha_ini.strftime('%d%m%Y')}_{fecha_fin.strftime('%d%m%Y')}"  # Formato para rango
+            else:
+                anio = self.anio_var.get()
+                mes_inicio = self.mes_inicio_var.get()
+                mes_final = self.mes_final_var.get()
 
+                if not all([anio, mes_inicio, mes_final]):
+                    messagebox.showerror("Error", "Debe seleccionar Año, Mes Inicio y Mes Final")
+                    return
+
+                fecha_ini_str, fecha_fin_str = self.calcular_rango_corte_logistico(
+                    anio, mes_inicio, mes_final
+                )
+                fecha_ini = datetime.strptime(fecha_ini_str, '%d/%m/%Y')
+                fecha_fin = datetime.strptime(fecha_fin_str, '%d/%m/%Y')
+                periodo = f"{mes_inicio}_{mes_final}_{anio}"  # Formato para corte
+
+            # Validar fechas
             if fecha_fin < fecha_ini:
                 messagebox.showerror("Error", "La fecha final debe ser mayor a la inicial")
                 return
@@ -594,156 +900,196 @@ class ReporteKardex:
                 return
 
             # Crear DataFrame y generar Excel
-            self.generar_excel(movimientos)
+            full_path = self.generar_excel(movimientos, periodo)
+
+            # Preguntar si desea abrir el Excel
+            if messagebox.askyesno("Excel Generado", "Reporte guardado exitosamente.\n¿Desea abrirlo ahora?"):
+                import os
+                import sys
+                try:
+                    if sys.platform.startswith('win'):
+                        os.startfile(full_path)
+                    elif sys.platform.startswith('darwin'):
+                        os.system(f'open "{full_path}"')
+                    else:
+                        os.system(f'xdg-open "{full_path}"')
+                except Exception as e:
+                    messagebox.showerror("Error", f"No se pudo abrir el Excel: {str(e)}")
 
         except Exception as e:
             messagebox.showerror("Error", f"Error al generar reporte: {str(e)}")
 
-    def generar_excel(self, movimientos):
-        # Filtrar y renombrar columnas
-        columnas_relevantes = [
-            'fecha', 'referencia', 'tipo_movimiento', 'entrada',
-            'precio_unitario', 'valor_total', 'lote', 'fecha_vencimiento',
-            'salida', 'reajuste', 'cantidad_col', 'saldo', 'observaciones'
-        ]
-        df = pd.DataFrame(movimientos)[columnas_relevantes]
-        df.columns = [
-            'Fecha', 'Referencia', 'Remitente/Destinatario', 'Entrada',
-            'Precio Unitario', 'Valor Total', 'Lote', 'Fecha Vencimiento',
-            'Salidas', 'Reajustes', 'Cantidad', 'Saldo', 'Observaciones'
-        ]
-        
-        # Generar nombre de archivo con fecha y hora
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        file_name = f"Reporte_Kardex_{timestamp}.xlsx"
+    def generar_excel(self, movimientos, periodo):
+        try:
+            import os  # Importar os al inicio del método
+            # Filtrar y renombrar columnas
+            columnas_relevantes = [
+                'fecha', 'referencia', 'tipo_movimiento', 'entrada',
+                'precio_unitario', 'valor_total', 'lote', 'fecha_vencimiento',
+                'salida', 'reajuste', 'cantidad_col', 'saldo', 'observaciones'
+            ]
+            df = pd.DataFrame(movimientos)[columnas_relevantes]
 
-        # Ruta a la carpeta Descargas
-        downloads_path = os.path.expanduser("~/Downloads")
-        full_path = os.path.join(downloads_path, file_name)
+            # Nombres de columnas mejorados con saltos de línea
+            df.columns = [
+                'Fecha',
+                'No.\nReferencia',
+                'Remitente/\nDestinatario',
+                'Entrada',
+                'Precio\nUnitario\n(Q.)',
+                'Valor\nTotal\n(Q.)',
+                'No.\nLote',
+                'Fecha de\nVencimiento',
+                'Salidas',
+                'Reajustes\n(+) (-)',
+                'Cantidad',
+                'Saldo',
+                'Observaciones'
+            ]
 
-        # Crear archivo Excel
-        writer = pd.ExcelWriter(full_path, engine='xlsxwriter')
-        df.to_excel(writer, sheet_name='Kardex', startrow=8, index=False)
+            # Generar nombre de archivo con fecha y hora
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            file_name = f"Reporte_Kardex_{periodo}_{timestamp}.xlsx"
 
-        # Obtener el objeto workbook y worksheet
-        workbook = writer.book
-        worksheet = writer.sheets['Kardex']
+            # Ruta a la carpeta Descargas
+            downloads_path = os.path.expanduser("~/Downloads")
+            full_path = os.path.join(downloads_path, file_name)
 
-        # Mejorar el formato de los títulos
-        title_format = workbook.add_format({
-            'bold': True,
-            'align': 'center',
-            'valign': 'vcenter',
-            'font_size': 12,
-            'text_wrap': True
-        })
+            # Crear archivo Excel
+            writer = pd.ExcelWriter(full_path, engine='xlsxwriter')
+            df.to_excel(writer, sheet_name='Kardex', startrow=8, index=False)
 
-        subtitle_format = workbook.add_format({
-            'bold': True,
-            'align': 'center',
-            'valign': 'vcenter',
-            'font_size': 10,
-            'text_wrap': True
-        })
-        
-        timestamp_format = workbook.add_format({ 
-        'align': 'center',
-        'font_size': 9
-        })
-        
-        # Ajustar altura de las filas de títulos
-        worksheet.set_row(0, 30)  # Título principal
-        worksheet.set_row(1, 25)  # Subtítulo 1
-        worksheet.set_row(2, 25)  # Subtítulo 2
-        worksheet.set_row(3, 20)  # Fecha/hora
-        worksheet.set_row(5, 25)  # Fila de filtros
+            # Obtener el objeto workbook y worksheet
+            workbook = writer.book
+            worksheet = writer.sheets['Kardex']
 
-        # Ajustar altura de la fila de encabezados
-        worksheet.set_row(8, 40)  # Encabezados de columnas (aumentado a 40)
+            # Mejorar el formato de los títulos
+            title_format = workbook.add_format({
+                'bold': True,
+                'align': 'center',
+                'valign': 'vcenter',
+                'font_size': 12,
+                'text_wrap': True
+            })
 
-        # Formato para los datos con altura ajustada
-        data_format = workbook.add_format({
-            'align': 'center',
-            'valign': 'vcenter',
-            'text_wrap': True,
-            'font_size': 9
-        })
+            subtitle_format = workbook.add_format({
+                'bold': True,
+                'align': 'center',
+                'valign': 'vcenter',
+                'font_size': 10,
+                'text_wrap': True
+            })
 
-        # Aplicar formato a los datos
-        for row in range(9, len(df) + 9):
-            worksheet.set_row(row, 20, data_format)
+            timestamp_format = workbook.add_format({
+                'align': 'center',
+                'font_size': 9
+            })
 
-        # Ajustar el rango de las celdas combinadas para los títulos
-        worksheet.merge_range('A1:M1',
-            'DIRECCIÓN DEPARTAMENTAL DE REDES INTEGRADAS DE SERVICIOS DE SALUD DE GUATEMALA,',
-            title_format)
-        worksheet.merge_range('A2:M2', 'ÁREA NOR ORIENTE', subtitle_format)
-        worksheet.merge_range('A3:M3', 'TARJETA DE CONTROL DE SUMINISTROS', subtitle_format)
-        worksheet.merge_range('A4:M4',
-            f"Generado el: {datetime.now().strftime('%d/%m/%Y %H:%M:%S')}",
-            timestamp_format)
+            # Ajustar altura de las filas de títulos
+            worksheet.set_row(0, 30)  # Título principal
+            worksheet.set_row(1, 25)  # Subtítulo 1
+            worksheet.set_row(2, 25)  # Subtítulo 2
+            worksheet.set_row(3, 20)  # Fecha/hora
+            worksheet.set_row(5, 25)  # Fila de filtros
 
-        # Filtros en filas separadas
-        worksheet.merge_range('A6:B6', f"Área: {self.combo_area.get()}", subtitle_format)
-        worksheet.merge_range('C6:D6', f"Distrito: {self.combo_distrito.get()}", subtitle_format)
-        worksheet.merge_range('E6:F6', f"Tipo de Servicio: {self.combo_tipo_servicio.get()}", subtitle_format)
-        worksheet.merge_range('G6:H6', f"Servicio: {self.combo_servicio.get()}", subtitle_format)
-        worksheet.merge_range('I6:J6', f"Insumo: {self.combo_insumo.get()}", subtitle_format)
-        worksheet.merge_range('K6:M6', f"Presentación: {self.combo_presentacion.get()}", subtitle_format)
+            # Ajustar altura de la fila de encabezados (aumentada para los títulos multilínea)
+            worksheet.set_row(8, 45)  # Encabezados de columnas
 
-        # Configuración de página
-        worksheet.set_landscape()
-        worksheet.set_paper(9) 
-        worksheet.fit_to_pages(1, 1)
-        
-        # Formato para el contenido
-        content_format = workbook.add_format({
-            'align': 'center',
-            'valign': 'vcenter',
-            'font_size': 9,
-            'text_wrap': True
-        })
+            # Formato para los datos con altura ajustada
+            data_format = workbook.add_format({
+                'align': 'center',
+                'valign': 'vcenter',
+                'text_wrap': True,
+                'font_size': 9
+            })
 
-        # Formato para los encabezados
-        header_format = workbook.add_format({
-            'bold': True,
-            'align': 'center',
-            'valign': 'vcenter',
-            'font_size': 9,
-            'bg_color': '#ADD8E6',  # Light blue
-            'text_wrap': True,
-            'border': 1
-        })
+            # Aplicar formato a los datos
+            for row in range(9, len(df) + 9):
+                worksheet.set_row(row, 20, data_format)
 
-        # Aplicar formato a los encabezados
-        for col_num, value in enumerate(df.columns.values):
-            worksheet.write(8, col_num, value, header_format)
+            # Ajustar el rango de las celdas combinadas para los títulos
+            worksheet.merge_range('A1:M1',
+                'DIRECCIÓN DEPARTAMENTAL DE REDES INTEGRADAS DE SERVICIOS DE SALUD DE GUATEMALA,',
+                title_format)
+            worksheet.merge_range('A2:M2', 'ÁREA NOR ORIENTE', subtitle_format)
+            worksheet.merge_range('A3:M3', 'TARJETA DE CONTROL DE SUMINISTROS', subtitle_format)
+            worksheet.merge_range('A4:M4',
+                f"Generado el: {datetime.now().strftime('%d/%m/%Y %H:%M:%S')}",
+                timestamp_format)
 
-        # Ajustar anchos de columna
-        worksheet.set_column('A:A', 9)     # Fecha
-        worksheet.set_column('B:B', 11)    # Referencia
-        worksheet.set_column('C:C', 18)    # Remitente/Destinatario
-        worksheet.set_column('D:D', 8)     # Entrada
-        worksheet.set_column('E:E', 9)     # Precio Unitario
-        worksheet.set_column('F:F', 9)     # Valor Total
-        worksheet.set_column('G:G', 10)    # Lote
-        worksheet.set_column('H:H', 10)    # Fecha Vencimiento
-        worksheet.set_column('I:I', 8)     # Salidas
-        worksheet.set_column('J:J', 8)     # Reajustes
-        worksheet.set_column('K:K', 8)     # Cantidad
-        worksheet.set_column('L:L', 8)     # Saldo
-        worksheet.set_column('M:M', 15)    # Observaciones
-        
-        # Aplicar formato al contenido
-        worksheet.set_column('A:M', None, content_format)
+            # Filtros en filas separadas
+            worksheet.merge_range('A6:B6', f"Área: {self.combo_area.get()}", subtitle_format)
+            worksheet.merge_range('C6:D6', f"Distrito: {self.combo_distrito.get()}", subtitle_format)
+            worksheet.merge_range('E6:F6', f"Tipo de Servicio: {self.combo_tipo_servicio.get()}", subtitle_format)
+            worksheet.merge_range('G6:H6', f"Servicio: {self.combo_servicio.get()}", subtitle_format)
+            worksheet.merge_range('I6:J6', f"Insumo: {self.combo_insumo.get()}", subtitle_format)
+            worksheet.merge_range('K6:M6', f"Presentación: {self.combo_presentacion.get()}", subtitle_format)
 
-        # Ajustar altura de las filas
-        worksheet.set_default_row(20)  # Altura predeterminada para todas las filas
+            # Configuración de página
+            worksheet.set_landscape()
+            worksheet.set_paper(9)
+            worksheet.fit_to_pages(1, 1)
 
-        # Guardar archivo
-        writer.close()
-        messagebox.showinfo("Éxito", f"Reporte guardado en:\n{full_path}")
+            # Formato para el contenido
+            content_format = workbook.add_format({
+                'align': 'center',
+                'valign': 'vcenter',
+                'font_size': 9,
+                'text_wrap': True
+            })
 
+            # Formato mejorado para los encabezados
+            header_format = workbook.add_format({
+                'bold': True,
+                'align': 'center',
+                'valign': 'vcenter',
+                'font_size': 9,
+                'bg_color': '#ADD8E6',  # Light blue
+                'text_wrap': True,
+                'border': 1,
+                'border_color': '#808080'  # Gris para los bordes
+            })
+
+            # Aplicar formato a los encabezados
+            for col_num, value in enumerate(df.columns.values):
+                worksheet.write(8, col_num, value, header_format)
+
+            # Ajustar anchos de columna optimizados
+            worksheet.set_column('A:A', 10)    # Fecha
+            worksheet.set_column('B:B', 12)    # No. Referencia
+            worksheet.set_column('C:C', 20)    # Remitente/Destinatario
+            worksheet.set_column('D:D', 10)    # Entrada
+            worksheet.set_column('E:E', 10)    # Precio Unitario
+            worksheet.set_column('F:F', 10)    # Valor Total
+            worksheet.set_column('G:G', 10)    # No. Lote
+            worksheet.set_column('H:H', 12)    # Fecha Vencimiento
+            worksheet.set_column('I:I', 10)    # Salidas
+            worksheet.set_column('J:J', 10)    # Reajustes
+            worksheet.set_column('K:K', 10)    # Cantidad
+            worksheet.set_column('L:L', 10)    # Saldo
+            worksheet.set_column('M:M', 15)    # Observaciones
+
+            # Formato para números con dos decimales
+            number_format = workbook.add_format({
+                'align': 'center',
+                'valign': 'vcenter',
+                'font_size': 9,
+                'num_format': '#,##0.00'
+            })
+
+            # Aplicar formato numérico a columnas específicas
+            for row in range(9, len(df) + 9):
+                worksheet.write(row, 4, df.iloc[row-9]['Precio\nUnitario\n(Q.)'], number_format)  # Precio Unitario
+                worksheet.write(row, 5, df.iloc[row-9]['Valor\nTotal\n(Q.)'], number_format)      # Valor Total
+
+            # Guardar archivo
+            writer.close()
+            messagebox.showinfo("Éxito", f"Reporte guardado en:\n{full_path}")
+            return full_path
+        except Exception as e:
+            messagebox.showerror("Error", f"Error al generar Excel: {str(e)}")
+            return None
+    
     def cerrar_ventana(self):
         if messagebox.askyesno("Confirmar", "¿Está seguro que desea cerrar esta ventana?"):
             # Limpiar el frame principal

@@ -922,3 +922,173 @@ def obtener_movimientos_kardex(fecha_inicio, fecha_fin, distrito_nombre=None, ti
         return []
     finally:
         conn.close()
+# -------------------- OPERACIÓN USUARIOS --------------------
+# En src/database/db_manager.py (agregar estas funciones)
+
+def crear_tabla_usuarios():
+    """Crea la tabla de usuarios si no existe"""
+    query = '''
+    CREATE TABLE IF NOT EXISTS usuarios (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        username TEXT UNIQUE NOT NULL,
+        password TEXT NOT NULL,
+        nombre_completo TEXT,
+        rol TEXT CHECK(rol IN ('admin', 'usuario', 'super_admin')) NOT NULL,
+        activo BOOLEAN DEFAULT 1,
+        fecha_creacion DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+    '''
+    try:
+        conn = conectar_db()
+        conn.execute(query)
+        conn.commit()
+
+        # Crear super usuario si no existe
+        crear_super_usuario_si_no_existe()
+        return True
+    except Exception as e:
+        print(f"Error creando tabla usuarios: {e}")
+        return False
+    finally:
+        if conn:
+            conn.close()
+
+def crear_super_usuario_si_no_existe():
+    """Crea el super usuario si no existe"""
+    import hashlib
+
+    # Credenciales del super usuario
+    super_user = {
+        'username': 'admin',
+        'password': hashlib.sha256('admin123'.encode()).hexdigest(),
+        'nombre_completo': 'Administrador del Sistema',
+        'rol': 'super_admin'
+    }
+
+    try:
+        conn = conectar_db()
+        # Verificar si existe
+        cursor = conn.cursor()
+        cursor.execute('SELECT id FROM usuarios WHERE username = ?', (super_user['username'],))
+        if not cursor.fetchone():
+            # Crear super usuario
+            cursor.execute('''
+                INSERT INTO usuarios (username, password, nombre_completo, rol)
+                VALUES (?, ?, ?, ?)
+            ''', (
+                super_user['username'],
+                super_user['password'],
+                super_user['nombre_completo'],
+                super_user['rol']
+            ))
+            conn.commit()
+    except Exception as e:
+        print(f"Error creando super usuario: {e}")
+    finally:
+        if conn:
+            conn.close()
+
+def verificar_credenciales(username, password):
+    """Verifica las credenciales del usuario"""
+    import hashlib
+    try:
+        conn = conectar_db()
+        cursor = conn.cursor()
+
+        # Obtener usuario
+        cursor.execute('''
+            SELECT id, username, rol, activo
+            FROM usuarios
+            WHERE username = ? AND password = ? AND activo = 1
+        ''', (
+            username,
+            hashlib.sha256(password.encode()).hexdigest()
+        ))
+
+        usuario = cursor.fetchone()
+        if usuario:
+            return {
+                'id': usuario[0],
+                'username': usuario[1],
+                'rol': usuario[2],
+                'activo': usuario[3]
+            }
+        return None
+    except Exception as e:
+        print(f"Error verificando credenciales: {e}")
+        return None
+    finally:
+        if conn:
+            conn.close()
+
+def obtener_usuarios():
+    """Devuelve la lista de usuarios (excepto el super_admin)"""
+    conn = conectar_db()
+    cursor = conn.cursor()
+    cursor.execute("SELECT id, username, nombre_completo, rol, activo FROM usuarios WHERE rol != 'super_admin'")
+    usuarios = cursor.fetchall()
+    conn.close()
+    return usuarios
+
+def crear_usuario(username, password, nombre_completo, rol):
+    import hashlib
+    conn = conectar_db()
+    cursor = conn.cursor()
+    try:
+        cursor.execute(
+            "INSERT INTO usuarios (username, password, nombre_completo, rol) VALUES (?, ?, ?, ?)",
+            (username, hashlib.sha256(password.encode()).hexdigest(), nombre_completo, rol)
+        )
+        conn.commit()
+        return True
+    except Exception as e:
+        print(f"Error creando usuario: {e}")
+        return False
+    finally:
+        conn.close()
+
+def actualizar_usuario(id_usuario, nombre_completo, rol, activo):
+    conn = conectar_db()
+    cursor = conn.cursor()
+    try:
+        cursor.execute(
+            "UPDATE usuarios SET nombre_completo=?, rol=?, activo=? WHERE id=?",
+            (nombre_completo, rol, activo, id_usuario)
+        )
+        conn.commit()
+        return True
+    except Exception as e:
+        print(f"Error actualizando usuario: {e}")
+        return False
+    finally:
+        conn.close()
+
+def cambiar_password_usuario(id_usuario, new_password):
+    import hashlib
+    conn = conectar_db()
+    cursor = conn.cursor()
+    try:
+        cursor.execute(
+            "UPDATE usuarios SET password=? WHERE id=?",
+            (hashlib.sha256(new_password.encode()).hexdigest(), id_usuario)
+        )
+        conn.commit()
+        return True
+    except Exception as e:
+        print(f"Error cambiando contraseña: {e}")
+        return False
+    finally:
+        conn.close()
+
+def eliminar_usuario(id_usuario):
+    conn = conectar_db()
+    cursor = conn.cursor()
+    try:
+        cursor.execute("DELETE FROM usuarios WHERE id=?", (id_usuario,))
+        conn.commit()
+        return True
+    except Exception as e:
+        print(f"Error eliminando usuario: {e}")
+        return False
+    finally:
+        conn.close()

@@ -20,7 +20,8 @@ from src.gui.gestion_movimientos import GestionMovimientos
 from src.gui.reporte_kardex import ReporteKardex
 
 class MainWindow:
-    def __init__(self):
+    def __init__(self, usuario):
+        self.usuario = usuario
         
         # Inicializar la base de datos antes de crear la ventana
         if not self.initialize_database():
@@ -256,17 +257,16 @@ class MainWindow:
         ).pack(padx=5)
 
 
-        # Botones del menú
-        self.create_menu_button("Ingreso de Insumos",
-                          self.load_ingreso_insumos)
-        self.create_menu_button("Gestión de Insumos",
-                            self.load_gestion_insumos)
-        self.create_menu_button("Gestión de Servicios",
-                            self.load_gestion_servicios)
-        self.create_menu_button("Gestión de Movimientos",
-                            self.load_gestion_movimientos)
-        self.create_menu_button("Reporte Kardex",
-                            self.load_reporte_kardex)
+        # Botones según rol
+        rol = self.usuario['rol']
+        if rol in ("admin", "super_admin"):
+            self.create_menu_button("Gestión de Usuarios", self.load_gestion_usuarios)
+            self.create_menu_button("Gestión de Insumos", self.load_gestion_insumos)
+            self.create_menu_button("Gestión de Servicios", self.load_gestion_servicios)
+            self.create_menu_button("Gestión de Movimientos", self.load_gestion_movimientos)
+        if rol in ("usuario", "admin", "super_admin"):
+            self.create_menu_button("Ingreso de Insumos", self.load_ingreso_insumos)
+            self.create_menu_button("Reporte Kardex", self.load_reporte_kardex)
 
 
         # Botón de salir en la parte inferior
@@ -275,6 +275,15 @@ class MainWindow:
                   style='Menu.TButton',
                   command=self.root.quit).pack(pady=10, padx=10, side='bottom')
 
+    def load_gestion_usuarios(self):
+        if not self.verify_database_connection():
+            messagebox.showerror("Error", "No se puede conectar a la base de datos")
+            return
+        for widget in self.main_content_frame.winfo_children():
+            widget.destroy()
+        from src.gui.gestion_usuarios import GestionUsuarios
+        GestionUsuarios(self.main_content_frame, self)
+    
     def create_menu_button(self, text, command):
         btn_frame = ttk.Frame(self.menu_frame)
         btn_frame.pack(fill='x', pady=2)
@@ -309,17 +318,3 @@ class MainWindow:
                     font=('Helvetica', 10))
 
         self.root.mainloop()
-
-if __name__ == "__main__":
-    try:
-        app = MainWindow()
-        app.run()
-    except KeyboardInterrupt:
-        print("\nPrograma terminado por el usuario")
-    except Exception as e:
-        print(f"Error inesperado: {e}")
-    finally:
-        try:
-            app.root.destroy()
-        except:
-            pass
