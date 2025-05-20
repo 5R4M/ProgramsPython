@@ -923,7 +923,6 @@ def obtener_movimientos_kardex(fecha_inicio, fecha_fin, distrito_nombre=None, ti
     finally:
         conn.close()
 # -------------------- OPERACIÓN USUARIOS --------------------
-# En src/database/db_manager.py (agregar estas funciones)
 
 def crear_tabla_usuarios():
     """Crea la tabla de usuarios si no existe"""
@@ -987,6 +986,34 @@ def crear_super_usuario_si_no_existe():
     finally:
         if conn:
             conn.close()
+            
+def existe_usuario(username):
+    """Verifica si un nombre de usuario ya existe en la base de datos."""
+    conn = conectar_db()
+    cursor = conn.cursor()
+    try:
+        cursor.execute("SELECT id FROM usuarios WHERE username = ?", (username,))
+        resultado = cursor.fetchone()
+        return resultado is not None
+    except Exception as e:
+        print(f"Error al verificar la existencia del usuario: {e}")
+        return False
+    finally:
+        conn.close()
+
+def existe_usuario_otro(username, id_usuario):
+    """Verifica si existe otro usuario con el mismo username (excluyendo el usuario actual)."""
+    conn = conectar_db()
+    cursor = conn.cursor()
+    try:
+        cursor.execute("SELECT id FROM usuarios WHERE username = ? AND id != ?", (username, id_usuario))
+        resultado = cursor.fetchone()
+        return resultado is not None
+    except Exception as e:
+        print(f"Error al verificar la existencia del usuario: {e}")
+        return False
+    finally:
+        conn.close()
 
 def verificar_credenciales(username, password):
     """Verifica las credenciales del usuario"""
@@ -1030,14 +1057,14 @@ def obtener_usuarios():
     conn.close()
     return usuarios
 
-def crear_usuario(username, password, nombre_completo, rol):
+def crear_usuario(username, password, nombre_completo, rol, activo=1):
     import hashlib
     conn = conectar_db()
     cursor = conn.cursor()
     try:
         cursor.execute(
-            "INSERT INTO usuarios (username, password, nombre_completo, rol) VALUES (?, ?, ?, ?)",
-            (username, hashlib.sha256(password.encode()).hexdigest(), nombre_completo, rol)
+            "INSERT INTO usuarios (username, password, nombre_completo, rol, activo) VALUES (?, ?, ?, ?, ?)",
+            (username, hashlib.sha256(password.encode()).hexdigest(), nombre_completo, rol, activo)
         )
         conn.commit()
         return True
@@ -1089,6 +1116,222 @@ def eliminar_usuario(id_usuario):
         return True
     except Exception as e:
         print(f"Error eliminando usuario: {e}")
+        return False
+    finally:
+        conn.close()
+
+# -------------------- OPERACIÓN CORRECCIÓN --------------------
+
+def buscar_movimientos_por_filtros(
+    fecha_inicio, fecha_fin, area_nombre=None, distrito_nombre=None,
+    tipo_servicio_desc=None, servicio_nombre=None,
+    tipo_insumo_desc=None, insumo_nombre=None, presentacion_nombre=None,
+    tipo_movimiento_desc=None
+):
+    """
+    Devuelve todos los movimientos según los filtros, usando la lógica de kardex.
+    """
+    conn = conectar_db()
+    if not conn:
+        return []
+
+    try:
+        cursor = conn.cursor()
+        query = """
+            SELECT
+                m.id,
+                m.fecha_registro AS fecha,
+                m.referencia,
+                tm.descripcion AS tipo_movimiento,
+                m.cantidad,
+                m.lote,
+                m.fecha_vencimiento,
+                m.observaciones,
+                d_salida.nombre AS distrito_destino,
+                s_salida.nombre AS servicio_destino,
+                i.nombre AS insumo
+            FROM movimiento m
+            JOIN tipo_movimiento tm ON m.tipo_movimiento_id = tm.id
+            LEFT JOIN servicio s ON m.servicio_id = s.id
+            LEFT JOIN tipo_servicio ts ON s.id_tipo_servicio = ts.id
+            LEFT JOIN distrito d ON ts.id_distrito = d.id
+            LEFT JOIN distrito d_salida ON m.salida_distrito_id = d_salida.id
+            LEFT JOIN servicio s_salida ON m.salida_servicio_id = s_salida.id
+            LEFT JOIN insumo i ON m.insumo_id = i.id
+            LEFT JOIN tipo_insumo ti ON i.id_tipo_insumo = ti.id
+            LEFT JOIN insumo_presentacion ip ON i.id = ip.insumo_id
+            LEFT JOIN presentacion p ON ip.presentacion_id = p.id
+            LEFT JOIN area a ON d.id_area = a.id
+            WHERE m.fecha_registro BETWEEN ? AND ?
+        """
+        params = [fecha_inicio, fecha_fin]
+        if area_nombre:
+            query += " AND a.nombre = ?"
+            params.append(area_nombre)
+        if distrito_nombre:
+            query += " AND d.nombre = ?"
+            params.append(distrito_nombre)
+        if tipo_servicio_desc:
+            query += " AND ts.descripcion = ?"
+            params.append(tipo_servicio_desc)
+        if servicio_nombre:
+            query += " AND s.nombre = ?"
+            params.append(servicio_nombre)
+        if tipo_insumo_desc:
+            query += " AND ti.descripcion = ?"
+            params.append(tipo_insumo_desc)
+        if insumo_nombre:
+            query += " AND i.nombre = ?"
+            params.append(insumo_nombre)
+        if presentacion_nombre:
+            query += " AND p.nombre = ?"
+            params.append(presentacion_nombre)
+        if tipo_movimiento_desc:
+            query += " AND tm.descripcion = ?"
+            params.append(tipo_movimiento_desc)
+        query += " ORDER BY m.fecha_registro ASC, m.id ASC"
+
+        cursor.execute(query, params)
+        resultados = cursor.fetchall()
+
+        movimientos = []
+        for row in resultados:
+            tipo = row['tipo_movimiento'].upper()
+            cantidad = float(row['cantidad']) if row['cantidad'] else 0
+
+            # Remitente/Destinatario
+            destinatario = row['tipo_movimiento']
+            if tipo == 'SALIDA NIVEL INFERIOR':
+                if row['distrito_destino']:
+                    destinatario = f"Distrito: {row['distrito_destino']}"
+                elif row['servicio_destino']:
+                    destinatario = f"Servicio: {row['servicio_destino']}"
+
+            movimientos.append({
+                'id': row['id'],
+                'fecha': row['fecha'],
+                'referencia': row['referencia'],
+                'tipo_movimiento': destinatario,
+                'insumo': row['insumo'],
+                'cantidad': cantidad,
+                'lote': row['lote'],
+                'fecha_vencimiento': row['fecha_vencimiento'],
+                'observaciones': row['observaciones']
+            })
+        return movimientos
+
+    except sqlite3.Error as e:
+        print(f"Error al buscar movimientos: {e}")
+        return []
+    finally:
+        conn.close()
+
+def actualizar_movimiento(mov_id, nuevos_datos):
+    """
+    Actualiza un movimiento existente con los nuevos datos proporcionados.
+
+    Args:
+        mov_id: ID del movimiento a actualizar
+        nuevos_datos: Diccionario con los campos a actualizar
+
+    Returns:
+        bool: True si la actualización fue exitosa, False en caso contrario
+    """
+    conn = conectar_db()
+    if not conn:
+        return False
+
+    try:
+        cursor = conn.cursor()
+
+        # Primero obtenemos los datos actuales del movimiento
+        cursor.execute("""
+            SELECT
+                m.*,
+                i.nombre AS insumo_nombre,
+                ti.descripcion AS tipo_insumo
+            FROM movimiento m
+            JOIN insumo i ON m.insumo_id = i.id
+            JOIN tipo_insumo ti ON i.id_tipo_insumo = ti.id
+            WHERE m.id = ?
+        """, (mov_id,))
+
+        movimiento_actual = cursor.fetchone()
+        if not movimiento_actual:
+            return False
+
+        # Preparamos los campos a actualizar
+        campos_actualizables = []
+        valores = []
+
+        if 'fecha' in nuevos_datos:
+            campos_actualizables.append("fecha_registro = ?")
+            valores.append(nuevos_datos['fecha'])
+
+        if 'referencia' in nuevos_datos:
+            campos_actualizables.append("referencia = ?")
+            valores.append(nuevos_datos['referencia'])
+
+        if 'tipo_movimiento' in nuevos_datos:
+            # Obtenemos el ID del tipo de movimiento
+            cursor.execute("SELECT id FROM tipo_movimiento WHERE descripcion = ?",
+                          (nuevos_datos['tipo_movimiento'],))
+            tipo_mov = cursor.fetchone()
+            if tipo_mov:
+                campos_actualizables.append("tipo_movimiento_id = ?")
+                valores.append(tipo_mov['id'])
+
+        if 'cantidad' in nuevos_datos:
+            campos_actualizables.append("cantidad = ?")
+            valores.append(nuevos_datos['cantidad'])
+
+        if 'observaciones' in nuevos_datos:
+            campos_actualizables.append("observaciones = ?")
+            valores.append(nuevos_datos['observaciones'])
+
+        # Si no hay campos para actualizar, retornamos
+        if not campos_actualizables:
+            return False
+
+        # Construimos la consulta SQL
+        query = f"UPDATE movimiento SET {', '.join(campos_actualizables)} WHERE id = ?"
+        valores.append(mov_id)
+
+        # Ejecutamos la actualización
+        cursor.execute(query, valores)
+        conn.commit()
+
+        return cursor.rowcount > 0
+
+    except sqlite3.Error as e:
+        print(f"Error al actualizar movimiento: {e}")
+        conn.rollback()
+        return False
+    finally:
+        conn.close()
+
+def eliminar_movimiento(mov_id):
+    """
+    Elimina un movimiento por su ID.
+
+    Args:
+        mov_id: ID del movimiento a eliminar
+
+    Returns:
+        bool: True si la eliminación fue exitosa, False en caso contrario
+    """
+    conn = conectar_db()
+    if not conn:
+        return False
+
+    try:
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM movimiento WHERE id = ?", (mov_id,))
+        conn.commit()
+        return cursor.rowcount > 0
+    except sqlite3.Error as e:
+        print(f"Error al eliminar movimiento: {e}")
+        conn.rollback()
         return False
     finally:
         conn.close()

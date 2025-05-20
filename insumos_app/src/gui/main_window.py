@@ -22,13 +22,13 @@ from src.gui.reporte_kardex import ReporteKardex
 class MainWindow:
     def __init__(self, usuario):
         self.usuario = usuario
-        
+
         # Inicializar la base de datos antes de crear la ventana
         if not self.initialize_database():
             messagebox.showerror("Error Fatal",
                 "No se pudo inicializar la base de datos. El programa se cerrará.")
             sys.exit(1)
-        
+
         self.root = tk.Tk()
         self.root.title("Sistema de Gestión de Insumos")
         self.root.geometry("1200x800")
@@ -39,7 +39,7 @@ class MainWindow:
 
         self.setup_window()
         self.create_menu()
-        
+
         # Crear el frame principal que contendrá el contenido
         self.main_content_frame = ttk.Frame(self.root, style='Card.TFrame')
         self.main_content_frame.grid(row=0, column=1, sticky="nsew", padx=10, pady=10)
@@ -47,10 +47,25 @@ class MainWindow:
         # Mostrar la pantalla de bienvenida inicial
         self.show_welcome_screen()
 
-        
+        # Agregar barra de estado en la parte inferior
+        self.status_bar = ttk.Frame(self.root)
+        self.status_bar.grid(row=1, column=0, columnspan=2, sticky="ew")
+
+        # Etiqueta para mostrar el usuario logueado
+        nombre_usuario = self.usuario.get('nombre_completo', self.usuario.get('username', 'Usuario'))
+        rol_usuario = self.usuario.get('rol', '')
+
+        self.user_label = ttk.Label(
+            self.status_bar,
+            text=f"Usuario: {nombre_usuario} ({rol_usuario})",
+            anchor="w",
+            padding=(10, 5)
+        )
+        self.user_label.pack(side="left", fill="x")
+
         # Manejar el cierre de la ventana principal
         self.root.protocol("WM_DELETE_WINDOW", self.on_closing)
-    
+
     def initialize_database(self):
         """Inicializa la base de datos y verifica su estructura"""
         try:
@@ -92,12 +107,12 @@ class MainWindow:
         except Exception as e:
             print(f"Error al verificar conexión a la base de datos: {e}")
             return False
-     
+
     def on_closing(self):
         """Maneja el cierre de la ventana principal"""
         if messagebox.askokcancel("Salir", "¿Desea salir del sistema?"):
             self.root.quit()
-            self.root.destroy()   
+            self.root.destroy()
 
     def setup_window(self):
         # Centrar la ventana
@@ -110,8 +125,10 @@ class MainWindow:
         # Configurar el grid
         self.root.grid_rowconfigure(0, weight=1)
         self.root.grid_columnconfigure(1, weight=1)
-        
-    
+        # Agregar una fila para la barra de estado
+        self.root.grid_rowconfigure(1, weight=0)
+
+
     def show_welcome_screen(self):
         # Limpiar el contenido actual
         for widget in self.main_content_frame.winfo_children():
@@ -133,7 +150,7 @@ class MainWindow:
                       "ÁREA NOR ORIENTE",
                 font=('Helvetica', 14),
                 justify='center',
-                background='white', 
+                background='white',
                 anchor='center').pack(pady=20)
 
         info_frame = ttk.Frame(welcome_frame, style='Card.TFrame')
@@ -154,7 +171,7 @@ class MainWindow:
                 text=info_text,
                 font=('Helvetica', 12),
                 justify='left',
-                background='white', 
+                background='white',
                 anchor='w').pack(padx=10)
 
     def load_ingreso_insumos(self):
@@ -180,7 +197,7 @@ class MainWindow:
         for widget in self.main_content_frame.winfo_children():
             widget.destroy()
         GestionServicios(self.main_content_frame, self)
-        
+
     def load_gestion_movimientos(self):
         if not self.verify_database_connection():
             messagebox.showerror("Error", "No se puede conectar a la base de datos")
@@ -195,6 +212,7 @@ class MainWindow:
             return
         for widget in self.main_content_frame.winfo_children():
             widget.destroy()
+        # No destruyas self.main_content_frame, solo sus hijos
         ReporteKardex(self.main_content_frame, self)
 
     def create_menu(self):
@@ -208,7 +226,7 @@ class MainWindow:
                    background='white',
                    relief='flat',
                    borderwidth=0)
-        
+
         style.configure('Menu.TButton',
                     font=('Helvetica', 11),
                     padding=(10, 5),
@@ -222,14 +240,14 @@ class MainWindow:
                 background=[('active', '#e1e1e1'), ('!active', 'white')],
                 relief=[('pressed', 'flat'), ('!pressed', 'flat')],
                 borderwidth=[('pressed', '0'), ('!pressed', '0')])
-        
+
         # Estilo para el título (sin fondo ni borde)
         style.configure('Title.TLabel',
                     font=('Helvetica', 12, 'bold'),
                     background='white',  # O el color de fondo de tu menú
                     borderwidth=0,
                     relief='flat')
-        
+
         # Frame simple para el título, sin borde y con ancho reducido
         title_frame = tk.Frame(self.menu_frame, bd=0, highlightthickness=0)
         title_frame.pack(pady=20)
@@ -267,6 +285,7 @@ class MainWindow:
         if rol in ("usuario", "admin", "super_admin"):
             self.create_menu_button("Ingreso de Insumos", self.load_ingreso_insumos)
             self.create_menu_button("Reporte Kardex", self.load_reporte_kardex)
+            self.create_menu_button("Corrección de Movimientos", self.load_correccion_movimientos)
 
 
         # Botón de salir en la parte inferior
@@ -284,6 +303,15 @@ class MainWindow:
         from src.gui.gestion_usuarios import GestionUsuarios
         GestionUsuarios(self.main_content_frame, self)
     
+    def load_correccion_movimientos(self):
+        if not self.verify_database_connection():
+            messagebox.showerror("Error", "No se puede conectar a la base de datos")
+            return
+        for widget in self.main_content_frame.winfo_children():
+            widget.destroy()
+        from src.gui.correccion_movimientos import CorreccionMovimientos
+        CorreccionMovimientos(self.main_content_frame, self)
+
     def create_menu_button(self, text, command):
         btn_frame = ttk.Frame(self.menu_frame)
         btn_frame.pack(fill='x', pady=2)
@@ -302,9 +330,9 @@ class MainWindow:
 
         btn.bind('<Enter>', on_enter)
         btn.bind('<Leave>', on_leave)
-        
+
     def run(self):
-    # Configurar estilos adicionales
+        # Configurar estilos adicionales
         style = ttk.Style()
 
         # Estilo para frames tipo tarjeta
@@ -316,5 +344,15 @@ class MainWindow:
         # Estilo para etiquetas
         style.configure('TLabel',
                     font=('Helvetica', 10))
+
+        # Estilo para la barra de estado
+        style.configure('Status.TFrame',
+                    background='#f0f0f0',
+                    relief='sunken',
+                    borderwidth=1)
+
+        style.configure('Status.TLabel',
+                    font=('Helvetica', 9),
+                    background='#f0f0f0')
 
         self.root.mainloop()

@@ -86,7 +86,7 @@ class ReporteKardex:
         # Frame para fechas
         self.frame_fechas = ttk.LabelFrame(self.frame_principal, text="Selección de Fechas/Corte Logístico")
         self.frame_fechas.pack(fill="x", padx=5, pady=5)
-
+        
         # Modo de selección de fechas
         self.modo_fecha_var = tk.StringVar(value="rango")
 

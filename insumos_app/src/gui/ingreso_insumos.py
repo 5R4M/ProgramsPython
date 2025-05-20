@@ -1096,7 +1096,7 @@ class IngresoInsumos:
 
         # Tamaño base fijo (ajusta según tu diseño)
         ancho_base = 1200
-        alto_base = 800
+        alto_base = 900
 
         self.parent.update_idletasks()
         altura_frame = self.frame_salida_nivel_inferior.winfo_reqheight() + 50  # margen extra
