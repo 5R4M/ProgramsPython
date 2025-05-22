@@ -27,7 +27,7 @@ class CorreccionMovimientos:
     # Definir las columnas como atributo de la clase
     COLUMNAS = [
         'ID', 'Fecha', 'Referencia', 'Tipo de Movimiento', 'Lote',
-        'Fecha Vencimiento', 'Cantidad', 'Distrito Salida', 'Servicio Salida',
+        'Fecha Vencimiento', 'Cantidad', 'Insumo', 'Distrito Salida', 'Servicio Salida',
         'Observaciones'
     ]
 
@@ -346,6 +346,7 @@ class CorreccionMovimientos:
                     mov.get('lote', '') or "",
                     mov.get('fecha_vencimiento', '') or "",
                     self.formato_float(mov.get('cantidad', 0)),
+                    mov.get('insumo_nombre', '') or "",
                     mov.get('distrito_salida', '') or "",
                     mov.get('servicio_salida', '') or "",
                     mov.get('observaciones', '') or ""
@@ -436,6 +437,11 @@ class CorreccionMovimientos:
         referencia_var = tk.StringVar(value=movimiento.get('referencia', '') or "")
         referencia_entry = ttk.Entry(frame_edicion, textvariable=referencia_var, width=30)
         referencia_entry.grid(row=row, column=1, sticky="w", padx=5, pady=5)
+        row += 1
+        
+        # Insumo (solo lectura)
+        ttk.Label(frame_edicion, text="Insumo:").grid(row=row, column=0, sticky="w", padx=5, pady=5)
+        ttk.Label(frame_edicion, text=movimiento.get('insumo_nombre', '') or "", foreground="blue").grid(row=row, column=1, sticky="w", padx=5, pady=5)
         row += 1
 
         # Tipo de Movimiento

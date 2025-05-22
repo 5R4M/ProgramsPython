@@ -623,38 +623,61 @@ def eliminar_tipo_movimiento(id_tipo):
 # -------------------- OPERACIONES MOVIMIENTO --------------------
 
 def guardar_movimiento(movimiento_data):
+    """
+    Guarda un movimiento en la base de datos.
+
+    Args:
+        movimiento_data (dict): Diccionario con los datos del movimiento
+
+    Returns:
+        int: ID del movimiento guardado
+    """
     conn = conectar_db()
     if conn:
         try:
             cursor = conn.cursor()
             fecha_registro = movimiento_data['fecha_registro'].strftime('%Y-%m-%d')
             fecha_vencimiento = movimiento_data['fecha_vencimiento'].strftime('%Y-%m-%d')
+
+            # Usar el area_id directamente del diccionario
+            area_id = movimiento_data.get('area_id')
+            distrito_id = movimiento_data.get('distrito_id')
+
+            # Imprimir para depuración
+            print(f"Guardando movimiento con area_id={area_id}, distrito_id={distrito_id}, servicio_id={movimiento_data.get('servicio_id')}")
+
             cursor.execute("""
                 INSERT INTO movimiento (
                     fecha_registro,
                     referencia,
                     tipo_movimiento_id,
+                    area_id,
+                    distrito_id,
                     servicio_id,
                     insumo_id,
+                    presentacion_id,
                     lote,
                     fecha_vencimiento,
                     cantidad,
                     salida_distrito_id,
                     salida_servicio_id,
                     observaciones
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 (
                     fecha_registro,
                     movimiento_data['referencia'],
                     movimiento_data['tipo_movimiento_id'],
-                    movimiento_data['servicio_id'],
+                    area_id,
+                    distrito_id,
+                    movimiento_data.get('servicio_id'),
                     movimiento_data['insumo_id'],
+                    movimiento_data.get('presentacion_id'),
                     movimiento_data['lote'],
                     fecha_vencimiento,
                     movimiento_data['cantidad'],
                     movimiento_data.get('salida_distrito_id'),
                     movimiento_data.get('salida_servicio_id'),
-                    movimiento_data['observaciones']
+                    movimiento_data.get('observaciones')
                 ))
             conn.commit()
             return cursor.lastrowid
@@ -1139,11 +1162,14 @@ def buscar_movimientos_por_filtros(
             m.lote,
             m.fecha_vencimiento,
             m.cantidad,
+            i.nombre AS insumo_nombre,
             d_salida.nombre AS distrito_salida,
             s_salida.nombre AS servicio_salida,
             m.observaciones
         FROM movimiento m
         JOIN tipo_movimiento tm ON m.tipo_movimiento_id = tm.id
+        LEFT JOIN area a2 ON m.area_id = a2.id
+        LEFT JOIN distrito d2 ON m.distrito_id = d2.id
         LEFT JOIN servicio s ON m.servicio_id = s.id
         LEFT JOIN tipo_servicio ts ON s.id_tipo_servicio = ts.id
         LEFT JOIN distrito d ON ts.id_distrito = d.id
@@ -1158,17 +1184,25 @@ def buscar_movimientos_por_filtros(
         """
 
         params = [fecha_ini, fecha_fin]
+
+        # Filtro por área (directa o a través de distrito)
         if area:
-            query += " AND a.nombre = ?"
+            query += " AND (a2.nombre = ? OR a.nombre = ?)"
             params.append(area)
+            params.append(area)
+
         if distrito:
-            query += " AND d.nombre = ?"
+            query += " AND (d2.nombre = ? OR d.nombre = ? OR d_salida.nombre = ?)"
             params.append(distrito)
+            params.append(distrito)
+            params.append(distrito)
+
         if tipo_servicio:
             query += " AND ts.descripcion = ?"
             params.append(tipo_servicio)
         if servicio:
-            query += " AND s.nombre = ?"
+            query += " AND (s.nombre = ? OR s_salida.nombre = ?)"
+            params.append(servicio)
             params.append(servicio)
         if tipo_insumo:
             query += " AND ti.descripcion = ?"
@@ -1189,6 +1223,7 @@ def buscar_movimientos_por_filtros(
         resultados = [dict(row) for row in cursor.fetchall()]
         return resultados
     except Exception as e:
+        print(f"Error en buscar_movimientos_por_filtros: {e}")
         return []
     finally:
         conn.close()
