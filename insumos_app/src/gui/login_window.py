@@ -12,7 +12,7 @@ sys.path.append(project_root)
 from src.database.db_manager import verificar_credenciales
 from src.gui.main_window import MainWindow
 
-from src.database.db_manager import verificar_credenciales, crear_tabla_usuarios  # Añade crear_tabla_usuarios
+from src.database.db_manager import verificar_credenciales, crear_tabla_usuarios
 
 class LoginWindow:
     def __init__(self):

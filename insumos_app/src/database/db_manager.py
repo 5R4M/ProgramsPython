@@ -809,6 +809,7 @@ def verificar_tablas():
             conn.close()
     return False
 # -------------------- OPERACIÓN REPORTE --------------------
+
 def obtener_movimientos_kardex(fecha_inicio, fecha_fin, distrito_nombre=None, tipo_servicio_desc=None,
                                servicio_nombre=None, tipo_insumo_desc=None, insumo_nombre=None,
                                presentacion_nombre=None):
@@ -1001,20 +1002,6 @@ def existe_usuario(username):
     finally:
         conn.close()
 
-def existe_usuario_otro(username, id_usuario):
-    """Verifica si existe otro usuario con el mismo username (excluyendo el usuario actual)."""
-    conn = conectar_db()
-    cursor = conn.cursor()
-    try:
-        cursor.execute("SELECT id FROM usuarios WHERE username = ? AND id != ?", (username, id_usuario))
-        resultado = cursor.fetchone()
-        return resultado is not None
-    except Exception as e:
-        print(f"Error al verificar la existencia del usuario: {e}")
-        return False
-    finally:
-        conn.close()
-
 def verificar_credenciales(username, password):
     """Verifica las credenciales del usuario"""
     import hashlib
@@ -1123,109 +1110,89 @@ def eliminar_usuario(id_usuario):
 # -------------------- OPERACIÓN CORRECCIÓN --------------------
 
 def buscar_movimientos_por_filtros(
-    fecha_inicio, fecha_fin, area_nombre=None, distrito_nombre=None,
-    tipo_servicio_desc=None, servicio_nombre=None,
-    tipo_insumo_desc=None, insumo_nombre=None, presentacion_nombre=None,
-    tipo_movimiento_desc=None
+    fecha_ini, fecha_fin, area, distrito, tipo_servicio,
+    servicio, tipo_insumo, insumo, presentacion, tipo_movimiento
 ):
-    """
-    Devuelve todos los movimientos según los filtros, usando la lógica de kardex.
-    """
     conn = conectar_db()
     if not conn:
         return []
 
     try:
         cursor = conn.cursor()
+
+        # Manejar valores vacíos
+        area = area if area else None
+        distrito = distrito if distrito else None
+        tipo_servicio = tipo_servicio if tipo_servicio else None
+        servicio = servicio if servicio else None
+        tipo_insumo = tipo_insumo if tipo_insumo else None
+        insumo = insumo if insumo else None
+        presentacion = presentacion if presentacion else None
+        tipo_movimiento = tipo_movimiento if tipo_movimiento else None
+
         query = """
-            SELECT
-                m.id,
-                m.fecha_registro AS fecha,
-                m.referencia,
-                tm.descripcion AS tipo_movimiento,
-                m.cantidad,
-                m.lote,
-                m.fecha_vencimiento,
-                m.observaciones,
-                d_salida.nombre AS distrito_destino,
-                s_salida.nombre AS servicio_destino,
-                i.nombre AS insumo
-            FROM movimiento m
-            JOIN tipo_movimiento tm ON m.tipo_movimiento_id = tm.id
-            LEFT JOIN servicio s ON m.servicio_id = s.id
-            LEFT JOIN tipo_servicio ts ON s.id_tipo_servicio = ts.id
-            LEFT JOIN distrito d ON ts.id_distrito = d.id
-            LEFT JOIN distrito d_salida ON m.salida_distrito_id = d_salida.id
-            LEFT JOIN servicio s_salida ON m.salida_servicio_id = s_salida.id
-            LEFT JOIN insumo i ON m.insumo_id = i.id
-            LEFT JOIN tipo_insumo ti ON i.id_tipo_insumo = ti.id
-            LEFT JOIN insumo_presentacion ip ON i.id = ip.insumo_id
-            LEFT JOIN presentacion p ON ip.presentacion_id = p.id
-            LEFT JOIN area a ON d.id_area = a.id
-            WHERE m.fecha_registro BETWEEN ? AND ?
+        SELECT
+            m.id,
+            m.fecha_registro AS fecha,
+            m.referencia,
+            tm.descripcion AS tipo_movimiento,
+            m.lote,
+            m.fecha_vencimiento,
+            m.cantidad,
+            d_salida.nombre AS distrito_salida,
+            s_salida.nombre AS servicio_salida,
+            m.observaciones
+        FROM movimiento m
+        JOIN tipo_movimiento tm ON m.tipo_movimiento_id = tm.id
+        LEFT JOIN servicio s ON m.servicio_id = s.id
+        LEFT JOIN tipo_servicio ts ON s.id_tipo_servicio = ts.id
+        LEFT JOIN distrito d ON ts.id_distrito = d.id
+        LEFT JOIN area a ON d.id_area = a.id
+        LEFT JOIN distrito d_salida ON m.salida_distrito_id = d_salida.id
+        LEFT JOIN servicio s_salida ON m.salida_servicio_id = s_salida.id
+        LEFT JOIN insumo i ON m.insumo_id = i.id
+        LEFT JOIN tipo_insumo ti ON i.id_tipo_insumo = ti.id
+        LEFT JOIN insumo_presentacion ip ON i.id = ip.insumo_id
+        LEFT JOIN presentacion p ON ip.presentacion_id = p.id
+        WHERE m.fecha_registro BETWEEN ? AND ?
         """
-        params = [fecha_inicio, fecha_fin]
-        if area_nombre:
+
+        params = [fecha_ini, fecha_fin]
+        if area:
             query += " AND a.nombre = ?"
-            params.append(area_nombre)
-        if distrito_nombre:
+            params.append(area)
+        if distrito:
             query += " AND d.nombre = ?"
-            params.append(distrito_nombre)
-        if tipo_servicio_desc:
+            params.append(distrito)
+        if tipo_servicio:
             query += " AND ts.descripcion = ?"
-            params.append(tipo_servicio_desc)
-        if servicio_nombre:
+            params.append(tipo_servicio)
+        if servicio:
             query += " AND s.nombre = ?"
-            params.append(servicio_nombre)
-        if tipo_insumo_desc:
+            params.append(servicio)
+        if tipo_insumo:
             query += " AND ti.descripcion = ?"
-            params.append(tipo_insumo_desc)
-        if insumo_nombre:
+            params.append(tipo_insumo)
+        if insumo:
             query += " AND i.nombre = ?"
-            params.append(insumo_nombre)
-        if presentacion_nombre:
+            params.append(insumo)
+        if presentacion:
             query += " AND p.nombre = ?"
-            params.append(presentacion_nombre)
-        if tipo_movimiento_desc:
+            params.append(presentacion)
+        if tipo_movimiento:
             query += " AND tm.descripcion = ?"
-            params.append(tipo_movimiento_desc)
+            params.append(tipo_movimiento)
+
         query += " ORDER BY m.fecha_registro ASC, m.id ASC"
 
         cursor.execute(query, params)
-        resultados = cursor.fetchall()
-
-        movimientos = []
-        for row in resultados:
-            tipo = row['tipo_movimiento'].upper()
-            cantidad = float(row['cantidad']) if row['cantidad'] else 0
-
-            # Remitente/Destinatario
-            destinatario = row['tipo_movimiento']
-            if tipo == 'SALIDA NIVEL INFERIOR':
-                if row['distrito_destino']:
-                    destinatario = f"Distrito: {row['distrito_destino']}"
-                elif row['servicio_destino']:
-                    destinatario = f"Servicio: {row['servicio_destino']}"
-
-            movimientos.append({
-                'id': row['id'],
-                'fecha': row['fecha'],
-                'referencia': row['referencia'],
-                'tipo_movimiento': destinatario,
-                'insumo': row['insumo'],
-                'cantidad': cantidad,
-                'lote': row['lote'],
-                'fecha_vencimiento': row['fecha_vencimiento'],
-                'observaciones': row['observaciones']
-            })
-        return movimientos
-
-    except sqlite3.Error as e:
-        print(f"Error al buscar movimientos: {e}")
+        resultados = [dict(row) for row in cursor.fetchall()]
+        return resultados
+    except Exception as e:
         return []
     finally:
         conn.close()
-
+        
 def actualizar_movimiento(mov_id, nuevos_datos):
     """
     Actualiza un movimiento existente con los nuevos datos proporcionados.
@@ -1245,17 +1212,7 @@ def actualizar_movimiento(mov_id, nuevos_datos):
         cursor = conn.cursor()
 
         # Primero obtenemos los datos actuales del movimiento
-        cursor.execute("""
-            SELECT
-                m.*,
-                i.nombre AS insumo_nombre,
-                ti.descripcion AS tipo_insumo
-            FROM movimiento m
-            JOIN insumo i ON m.insumo_id = i.id
-            JOIN tipo_insumo ti ON i.id_tipo_insumo = ti.id
-            WHERE m.id = ?
-        """, (mov_id,))
-
+        cursor.execute("SELECT * FROM movimiento WHERE id = ?", (mov_id,))
         movimiento_actual = cursor.fetchone()
         if not movimiento_actual:
             return False
@@ -1280,6 +1237,14 @@ def actualizar_movimiento(mov_id, nuevos_datos):
             if tipo_mov:
                 campos_actualizables.append("tipo_movimiento_id = ?")
                 valores.append(tipo_mov['id'])
+
+        if 'lote' in nuevos_datos:
+            campos_actualizables.append("lote = ?")
+            valores.append(nuevos_datos['lote'])
+
+        if 'fecha_vencimiento' in nuevos_datos:
+            campos_actualizables.append("fecha_vencimiento = ?")
+            valores.append(nuevos_datos['fecha_vencimiento'])
 
         if 'cantidad' in nuevos_datos:
             campos_actualizables.append("cantidad = ?")

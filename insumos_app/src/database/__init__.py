@@ -21,12 +21,14 @@ def verificar_tablas():
         cursor = conn.cursor()
 
         tablas_requeridas = [
+            'area',
             'distrito',
             'tipo_servicio',
             'servicio',
             'tipo_insumo',
             'presentacion',
             'insumo',
+            'insumo_presentacion',
             'tipo_movimiento',
             'movimiento'
         ]
@@ -59,7 +61,7 @@ def crear_base_datos():
         # Habilitar las foreign keys
         cursor.execute("PRAGMA foreign_keys = ON;")
 
-        # Tabla ÁREA (se mantiene igual)
+        # Tabla ÁREA
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS area (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -67,7 +69,7 @@ def crear_base_datos():
             );
         """)
 
-        # Tabla DISTRICTO (se mantiene igual)
+        # Tabla DISTRITO
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS distrito (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -78,7 +80,7 @@ def crear_base_datos():
             );
         """)
 
-        # Tabla TIPO_SERVICIO (se mantiene igual)
+        # Tabla TIPO_SERVICIO
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS tipo_servicio (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -89,7 +91,7 @@ def crear_base_datos():
             );
         """)
 
-        # Tabla SERVICIO (se mantiene igual)
+        # Tabla SERVICIO
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS servicio (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -100,7 +102,7 @@ def crear_base_datos():
             );
         """)
 
-        # Tabla TIPO_INSUMO (se mantiene igual)
+        # Tabla TIPO_INSUMO
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS tipo_insumo (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -108,7 +110,7 @@ def crear_base_datos():
             );
         """)
 
-        # Tabla PRESENTACION (se mantiene igual)
+        # Tabla PRESENTACION
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS presentacion (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -116,18 +118,7 @@ def crear_base_datos():
             );
         """)
 
-        # NUEVA TABLA INTERMEDIA INSUMO_PRESENTACION (nueva)
-        cursor.execute("""
-            CREATE TABLE IF NOT EXISTS insumo_presentacion (
-                insumo_id INTEGER NOT NULL,
-                presentacion_id INTEGER NOT NULL,
-                PRIMARY KEY (insumo_id, presentacion_id),
-                FOREIGN KEY (insumo_id) REFERENCES insumo(id),
-                FOREIGN KEY (presentacion_id) REFERENCES presentacion(id)
-            );
-        """)
-
-        # Tabla INSUMO (eliminamos id_presentacion)
+        # Tabla INSUMO
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS insumo (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -139,7 +130,18 @@ def crear_base_datos():
             );
         """)
 
-        # Tabla TIPO_MOVIMIENTO (se mantiene igual)
+        # Tabla INSUMO_PRESENTACION
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS insumo_presentacion (
+                insumo_id INTEGER NOT NULL,
+                presentacion_id INTEGER NOT NULL,
+                PRIMARY KEY (insumo_id, presentacion_id),
+                FOREIGN KEY (insumo_id) REFERENCES insumo(id),
+                FOREIGN KEY (presentacion_id) REFERENCES presentacion(id)
+            );
+        """)
+
+        # Tabla TIPO_MOVIMIENTO
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS tipo_movimiento (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -147,15 +149,18 @@ def crear_base_datos():
             );
         """)
 
-        # Tabla MOVIMIENTO (se mantiene igual, pero ahora debe referenciar presentacion_id si es necesario)
+        # Tabla MOVIMIENTO (con area_id, distrito_id y presentacion_id)
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS movimiento (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 fecha_registro DATE NOT NULL,
                 referencia TEXT NOT NULL,
                 tipo_movimiento_id INTEGER NOT NULL,
+                area_id INTEGER,
+                distrito_id INTEGER,
                 servicio_id INTEGER,
                 insumo_id INTEGER NOT NULL,
+                presentacion_id INTEGER,
                 lote TEXT,
                 fecha_vencimiento DATE,
                 cantidad REAL NOT NULL,
@@ -163,12 +168,34 @@ def crear_base_datos():
                 salida_distrito_id INTEGER,
                 salida_servicio_id INTEGER,
                 FOREIGN KEY (tipo_movimiento_id) REFERENCES tipo_movimiento(id),
+                FOREIGN KEY (area_id) REFERENCES area(id),
+                FOREIGN KEY (distrito_id) REFERENCES distrito(id),
                 FOREIGN KEY (servicio_id) REFERENCES servicio(id),
                 FOREIGN KEY (insumo_id) REFERENCES insumo(id),
+                FOREIGN KEY (presentacion_id) REFERENCES presentacion(id),
                 FOREIGN KEY (salida_distrito_id) REFERENCES distrito(id),
                 FOREIGN KEY (salida_servicio_id) REFERENCES servicio(id)
             );
         """)
+        
+        # Tabla USUARIOS
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS usuarios (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                username TEXT UNIQUE NOT NULL,
+                password TEXT NOT NULL,
+                nombre_completo TEXT,
+                rol TEXT CHECK(rol IN ('admin', 'usuario', 'super_admin')) NOT NULL,
+                activo BOOLEAN DEFAULT 1,
+                fecha_creacion DATETIME DEFAULT CURRENT_TIMESTAMP
+            );
+        """)
+
+        # Crear índices para mejorar rendimiento
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_mov_area ON movimiento(area_id);")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_mov_distrito ON movimiento(distrito_id);")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_mov_servicio ON movimiento(servicio_id);")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_mov_fecha ON movimiento(fecha_registro);")
 
         conn.commit()
         print(f"Base de datos creada correctamente en: {DB_PATH}")
@@ -182,4 +209,16 @@ def crear_base_datos():
             conn.close()
 
 # Exportar las funciones necesarias
-__all__ = ['DB_PATH', 'crear_base_datos', 'verificar_tablas', 'asegurar_directorio']
+__all__ = [
+    'DB_PATH',
+    'crear_base_datos',
+    'verificar_tablas',
+    'asegurar_directorio'
+]
+
+# Si se ejecuta directamente, crear la base de datos
+if __name__ == "__main__":
+    if crear_base_datos():
+        print("Base de datos creada con éxito")
+    else:
+        print("Error al crear la base de datos")

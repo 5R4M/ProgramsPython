@@ -1,7 +1,7 @@
 import tkinter as tk
 from tkinter import ttk, messagebox, simpledialog
 from src.database.db_manager import (
-    obtener_usuarios, crear_usuario, actualizar_usuario, cambiar_password_usuario, eliminar_usuario, existe_usuario, existe_usuario_otro
+    obtener_usuarios, crear_usuario, actualizar_usuario, cambiar_password_usuario, eliminar_usuario, existe_usuario
 )
 
 class GestionUsuarios:

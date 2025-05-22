@@ -999,7 +999,11 @@ class IngresoInsumos:
                 tipo_insumo_id = obtener_id_tipo_insumo(tipo_insumo_desc)
                 if tipo_insumo_id is None:
                     raise ValueError(f"No se encontró el tipo de insumo: {tipo_insumo_desc}")
-
+                
+                area_nombre = self.area_var.get()
+                areas = obtener_areas() or []
+                area_id = next((a['id'] for a in areas if a['nombre'] == area_nombre), None)
+                
                 # Obtener IDs necesarios
                 distrito_id = obtener_id_distrito(self.distrito_var.get())
                 tipo_servicio_id = obtener_id_tipo_servicio(self.tipo_servicio_var.get())
@@ -1025,6 +1029,7 @@ class IngresoInsumos:
                     'fecha_registro': fecha_registro,
                     'referencia': valores[1],
                     'tipo_movimiento_id': tipo_movimiento_id,
+                    'area_id': area_id,
                     'distrito_id': distrito_id,
                     'tipo_servicio_id': tipo_servicio_id,
                     'servicio_id': servicio_id,
