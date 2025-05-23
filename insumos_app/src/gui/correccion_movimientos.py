@@ -26,7 +26,7 @@ from src.database.db_manager import (
 class CorreccionMovimientos:
     # Definir las columnas como atributo de la clase
     COLUMNAS = [
-        'ID', 'Fecha', 'Referencia', 'Tipo de Movimiento', 'Lote',
+        'ID', 'Fecha', 'Referencia', 'Servicio', 'Tipo de Movimiento', 'Lote',
         'Fecha Vencimiento', 'Cantidad', 'Insumo', 'Distrito Salida', 'Servicio Salida',
         'Observaciones'
     ]
@@ -99,22 +99,22 @@ class CorreccionMovimientos:
         # Grid DENTRO del frame_combos1
         ttk.Label(self.frame_combos1, text="Área:").grid(row=0, column=0, padx=5, sticky='w')
         self.area_var = tk.StringVar()
-        self.combo_area = AutocompleteCombobox(self.frame_combos1, textvariable=self.area_var, state="normal", width=20)
+        self.combo_area = AutocompleteCombobox(self.frame_combos1, textvariable=self.area_var, state="normal", width=18)
         self.combo_area.grid(row=0, column=1, padx=5, sticky='w')
 
         ttk.Label(self.frame_combos1, text="Distrito:").grid(row=0, column=2, padx=5, sticky='w')
         self.distrito_var = tk.StringVar()
-        self.combo_distrito = AutocompleteCombobox(self.frame_combos1, textvariable=self.distrito_var, state="normal", width=20)
+        self.combo_distrito = AutocompleteCombobox(self.frame_combos1, textvariable=self.distrito_var, state="normal", width=18)
         self.combo_distrito.grid(row=0, column=3, padx=5, sticky='w')
 
         ttk.Label(self.frame_combos1, text="Tipo de Servicio:").grid(row=0, column=4, padx=5, sticky='w')
         self.tipo_servicio_var = tk.StringVar()
-        self.combo_tipo_servicio = AutocompleteCombobox(self.frame_combos1, textvariable=self.tipo_servicio_var, state="normal", width=20)
+        self.combo_tipo_servicio = AutocompleteCombobox(self.frame_combos1, textvariable=self.tipo_servicio_var, state="normal", width=18)
         self.combo_tipo_servicio.grid(row=0, column=5, padx=5, sticky='w')
 
         ttk.Label(self.frame_combos1, text="Servicio:").grid(row=0, column=6, padx=5, sticky='w')
         self.servicio_var = tk.StringVar()
-        self.combo_servicio = AutocompleteCombobox(self.frame_combos1, textvariable=self.servicio_var, state="normal", width=20)
+        self.combo_servicio = AutocompleteCombobox(self.frame_combos1, textvariable=self.servicio_var, state="normal", width=18)
         self.combo_servicio.grid(row=0, column=7, padx=5, sticky='w')
 
         # Segunda fila de combos
@@ -122,24 +122,24 @@ class CorreccionMovimientos:
         self.frame_combos2.pack(fill="x", pady=5)
 
         # Grid DENTRO del frame_combos2
-        ttk.Label(self.frame_combos2, text="Tipo de Insumo:").grid(row=0, column=0, padx=5, sticky='w')
+        ttk.Label(self.frame_combos2, text="Tipo\nInsumo:").grid(row=0, column=0, padx=5, sticky='w')
         self.tipo_insumo_var = tk.StringVar()
-        self.combo_tipo_insumo = AutocompleteCombobox(self.frame_combos2, textvariable=self.tipo_insumo_var, state="normal", width=20)
+        self.combo_tipo_insumo = AutocompleteCombobox(self.frame_combos2, textvariable=self.tipo_insumo_var, state="normal", width=18)
         self.combo_tipo_insumo.grid(row=0, column=1, padx=5, sticky='w')
 
         ttk.Label(self.frame_combos2, text="Insumo:").grid(row=0, column=2, padx=5, sticky='w')
         self.insumo_var = tk.StringVar()
-        self.combo_insumo = AutocompleteCombobox(self.frame_combos2, textvariable=self.insumo_var, state="normal", width=20)
+        self.combo_insumo = AutocompleteCombobox(self.frame_combos2, textvariable=self.insumo_var, state="normal", width=18)
         self.combo_insumo.grid(row=0, column=3, padx=5, sticky='w')
 
         ttk.Label(self.frame_combos2, text="Presentación:").grid(row=0, column=4, padx=5, sticky='w')
         self.presentacion_var = tk.StringVar()
-        self.combo_presentacion = AutocompleteCombobox(self.frame_combos2, textvariable=self.presentacion_var, state="normal", width=20)
+        self.combo_presentacion = AutocompleteCombobox(self.frame_combos2, textvariable=self.presentacion_var, state="normal", width=18)
         self.combo_presentacion.grid(row=0, column=5, padx=5, sticky='w')
 
-        ttk.Label(self.frame_combos2, text="Tipo de Movimiento:").grid(row=0, column=6, padx=5, sticky='w')
+        ttk.Label(self.frame_combos2, text="Tipo\nMovimiento:").grid(row=0, column=6, padx=5, sticky='w')
         self.tipo_movimiento_var = tk.StringVar()
-        self.combo_tipo_movimiento = AutocompleteCombobox(self.frame_combos2, textvariable=self.tipo_movimiento_var, state="normal", width=20)
+        self.combo_tipo_movimiento = AutocompleteCombobox(self.frame_combos2, textvariable=self.tipo_movimiento_var, state="normal", width=18)
         self.combo_tipo_movimiento.grid(row=0, column=7, padx=5, sticky='w')
 
         # Frame para botones de búsqueda
@@ -156,6 +156,9 @@ class CorreccionMovimientos:
         # Crear Treeview con scrollbars
         self.tree_frame = ttk.Frame(self.frame_treeview)
         self.tree_frame.pack(fill="both", expand=True, padx=5, pady=5)
+        
+        style = ttk.Style()
+        style.configure("Treeview.Heading", font=("Courier", 9))
 
         # Scrollbars para el Treeview
         self.tree_scroll_y = ttk.Scrollbar(self.tree_frame)
@@ -164,7 +167,12 @@ class CorreccionMovimientos:
         self.tree_scroll_x = ttk.Scrollbar(self.tree_frame, orient="horizontal")
         self.tree_scroll_x.pack(side="bottom", fill="x")
 
-        # Configurar el Treeview
+        # Configurar estilos
+        style = ttk.Style()
+        style.configure("Treeview.Heading", font=("Consolas", 9, "bold"))
+        style.configure("Treeview", font=("Consolas", 9), rowheight=25)
+
+        # Crear Treeview
         self.tree = ttk.Treeview(
             self.tree_frame,
             columns=self.COLUMNAS,
@@ -173,15 +181,57 @@ class CorreccionMovimientos:
             xscrollcommand=self.tree_scroll_x.set
         )
 
-        # Configurar las columnas
-        for col in self.COLUMNAS:
-            self.tree.heading(col, text=col)
-            width = 150 if col in ["Referencia", "Observaciones", "Tipo de Movimiento"] else 100
-            self.tree.column(col, width=width, minwidth=50)
+        # Títulos simples y claros
+        encabezados = {
+            'ID': 'ID',
+            'Fecha': 'FECHA',
+            'Referencia': 'REFERENCIA',
+            'Servicio': 'SERVICIO',
+            'Tipo de Movimiento': 'TIPO MOVIMIENTO',
+            'Lote': 'LOTE',
+            'Fecha Vencimiento': 'FECHA VENCIMIENTO',
+            'Cantidad': 'CANTIDAD',
+            'Insumo': 'INSUMO',
+            'Distrito Salida': 'DISTRITO SALIDA',
+            'Servicio Salida': 'SERVICIO SALIDA',
+            'Observaciones': 'OBSERVACIONES'
+        }
 
-        # Ocultar la columna ID pero mantenerla para referencia
+        for col in self.COLUMNAS:
+            self.tree.heading(col, text=encabezados[col])
+
+            # Anchos aumentados basados en los títulos
+            if col == "Referencia":
+                width = 120  # Aumentado para "REFERENCIA"
+            elif col == "Observaciones":
+                width = 250  # Aumentado para "OBSERVACIONES"
+            elif col == "Tipo de Movimiento":
+                width = 180  # Aumentado para "TIPO MOVIMIENTO"
+            elif col == "Fecha Vencimiento":
+                width = 150  # Aumentado para "F. VENCIMIENTO"
+            elif col in ["Servicio", "Insumo"]:
+                width = 160  # Aumentado para "SERVICIO" e "INSUMO"
+            elif col in ["Distrito Salida", "Servicio Salida"]:
+                width = 140  # Aumentado para "DIST. SALIDA" y "SERV. SALIDA"
+            elif col == "Cantidad":
+                width = 120  # Aumentado para "CANTIDAD"
+            elif col == "Fecha":
+                width = 110  # Aumentado para "FECHA"
+            elif col == "Lote":
+                width = 100  # Aumentado para "LOTE"
+            else:
+                width = 100  # Ancho por defecto
+
+            # Configurar alineación
+            if col in ["Cantidad"]:
+                self.tree.column(col, width=width, anchor='center')
+            elif col in ["Fecha", "Fecha Vencimiento"]:
+                self.tree.column(col, width=width, anchor='center')
+            else:
+                self.tree.column(col, width=width, anchor='w')
+
         self.tree.column("ID", width=0, stretch=False)
-        
+                    
         # Empaquetar el Treeview
         self.tree.pack(side="left", fill="both", expand=True)
 
@@ -336,20 +386,21 @@ class CorreccionMovimientos:
             for item in self.tree.get_children():
                 self.tree.delete(item)
 
-            # Llenar el Treeview con los datos
+            # Llenar el Treeview con los datos (nuevo orden con Servicio)
             for mov in self.movimientos_data:
                 self.tree.insert('', 'end', values=(
-                    mov.get('id', ''),
-                    mov.get('fecha', ''),
-                    mov.get('referencia', '') or "",
-                    mov.get('tipo_movimiento', '') or "",
-                    mov.get('lote', '') or "",
-                    mov.get('fecha_vencimiento', '') or "",
-                    self.formato_float(mov.get('cantidad', 0)),
-                    mov.get('insumo_nombre', '') or "",
-                    mov.get('distrito_salida', '') or "",
-                    mov.get('servicio_salida', '') or "",
-                    mov.get('observaciones', '') or ""
+                    mov.get('id', ''),                          # ID
+                    mov.get('fecha', ''),                       # Fecha
+                    mov.get('referencia', '') or "",            # Referencia
+                    mov.get('servicio_nombre', '') or "",       # Servicio (NUEVO)
+                    mov.get('tipo_movimiento', '') or "",       # Tipo de Movimiento
+                    mov.get('lote', '') or "",                  # Lote
+                    mov.get('fecha_vencimiento', '') or "",     # Fecha Vencimiento
+                    self.formato_float(mov.get('cantidad', 0)), # Cantidad
+                    mov.get('insumo_nombre', '') or "",         # Insumo
+                    mov.get('distrito_salida', '') or "",       # Distrito Salida
+                    mov.get('servicio_salida', '') or "",       # Servicio Salida
+                    mov.get('observaciones', '') or ""          # Observaciones
                 ))
 
         except Exception as e:
@@ -387,9 +438,9 @@ class CorreccionMovimientos:
             messagebox.showwarning("Advertencia", "Por favor, seleccione un movimiento para editar")
             return
 
-        # Obtener el ID del movimiento seleccionado
+        # Obtener el ID del movimiento seleccionado (sigue siendo la primera columna)
         item_values = self.tree.item(selected_item[0], 'values')
-        movimiento_id = item_values[0]
+        movimiento_id = item_values[0]  # ID sigue siendo índice 0
 
         # Buscar el movimiento en los datos
         movimiento = next((m for m in self.movimientos_data if str(m['id']) == str(movimiento_id)), None)
@@ -404,27 +455,59 @@ class CorreccionMovimientos:
         # Crear ventana de edición
         edicion_window = tk.Toplevel(self.parent)
         edicion_window.title("Editar Movimiento")
-        edicion_window.geometry("800x600")
+        edicion_window.geometry("600x500")
         edicion_window.grab_set()  # Hacer modal
 
-        # Frame principal
-        frame_edicion = ttk.Frame(edicion_window, padding=10)
+        # Centrar la ventana
+        edicion_window.transient(self.parent)
+        edicion_window.update_idletasks()
+
+        # Obtener dimensiones de la pantalla y la ventana
+        screen_width = edicion_window.winfo_screenwidth()
+        screen_height = edicion_window.winfo_screenheight()
+        window_width = 600
+        window_height = 500
+
+        # Calcular posición para centrar
+        x = (screen_width - window_width) // 2
+        y = (screen_height - window_height) // 2
+
+        edicion_window.geometry(f"{window_width}x{window_height}+{x}+{y}")
+
+        # Frame principal con padding
+        frame_edicion = ttk.Frame(edicion_window, padding=20)
         frame_edicion.pack(fill="both", expand=True)
 
-        # Título
-        ttk.Label(frame_edicion, text=f"Editar Movimiento ID: {movimiento['id']}", font=("Arial", 12, "bold")).grid(row=0, column=0, columnspan=4, pady=10)
+        # Título centrado (sin ID)
+        titulo_frame = ttk.Frame(frame_edicion)
+        titulo_frame.pack(fill="x", pady=(0, 20))
 
-        # Campos de edición
-        row = 1
+        ttk.Label(titulo_frame, text="Editar Movimiento",
+                font=("Arial", 14, "bold")).pack()
+
+        # Frame para los campos con grid
+        campos_frame = ttk.Frame(frame_edicion)
+        campos_frame.pack(fill="both", expand=True)
+
+        # Configurar columnas para que se expandan uniformemente
+        campos_frame.columnconfigure(1, weight=1)
+
+        # Tamaño estándar para todos los campos
+        ANCHO_CAMPO = 25
+
+        row = 0
 
         # Fecha
-        ttk.Label(frame_edicion, text="Fecha:").grid(row=row, column=0, sticky="w", padx=5, pady=5)
-        fecha_entry = DateEntry(
-            frame_edicion,
-            width=12,
-            date_pattern='dd/mm/yyyy'
+        ttk.Label(campos_frame, text="Fecha:", font=("Arial", 10)).grid(
+            row=row, column=0, sticky="w", padx=(0, 10), pady=8
         )
-        fecha_entry.grid(row=row, column=1, sticky="w", padx=5, pady=5)
+        fecha_entry = DateEntry(
+            campos_frame,
+            width=ANCHO_CAMPO,
+            date_pattern='dd/mm/yyyy',
+            font=("Arial", 10)
+        )
+        fecha_entry.grid(row=row, column=1, sticky="ew", pady=8)
         if movimiento['fecha']:
             try:
                 fecha_entry.set_date(datetime.strptime(movimiento['fecha'], '%Y-%m-%d'))
@@ -433,40 +516,64 @@ class CorreccionMovimientos:
         row += 1
 
         # Referencia
-        ttk.Label(frame_edicion, text="Referencia:").grid(row=row, column=0, sticky="w", padx=5, pady=5)
+        ttk.Label(campos_frame, text="Referencia:", font=("Arial", 10)).grid(
+            row=row, column=0, sticky="w", padx=(0, 10), pady=8
+        )
         referencia_var = tk.StringVar(value=movimiento.get('referencia', '') or "")
-        referencia_entry = ttk.Entry(frame_edicion, textvariable=referencia_var, width=30)
-        referencia_entry.grid(row=row, column=1, sticky="w", padx=5, pady=5)
+        referencia_entry = ttk.Entry(campos_frame, textvariable=referencia_var,
+                                    width=ANCHO_CAMPO, font=("Arial", 10))
+        referencia_entry.grid(row=row, column=1, sticky="ew", pady=8)
         row += 1
-        
+
         # Insumo (solo lectura)
-        ttk.Label(frame_edicion, text="Insumo:").grid(row=row, column=0, sticky="w", padx=5, pady=5)
-        ttk.Label(frame_edicion, text=movimiento.get('insumo_nombre', '') or "", foreground="blue").grid(row=row, column=1, sticky="w", padx=5, pady=5)
+        ttk.Label(campos_frame, text="Insumo:", font=("Arial", 10)).grid(
+            row=row, column=0, sticky="w", padx=(0, 10), pady=8
+        )
+        insumo_frame = ttk.Frame(campos_frame)
+        insumo_frame.grid(row=row, column=1, sticky="ew", pady=8)
+        insumo_frame.columnconfigure(0, weight=1)
+
+        insumo_label = ttk.Label(insumo_frame,
+                                text=movimiento.get('insumo_nombre', '') or "",
+                                foreground="blue",
+                                font=("Arial", 10),
+                                relief="sunken",
+                                padding=5)
+        insumo_label.grid(row=0, column=0, sticky="ew")
         row += 1
 
         # Tipo de Movimiento
-        ttk.Label(frame_edicion, text="Tipo de Movimiento:").grid(row=row, column=0, sticky="w", padx=5, pady=5)
+        ttk.Label(campos_frame, text="Tipo de Movimiento:", font=("Arial", 10)).grid(
+            row=row, column=0, sticky="w", padx=(0, 10), pady=8
+        )
         tipo_movimiento_var = tk.StringVar(value=movimiento.get('tipo_movimiento', '') or "")
-        tipo_movimiento_combo = ttk.Combobox(frame_edicion, textvariable=tipo_movimiento_var, width=30)
+        tipo_movimiento_combo = ttk.Combobox(campos_frame, textvariable=tipo_movimiento_var,
+                                            width=ANCHO_CAMPO, font=("Arial", 10))
         tipo_movimiento_combo['values'] = [t['descripcion'] for t in self.tipos_movimiento] if self.tipos_movimiento else []
-        tipo_movimiento_combo.grid(row=row, column=1, sticky="w", padx=5, pady=5)
+        tipo_movimiento_combo.grid(row=row, column=1, sticky="ew", pady=8)
         row += 1
 
         # Lote
-        ttk.Label(frame_edicion, text="Lote:").grid(row=row, column=0, sticky="w", padx=5, pady=5)
+        ttk.Label(campos_frame, text="Lote:", font=("Arial", 10)).grid(
+            row=row, column=0, sticky="w", padx=(0, 10), pady=8
+        )
         lote_var = tk.StringVar(value=movimiento.get('lote', '') or "")
-        lote_entry = ttk.Entry(frame_edicion, textvariable=lote_var, width=20)
-        lote_entry.grid(row=row, column=1, sticky="w", padx=5, pady=5)
+        lote_entry = ttk.Entry(campos_frame, textvariable=lote_var,
+                            width=ANCHO_CAMPO, font=("Arial", 10))
+        lote_entry.grid(row=row, column=1, sticky="ew", pady=8)
         row += 1
 
         # Fecha Vencimiento
-        ttk.Label(frame_edicion, text="Fecha Vencimiento:").grid(row=row, column=0, sticky="w", padx=5, pady=5)
-        fecha_venc_entry = DateEntry(
-            frame_edicion,
-            width=12,
-            date_pattern='dd/mm/yyyy'
+        ttk.Label(campos_frame, text="Fecha Vencimiento:", font=("Arial", 10)).grid(
+            row=row, column=0, sticky="w", padx=(0, 10), pady=8
         )
-        fecha_venc_entry.grid(row=row, column=1, sticky="w", padx=5, pady=5)
+        fecha_venc_entry = DateEntry(
+            campos_frame,
+            width=ANCHO_CAMPO,
+            date_pattern='dd/mm/yyyy',
+            font=("Arial", 10)
+        )
+        fecha_venc_entry.grid(row=row, column=1, sticky="ew", pady=8)
         if movimiento.get('fecha_vencimiento'):
             try:
                 fecha_venc_entry.set_date(datetime.strptime(movimiento['fecha_vencimiento'], '%Y-%m-%d'))
@@ -475,22 +582,24 @@ class CorreccionMovimientos:
         row += 1
 
         # Cantidad
-        ttk.Label(frame_edicion, text="Cantidad:").grid(row=row, column=0, sticky="w", padx=5, pady=5)
+        ttk.Label(campos_frame, text="Cantidad:", font=("Arial", 10)).grid(
+            row=row, column=0, sticky="w", padx=(0, 10), pady=8
+        )
         cantidad_var = tk.StringVar(value=self.formato_float(movimiento.get('cantidad', 0)))
-        cantidad_entry = ttk.Entry(frame_edicion, textvariable=cantidad_var, width=15)
-        cantidad_entry.grid(row=row, column=1, sticky="w", padx=5, pady=5)
+        cantidad_entry = ttk.Entry(campos_frame, textvariable=cantidad_var,
+                                width=ANCHO_CAMPO, font=("Arial", 10))
+        cantidad_entry.grid(row=row, column=1, sticky="ew", pady=8)
         row += 1
 
         # Observaciones
-        ttk.Label(frame_edicion, text="Observaciones:").grid(row=row, column=0, sticky="w", padx=5, pady=5)
+        ttk.Label(campos_frame, text="Observaciones:", font=("Arial", 10)).grid(
+            row=row, column=0, sticky="w", padx=(0, 10), pady=8
+        )
         observaciones_var = tk.StringVar(value=movimiento.get('observaciones', '') or "")
-        observaciones_entry = ttk.Entry(frame_edicion, textvariable=observaciones_var, width=50)
-        observaciones_entry.grid(row=row, column=1, columnspan=3, sticky="w", padx=5, pady=5)
+        observaciones_entry = ttk.Entry(campos_frame, textvariable=observaciones_var,
+                                    width=ANCHO_CAMPO, font=("Arial", 10))
+        observaciones_entry.grid(row=row, column=1, sticky="ew", pady=8)
         row += 1
-
-        # Frame para botones
-        frame_botones = ttk.Frame(frame_edicion)
-        frame_botones.grid(row=row, column=0, columnspan=4, pady=20)
 
         # Función para guardar cambios
         def guardar_cambios():
@@ -531,9 +640,21 @@ class CorreccionMovimientos:
             except Exception as e:
                 messagebox.showerror("Error", f"Error al actualizar movimiento: {str(e)}")
 
-        # Botones
-        ttk.Button(frame_botones, text="Guardar Cambios", command=guardar_cambios).pack(side="left", padx=5)
-        ttk.Button(frame_botones, text="Cancelar", command=edicion_window.destroy).pack(side="left", padx=5)
+        # Frame para botones centrado
+        frame_botones = ttk.Frame(frame_edicion)
+        frame_botones.pack(pady=20)
+
+        # Botones con estilo uniforme
+        btn_guardar = ttk.Button(frame_botones, text="Modificar",
+                                command=guardar_cambios, width=15)
+        btn_guardar.pack(side="left", padx=10)
+
+        btn_cancelar = ttk.Button(frame_botones, text="Cancelar",
+                                command=edicion_window.destroy, width=15)
+        btn_cancelar.pack(side="left", padx=10)
+
+        # Enfocar el primer campo
+        referencia_entry.focus_set()
 
     def eliminar_movimiento(self):
         # Obtener el item seleccionado

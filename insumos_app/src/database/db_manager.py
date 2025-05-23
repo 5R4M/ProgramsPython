@@ -690,6 +690,20 @@ def guardar_movimiento(movimiento_data):
 
 # -------------------- FUNCIONES PARA OBTENER IDS --------------------
 
+def obtener_id_area(nombre_area):
+    conn = conectar_db()
+    if conn:
+        try:
+            cursor = conn.cursor()
+            cursor.execute("SELECT id FROM area WHERE nombre = ?", (nombre_area,))
+            resultado = cursor.fetchone()
+            return resultado['id'] if resultado else None
+        except sqlite3.Error as e:
+            print(f"Error al obtener id área: {e}")
+            return None
+        finally:
+            conn.close()
+
 def obtener_id_distrito(nombre_distrito):
     conn = conectar_db()
     if conn:

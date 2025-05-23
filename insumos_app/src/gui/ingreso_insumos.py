@@ -205,7 +205,8 @@ class IngresoInsumos:
 
         columns = (
             'fecha_registro', 'referencia', 'tipo_movimiento', 'insumo', 'presentacion', 'servicio',
-            'lote', 'fecha_vencimiento', 'cantidad', 'salida_distrito', 'salida_servicio', 'observaciones', 'tipo_insumo'
+            'lote', 'fecha_vencimiento', 'cantidad', 'salida_distrito', 'salida_servicio',
+            'observaciones', 'tipo_insumo', 'area', 'distrito', 'tipo_servicio'
         )
 
         self.tree = ttk.Treeview(self.frame_movimientos, columns=columns, show='headings')
@@ -224,7 +225,10 @@ class IngresoInsumos:
             'salida_distrito': 'Salida Distrito',
             'salida_servicio': 'Salida Servicio',
             'observaciones': 'Observaciones',
-            'tipo_insumo': 'Tipo Insumo'
+            'tipo_insumo': 'Tipo Insumo',
+            'area': 'Área',           
+            'distrito': 'Distrito',   
+            'tipo_servicio': 'Tipo Servicio'  
         }
 
         for col in columns:
@@ -473,7 +477,7 @@ class IngresoInsumos:
         try:
             fecha_registro = self.fecha_reg.get_date().strftime('%d/%m/%Y')
             tipo_movimiento = self.tipo_movimiento_var.get()
-            tipo_insumo = self.tipo_insumo_var.get()  # Agregar esta línea
+            tipo_insumo = self.tipo_insumo_var.get()
             insumo = self.insumo_var.get()
             presentacion = self.presentacion_var.get()
             lote = self.lote_entry.get().upper()
@@ -481,13 +485,19 @@ class IngresoInsumos:
             cantidad_str = self.cantidad_entry.get()
             referencia = self.referencia_entry.get().upper()
             observaciones = self.observaciones_entry.get().upper()
+
+            # Obtener datos de servicios
+            area = self.area_var.get()
+            distrito = self.distrito_var.get()
+            tipo_servicio = self.tipo_servicio_var.get()
+            servicio = self.servicio_var.get()
+
             salida_distrito = ''
             salida_servicio = ''
             if tipo_movimiento.strip().upper() == "SALIDA NIVEL INFERIOR":
                 salida_distrito = self.salida_distrito_var.get()
                 salida_servicio = self.salida_servicio_var.get()
 
-            # Validar que tipo_insumo no esté vacío
             if not tipo_insumo:
                 messagebox.showerror("Error", "Debe seleccionar un tipo de insumo")
                 return
@@ -498,14 +508,26 @@ class IngresoInsumos:
 
             cantidad = float(cantidad_str)
 
-            # Modificar el Treeview para incluir tipo_insumo
+            # Insertar en el Treeview con TODOS los datos necesarios
             self.tree.insert('', 'end', values=(
-                fecha_registro, referencia, tipo_movimiento, insumo,
-                presentacion, self.servicio_var.get(), lote, fecha_venc_str, cantidad, salida_distrito,
-                salida_servicio, observaciones, tipo_insumo
+                fecha_registro,      # 0
+                referencia,          # 1
+                tipo_movimiento,     # 2
+                insumo,             # 3
+                presentacion,       # 4
+                servicio,           # 5
+                lote,               # 6
+                fecha_venc_str,     # 7
+                cantidad,           # 8
+                salida_distrito,    # 9
+                salida_servicio,    # 10
+                observaciones,      # 11
+                tipo_insumo,        # 12
+                area,               # 13 - NUEVO
+                distrito,           # 14 - NUEVO
+                tipo_servicio       # 15 - NUEVO
             ))
-            
-            # Llamar a la función de limpieza
+
             self.limpiar_campos()
 
         except ValueError:
@@ -923,17 +945,22 @@ class IngresoInsumos:
         def guardar_cambios():
             try:
                 nuevos_valores = (
-                    fecha_edit.get_date().strftime('%d/%m/%Y'),
-                    referencia_entry.get().upper(),
-                    edit_tipo_movimiento_var.get(),
-                    edit_insumo_var.get(),
-                    edit_presentacion_var.get(),
-                    lote_entry.get().upper(),
-                    fecha_venc_edit.get_date().strftime('%d/%m/%Y'),
-                    cantidad_entry.get(),
-                    edit_salida_distrito_var.get(),
-                    edit_salida_servicio_var.get(),
-                    observaciones_entry.get().upper()
+                    fecha_edit.get_date().strftime('%d/%m/%Y'),    # 0
+                    referencia_entry.get().upper(),                # 1
+                    edit_tipo_movimiento_var.get(),                # 2
+                    edit_insumo_var.get(),                         # 3
+                    edit_presentacion_var.get(),                   # 4
+                    edit_servicio_var.get(),                       # 5
+                    lote_entry.get().upper(),                      # 6
+                    fecha_venc_edit.get_date().strftime('%d/%m/%Y'), # 7
+                    cantidad_entry.get(),                          # 8
+                    edit_salida_distrito_var.get(),                # 9
+                    edit_salida_servicio_var.get(),                # 10
+                    observaciones_entry.get().upper(),             # 11
+                    edit_tipo_insumo_var.get(),                    # 12
+                    edit_area_var.get(),                           # 13
+                    edit_distrito_var.get(),                       # 14 
+                    edit_tipo_servicio_var.get()                   # 15 
                 )
 
                 if not all(nuevos_valores[:8]):
@@ -941,7 +968,7 @@ class IngresoInsumos:
                     return
 
                 try:
-                    float(nuevos_valores[7])
+                    float(nuevos_valores[8])
                 except ValueError:
                     messagebox.showerror("Error", "La cantidad debe ser un número válido")
                     return
@@ -991,43 +1018,69 @@ class IngresoInsumos:
             try:
                 valores = self.tree.item(item)['values']
 
-                # Obtener tipo_insumo del Treeview (última columna, índice 12)
-                tipo_insumo_desc = valores[12]  # Índice 12 corresponde a la columna tipo_insumo
+                # Obtener datos con los índices correctos
+                fecha_registro_str = valores[0]
+                referencia = valores[1]
+                tipo_movimiento_desc = valores[2]
+                insumo_nombre = valores[3]
+                presentacion_nombre = valores[4]
+                servicio_nombre = valores[5]
+                lote = valores[6]
+                fecha_vencimiento_str = valores[7]
+                cantidad = float(valores[8])
+                salida_distrito_nombre = valores[9] if valores[9] else None
+                salida_servicio_nombre = valores[10] if valores[10] else None
+                observaciones = valores[11] if valores[11] else None
+                tipo_insumo_desc = valores[12]
+                area_nombre = valores[13]           # NUEVO
+                distrito_nombre = valores[14]       # NUEVO
+                tipo_servicio_desc = valores[15]    # NUEVO
+
+                # Validaciones
                 if not tipo_insumo_desc:
                     raise ValueError("El tipo de insumo no puede estar vacío")
+
+                # Obtener IDs
+                area_id = None
+                if area_nombre:
+                    areas = obtener_areas() or []
+                    area_id = next((a['id'] for a in areas if a['nombre'] == area_nombre), None)
+
+                distrito_id = obtener_id_distrito(distrito_nombre) if distrito_nombre else None
+
+                tipo_servicio_id = None
+                if tipo_servicio_desc and distrito_id:
+                    tipos_servicio = obtener_tipos_servicio_por_distrito(distrito_id) or []
+                    tipo_servicio_id = next((ts['id'] for ts in tipos_servicio if ts['descripcion'] == tipo_servicio_desc), None)
+
+                servicio_id = None
+                if servicio_nombre and tipo_servicio_id:
+                    servicios = obtener_servicios_por_tipo(tipo_servicio_id) or []
+                    servicio_id = next((s['id'] for s in servicios if s['nombre'] == servicio_nombre), None)
 
                 tipo_insumo_id = obtener_id_tipo_insumo(tipo_insumo_desc)
                 if tipo_insumo_id is None:
                     raise ValueError(f"No se encontró el tipo de insumo: {tipo_insumo_desc}")
-                
-                area_nombre = self.area_var.get()
-                areas = obtener_areas() or []
-                area_id = next((a['id'] for a in areas if a['nombre'] == area_nombre), None)
-                
-                # Obtener IDs necesarios
-                distrito_id = obtener_id_distrito(self.distrito_var.get())
-                tipo_servicio_id = obtener_id_tipo_servicio(self.tipo_servicio_var.get())
-                servicio_nombre = valores[5]  # Índice 5 corresponde a la columna servicio
-                servicio_id = obtener_id_servicio(servicio_nombre)
-                insumo_id = obtener_id_insumo(valores[3], tipo_insumo_id)  # valores[3] es el nombre del insumo
-                presentacion_id = obtener_id_presentacion(valores[4])  # valores[4] es la presentación
-                tipo_movimiento_id = obtener_id_tipo_movimiento(valores[2])  # valores[2] es el tipo de movimiento
+
+                insumo_id = obtener_id_insumo(insumo_nombre, tipo_insumo_id)
+                if insumo_id is None:
+                    raise ValueError(f"No se encontró el insumo: {insumo_nombre}")
+
+                presentacion_id = obtener_id_presentacion(presentacion_nombre) if presentacion_nombre else None
+                tipo_movimiento_id = obtener_id_tipo_movimiento(tipo_movimiento_desc)
 
                 # Convertir fechas
-                fecha_registro = datetime.strptime(valores[0], '%d/%m/%Y')
-                fecha_vencimiento = datetime.strptime(valores[7], '%d/%m/%Y')  # valores[7] es la fecha de vencimiento
+                fecha_registro = datetime.strptime(fecha_registro_str, '%d/%m/%Y')
+                fecha_vencimiento = datetime.strptime(fecha_vencimiento_str, '%d/%m/%Y')
 
                 # Manejar salida nivel inferior
-                salida_distrito_id = None
-                salida_servicio_id = None
-                if valores[2].strip().upper() == "SALIDA NIVEL INFERIOR":
-                    salida_distrito_id = obtener_id_distrito(valores[9])  # valores[9] es el distrito de salida
-                    salida_servicio_id = obtener_id_servicio(valores[10])  # valores[10] es el servicio de salida
+                salida_distrito_id = obtener_id_distrito(salida_distrito_nombre) if salida_distrito_nombre else None
+                salida_servicio_id = obtener_id_servicio(salida_servicio_nombre) if salida_servicio_nombre else None
 
                 # Crear diccionario con datos del movimiento
                 movimiento_data = {
                     'fecha_registro': fecha_registro,
-                    'referencia': valores[1],
+                    'referencia': referencia,
                     'tipo_movimiento_id': tipo_movimiento_id,
                     'area_id': area_id,
                     'distrito_id': distrito_id,
@@ -1036,13 +1089,16 @@ class IngresoInsumos:
                     'tipo_insumo_id': tipo_insumo_id,
                     'insumo_id': insumo_id,
                     'presentacion_id': presentacion_id,
-                    'lote': valores[6],  # valores[6] es el lote
+                    'lote': lote,
                     'fecha_vencimiento': fecha_vencimiento,
-                    'cantidad': float(valores[8]),  # valores[8] es la cantidad
+                    'cantidad': cantidad,
                     'salida_distrito_id': salida_distrito_id,
                     'salida_servicio_id': salida_servicio_id,
-                    'observaciones': valores[11] if valores[11] else None  # valores[11] son las observaciones
+                    'observaciones': observaciones
                 }
+
+                # Debug: imprimir los IDs que se van a guardar
+                print(f"Guardando movimiento: area_id={area_id}, distrito_id={distrito_id}, servicio_id={servicio_id}")
 
                 # Guardar movimiento
                 guardar_movimiento(movimiento_data)
