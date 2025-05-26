@@ -16,7 +16,6 @@ from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, 
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.units import inch
 
-
 # Agregar el directorio raíz del proyecto al PATH de Python
 sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
@@ -77,6 +76,165 @@ class ReporteKardex:
                 locale.setlocale(locale.LC_TIME, 'spanish')  # Windows
             except locale.Error:
                 print("No se pudo establecer el locale a español")
+
+    def ordenar_movimientos(self, movimientos):
+        """
+        Ordena los movimientos por fecha y luego por prioridad de tipo de movimiento.
+        Positivos primero, luego negativos, luego neutrales (NO ENTREGADO).
+        """
+        def obtener_prioridad(tipo_movimiento):
+            tipo = tipo_movimiento.upper()
+            # Movimientos positivos (prioridad 1)
+            if tipo in ['INVENTARIO INICIAL', 'ENTRADA NIVEL SUPERIOR', 'REAJUSTE POSITIVO']:
+                return 1
+            # Movimientos negativos que SÍ afectan el saldo (prioridad 2)
+            elif tipo in ['SALIDA NIVEL INFERIOR', 'REAJUSTE NEGATIVO', 'ENTREGADO']:
+                return 2
+            # Movimientos neutrales que NO afectan el saldo (prioridad 3)
+            elif tipo == 'NO ENTREGADO':
+                return 3
+            # Cualquier otro tipo no reconocido (prioridad 4)
+            else:
+                return 4
+
+        # Ordenar por fecha y luego por prioridad
+        return sorted(movimientos, key=lambda x: (x['fecha'], obtener_prioridad(x['tipo_movimiento'])))
+
+    def calcular_saldo_acumulado(self, movimientos_ordenados):
+        """
+        Calcula el saldo acumulado para los movimientos ordenados.
+        Los movimientos "NO ENTREGADO" se muestran pero no afectan el saldo.
+        """
+        saldo = 0
+        movimientos_con_saldo = []
+
+        for mov in movimientos_ordenados:
+            tipo = mov['tipo_movimiento'].upper()
+
+            # Buscar la cantidad usando múltiples posibles nombres de campo
+            cantidad = 0
+            posibles_campos_cantidad = [
+                'cantidad', 'cantidad_movimiento', 'cantidad_entrada', 'cantidad_salida',
+                'qty', 'quantity', 'cant', 'cantidades', 'valor_cantidad'
+            ]
+
+            for campo in posibles_campos_cantidad:
+                if campo in mov and mov[campo] is not None:
+                    try:
+                        cantidad = float(mov[campo])
+                        break
+                    except (ValueError, TypeError):
+                        continue
+
+            # Si no encontramos cantidad en los campos esperados, buscar cualquier campo que contenga 'cantidad'
+            if cantidad == 0:
+                for key, value in mov.items():
+                    if 'cantidad' in key.lower() and value is not None:
+                        try:
+                            cantidad = float(value)
+                            break
+                        except (ValueError, TypeError):
+                            continue
+
+            # Formatear fechas
+            fecha_registro = self.formatear_fecha(mov.get('fecha', ''))
+            fecha_vencimiento = self.formatear_fecha(mov.get('fecha_vencimiento', ''))
+
+            # Determinar el destinatario para SALIDA NIVEL INFERIOR
+            destinatario = mov['tipo_movimiento']
+            if tipo == 'SALIDA NIVEL INFERIOR':
+                if mov.get('distrito_destino'):
+                    destinatario = f"Distrito: {mov['distrito_destino']}"
+                elif mov.get('servicio_destino'):
+                    destinatario = f"Servicio: {mov['servicio_destino']}"
+
+            # Configurar las columnas según el tipo de movimiento
+            entrada = 0
+            salida = ""
+            reajuste = 0
+            cantidad_col = 0
+
+            if tipo in ['INVENTARIO INICIAL', 'ENTRADA NIVEL SUPERIOR']:
+                entrada = cantidad
+                cantidad_col = cantidad
+                saldo += cantidad  # SÍ afecta el saldo
+            elif tipo in ['SALIDA NIVEL INFERIOR', 'ENTREGADO']:
+                salida = f"{cantidad:.2f} ({tipo.title()})"
+                cantidad_col = cantidad
+                saldo -= cantidad  # SÍ afecta el saldo
+            elif tipo == 'REAJUSTE POSITIVO':
+                reajuste = cantidad
+                cantidad_col = cantidad
+                saldo += cantidad  # SÍ afecta el saldo
+            elif tipo == 'REAJUSTE NEGATIVO':
+                reajuste = -cantidad
+                cantidad_col = cantidad
+                saldo -= cantidad  # SÍ afecta el saldo
+            elif tipo == 'NO ENTREGADO':
+                # NO ENTREGADO se muestra en el reporte pero NO afecta el saldo
+                salida = f"{cantidad:.2f} (No Entregado)"
+                cantidad_col = cantidad
+                # NO se modifica el saldo: saldo permanece igual
+
+            movimientos_con_saldo.append({
+                'fecha': fecha_registro,
+                'referencia': mov.get('referencia', ''),
+                'tipo_movimiento': destinatario,
+                'entrada': entrada,
+                'precio_unitario': "",
+                'valor_total': "",
+                'lote': mov.get('lote', ''),
+                'fecha_vencimiento': fecha_vencimiento,
+                'salida': salida,
+                'reajuste': reajuste,
+                'cantidad_col': cantidad_col,
+                'saldo': saldo,
+                'observaciones': mov.get('observaciones', '')
+            })
+
+        return movimientos_con_saldo
+
+    def formatear_fecha(self, fecha):
+        """
+        Convierte una fecha al formato día/mes/año
+        """
+        if not fecha:
+            return ""
+
+        try:
+            # Si la fecha viene como string, intentar parsearla
+            if isinstance(fecha, str):
+                # Intentar diferentes formatos de entrada
+                formatos_entrada = [
+                    '%Y-%m-%d',      # 2024-01-15
+                    '%Y/%m/%d',      # 2024/01/15
+                    '%d-%m-%Y',      # 15-01-2024
+                    '%d/%m/%Y',      # 15/01/2024
+                    '%Y-%m-%d %H:%M:%S',  # 2024-01-15 10:30:00
+                    '%Y/%m/%d %H:%M:%S'   # 2024/01/15 10:30:00
+                ]
+
+                for formato in formatos_entrada:
+                    try:
+                        fecha_obj = datetime.strptime(fecha, formato)
+                        return fecha_obj.strftime('%d/%m/%Y')
+                    except ValueError:
+                        continue
+
+                # Si no se pudo parsear, devolver la fecha original
+                return fecha
+
+            # Si la fecha viene como objeto datetime
+            elif hasattr(fecha, 'strftime'):
+                return fecha.strftime('%d/%m/%Y')
+
+            # Si es otro tipo, convertir a string
+            else:
+                return str(fecha)
+
+        except Exception as e:
+            print(f"Error al formatear fecha {fecha}: {e}")
+            return str(fecha) if fecha else ""
 
     def setup_ui(self):
         # Frame principal - USAR PACK PARA TODO
@@ -463,7 +621,7 @@ class ReporteKardex:
                 return
 
             # Obtener datos
-            self.movimientos_data = obtener_movimientos_kardex(
+            movimientos_raw = obtener_movimientos_kardex(
                 fecha_ini.strftime('%Y-%m-%d'),
                 fecha_fin.strftime('%Y-%m-%d'),
                 self.combo_distrito.get(),
@@ -474,9 +632,13 @@ class ReporteKardex:
                 self.combo_presentacion.get()
             )
 
-            if not self.movimientos_data:
+            if not movimientos_raw:
                 messagebox.showinfo("Info", "No hay datos para mostrar")
                 return
+
+            # Ordenar movimientos y calcular saldo
+            movimientos_ordenados = self.ordenar_movimientos(movimientos_raw)
+            self.movimientos_data = self.calcular_saldo_acumulado(movimientos_ordenados)
 
             # Generar PDF temporal
             import tempfile
@@ -639,7 +801,7 @@ class ReporteKardex:
 
             # Obtener datos si no existen
             if not self.movimientos_data:
-                self.movimientos_data = obtener_movimientos_kardex(
+                movimientos_raw = obtener_movimientos_kardex(
                     fecha_ini.strftime('%Y-%m-%d'),
                     fecha_fin.strftime('%Y-%m-%d'),
                     self.combo_distrito.get(),
@@ -650,9 +812,13 @@ class ReporteKardex:
                     self.combo_presentacion.get()
                 )
 
-            if not self.movimientos_data:
-                messagebox.showinfo("Info", "No hay datos para mostrar")
-                return
+                if not movimientos_raw:
+                    messagebox.showinfo("Info", "No hay datos para mostrar")
+                    return
+
+                # Ordenar movimientos y calcular saldo
+                movimientos_ordenados = self.ordenar_movimientos(movimientos_raw)
+                self.movimientos_data = self.calcular_saldo_acumulado(movimientos_ordenados)
 
             # Generar nombre de archivo con fecha y hora
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -767,81 +933,120 @@ class ReporteKardex:
             elements.append(table_filtros)
             elements.append(Spacer(1, 30))
 
-            # Encabezados de la tabla
-            headers = [
-                'Fecha',
-                'Referencia',
-                'Remitente/\nDestinatario',
-                'Entrada',
-                'Precio\nUnitario',
-                'Valor\nTotal',
-                'Lote',
-                'Fecha\nVencimiento',
-                'Salidas',
-                'Reajustes\n(+) (-)',
-                'Cantidad',
-                'Saldo',
-                'Observaciones'
-            ]
+            # Dividir datos en páginas (aproximadamente 25 filas por página)
+            filas_por_pagina = 25
+            total_movimientos = len(self.movimientos_data)
+            
+            for pagina in range(0, total_movimientos, filas_por_pagina):
+                # Si no es la primera página, agregar salto de página
+                if pagina > 0:
+                    from reportlab.platypus import PageBreak
+                    elements.append(PageBreak())
+                    
+                    # Agregar títulos en cada página nueva
+                    elements.append(Paragraph(
+                        "DIRECCIÓN DEPARTAMENTAL DE REDES INTEGRADAS DE SERVICIOS DE SALUD DE GUATEMALA,",
+                        title_style))
+                    elements.append(Paragraph("ÁREA NOR ORIENTE", subtitle_style))
+                    elements.append(Paragraph("TARJETA DE CONTROL DE SUMINISTROS", subtitle_style))
+                    elements.append(Spacer(1, 20))
 
-            # Datos del reporte
-            data = [headers]
-            for mov in self.movimientos_data:
-                row = [
-                    mov['fecha'],
-                    mov['referencia'] or "",
-                    mov['tipo_movimiento'],
-                    self.formato_float(mov['entrada']),
-                    self.formato_float(mov['precio_unitario']),
-                    self.formato_float(mov['valor_total']),
-                    mov['lote'] or "",
-                    mov['fecha_vencimiento'] or "",
-                    mov['salida'],
-                    f"{mov['reajuste']:+.2f}" if mov['reajuste'] != 0 else "",
-                    self.formato_float(mov['cantidad_col']),
-                    self.formato_float(mov['saldo']),
-                    mov['observaciones'] or ""
+                # Encabezados de la tabla
+                headers = [
+                    'Fecha',
+                    'Referencia',
+                    'Remitente/\nDestinatario',
+                    'Entrada',
+                    'Precio\nUnitario',
+                    'Valor\nTotal',
+                    'Lote',
+                    'Fecha\nVencimiento',
+                    'Salidas',
+                    'Reajustes\n(+) (-)',
+                    'Cantidad',
+                    'Saldo',
+                    'Observaciones'
                 ]
-                data.append(row)
 
-            # Crear tabla con formato y anchos ajustados
-            colWidths = [
-                0.7*inch,  # Fecha
-                0.8*inch,  # Ref.
-                1.5*inch,  # Remitente
-                0.6*inch,  # Entrada
-                0.7*inch,  # P.Unit.
-                0.7*inch,  # V.Total
-                0.8*inch,  # Lote
-                0.7*inch,  # F.Venc.
-                0.6*inch,  # Salidas
-                0.6*inch,  # Reaj.
-                0.6*inch,  # Cant.
-                0.6*inch,  # Saldo
-                1.1*inch   # Obs.
-            ]
+                # Datos de la página actual
+                data = [headers]
+                
+                # Si no es la primera página, agregar fila con saldo anterior
+                if pagina > 0:
+                    saldo_anterior = self.movimientos_data[pagina - 1]['saldo']
+                    fila_saldo_anterior = [
+                        "SALDO ANTERIOR", "", "", "", "", "", "", "", "", "", "", 
+                        self.formato_float(saldo_anterior), ""
+                    ]
+                    data.append(fila_saldo_anterior)
 
-            # Modificar el estilo de la tabla
-            table = Table(data, colWidths=colWidths)
-            table.setStyle(TableStyle([
-                ('BACKGROUND', (0,0), (-1,0), colors.lightblue),
-                ('TEXTCOLOR', (0,0), (-1,0), colors.black),
-                ('ALIGN', (0,0), (-1,-1), 'CENTER'),
-                ('FONTNAME', (0,0), (-1,0), 'Helvetica-Bold'),
-                ('FONTSIZE', (0,0), (-1,0), 7),
-                ('FONTSIZE', (0,1), (-1,-1), 7),
-                ('GRID', (0,0), (-1,-1), 0.25, colors.grey),
-                ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
-                ('TOPPADDING', (0,0), (-1,0), 6),
-                ('BOTTOMPADDING', (0,0), (-1,0), 6),
-                ('TOPPADDING', (0,1), (-1,-1), 2),
-                ('BOTTOMPADDING', (0,1), (-1,-1), 2),
-                ('LEFTPADDING', (0,0), (-1,-1), 2),
-                ('RIGHTPADDING', (0,0), (-1,-1), 2),
-                ('WORDWRAP', (0,0), (-1,0), True),
-            ]))
+                # Agregar movimientos de esta página
+                fin_pagina = min(pagina + filas_por_pagina, total_movimientos)
+                for i in range(pagina, fin_pagina):
+                    mov = self.movimientos_data[i]
+                    row = [
+                        mov['fecha'],
+                        mov['referencia'] or "",
+                        mov['tipo_movimiento'],
+                        self.formato_float(mov['entrada']),
+                        self.formato_float(mov['precio_unitario']),
+                        self.formato_float(mov['valor_total']),
+                        mov['lote'] or "",
+                        mov['fecha_vencimiento'] or "",
+                        mov['salida'],
+                        f"{mov['reajuste']:+.2f}" if mov['reajuste'] != 0 else "",
+                        self.formato_float(mov['cantidad_col']),
+                        self.formato_float(mov['saldo']),
+                        mov['observaciones'] or ""
+                    ]
+                    data.append(row)
 
-            elements.append(table)
+                # Crear tabla con formato y anchos ajustados
+                colWidths = [
+                    0.7*inch,  # Fecha
+                    0.8*inch,  # Ref.
+                    1.5*inch,  # Remitente
+                    0.6*inch,  # Entrada
+                    0.7*inch,  # P.Unit.
+                    0.7*inch,  # V.Total
+                    0.8*inch,  # Lote
+                    0.7*inch,  # F.Venc.
+                    0.6*inch,  # Salidas
+                    0.6*inch,  # Reaj.
+                    0.6*inch,  # Cant.
+                    0.6*inch,  # Saldo
+                    1.1*inch   # Obs.
+                ]
+
+                table = Table(data, colWidths=colWidths)
+                
+                # Estilo base de la tabla
+                table_style = [
+                    ('BACKGROUND', (0,0), (-1,0), colors.lightblue),
+                    ('TEXTCOLOR', (0,0), (-1,0), colors.black),
+                    ('ALIGN', (0,0), (-1,-1), 'CENTER'),
+                    ('FONTNAME', (0,0), (-1,0), 'Helvetica-Bold'),
+                    ('FONTSIZE', (0,0), (-1,0), 7),
+                    ('FONTSIZE', (0,1), (-1,-1), 7),
+                    ('GRID', (0,0), (-1,-1), 0.25, colors.grey),
+                    ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
+                    ('TOPPADDING', (0,0), (-1,0), 6),
+                    ('BOTTOMPADDING', (0,0), (-1,0), 6),
+                    ('TOPPADDING', (0,1), (-1,-1), 2),
+                    ('BOTTOMPADDING', (0,1), (-1,-1), 2),
+                    ('LEFTPADDING', (0,0), (-1,-1), 2),
+                    ('RIGHTPADDING', (0,0), (-1,-1), 2),
+                    ('WORDWRAP', (0,0), (-1,0), True),
+                ]
+                
+                # Si hay saldo anterior, resaltarlo
+                if pagina > 0:
+                    table_style.append(('BACKGROUND', (0,1), (-1,1), colors.lightyellow))
+                    table_style.append(('FONTNAME', (0,1), (-1,1), 'Helvetica-Bold'))
+
+                table.setStyle(TableStyle(table_style))
+                elements.append(table)
+
             doc.build(elements)
 
             if not es_vista_previa:
@@ -884,7 +1089,7 @@ class ReporteKardex:
                 return
 
             # Obtener datos para el reporte
-            movimientos = obtener_movimientos_kardex(
+            movimientos_raw = obtener_movimientos_kardex(
                 fecha_ini.strftime('%Y-%m-%d'),
                 fecha_fin.strftime('%Y-%m-%d'),
                 self.combo_distrito.get(),
@@ -895,9 +1100,13 @@ class ReporteKardex:
                 self.combo_presentacion.get()
             )
 
-            if not movimientos:
+            if not movimientos_raw:
                 messagebox.showinfo("Info", "No hay datos para mostrar")
                 return
+
+            # Ordenar movimientos y calcular saldo
+            movimientos_ordenados = self.ordenar_movimientos(movimientos_raw)
+            movimientos = self.calcular_saldo_acumulado(movimientos_ordenados)
 
             # Crear DataFrame y generar Excel
             full_path = self.generar_excel(movimientos, periodo)
@@ -922,31 +1131,11 @@ class ReporteKardex:
     def generar_excel(self, movimientos, periodo):
         try:
             import os  # Importar os al inicio del método
-            # Filtrar y renombrar columnas
-            columnas_relevantes = [
-                'fecha', 'referencia', 'tipo_movimiento', 'entrada',
-                'precio_unitario', 'valor_total', 'lote', 'fecha_vencimiento',
-                'salida', 'reajuste', 'cantidad_col', 'saldo', 'observaciones'
-            ]
-            df = pd.DataFrame(movimientos)[columnas_relevantes]
-
-            # Nombres de columnas mejorados con saltos de línea
-            df.columns = [
-                'Fecha',
-                'No.\nReferencia',
-                'Remitente/\nDestinatario',
-                'Entrada',
-                'Precio\nUnitario\n(Q.)',
-                'Valor\nTotal\n(Q.)',
-                'No.\nLote',
-                'Fecha de\nVencimiento',
-                'Salidas',
-                'Reajustes\n(+) (-)',
-                'Cantidad',
-                'Saldo',
-                'Observaciones'
-            ]
-
+            
+            # Dividir movimientos en hojas (máximo 1000 filas por hoja)
+            filas_por_hoja = 1000
+            total_movimientos = len(movimientos)
+            
             # Generar nombre de archivo con fecha y hora
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             file_name = f"Reporte_Kardex_{periodo}_{timestamp}.xlsx"
@@ -957,13 +1146,9 @@ class ReporteKardex:
 
             # Crear archivo Excel
             writer = pd.ExcelWriter(full_path, engine='xlsxwriter')
-            df.to_excel(writer, sheet_name='Kardex', startrow=8, index=False)
-
-            # Obtener el objeto workbook y worksheet
             workbook = writer.book
-            worksheet = writer.sheets['Kardex']
 
-            # Mejorar el formato de los títulos
+            # Estilos comunes
             title_format = workbook.add_format({
                 'bold': True,
                 'align': 'center',
@@ -980,121 +1165,179 @@ class ReporteKardex:
                 'text_wrap': True
             })
 
-            timestamp_format = workbook.add_format({
-                'align': 'center',
-                'font_size': 9
-            })
-
-            # Ajustar altura de las filas de títulos
-            worksheet.set_row(0, 30)  # Título principal
-            worksheet.set_row(1, 25)  # Subtítulo 1
-            worksheet.set_row(2, 25)  # Subtítulo 2
-            worksheet.set_row(3, 20)  # Fecha/hora
-            worksheet.set_row(5, 25)  # Fila de filtros
-
-            # Ajustar altura de la fila de encabezados (aumentada para los títulos multilínea)
-            worksheet.set_row(8, 45)  # Encabezados de columnas
-
-            # Formato para los datos con altura ajustada
-            data_format = workbook.add_format({
-                'align': 'center',
-                'valign': 'vcenter',
-                'text_wrap': True,
-                'font_size': 9
-            })
-
-            # Aplicar formato a los datos
-            for row in range(9, len(df) + 9):
-                worksheet.set_row(row, 20, data_format)
-
-            # Ajustar el rango de las celdas combinadas para los títulos
-            worksheet.merge_range('A1:M1',
-                'DIRECCIÓN DEPARTAMENTAL DE REDES INTEGRADAS DE SERVICIOS DE SALUD DE GUATEMALA,',
-                title_format)
-            worksheet.merge_range('A2:M2', 'ÁREA NOR ORIENTE', subtitle_format)
-            worksheet.merge_range('A3:M3', 'TARJETA DE CONTROL DE SUMINISTROS', subtitle_format)
-            worksheet.merge_range('A4:M4',
-                f"Generado el: {datetime.now().strftime('%d/%m/%Y %H:%M:%S')}",
-                timestamp_format)
-
-            # Filtros en filas separadas
-            worksheet.merge_range('A6:B6', f"Área: {self.combo_area.get()}", subtitle_format)
-            worksheet.merge_range('C6:D6', f"Distrito: {self.combo_distrito.get()}", subtitle_format)
-            worksheet.merge_range('E6:F6', f"Tipo de Servicio: {self.combo_tipo_servicio.get()}", subtitle_format)
-            worksheet.merge_range('G6:H6', f"Servicio: {self.combo_servicio.get()}", subtitle_format)
-            worksheet.merge_range('I6:J6', f"Insumo: {self.combo_insumo.get()}", subtitle_format)
-            worksheet.merge_range('K6:M6', f"Presentación: {self.combo_presentacion.get()}", subtitle_format)
-
-            # Configuración de página
-            worksheet.set_landscape()
-            worksheet.set_paper(9)
-            worksheet.fit_to_pages(1, 1)
-
-            # Formato para el contenido
-            content_format = workbook.add_format({
-                'align': 'center',
-                'valign': 'vcenter',
-                'font_size': 9,
-                'text_wrap': True
-            })
-
-            # Formato mejorado para los encabezados
             header_format = workbook.add_format({
                 'bold': True,
                 'align': 'center',
                 'valign': 'vcenter',
                 'font_size': 9,
-                'bg_color': '#ADD8E6',  # Light blue
+                'bg_color': '#ADD8E6',
                 'text_wrap': True,
                 'border': 1,
-                'border_color': '#808080'  # Gris para los bordes
+                'border_color': '#808080'
             })
 
-            # Aplicar formato a los encabezados
-            for col_num, value in enumerate(df.columns.values):
-                worksheet.write(8, col_num, value, header_format)
-
-            # Ajustar anchos de columna optimizados
-            worksheet.set_column('A:A', 10)    # Fecha
-            worksheet.set_column('B:B', 12)    # No. Referencia
-            worksheet.set_column('C:C', 20)    # Remitente/Destinatario
-            worksheet.set_column('D:D', 10)    # Entrada
-            worksheet.set_column('E:E', 10)    # Precio Unitario
-            worksheet.set_column('F:F', 10)    # Valor Total
-            worksheet.set_column('G:G', 10)    # No. Lote
-            worksheet.set_column('H:H', 12)    # Fecha Vencimiento
-            worksheet.set_column('I:I', 10)    # Salidas
-            worksheet.set_column('J:J', 10)    # Reajustes
-            worksheet.set_column('K:K', 10)    # Cantidad
-            worksheet.set_column('L:L', 10)    # Saldo
-            worksheet.set_column('M:M', 15)    # Observaciones
-
-            # Formato para números con dos decimales
-            number_format = workbook.add_format({
+            saldo_anterior_format = workbook.add_format({
+                'bold': True,
                 'align': 'center',
                 'valign': 'vcenter',
                 'font_size': 9,
-                'num_format': '#,##0.00'
+                'bg_color': '#FFFFE0',
+                'border': 1
             })
 
-            # Aplicar formato numérico a columnas específicas
-            for row in range(9, len(df) + 9):
-                worksheet.write(row, 4, df.iloc[row-9]['Precio\nUnitario\n(Q.)'], number_format)  # Precio Unitario
-                worksheet.write(row, 5, df.iloc[row-9]['Valor\nTotal\n(Q.)'], number_format)      # Valor Total
+            # Procesar cada hoja
+            for hoja_num in range(0, total_movimientos, filas_por_hoja):
+                nombre_hoja = f"Kardex_{hoja_num//filas_por_hoja + 1}"
+                
+                # Filtrar y renombrar columnas para esta hoja
+                fin_hoja = min(hoja_num + filas_por_hoja, total_movimientos)
+                movimientos_hoja = movimientos[hoja_num:fin_hoja]
+                
+                columnas_relevantes = [
+                    'fecha', 'referencia', 'tipo_movimiento', 'entrada',
+                    'precio_unitario', 'valor_total', 'lote', 'fecha_vencimiento',
+                    'salida', 'reajuste', 'cantidad_col', 'saldo', 'observaciones'
+                ]
+                
+                df = pd.DataFrame(movimientos_hoja)[columnas_relevantes]
+
+                # Nombres de columnas mejorados
+                df.columns = [
+                    'Fecha',
+                    'No.\nReferencia',
+                    'Remitente/\nDestinatario',
+                    'Entrada',
+                    'Precio\nUnitario\n(Q.)',
+                    'Valor\nTotal\n(Q.)',
+                    'No.\nLote',
+                    'Fecha de\nVencimiento',
+                    'Salidas',
+                    'Reajustes\n(+) (-)',
+                    'Cantidad',
+                    'Saldo',
+                    'Observaciones'
+                ]
+
+                # Escribir datos comenzando en fila 8
+                fila_inicio = 8
+                
+                # Si no es la primera hoja, agregar fila de saldo anterior
+                if hoja_num > 0:
+                    saldo_anterior = movimientos[hoja_num - 1]['saldo']
+                    # Crear DataFrame para saldo anterior
+                    saldo_df = pd.DataFrame([{
+                        'Fecha': 'SALDO ANTERIOR',
+                        'No.\nReferencia': '',
+                        'Remitente/\nDestinatario': '',
+                        'Entrada': '',
+                        'Precio\nUnitario\n(Q.)': '',
+                        'Valor\nTotal\n(Q.)': '',
+                        'No.\nLote': '',
+                        'Fecha de\nVencimiento': '',
+                        'Salidas': '',
+                        'Reajustes\n(+) (-)': '',
+                        'Cantidad': '',
+                        'Saldo': saldo_anterior,
+                        'Observaciones': ''
+                    }])
+                    
+                    # Escribir saldo anterior
+                    saldo_df.to_excel(writer, sheet_name=nombre_hoja, startrow=fila_inicio, index=False, header=False)
+                    fila_inicio += 1
+
+                # Escribir datos principales
+                df.to_excel(writer, sheet_name=nombre_hoja, startrow=fila_inicio, index=False)
+
+                # Obtener worksheet
+                worksheet = writer.sheets[nombre_hoja]
+
+                # Configurar títulos y encabezados
+                self.configurar_hoja_excel(worksheet, workbook, title_format, subtitle_format, 
+                                         header_format, saldo_anterior_format, df, hoja_num > 0, fila_inicio)
 
             # Guardar archivo
             writer.close()
             messagebox.showinfo("Éxito", f"Reporte guardado en:\n{full_path}")
             return full_path
+            
         except Exception as e:
             messagebox.showerror("Error", f"Error al generar Excel: {str(e)}")
             return None
-    
+
+    def configurar_hoja_excel(self, worksheet, workbook, title_format, subtitle_format, 
+                            header_format, saldo_anterior_format, df, tiene_saldo_anterior, fila_inicio):
+        """Configura el formato de una hoja de Excel"""
+        
+        # Configurar altura de filas
+        worksheet.set_row(0, 30)
+        worksheet.set_row(1, 25)
+        worksheet.set_row(2, 25)
+        worksheet.set_row(3, 20)
+        worksheet.set_row(5, 25)
+        worksheet.set_row(fila_inicio - 1, 45)  # Encabezados
+
+        # Títulos principales
+        worksheet.merge_range('A1:M1',
+            'DIRECCIÓN DEPARTAMENTAL DE REDES INTEGRADAS DE SERVICIOS DE SALUD DE GUATEMALA,',
+            title_format)
+        worksheet.merge_range('A2:M2', 'ÁREA NOR ORIENTE', subtitle_format)
+        worksheet.merge_range('A3:M3', 'TARJETA DE CONTROL DE SUMINISTROS', subtitle_format)
+        worksheet.merge_range('A4:M4',
+            f"Generado el: {datetime.now().strftime('%d/%m/%Y %H:%M:%S')}",
+            subtitle_format)
+
+        # Filtros
+        worksheet.merge_range('A6:B6', f"Área: {self.combo_area.get()}", subtitle_format)
+        worksheet.merge_range('C6:D6', f"Distrito: {self.combo_distrito.get()}", subtitle_format)
+        worksheet.merge_range('E6:F6', f"Tipo de Servicio: {self.combo_tipo_servicio.get()}", subtitle_format)
+        worksheet.merge_range('G6:H6', f"Servicio: {self.combo_servicio.get()}", subtitle_format)
+        worksheet.merge_range('I6:J6', f"Insumo: {self.combo_insumo.get()}", subtitle_format)
+        worksheet.merge_range('K6:M6', f"Presentación: {self.combo_presentacion.get()}", subtitle_format)
+
+        # Aplicar formato a encabezados
+        for col_num, value in enumerate(df.columns.values):
+            worksheet.write(fila_inicio - 1, col_num, value, header_format)
+
+        # Si hay saldo anterior, aplicar formato especial
+        if tiene_saldo_anterior:
+            for col in range(13):
+                worksheet.write(fila_inicio, col, 
+                              worksheet.cell(fila_inicio, col).value, saldo_anterior_format)
+
+        # Configuración de página
+        worksheet.set_landscape()
+        worksheet.set_paper(9)
+        worksheet.fit_to_pages(1, 1)
+
+        # Ajustar anchos de columna
+        worksheet.set_column('A:A', 10)    # Fecha
+        worksheet.set_column('B:B', 12)    # No. Referencia
+        worksheet.set_column('C:C', 20)    # Remitente/Destinatario
+        worksheet.set_column('D:D', 10)    # Entrada
+        worksheet.set_column('E:E', 10)    # Precio Unitario
+        worksheet.set_column('F:F', 10)    # Valor Total
+
     def cerrar_ventana(self):
-        if messagebox.askyesno("Confirmar", "¿Está seguro que desea cerrar esta ventana?"):
-            # Limpiar el frame principal
-            for widget in self.parent.winfo_children():
-                widget.destroy()
-            # Mostrar la pantalla de bienvenida
+        """
+        Cierra la ventana del reporte y limpia los recursos
+        """
+        try:
+            # Limpiar archivo temporal si existe
+            if hasattr(self, 'temp_pdf_path') and os.path.exists(self.temp_pdf_path):
+                try:
+                    os.remove(self.temp_pdf_path)
+                except:
+                    pass  # No importa si no se puede eliminar
+
+            # Si hay una referencia a la ventana principal, volver al menú principal
             if self.main_window:
-                self.main_window.show_welcome_screen()
+                self.main_window.show_main_menu()
+
+        except Exception as e:
+            print(f"Error al cerrar ventana: {e}")
+            # En caso de error, intentar cerrar de todas formas
+            if self.main_window:
+                try:
+                    self.main_window.show_main_menu()
+                except:
+                    pass

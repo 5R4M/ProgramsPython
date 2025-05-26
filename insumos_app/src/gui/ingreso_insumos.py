@@ -1153,29 +1153,15 @@ class IngresoInsumos:
             self.frame_salida_nivel_inferior.pack_forget()
     
     def ajustar_tamano_ventana(self, mostrar_salida):
-        ventana = self.main_window.root  # Ventana principal Tk
-
-        # Tamaño base fijo (ajusta según tu diseño)
-        ancho_base = 1200
-        alto_base = 900
-
-        self.parent.update_idletasks()
-        altura_frame = self.frame_salida_nivel_inferior.winfo_reqheight() + 50  # margen extra
-
+        """Ajusta el tamaño de la ventana cuando se muestra/oculta el frame de salida"""
         if mostrar_salida:
-            nuevo_alto = alto_base + altura_frame
+            # Calcular altura adicional necesaria
+            self.parent.update_idletasks()
+            altura_frame = self.frame_salida_nivel_inferior.winfo_reqheight() + 50
+            self.main_window.resize_window_for_content(altura_frame)
         else:
-            nuevo_alto = alto_base
-
-        # Obtener dimensiones de pantalla
-        screen_width = ventana.winfo_screenwidth()
-        screen_height = ventana.winfo_screenheight()
-
-        # Calcular posición para centrar verticalmente y mantener la posición horizontal actual
-        x = max(0, (screen_width - ancho_base) // 2)
-        y = max(0, (screen_height - nuevo_alto) // 2)
-
-        ventana.geometry(f"{ancho_base}x{nuevo_alto}+{x}+{y}")
+            # Restaurar tamaño original
+            self.main_window.reset_window_size()
         
     def cerrar_ventana(self):
         if messagebox.askyesno("Confirmar", "¿Está seguro que desea cerrar esta ventana?"):

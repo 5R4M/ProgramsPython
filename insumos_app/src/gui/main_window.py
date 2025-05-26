@@ -23,6 +23,10 @@ class MainWindow:
     def __init__(self, usuario):
         self.usuario = usuario
 
+        # **CONFIGURACIÓN DE TAMAÑO ESTÁNDAR PARA TODAS LAS VENTANAS**
+        self.ANCHO_VENTANA = 1200  # Ancho estándar
+        self.ALTO_VENTANA = 900    # Alto estándar
+
         # Inicializar la base de datos antes de crear la ventana
         if not self.initialize_database():
             messagebox.showerror("Error Fatal",
@@ -31,7 +35,6 @@ class MainWindow:
 
         self.root = tk.Tk()
         self.root.title("Sistema de Gestión de Insumos")
-        self.root.geometry("1200x800")
 
         # Aplicar tema moderno
         style = ThemedStyle(self.root)
@@ -65,6 +68,65 @@ class MainWindow:
 
         # Manejar el cierre de la ventana principal
         self.root.protocol("WM_DELETE_WINDOW", self.on_closing)
+
+    def setup_window(self):
+        """Configura la ventana principal con tamaño estándar"""
+        # Configurar tamaño y centrar ventana
+        self.center_window(self.ANCHO_VENTANA, self.ALTO_VENTANA)
+
+        # Configurar tamaño mínimo
+        self.root.minsize(1200, 700)
+
+        # Permitir redimensionamiento
+        self.root.resizable(True, True)
+
+        # Configurar el grid
+        self.root.grid_rowconfigure(0, weight=1)
+        self.root.grid_columnconfigure(1, weight=1)
+        # Agregar una fila para la barra de estado
+        self.root.grid_rowconfigure(1, weight=0)
+
+    def center_window(self, width, height):
+        """Centra la ventana en la pantalla tanto horizontal como verticalmente"""
+        # Forzar actualización para obtener dimensiones reales de la pantalla
+        self.root.update_idletasks()
+
+        screen_width = self.root.winfo_screenwidth()
+        screen_height = self.root.winfo_screenheight()
+
+        # Calcular posición para centrar horizontal y verticalmente
+        x = (screen_width - width) // 2
+        y = (screen_height - height) // 2
+
+        # Asegurar que la ventana no se posicione fuera de los límites de la pantalla
+        x = max(0, x)
+        y = max(0, y)
+
+        self.root.geometry(f"{width}x{height}+{x}+{y}")
+
+    def resize_window_for_content(self, extra_height=0):
+        """Redimensiona la ventana cuando se necesita espacio adicional"""
+        nuevo_alto = self.ALTO_VENTANA + extra_height
+
+        # Obtener posición actual
+        self.root.update_idletasks()
+        x = self.root.winfo_x()
+
+        # Recalcular posición Y para mantener centrado verticalmente
+        screen_height = self.root.winfo_screenheight()
+        y = (screen_height - nuevo_alto) // 2
+
+        # Ajustar posición Y si es necesario para que no se salga de la pantalla
+        if y + nuevo_alto > screen_height:
+            y = max(0, screen_height - nuevo_alto)
+        elif y < 0:
+            y = 0
+
+        self.root.geometry(f"{self.ANCHO_VENTANA}x{nuevo_alto}+{x}+{y}")
+
+    def reset_window_size(self):
+        """Restaura el tamaño original de la ventana y la centra"""
+        self.center_window(self.ANCHO_VENTANA, self.ALTO_VENTANA)
 
     def initialize_database(self):
         """Inicializa la base de datos y verifica su estructura"""
@@ -114,25 +176,16 @@ class MainWindow:
             self.root.quit()
             self.root.destroy()
 
-    def setup_window(self):
-        # Centrar la ventana
-        screen_width = self.root.winfo_screenwidth()
-        screen_height = self.root.winfo_screenheight()
-        x = (screen_width - 1200) // 2
-        y = (screen_height - 800) // 2
-        self.root.geometry(f"1200x800+{x}+{y}")
-
-        # Configurar el grid
-        self.root.grid_rowconfigure(0, weight=1)
-        self.root.grid_columnconfigure(1, weight=1)
-        # Agregar una fila para la barra de estado
-        self.root.grid_rowconfigure(1, weight=0)
-
-
-    def show_welcome_screen(self):
-        # Limpiar el contenido actual
+    def clear_content_frame(self):
+        """Limpia el contenido del frame principal"""
         for widget in self.main_content_frame.winfo_children():
             widget.destroy()
+
+    def show_welcome_screen(self):
+        """Muestra la pantalla de bienvenida"""
+        # Limpiar el contenido actual y restaurar tamaño
+        self.clear_content_frame()
+        self.reset_window_size()
 
         # Contenido de bienvenida
         welcome_frame = ttk.Frame(self.main_content_frame, style='Card.TFrame')
@@ -174,46 +227,64 @@ class MainWindow:
                 background='white',
                 anchor='w').pack(padx=10)
 
+    # Métodos para cargar módulos (modificados para usar el tamaño estándar)
     def load_ingreso_insumos(self):
         if not self.verify_database_connection():
             messagebox.showerror("Error", "No se puede conectar a la base de datos")
             return
-        for widget in self.main_content_frame.winfo_children():
-            widget.destroy()
+        self.clear_content_frame()
+        self.reset_window_size()  # Restaurar tamaño estándar
         IngresoInsumos(self.main_content_frame, self)
 
     def load_gestion_insumos(self):
         if not self.verify_database_connection():
             messagebox.showerror("Error", "No se puede conectar a la base de datos")
             return
-        for widget in self.main_content_frame.winfo_children():
-            widget.destroy()
+        self.clear_content_frame()
+        self.reset_window_size()
         GestionInsumos(self.main_content_frame, self)
 
     def load_gestion_servicios(self):
         if not self.verify_database_connection():
             messagebox.showerror("Error", "No se puede conectar a la base de datos")
             return
-        for widget in self.main_content_frame.winfo_children():
-            widget.destroy()
+        self.clear_content_frame()
+        self.reset_window_size()
         GestionServicios(self.main_content_frame, self)
 
     def load_gestion_movimientos(self):
         if not self.verify_database_connection():
             messagebox.showerror("Error", "No se puede conectar a la base de datos")
             return
-        for widget in self.main_content_frame.winfo_children():
-            widget.destroy()
+        self.clear_content_frame()
+        self.reset_window_size()
         GestionMovimientos(self.main_content_frame, self)
 
     def load_reporte_kardex(self):
         if not self.verify_database_connection():
             messagebox.showerror("Error", "No se puede conectar a la base de datos")
             return
-        for widget in self.main_content_frame.winfo_children():
-            widget.destroy()
-        # No destruyas self.main_content_frame, solo sus hijos
+        self.clear_content_frame()
+        self.reset_window_size()
         ReporteKardex(self.main_content_frame, self)
+
+    def load_gestion_usuarios(self):
+        if not self.verify_database_connection():
+            messagebox.showerror("Error", "No se puede conectar a la base de datos")
+            return
+        self.clear_content_frame()
+        self.reset_window_size()
+        from src.gui.gestion_usuarios import GestionUsuarios
+        GestionUsuarios(self.main_content_frame, self)
+
+    def load_correccion_movimientos(self):
+        if not self.verify_database_connection():
+            messagebox.showerror("Error", "No se puede conectar a la base de datos")
+            return
+        self.clear_content_frame()
+        self.reset_window_size()
+        from src.gui.correccion_movimientos import CorreccionMovimientos
+        CorreccionMovimientos(self.main_content_frame, self)
 
     def create_menu(self):
         # Frame para el menú lateral
@@ -274,7 +345,6 @@ class MainWindow:
             justify="center"
         ).pack(padx=5)
 
-
         # Botones según rol
         rol = self.usuario['rol']
         if rol in ("admin", "super_admin"):
@@ -285,32 +355,13 @@ class MainWindow:
         if rol in ("usuario", "admin", "super_admin"):
             self.create_menu_button("Ingreso de Insumos", self.load_ingreso_insumos)
             self.create_menu_button("Reporte Kardex", self.load_reporte_kardex)
-            self.create_menu_button("Corrección de Movimientos", self.load_correccion_movimientos)
-
+            self.create_menu_button("Correcciones", self.load_correccion_movimientos)
 
         # Botón de salir en la parte inferior
         ttk.Button(self.menu_frame,
-                  text="Salir",
-                  style='Menu.TButton',
-                  command=self.root.quit).pack(pady=10, padx=10, side='bottom')
-
-    def load_gestion_usuarios(self):
-        if not self.verify_database_connection():
-            messagebox.showerror("Error", "No se puede conectar a la base de datos")
-            return
-        for widget in self.main_content_frame.winfo_children():
-            widget.destroy()
-        from src.gui.gestion_usuarios import GestionUsuarios
-        GestionUsuarios(self.main_content_frame, self)
-    
-    def load_correccion_movimientos(self):
-        if not self.verify_database_connection():
-            messagebox.showerror("Error", "No se puede conectar a la base de datos")
-            return
-        for widget in self.main_content_frame.winfo_children():
-            widget.destroy()
-        from src.gui.correccion_movimientos import CorreccionMovimientos
-        CorreccionMovimientos(self.main_content_frame, self)
+            text="Salir",
+            style='Menu.TButton',
+            command=self.on_closing).pack(pady=10, padx=10, side='bottom')
 
     def create_menu_button(self, text, command):
         btn_frame = ttk.Frame(self.menu_frame)

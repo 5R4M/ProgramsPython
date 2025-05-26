@@ -1040,37 +1040,38 @@ def existe_usuario(username):
         conn.close()
 
 def verificar_credenciales(username, password):
-    """Verifica las credenciales del usuario"""
     import hashlib
+
     try:
-        conn = conectar_db()
+        conn = sqlite3.connect(DB_PATH)
         cursor = conn.cursor()
 
-        # Obtener usuario
-        cursor.execute('''
-            SELECT id, username, rol, activo
+        # Hash de la contraseña ingresada
+        password_hash = hashlib.sha256(password.encode()).hexdigest()
+
+        # Buscar usuario sin importar mayúsculas/minúsculas
+        cursor.execute("""
+            SELECT id, username, nombre_completo, rol, activo
             FROM usuarios
-            WHERE username = ? AND password = ? AND activo = 1
-        ''', (
-            username,
-            hashlib.sha256(password.encode()).hexdigest()
-        ))
+            WHERE LOWER(username) = LOWER(?) AND password = ?
+        """, (username, password_hash))
 
         usuario = cursor.fetchone()
-        if usuario:
+        conn.close()
+
+        if usuario and usuario[4]:  # Verificar que esté activo
             return {
                 'id': usuario[0],
                 'username': usuario[1],
-                'rol': usuario[2],
-                'activo': usuario[3]
+                'nombre_completo': usuario[2],
+                'rol': usuario[3],
+                'activo': usuario[4]
             }
         return None
+
     except Exception as e:
-        print(f"Error verificando credenciales: {e}")
+        print(f"Error al verificar credenciales: {e}")
         return None
-    finally:
-        if conn:
-            conn.close()
 
 def obtener_usuarios():
     """Devuelve la lista de usuarios (excepto el super_admin)"""

@@ -160,7 +160,7 @@ class LoginWindow:
         self.username_entry.focus()
 
     def login(self):
-        username = self.username_entry.get().strip()
+        username = self.username_entry.get().strip().lower()
         password = self.password_entry.get().strip()
 
         if not username or not password:
