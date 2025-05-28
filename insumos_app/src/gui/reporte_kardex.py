@@ -40,7 +40,10 @@ class ReporteKardex:
     
     def formato_float(self, valor):
         try:
-            return f"{float(valor):.2f}"
+            num = float(valor)
+            if num == 0:
+                return ""  # Retornar cadena vacía si es 0
+            return f"{num:.2f}"
         except (ValueError, TypeError):
             return ""
     
@@ -144,36 +147,34 @@ class ReporteKardex:
             destinatario = mov['tipo_movimiento']
             if tipo == 'SALIDA NIVEL INFERIOR':
                 if mov.get('distrito_destino'):
-                    destinatario = f"Distrito: {mov['distrito_destino']}"
+                    destinatario = mov['distrito_destino']
                 elif mov.get('servicio_destino'):
-                    destinatario = f"Servicio: {mov['servicio_destino']}"
+                    destinatario = mov['servicio_destino']
 
             # Configurar las columnas según el tipo de movimiento
-            entrada = 0
+            entrada = ""  # CAMBIO: Inicializar como cadena vacía
             salida = ""
-            reajuste = 0
-            cantidad_col = 0
+            reajuste = ""  # CAMBIO: Inicializar como cadena vacía
+            cantidad_col = self.formato_float(cantidad)  # CAMBIO: Usar formato_float
 
             if tipo in ['INVENTARIO INICIAL', 'ENTRADA NIVEL SUPERIOR']:
-                entrada = cantidad
-                cantidad_col = cantidad
+                entrada = self.formato_float(cantidad)  # CAMBIO: Usar formato_float
                 saldo += cantidad  # SÍ afecta el saldo
-            elif tipo in ['SALIDA NIVEL INFERIOR', 'ENTREGADO']:
-                salida = f"{cantidad:.2f} ({tipo.title()})"
-                cantidad_col = cantidad
+            elif tipo == 'SALIDA NIVEL INFERIOR':
+                salida = self.formato_float(cantidad)  # CAMBIO: Usar formato_float
+                saldo -= cantidad  # SÍ afecta el saldo
+            elif tipo == 'ENTREGADO':
+                salida = self.formato_float(cantidad)  # CAMBIO: Usar formato_float
                 saldo -= cantidad  # SÍ afecta el saldo
             elif tipo == 'REAJUSTE POSITIVO':
-                reajuste = cantidad
-                cantidad_col = cantidad
+                reajuste = f"+{self.formato_float(cantidad)}" if cantidad > 0 else ""  # CAMBIO: Formato con signo
                 saldo += cantidad  # SÍ afecta el saldo
             elif tipo == 'REAJUSTE NEGATIVO':
-                reajuste = -cantidad
-                cantidad_col = cantidad
+                reajuste = f"-{self.formato_float(cantidad)}" if cantidad > 0 else ""  # CAMBIO: Formato con signo
                 saldo -= cantidad  # SÍ afecta el saldo
             elif tipo == 'NO ENTREGADO':
                 # NO ENTREGADO se muestra en el reporte pero NO afecta el saldo
-                salida = f"{cantidad:.2f} (No Entregado)"
-                cantidad_col = cantidad
+                salida = self.formato_float(cantidad)  # CAMBIO: Usar formato_float
                 # NO se modifica el saldo: saldo permanece igual
 
             movimientos_con_saldo.append({
@@ -188,7 +189,7 @@ class ReporteKardex:
                 'salida': salida,
                 'reajuste': reajuste,
                 'cantidad_col': cantidad_col,
-                'saldo': saldo,
+                'saldo': self.formato_float(saldo),  # CAMBIO: Usar formato_float para el saldo
                 'observaciones': mov.get('observaciones', '')
             })
 
@@ -236,6 +237,23 @@ class ReporteKardex:
             print(f"Error al formatear fecha {fecha}: {e}")
             return str(fecha) if fecha else ""
 
+    def destroy(self):
+        # Desvincular eventos de los combobox
+        try:
+            self.combo_area.unbind('<<ComboboxSelected>>')
+            self.combo_distrito.unbind('<<ComboboxSelected>>')
+            self.combo_tipo_servicio.unbind('<<ComboboxSelected>>')
+            self.combo_tipo_insumo.unbind('<<ComboboxSelected>>')
+            self.combo_insumo.unbind('<<ComboboxSelected>>')
+        except Exception as e:
+            print("Error al desvincular eventos:", e)
+        # Limpiar archivo temporal si existe
+        if hasattr(self, 'temp_pdf_path') and os.path.exists(self.temp_pdf_path):
+            try:
+                os.remove(self.temp_pdf_path)
+            except:
+                pass
+    
     def setup_ui(self):
         # Frame principal - USAR PACK PARA TODO
         self.frame_principal = ttk.LabelFrame(self.parent, text="Filtros de Reporte")
@@ -988,15 +1006,15 @@ class ReporteKardex:
                         mov['fecha'],
                         mov['referencia'] or "",
                         mov['tipo_movimiento'],
-                        self.formato_float(mov['entrada']),
-                        self.formato_float(mov['precio_unitario']),
-                        self.formato_float(mov['valor_total']),
+                        mov['entrada'],  
+                        mov['precio_unitario'],  
+                        mov['valor_total'], 
                         mov['lote'] or "",
                         mov['fecha_vencimiento'] or "",
-                        mov['salida'],
-                        f"{mov['reajuste']:+.2f}" if mov['reajuste'] != 0 else "",
-                        self.formato_float(mov['cantidad_col']),
-                        self.formato_float(mov['saldo']),
+                        mov['salida'],  
+                        mov['reajuste'],  
+                        mov['cantidad_col'],  
+                        mov['saldo'],  
                         mov['observaciones'] or ""
                     ]
                     data.append(row)

@@ -177,7 +177,11 @@ class MainWindow:
             self.root.destroy()
 
     def clear_content_frame(self):
-        """Limpia el contenido del frame principal"""
+        # Si guardas la instancia de la pantalla actual:
+        if hasattr(self, 'pantalla_actual') and self.pantalla_actual:
+            if hasattr(self.pantalla_actual, 'destroy'):
+                self.pantalla_actual.destroy()
+            self.pantalla_actual = None
         for widget in self.main_content_frame.winfo_children():
             widget.destroy()
 
@@ -234,7 +238,7 @@ class MainWindow:
             return
         self.clear_content_frame()
         self.reset_window_size()  # Restaurar tamaño estándar
-        IngresoInsumos(self.main_content_frame, self)
+        self.pantalla_actual = IngresoInsumos(self.main_content_frame, self)
 
     def load_gestion_insumos(self):
         if not self.verify_database_connection():
@@ -242,7 +246,7 @@ class MainWindow:
             return
         self.clear_content_frame()
         self.reset_window_size()
-        GestionInsumos(self.main_content_frame, self)
+        self.pantalla_actual = GestionInsumos(self.main_content_frame, self)
 
     def load_gestion_servicios(self):
         if not self.verify_database_connection():
@@ -250,7 +254,7 @@ class MainWindow:
             return
         self.clear_content_frame()
         self.reset_window_size()
-        GestionServicios(self.main_content_frame, self)
+        self.pantalla_actual = GestionServicios(self.main_content_frame, self)
 
     def load_gestion_movimientos(self):
         if not self.verify_database_connection():
@@ -258,7 +262,7 @@ class MainWindow:
             return
         self.clear_content_frame()
         self.reset_window_size()
-        GestionMovimientos(self.main_content_frame, self)
+        self.pantalla_actual = GestionMovimientos(self.main_content_frame, self)
 
     def load_reporte_kardex(self):
         if not self.verify_database_connection():
@@ -266,7 +270,7 @@ class MainWindow:
             return
         self.clear_content_frame()
         self.reset_window_size()
-        ReporteKardex(self.main_content_frame, self)
+        self.pantalla_actual = ReporteKardex(self.main_content_frame, self)
 
     def load_gestion_usuarios(self):
         if not self.verify_database_connection():
@@ -275,7 +279,7 @@ class MainWindow:
         self.clear_content_frame()
         self.reset_window_size()
         from src.gui.gestion_usuarios import GestionUsuarios
-        GestionUsuarios(self.main_content_frame, self)
+        self.pantalla_actual = GestionUsuarios(self.main_content_frame, self)
 
     def load_correccion_movimientos(self):
         if not self.verify_database_connection():
@@ -284,7 +288,7 @@ class MainWindow:
         self.clear_content_frame()
         self.reset_window_size()
         from src.gui.correccion_movimientos import CorreccionMovimientos
-        CorreccionMovimientos(self.main_content_frame, self)
+        self.pantalla_actual =CorreccionMovimientos(self.main_content_frame, self)
 
     def create_menu(self):
         # Frame para el menú lateral

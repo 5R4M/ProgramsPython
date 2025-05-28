@@ -907,52 +907,21 @@ def obtener_movimientos_kardex(fecha_inicio, fecha_fin, distrito_nombre=None, ti
         cursor.execute(query, params)
         resultados = cursor.fetchall()
 
-        # Cálculo de saldo acumulado
-        saldo = 0
+        # Retornar los datos sin procesar para que sean procesados en reporte_kardex.py
         movimientos = []
         for row in resultados:
-            tipo = row['tipo_movimiento'].upper()
-            cantidad = float(row['cantidad']) if row['cantidad'] else 0
-
-            # Determinar el destinatario para SALIDA NIVEL INFERIOR
-            destinatario = row['tipo_movimiento']
-            if tipo == 'SALIDA NIVEL INFERIOR':
-                if row['distrito_destino']:
-                    destinatario = f"Distrito: {row['distrito_destino']}"
-                elif row['servicio_destino']:
-                    destinatario = f"Servicio: {row['servicio_destino']}"
-
-            entrada = cantidad if tipo in ['INVENTARIO INICIAL', 'ENTRADA NIVEL SUPERIOR'] else 0
-
-            # Formatear salida con tipo de movimiento
-            if tipo in ['SALIDA NIVEL INFERIOR', 'ENTREGADO']:
-                salida = f"{cantidad:.2f} ({tipo.title()})"
-            else:
-                salida = ""
-
-            reajuste = cantidad if tipo == 'REAJUSTE POSITIVO' else (-cantidad if tipo == 'REAJUSTE NEGATIVO' else 0)
-            cantidad_col = cantidad if tipo not in ['NO ENTREGADO'] else 0
-
-            if tipo in ['INVENTARIO INICIAL', 'ENTRADA NIVEL SUPERIOR', 'REAJUSTE POSITIVO']:
-                saldo += cantidad
-            elif tipo in ['SALIDA NIVEL INFERIOR', 'ENTREGADO', 'REAJUSTE NEGATIVO']:
-                saldo -= cantidad
-
             movimientos.append({
                 'fecha': row['fecha'],
                 'referencia': row['referencia'],
-                'tipo_movimiento': destinatario,  
-                'entrada': entrada,
-                'precio_unitario': "",    
-                'valor_total': "",       
+                'tipo_movimiento': row['tipo_movimiento'],
+                'cantidad': row['cantidad'],
                 'lote': row['lote'],
                 'fecha_vencimiento': row['fecha_vencimiento'],
-                'salida': salida,         
-                'reajuste': reajuste,
-                'cantidad_col': cantidad_col,
-                'saldo': saldo,
-                'observaciones': row['observaciones']
+                'observaciones': row['observaciones'],
+                'distrito_destino': row['distrito_destino'],
+                'servicio_destino': row['servicio_destino']
             })
+
         return movimientos
 
     except sqlite3.Error as e:
@@ -960,6 +929,7 @@ def obtener_movimientos_kardex(fecha_inicio, fecha_fin, distrito_nombre=None, ti
         return []
     finally:
         conn.close()
+        
 # -------------------- OPERACIÓN USUARIOS --------------------
 
 def crear_tabla_usuarios():
