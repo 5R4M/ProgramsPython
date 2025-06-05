@@ -637,8 +637,11 @@ def guardar_movimiento(movimiento_data):
         try:
             cursor = conn.cursor()
             fecha_registro = movimiento_data['fecha_registro'].strftime('%Y-%m-%d')
-            fecha_vencimiento = movimiento_data['fecha_vencimiento'].strftime('%Y-%m-%d')
-
+            fecha_vencimiento = (
+                movimiento_data['fecha_vencimiento'].strftime('%Y-%m-%d')
+                if movimiento_data['fecha_vencimiento'] is not None
+                else None
+            )
             # Usar el area_id directamente del diccionario
             area_id = movimiento_data.get('area_id')
             distrito_id = movimiento_data.get('distrito_id')

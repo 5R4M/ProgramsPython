@@ -139,7 +139,16 @@ class IngresoInsumos:
         ttk.Label(self.frame_insumos, text="Fecha de Vencimiento:", anchor="w").grid(row=1, column=2, padx=5, pady=5, sticky="w")
         self.fecha_venc = DateEntry(self.frame_insumos, width=25, background='darkblue', foreground='white', borderwidth=2, date_pattern='dd/mm/yyyy')
         self.fecha_venc.grid(row=1, column=3, padx=5, pady=5, sticky="w")
-
+        
+        self.sin_fecha_venc = tk.BooleanVar()
+        self.check_sin_fecha = ttk.Checkbutton(
+            self.frame_insumos,
+            text="Sin fecha de vencimiento",
+            variable=self.sin_fecha_venc,
+            command=self.toggle_fecha_vencimiento
+        )
+        self.check_sin_fecha.grid(row=1, column=4, padx=5, pady=5, sticky="w")
+        
         # Frame Registro de Movimiento
         self.frame_registro = ttk.LabelFrame(self.parent, text="Registro de Movimiento")
         self.frame_registro.pack(fill="x", padx=10, pady=10)
@@ -471,6 +480,12 @@ class IngresoInsumos:
         self.salida_servicio_cb.config(completevalues=[])
         self.salida_servicio_var.set('')
 
+    def toggle_fecha_vencimiento(self):
+        if self.sin_fecha_venc.get():
+            self.fecha_venc.configure(state='disabled')
+        else:
+            self.fecha_venc.configure(state='normal')
+
     # 5. Métodos de gestión de movimientos 
 
     def agregar_movimiento(self):
@@ -481,7 +496,10 @@ class IngresoInsumos:
             insumo = self.insumo_var.get()
             presentacion = self.presentacion_var.get()
             lote = self.lote_entry.get().upper()
-            fecha_venc_str = self.fecha_venc.get_date().strftime('%d/%m/%Y')
+            if self.sin_fecha_venc.get():
+                fecha_venc_str = "N/A"
+            else:
+                fecha_venc_str = self.fecha_venc.get_date().strftime('%d/%m/%Y')
             cantidad_str = self.cantidad_entry.get()
             referencia = self.referencia_entry.get().upper()
             observaciones = self.observaciones_entry.get().upper()
@@ -664,6 +682,15 @@ class IngresoInsumos:
         ttk.Label(frame_detalles, text="Fecha Vencimiento:", width=15, anchor="w").grid(row=1, column=2, padx=5, pady=5, sticky="w")
         fecha_venc_edit = DateEntry(frame_detalles, width=25, background='darkblue', foreground='white', borderwidth=2, date_pattern='dd/mm/yyyy')
         fecha_venc_edit.grid(row=1, column=3, padx=5, pady=5, sticky="ew")
+        
+        edit_sin_fecha_venc = tk.BooleanVar()
+        edit_check_sin_fecha = ttk.Checkbutton(
+            frame_detalles,
+            text="Sin fecha de vencimiento",
+            variable=edit_sin_fecha_venc,
+            command=lambda: fecha_venc_edit.configure(state='disabled' if edit_sin_fecha_venc.get() else 'normal')
+        )
+        edit_check_sin_fecha.grid(row=2, column=2, padx=5, pady=5, sticky="w")
 
         ttk.Label(frame_detalles, text="Cantidad:", width=15, anchor="w").grid(row=1, column=4, padx=5, pady=5, sticky="w")
         cantidad_entry = ttk.Entry(frame_detalles, width=27)
@@ -917,18 +944,25 @@ class IngresoInsumos:
             referencia_entry.insert(0, valores[1])
             edit_tipo_movimiento_var.set(valores[2])
             lote_entry.delete(0, tk.END)
-            lote_entry.insert(0, valores[5])
-            fecha_venc_edit.set_date(datetime.strptime(valores[6], '%d/%m/%Y').date())
+            lote_entry.insert(0, valores[6])
+            if valores[7] == "N/A":
+                fecha_venc_edit.set_date(datetime.now().date())
+                fecha_venc_edit.configure(state='disabled')
+                edit_sin_fecha_venc.set(True)
+            else:
+                fecha_venc_edit.set_date(datetime.strptime(valores[7], '%d/%m/%Y').date())
+                fecha_venc_edit.configure(state='normal')
+                edit_sin_fecha_venc.set(False)
             cantidad_entry.delete(0, tk.END)
-            cantidad_entry.insert(0, valores[7])
+            cantidad_entry.insert(0, valores[8])
             observaciones_entry.delete(0, tk.END)
-            if valores[10]:
-                observaciones_entry.insert(0, valores[10])
+            if valores[11]:
+                observaciones_entry.insert(0, valores[11])
 
             # Salida nivel inferior
-            edit_salida_distrito_var.set(valores[8] if valores[8] else '')
+            edit_salida_distrito_var.set(valores[9] if valores[9] else '')
             edit_salida_tipo_servicio_var.set('')
-            edit_salida_servicio_var.set(valores[9] if valores[9] else '')
+            edit_salida_servicio_var.set(valores[10] if valores[10] else '')
 
             # Actualizar estado combos y frame salida
             actualizar_estado_comboboxes_edit()
@@ -952,7 +986,7 @@ class IngresoInsumos:
                     edit_presentacion_var.get(),                   # 4
                     edit_servicio_var.get(),                       # 5
                     lote_entry.get().upper(),                      # 6
-                    fecha_venc_edit.get_date().strftime('%d/%m/%Y'), # 7
+                    "N/A" if edit_sin_fecha_venc.get() else fecha_venc_edit.get_date().strftime('%d/%m/%Y'), # 7
                     cantidad_entry.get(),                          # 8
                     edit_salida_distrito_var.get(),                # 9
                     edit_salida_servicio_var.get(),                # 10
@@ -1071,7 +1105,10 @@ class IngresoInsumos:
 
                 # Convertir fechas
                 fecha_registro = datetime.strptime(fecha_registro_str, '%d/%m/%Y')
-                fecha_vencimiento = datetime.strptime(fecha_vencimiento_str, '%d/%m/%Y')
+                if fecha_vencimiento_str == "N/A":
+                    fecha_vencimiento = None
+                else:
+                    fecha_vencimiento = datetime.strptime(fecha_vencimiento_str, '%d/%m/%Y')
 
                 # Manejar salida nivel inferior
                 salida_distrito_id = obtener_id_distrito(salida_distrito_nombre) if salida_distrito_nombre else None

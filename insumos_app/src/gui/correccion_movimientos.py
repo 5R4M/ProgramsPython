@@ -355,6 +355,23 @@ class CorreccionMovimientos:
 
     def buscar_movimientos(self):
         try:
+            
+            # Validar que al menos un filtro esté seleccionado
+            if not any([
+                self.fecha_inicial.get(),
+                self.fecha_final.get(),
+                self.combo_area.get(),
+                self.combo_distrito.get(),
+                self.combo_tipo_servicio.get(),
+                self.combo_servicio.get(),
+                self.combo_tipo_insumo.get(),
+                self.combo_insumo.get(),
+                self.combo_presentacion.get(),
+                self.combo_tipo_movimiento.get()
+            ]):
+                messagebox.showwarning("Advertencia", "Por favor, seleccione al menos un filtro para buscar movimientos.")
+                return
+            
             # Obtener fechas
             fecha_ini = datetime.strptime(self.fecha_inicial.get(), '%d/%m/%Y')
             fecha_fin = datetime.strptime(self.fecha_final.get(), '%d/%m/%Y')
@@ -388,6 +405,9 @@ class CorreccionMovimientos:
 
             # Llenar el Treeview con los datos (nuevo orden con Servicio)
             for mov in self.movimientos_data:
+                fecha_venc = mov.get('fecha_vencimiento')
+                if fecha_venc is None or fecha_venc == '':
+                    fecha_venc = "N/A"
                 self.tree.insert('', 'end', values=(
                     mov.get('id', ''),                          # ID
                     mov.get('fecha', ''),                       # Fecha
@@ -395,7 +415,7 @@ class CorreccionMovimientos:
                     mov.get('servicio_nombre', '') or "",       # Servicio (NUEVO)
                     mov.get('tipo_movimiento', '') or "",       # Tipo de Movimiento
                     mov.get('lote', '') or "",                  # Lote
-                    mov.get('fecha_vencimiento', '') or "",     # Fecha Vencimiento
+                    fecha_venc,                                 # Fecha Vencimiento
                     self.formato_float(mov.get('cantidad', 0)), # Cantidad
                     mov.get('insumo_nombre', '') or "",         # Insumo
                     mov.get('distrito_salida', '') or "",       # Distrito Salida

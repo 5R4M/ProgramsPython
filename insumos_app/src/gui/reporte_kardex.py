@@ -141,7 +141,11 @@ class ReporteKardex:
 
             # Formatear fechas
             fecha_registro = self.formatear_fecha(mov.get('fecha', ''))
-            fecha_vencimiento = self.formatear_fecha(mov.get('fecha_vencimiento', ''))
+            fecha_vencimiento = mov.get('fecha_vencimiento')
+            if fecha_vencimiento is None:
+                fecha_vencimiento = "N/A"
+            else:
+                fecha_vencimiento = self.formatear_fecha(fecha_vencimiento)
 
             # Determinar el destinatario para SALIDA NIVEL INFERIOR
             destinatario = mov['tipo_movimiento']
