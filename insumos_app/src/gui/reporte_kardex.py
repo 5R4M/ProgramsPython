@@ -147,6 +147,10 @@ class ReporteKardex:
             else:
                 fecha_vencimiento = self.formatear_fecha(fecha_vencimiento)
 
+            lote_val = mov.get('lote')
+            if lote_val is None or lote_val == '':
+                lote_val = "N/A"
+            
             # Determinar el destinatario para SALIDA NIVEL INFERIOR
             destinatario = mov['tipo_movimiento']
             if tipo == 'SALIDA NIVEL INFERIOR':
@@ -188,7 +192,7 @@ class ReporteKardex:
                 'entrada': entrada,
                 'precio_unitario': "",
                 'valor_total': "",
-                'lote': mov.get('lote', ''),
+                'lote': lote_val,
                 'fecha_vencimiento': fecha_vencimiento,
                 'salida': salida,
                 'reajuste': reajuste,
@@ -1006,6 +1010,11 @@ class ReporteKardex:
                 fin_pagina = min(pagina + filas_por_pagina, total_movimientos)
                 for i in range(pagina, fin_pagina):
                     mov = self.movimientos_data[i]
+                    
+                    lote_val = mov['lote']
+                    if lote_val is None or lote_val == '':
+                        lote_val = "N/A"
+                    
                     row = [
                         mov['fecha'],
                         mov['referencia'] or "",
@@ -1013,7 +1022,7 @@ class ReporteKardex:
                         mov['entrada'],  
                         mov['precio_unitario'],  
                         mov['valor_total'], 
-                        mov['lote'] or "",
+                        lote_val,
                         mov['fecha_vencimiento'] or "",
                         mov['salida'],  
                         mov['reajuste'],  
@@ -1268,7 +1277,7 @@ class ReporteKardex:
                     fila_inicio += 1
 
                 # Escribir datos principales
-                df.to_excel(writer, sheet_name=nombre_hoja, startrow=fila_inicio, index=False)
+                df.to_excel(writer, sheet_name=nombre_hoja, startrow=fila_inicio, index=False, header=False)
 
                 # Obtener worksheet
                 worksheet = writer.sheets[nombre_hoja]
@@ -1287,9 +1296,8 @@ class ReporteKardex:
             return None
 
     def configurar_hoja_excel(self, worksheet, workbook, title_format, subtitle_format, 
-                            header_format, saldo_anterior_format, df, tiene_saldo_anterior, fila_inicio):
+                        header_format, saldo_anterior_format, df, tiene_saldo_anterior, fila_inicio):
         """Configura el formato de una hoja de Excel"""
-        
         # Configurar altura de filas
         worksheet.set_row(0, 30)
         worksheet.set_row(1, 25)
@@ -1320,11 +1328,24 @@ class ReporteKardex:
         for col_num, value in enumerate(df.columns.values):
             worksheet.write(fila_inicio - 1, col_num, value, header_format)
 
-        # Si hay saldo anterior, aplicar formato especial
+        # Aplicar formato a fila saldo anterior (si existe)
         if tiene_saldo_anterior:
-            for col in range(13):
-                worksheet.write(fila_inicio, col, 
-                              worksheet.cell(fila_inicio, col).value, saldo_anterior_format)
+            worksheet.set_row(fila_inicio, None, saldo_anterior_format)
+
+        # Crear formato para los datos
+        data_format = workbook.add_format({
+            'align': 'center',
+            'valign': 'vcenter',
+            'font_size': 9,
+            'border': 1,
+            'border_color': '#808080'
+        })
+
+        # Aplicar formato a los datos (reescribiendo valores)
+        data_start_row = fila_inicio + (1 if tiene_saldo_anterior else 0)
+        for row_offset, row_data in enumerate(df.values):
+            for col_num, cell_value in enumerate(row_data):
+                worksheet.write(data_start_row + row_offset, col_num, cell_value, data_format)
 
         # Configuración de página
         worksheet.set_landscape()

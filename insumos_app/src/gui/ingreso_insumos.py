@@ -44,6 +44,7 @@ class IngresoInsumos:
         self.salida_distrito_var = tk.StringVar()
         self.salida_tipo_servicio_var = tk.StringVar()
         self.salida_servicio_var = tk.StringVar()
+        self.lote_var = tk.StringVar()
         
         # Variable para radio buttons nivel de bodega
         self.nivel_bodega_var = tk.StringVar(value="area")  
@@ -114,6 +115,10 @@ class IngresoInsumos:
         self.frame_insumos = ttk.LabelFrame(self.parent, text="Insumos")
         self.frame_insumos.pack(fill="x", padx=10, pady=10)
 
+        # Configurar columnas para que se distribuyan bien
+        for col in range(6):
+            self.frame_insumos.columnconfigure(col, weight=1)
+
         # Tipo de Insumo
         ttk.Label(self.frame_insumos, text="Tipo de Insumo:", anchor="w").grid(row=0, column=0, padx=5, pady=5, sticky="w")
         tipos_insumo = [ti['descripcion'] for ti in obtener_tipos_insumo() or []]
@@ -132,14 +137,25 @@ class IngresoInsumos:
 
         # Lote
         ttk.Label(self.frame_insumos, text="Lote:", anchor="w").grid(row=1, column=0, padx=5, pady=5, sticky="w")
-        self.lote_entry = ttk.Entry(self.frame_insumos, width=27)
-        self.lote_entry.grid(row=1, column=1, padx=5, pady=5, sticky="w")
+        self.lote_entry = ttk.Entry(self.frame_insumos, textvariable=self.lote_var)
+        self.lote_entry.grid(row=1, column=1, padx=5, pady=5, sticky="ew")
+
+        # Checkbox Sin lote
+        self.sin_lote_var = tk.BooleanVar()
+        self.check_sin_lote = ttk.Checkbutton(
+            self.frame_insumos,
+            text="Sin lote",
+            variable=self.sin_lote_var,
+            command=lambda: self.lote_entry.config(state='disabled' if self.sin_lote_var.get() else 'normal')
+        )
+        self.check_sin_lote.grid(row=1, column=2, padx=5, pady=5, sticky="w")
 
         # Fecha de Vencimiento
-        ttk.Label(self.frame_insumos, text="Fecha de Vencimiento:", anchor="w").grid(row=1, column=2, padx=5, pady=5, sticky="w")
+        ttk.Label(self.frame_insumos, text="Fecha de Vencimiento:", anchor="w").grid(row=1, column=3, padx=5, pady=5, sticky="w")
         self.fecha_venc = DateEntry(self.frame_insumos, width=25, background='darkblue', foreground='white', borderwidth=2, date_pattern='dd/mm/yyyy')
-        self.fecha_venc.grid(row=1, column=3, padx=5, pady=5, sticky="w")
-        
+        self.fecha_venc.grid(row=1, column=4, padx=5, pady=5, sticky="w")
+
+        # Checkbox Sin fecha de vencimiento
         self.sin_fecha_venc = tk.BooleanVar()
         self.check_sin_fecha = ttk.Checkbutton(
             self.frame_insumos,
@@ -147,7 +163,7 @@ class IngresoInsumos:
             variable=self.sin_fecha_venc,
             command=self.toggle_fecha_vencimiento
         )
-        self.check_sin_fecha.grid(row=1, column=4, padx=5, pady=5, sticky="w")
+        self.check_sin_fecha.grid(row=1, column=5, padx=5, pady=5, sticky="w")
         
         # Frame Registro de Movimiento
         self.frame_registro = ttk.LabelFrame(self.parent, text="Registro de Movimiento")
@@ -485,6 +501,13 @@ class IngresoInsumos:
             self.fecha_venc.configure(state='disabled')
         else:
             self.fecha_venc.configure(state='normal')
+    
+    def toggle_lote(self):
+        if self.sin_lote_var.get():
+            self.lote_entry.delete(0, 'end')
+            self.lote_entry.config(state='disabled')
+        else:
+            self.lote_entry.config(state='normal')
 
     # 5. Métodos de gestión de movimientos 
 
@@ -495,7 +518,10 @@ class IngresoInsumos:
             tipo_insumo = self.tipo_insumo_var.get()
             insumo = self.insumo_var.get()
             presentacion = self.presentacion_var.get()
-            lote = self.lote_entry.get().upper()
+            if self.sin_lote_var.get():
+                lote = "N/A"
+            else:
+                lote = self.lote_entry.get().upper()
             if self.sin_fecha_venc.get():
                 fecha_venc_str = "N/A"
             else:
@@ -678,6 +704,15 @@ class IngresoInsumos:
         ttk.Label(frame_detalles, text="Lote:", width=15, anchor="w").grid(row=1, column=0, padx=5, pady=5, sticky="w")
         lote_entry = ttk.Entry(frame_detalles, width=27)
         lote_entry.grid(row=1, column=1, padx=5, pady=5, sticky="ew")
+
+        edit_sin_lote_var = tk.BooleanVar()
+        edit_check_sin_lote = ttk.Checkbutton(
+            frame_detalles,
+            text="Sin lote",
+            variable=edit_sin_lote_var,
+            command=lambda: lote_entry.config(state='disabled' if edit_sin_lote_var.get() else 'normal')
+        )
+        edit_check_sin_lote.grid(row=1, column=2, padx=5, pady=5, sticky="w")
 
         ttk.Label(frame_detalles, text="Fecha Vencimiento:", width=15, anchor="w").grid(row=1, column=2, padx=5, pady=5, sticky="w")
         fecha_venc_edit = DateEntry(frame_detalles, width=25, background='darkblue', foreground='white', borderwidth=2, date_pattern='dd/mm/yyyy')
@@ -943,8 +978,15 @@ class IngresoInsumos:
             referencia_entry.delete(0, tk.END)
             referencia_entry.insert(0, valores[1])
             edit_tipo_movimiento_var.set(valores[2])
-            lote_entry.delete(0, tk.END)
-            lote_entry.insert(0, valores[6])
+            if valores[6] == "N/A":
+                edit_sin_lote_var.set(True)
+                lote_entry.config(state='disabled')
+            else:
+                edit_sin_lote_var.set(False)
+                lote_entry.config(state='normal')
+            lote_entry.delete(0, 'end')
+            if valores[6] != "N/A":
+                lote_entry.insert(0, valores[6])
             if valores[7] == "N/A":
                 fecha_venc_edit.set_date(datetime.now().date())
                 fecha_venc_edit.configure(state='disabled')
@@ -978,6 +1020,7 @@ class IngresoInsumos:
         
         def guardar_cambios():
             try:
+                lote_val = "N/A" if edit_sin_lote_var.get() else lote_entry.get().upper()
                 nuevos_valores = (
                     fecha_edit.get_date().strftime('%d/%m/%Y'),    # 0
                     referencia_entry.get().upper(),                # 1
@@ -985,7 +1028,7 @@ class IngresoInsumos:
                     edit_insumo_var.get(),                         # 3
                     edit_presentacion_var.get(),                   # 4
                     edit_servicio_var.get(),                       # 5
-                    lote_entry.get().upper(),                      # 6
+                    lote_val,                                      # 6
                     "N/A" if edit_sin_fecha_venc.get() else fecha_venc_edit.get_date().strftime('%d/%m/%Y'), # 7
                     cantidad_entry.get(),                          # 8
                     edit_salida_distrito_var.get(),                # 9
@@ -1060,15 +1103,17 @@ class IngresoInsumos:
                 presentacion_nombre = valores[4]
                 servicio_nombre = valores[5]
                 lote = valores[6]
+                if lote == "N/A":
+                    lote = None
                 fecha_vencimiento_str = valores[7]
                 cantidad = float(valores[8])
                 salida_distrito_nombre = valores[9] if valores[9] else None
                 salida_servicio_nombre = valores[10] if valores[10] else None
                 observaciones = valores[11] if valores[11] else None
                 tipo_insumo_desc = valores[12]
-                area_nombre = valores[13]           # NUEVO
-                distrito_nombre = valores[14]       # NUEVO
-                tipo_servicio_desc = valores[15]    # NUEVO
+                area_nombre = valores[13]          
+                distrito_nombre = valores[14]       
+                tipo_servicio_desc = valores[15]    
 
                 # Validaciones
                 if not tipo_insumo_desc:
@@ -1181,6 +1226,10 @@ class IngresoInsumos:
 
         # Resetear nivel de bodega a "area"
         self.nivel_bodega_var.set("area")
+        
+        # Resetear Sin lote
+        self.sin_lote_var.set(False)
+        self.lote_entry.config(state='normal')
 
         # Actualizar estados de los combobox
         self.actualizar_estado_comboboxes()

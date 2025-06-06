@@ -93,7 +93,7 @@ class CorreccionMovimientos:
         self.frame_combos.pack(fill="x", padx=5, pady=5)
 
         # Primera fila de combos
-        self.frame_combos1 = ttk.Frame(self.frame_combos)
+        self.frame_combos1 = ttk.LabelFrame(self.frame_combos, text="Selección de Ubicación")
         self.frame_combos1.pack(fill="x", pady=5)
 
         # Grid DENTRO del frame_combos1
@@ -118,7 +118,7 @@ class CorreccionMovimientos:
         self.combo_servicio.grid(row=0, column=7, padx=5, sticky='w')
 
         # Segunda fila de combos
-        self.frame_combos2 = ttk.Frame(self.frame_combos)
+        self.frame_combos2 = ttk.LabelFrame(self.frame_combos, text="Selección de Insumos / Tipo Movimiento")
         self.frame_combos2.pack(fill="x", pady=5)
 
         # Grid DENTRO del frame_combos2
@@ -355,33 +355,41 @@ class CorreccionMovimientos:
 
     def buscar_movimientos(self):
         try:
-            
-            # Validar que al menos un filtro esté seleccionado
-            if not any([
-                self.fecha_inicial.get(),
-                self.fecha_final.get(),
-                self.combo_area.get(),
-                self.combo_distrito.get(),
-                self.combo_tipo_servicio.get(),
-                self.combo_servicio.get(),
-                self.combo_tipo_insumo.get(),
-                self.combo_insumo.get(),
-                self.combo_presentacion.get(),
-                self.combo_tipo_movimiento.get()
-            ]):
-                messagebox.showwarning("Advertencia", "Por favor, seleccione al menos un filtro para buscar movimientos.")
-                return
-            
-            # Obtener fechas
-            fecha_ini = datetime.strptime(self.fecha_inicial.get(), '%d/%m/%Y')
-            fecha_fin = datetime.strptime(self.fecha_final.get(), '%d/%m/%Y')
-
             # Validar fechas
+            fecha_ini_str = self.fecha_inicial.get()
+            fecha_fin_str = self.fecha_final.get()
+
+            if not fecha_ini_str or not fecha_fin_str:
+                messagebox.showwarning("Advertencia", "Debe seleccionar fecha inicial y fecha final.")
+                return
+
+            fecha_ini = datetime.strptime(fecha_ini_str, '%d/%m/%Y')
+            fecha_fin = datetime.strptime(fecha_fin_str, '%d/%m/%Y')
+
             if fecha_fin < fecha_ini:
                 messagebox.showerror("Error", "La fecha final debe ser mayor a la inicial")
                 return
 
-            # Obtener datos
+            # Validar que al menos un filtro de ubicación, insumo o tipo movimiento esté seleccionado
+            filtros_obligatorios = [
+                self.combo_area.get().strip(),
+                self.combo_distrito.get().strip(),
+                self.combo_tipo_servicio.get().strip(),
+                self.combo_servicio.get().strip(),
+                self.combo_tipo_insumo.get().strip(),
+                self.combo_insumo.get().strip(),
+                self.combo_presentacion.get().strip(),
+                self.combo_tipo_movimiento.get().strip()
+            ]
+
+            if not any(filtros_obligatorios):
+                messagebox.showwarning(
+                    "Advertencia",
+                    "Debe seleccionar al menos un filtro de ubicación, insumo o tipo de movimiento."
+                )
+                return
+
+            # Obtener datos y asignar a self.movimientos_data
             self.movimientos_data = buscar_movimientos_por_filtros(
                 fecha_ini.strftime('%Y-%m-%d'),
                 fecha_fin.strftime('%Y-%m-%d'),
@@ -403,18 +411,23 @@ class CorreccionMovimientos:
             for item in self.tree.get_children():
                 self.tree.delete(item)
 
-            # Llenar el Treeview con los datos (nuevo orden con Servicio)
+            # Llenar el Treeview con los datos
             for mov in self.movimientos_data:
                 fecha_venc = mov.get('fecha_vencimiento')
                 if fecha_venc is None or fecha_venc == '':
                     fecha_venc = "N/A"
+                    
+                lote = mov.get('lote')
+                if lote is None or lote == '':
+                    lote = "N/A"
+                    
                 self.tree.insert('', 'end', values=(
                     mov.get('id', ''),                          # ID
                     mov.get('fecha', ''),                       # Fecha
                     mov.get('referencia', '') or "",            # Referencia
                     mov.get('servicio_nombre', '') or "",       # Servicio (NUEVO)
                     mov.get('tipo_movimiento', '') or "",       # Tipo de Movimiento
-                    mov.get('lote', '') or "",                  # Lote
+                    lote,                                       # Lote
                     fecha_venc,                                 # Fecha Vencimiento
                     self.formato_float(mov.get('cantidad', 0)), # Cantidad
                     mov.get('insumo_nombre', '') or "",         # Insumo
@@ -475,7 +488,7 @@ class CorreccionMovimientos:
         # Crear ventana de edición
         edicion_window = tk.Toplevel(self.parent)
         edicion_window.title("Editar Movimiento")
-        edicion_window.geometry("600x500")
+        edicion_window.geometry("600x550")
         edicion_window.grab_set()  # Hacer modal
 
         # Centrar la ventana
@@ -486,7 +499,7 @@ class CorreccionMovimientos:
         screen_width = edicion_window.winfo_screenwidth()
         screen_height = edicion_window.winfo_screenheight()
         window_width = 600
-        window_height = 500
+        window_height = 550
 
         # Calcular posición para centrar
         x = (screen_width - window_width) // 2
@@ -581,6 +594,35 @@ class CorreccionMovimientos:
         lote_entry = ttk.Entry(campos_frame, textvariable=lote_var,
                             width=ANCHO_CAMPO, font=("Arial", 10))
         lote_entry.grid(row=row, column=1, sticky="ew", pady=8)
+
+        row += 1
+        
+        # Checkbox Sin lote
+        sin_lote_var = tk.BooleanVar(value=False)
+
+        def toggle_lote():
+            if sin_lote_var.get():
+                lote_entry.delete(0, 'end')
+                lote_entry.config(state='disabled')
+            else:
+                lote_entry.config(state='normal')
+
+        checkbox_sin_lote = ttk.Checkbutton(
+            campos_frame,
+            text="Sin lote",
+            variable=sin_lote_var,
+            command=toggle_lote
+        )
+        checkbox_sin_lote.grid(row=row, column=1, sticky='nw', padx=5, pady=2)
+
+        # Inicializar checkbox según valor actual
+        if not movimiento.get('lote') or movimiento.get('lote') in ("", "N/A", None):
+            sin_lote_var.set(True)
+            lote_entry.config(state='disabled')
+        else:
+            sin_lote_var.set(False)
+            lote_entry.config(state='normal')
+
         row += 1
 
         # Fecha Vencimiento
@@ -600,6 +642,30 @@ class CorreccionMovimientos:
             except:
                 pass
         row += 1
+        
+        sin_fecha_var = tk.BooleanVar(value=False)
+        def toggle_fecha_venc():
+            if sin_fecha_var.get():
+                fecha_venc_entry.config(state='disabled')
+            else:
+                fecha_venc_entry.config(state='normal')
+
+        checkbox_sin_fecha = ttk.Checkbutton(
+            campos_frame,
+            text="Sin fecha de vencimiento",
+            variable=sin_fecha_var,
+            command=toggle_fecha_venc
+        )
+        checkbox_sin_fecha.grid(row=row, column=1, sticky='w', pady=2)
+        row += 1
+
+        # Inicializar checkbox según valor actual
+        if not movimiento.get('fecha_vencimiento'):
+            sin_fecha_var.set(True)
+            fecha_venc_entry.config(state='disabled')
+        else:
+            sin_fecha_var.set(False)
+            fecha_venc_entry.config(state='normal')
 
         # Cantidad
         ttk.Label(campos_frame, text="Cantidad:", font=("Arial", 10)).grid(
@@ -634,6 +700,16 @@ class CorreccionMovimientos:
                 except ValueError:
                     messagebox.showerror("Error", "El campo cantidad debe contener un valor numérico válido")
                     return
+                
+                if sin_fecha_var.get():
+                    fecha_vencimiento_val = None
+                else:
+                    fecha_vencimiento_val = fecha_venc_entry.get_date().strftime('%Y-%m-%d')
+                    
+                if sin_lote_var.get():
+                    lote_val = None  # o "N/A" según cómo manejes en la base
+                else:
+                    lote_val = lote_var.get().upper()
 
                 # Preparar datos para actualización
                 datos_actualizados = {
@@ -641,8 +717,8 @@ class CorreccionMovimientos:
                     'fecha': fecha,
                     'referencia': referencia_var.get(),
                     'tipo_movimiento': tipo_movimiento,
-                    'lote': lote_var.get(),
-                    'fecha_vencimiento': fecha_venc_entry.get_date().strftime('%Y-%m-%d') if fecha_venc_entry.get() else None,
+                    'lote': lote_val,
+                    'fecha_vencimiento': fecha_vencimiento_val,
                     'cantidad': cantidad,
                     'observaciones': observaciones_var.get()
                 }

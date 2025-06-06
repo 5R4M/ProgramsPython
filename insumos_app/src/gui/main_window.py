@@ -18,6 +18,7 @@ from src.gui.gestion_insumos import GestionInsumos
 from src.gui.gestion_servicios import GestionServicios
 from src.gui.gestion_movimientos import GestionMovimientos
 from src.gui.reporte_kardex import ReporteKardex
+from src.gui.reporte_demanda_real import ReporteDemandaReal
 
 class MainWindow:
     def __init__(self, usuario):
@@ -289,6 +290,14 @@ class MainWindow:
         self.reset_window_size()
         from src.gui.correccion_movimientos import CorreccionMovimientos
         self.pantalla_actual =CorreccionMovimientos(self.main_content_frame, self)
+        
+    def load_reporte_demanda_real(self):
+        if not self.verify_database_connection():
+            messagebox.showerror("Error", "No se puede conectar a la base de datos")
+            return
+        self.clear_content_frame()
+        self.reset_window_size()
+        self.pantalla_actual = ReporteDemandaReal(self.main_content_frame, self)
 
     def create_menu(self):
         # Frame para el menú lateral
@@ -359,6 +368,7 @@ class MainWindow:
         if rol in ("usuario", "admin", "super_admin"):
             self.create_menu_button("Ingreso de Insumos", self.load_ingreso_insumos)
             self.create_menu_button("Reporte Kardex", self.load_reporte_kardex)
+            self.create_menu_button("Reporte Demanda Real", self.load_reporte_demanda_real)
             self.create_menu_button("Correcciones", self.load_correccion_movimientos)
 
         # Botón de salir en la parte inferior
