@@ -1145,7 +1145,11 @@ def buscar_movimientos_por_filtros(
         SELECT
             m.id,
             m.fecha_registro AS fecha,
+            a2.nombre AS area_nombre,
+            d2.nombre AS distrito_nombre,
+            ts.descripcion AS tipo_servicio_desc,
             m.referencia,
+            s.nombre AS servicio_nombre,
             tm.descripcion AS tipo_movimiento,
             m.lote,
             m.fecha_vencimiento,

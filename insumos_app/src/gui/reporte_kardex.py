@@ -1384,3 +1384,7 @@ class ReporteKardex:
                     self.main_window.show_main_menu()
                 except:
                     pass
+    
+    def destroy(self):
+        if hasattr(self, 'frame_principal'):
+            self.frame_principal.destroy()

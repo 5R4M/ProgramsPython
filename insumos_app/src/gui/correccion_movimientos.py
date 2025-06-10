@@ -26,9 +26,9 @@ from src.database.db_manager import (
 class CorreccionMovimientos:
     # Definir las columnas como atributo de la clase
     COLUMNAS = [
-        'ID', 'Fecha', 'Referencia', 'Servicio', 'Tipo de Movimiento', 'Lote',
-        'Fecha Vencimiento', 'Cantidad', 'Insumo', 'Distrito Salida', 'Servicio Salida',
-        'Observaciones'
+        'ID', 'Fecha', 'Área', 'Distrito', 'Tipo de Servicio', 'Referencia', 'Servicio',
+        'Tipo de Movimiento', 'Lote', 'Fecha Vencimiento', 'Cantidad', 'Insumo',
+        'Distrito Salida', 'Servicio Salida', 'Observaciones'
     ]
 
     def formato_float(self, valor):
@@ -185,6 +185,9 @@ class CorreccionMovimientos:
         encabezados = {
             'ID': 'ID',
             'Fecha': 'FECHA',
+            'Área': 'ÁREA',
+            'Distrito': 'DISTRITO',
+            'Tipo de Servicio': 'TIPO SERVICIO',
             'Referencia': 'REFERENCIA',
             'Servicio': 'SERVICIO',
             'Tipo de Movimiento': 'TIPO MOVIMIENTO',
@@ -201,7 +204,13 @@ class CorreccionMovimientos:
             self.tree.heading(col, text=encabezados[col])
 
             # Anchos aumentados basados en los títulos
-            if col == "Referencia":
+            if col == "Área":
+                width = 120  # Ancho para "ÁREA"
+            elif col == "Distrito":
+                width = 120  # Ancho para "DISTRITO"
+            elif col == "Tipo de Servicio":
+                width = 150  # Ancho para "TIPO SERVICIO"
+            elif col == "Referencia":
                 width = 120  # Aumentado para "REFERENCIA"
             elif col == "Observaciones":
                 width = 250  # Aumentado para "OBSERVACIONES"
@@ -424,8 +433,11 @@ class CorreccionMovimientos:
                 self.tree.insert('', 'end', values=(
                     mov.get('id', ''),                          # ID
                     mov.get('fecha', ''),                       # Fecha
+                    mov.get('area_nombre', '') or "",           # Área
+                    mov.get('distrito_nombre', '') or "",       # Distrito
+                    mov.get('tipo_servicio_desc', '') or "",    # Tipo de Servicio
                     mov.get('referencia', '') or "",            # Referencia
-                    mov.get('servicio_nombre', '') or "",       # Servicio (NUEVO)
+                    mov.get('servicio_nombre', '') or "",       # Servicio
                     mov.get('tipo_movimiento', '') or "",       # Tipo de Movimiento
                     lote,                                       # Lote
                     fecha_venc,                                 # Fecha Vencimiento
