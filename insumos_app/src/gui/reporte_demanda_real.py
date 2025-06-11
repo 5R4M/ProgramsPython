@@ -10,14 +10,27 @@ from ttkwidgets.autocomplete import AutocompleteCombobox
 # ReportLab para PDF
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import letter, landscape
-from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, PageBreak
+from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.units import inch
 
-import pandas as pd
 import fitz  # PyMuPDF
 from PIL import Image, ImageTk
 from ttkwidgets.autocomplete import AutocompleteCombobox
+
+import locale
+
+# Intentar establecer el locale a español
+try:
+    locale.setlocale(locale.LC_TIME, 'es_ES.UTF-8')  # Linux
+except locale.Error:
+    try:
+        locale.setlocale(locale.LC_TIME, 'es_ES')  # Otro sistema
+    except locale.Error:
+        try:
+            locale.setlocale(locale.LC_TIME, 'spanish')  # Windows
+        except locale.Error:
+            print("No se pudo establecer el locale a español")
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
@@ -40,72 +53,150 @@ class ReporteDemandaReal:
     def __init__(self, parent_frame, main_window=None):
         self.parent = parent_frame
         self.main_window = main_window
+        self.movimientos_data = None
+
+        # Crear estilos para los frames (ya no se necesitan los estilos Enabled/Disabled)
+        style = ttk.Style()
+        
+        self.areas = []
+        self.distritos = []       
+        self.tipos_servicio = []  
+        self.tipos_insumo = []
+        self.insumos = []
+        self.presentaciones = []
+    
         self.setup_ui()
 
     def setup_ui(self):
+        # Frame principal - USAR PACK PARA TODO
         self.frame_principal = ttk.LabelFrame(self.parent, text="Filtros de Reporte Demanda Real")
         self.frame_principal.pack(fill="both", expand=True, padx=10, pady=5)
 
-        # Filtros: Área, Distrito, Tipo Servicio, Servicio, Tipo Insumo, Insumo, Presentación
-        self.frame_filtros = ttk.Frame(self.frame_principal)
-        self.frame_filtros.pack(fill="x", padx=5, pady=5)
-
-        # Primera fila de filtros
-        ttk.Label(self.frame_filtros, text="Área:").grid(row=0, column=0, padx=5, pady=2, sticky='w')
-        self.area_var = tk.StringVar()
-        self.combo_area = AutocompleteCombobox(self.frame_filtros, textvariable=self.area_var, width=20, state="normal")
-        self.combo_area.grid(row=0, column=1, padx=5, pady=2, sticky='w')
-
-        ttk.Label(self.frame_filtros, text="Distrito:").grid(row=0, column=2, padx=5, pady=2, sticky='w')
-        self.distrito_var = tk.StringVar()
-        self.combo_distrito = AutocompleteCombobox(self.frame_filtros, textvariable=self.distrito_var, width=20, state="normal")
-        self.combo_distrito.grid(row=0, column=3, padx=5, pady=2, sticky='w')
-
-        ttk.Label(self.frame_filtros, text="Tipo de Servicio:").grid(row=0, column=4, padx=5, pady=2, sticky='w')
-        self.tipo_servicio_var = tk.StringVar()
-        self.combo_tipo_servicio = AutocompleteCombobox(self.frame_filtros, textvariable=self.tipo_servicio_var, width=20, state="normal")
-        self.combo_tipo_servicio.grid(row=0, column=5, padx=5, pady=2, sticky='w')
-
-        ttk.Label(self.frame_filtros, text="Servicio:").grid(row=0, column=6, padx=5, pady=2, sticky='w')
-        self.servicio_var = tk.StringVar()
-        self.combo_servicio = AutocompleteCombobox(self.frame_filtros, textvariable=self.servicio_var, width=20, state="normal")
-        self.combo_servicio.grid(row=0, column=7, padx=5, pady=2, sticky='w')
-
-        # Segunda fila de filtros
-        ttk.Label(self.frame_filtros, text="Tipo de Insumo:").grid(row=1, column=0, padx=5, pady=2, sticky='w')
-        self.tipo_insumo_var = tk.StringVar()
-        self.combo_tipo_insumo = AutocompleteCombobox(self.frame_filtros, textvariable=self.tipo_insumo_var, width=20, state="normal")
-        self.combo_tipo_insumo.grid(row=1, column=1, padx=5, pady=2, sticky='w')
-
-        ttk.Label(self.frame_filtros, text="Insumo:").grid(row=1, column=2, padx=5, pady=2, sticky='w')
-        self.insumo_var = tk.StringVar()
-        self.combo_insumo = AutocompleteCombobox(self.frame_filtros, textvariable=self.insumo_var, width=20, state="normal")
-        self.combo_insumo.grid(row=1, column=3, padx=5, pady=2, sticky='w')
-
-        ttk.Label(self.frame_filtros, text="Presentación:").grid(row=1, column=4, padx=5, pady=2, sticky='w')
-        self.presentacion_var = tk.StringVar()
-        self.combo_presentacion = AutocompleteCombobox(self.frame_filtros, textvariable=self.presentacion_var, width=20, state="normal")
-        self.combo_presentacion.grid(row=1, column=5, padx=5, pady=2, sticky='w')
+        # Frame para corte logístico - UNA SOLA LÍNEA
+        self.frame_corte_logistico = ttk.LabelFrame(self.frame_principal, text="Corte Logístico")
+        self.frame_corte_logistico.pack(fill="x", padx=5, pady=5)
         
-        # Frame para visor PDF (nuevo)
+        self.frame_corte = ttk.Frame(self.frame_corte_logistico)
+        self.frame_corte.pack(fill="x", padx=5, pady=5)
+
+        # Una sola fila - Año, Mes Inicio y Mes Final
+        ttk.Label(self.frame_corte, text="Año:").grid(row=0, column=0, padx=5, sticky='w')
+        self.anio_var = tk.StringVar()
+        anios = [str(a) for a in range(datetime.now().year - 5, datetime.now().year + 2)]
+        self.combo_anio = ttk.Combobox(
+            self.frame_corte,
+            textvariable=self.anio_var,
+            values=anios,
+            width=8,
+            state="readonly"
+        )
+        self.combo_anio.grid(row=0, column=1, padx=5)
+        self.combo_anio.set(str(datetime.now().year))
+
+        ttk.Label(self.frame_corte, text="Mes Inicio:").grid(row=0, column=2, padx=5, sticky='w')
+        self.mes_inicio_var = tk.StringVar()
+        
+        # Obtener nombres de meses en español
+        meses = [datetime(2024, m, 1).strftime("%B").capitalize() for m in range(1, 13)]
+        
+        self.combo_mes_inicio = ttk.Combobox(
+            self.frame_corte,
+            textvariable=self.mes_inicio_var,
+            values=meses,
+            width=12,
+            state="readonly"
+        )
+        self.combo_mes_inicio.grid(row=0, column=3, padx=5)
+        self.combo_mes_inicio.set(datetime.now().strftime("%B").capitalize())
+
+        ttk.Label(self.frame_corte, text="Mes Final:").grid(row=0, column=4, padx=5, sticky='w')
+        self.mes_final_var = tk.StringVar()
+        
+        self.combo_mes_final = ttk.Combobox(
+            self.frame_corte,
+            textvariable=self.mes_final_var,
+            values=meses,
+            width=12,
+            state="readonly"
+        )
+        self.combo_mes_final.grid(row=0, column=5, padx=5)
+        self.combo_mes_final.set(datetime.now().strftime("%B").capitalize())
+
+        # Eventos para actualizar fechas
+        self.combo_anio.bind('<<ComboboxSelected>>', self.actualizar_fechas_por_corte)
+        self.combo_mes_inicio.bind('<<ComboboxSelected>>', self.actualizar_fechas_por_corte)
+        self.combo_mes_final.bind('<<ComboboxSelected>>', self.actualizar_fechas_por_corte)
+
+        # Frame para Ubicación - UNA SOLA LÍNEA
+        self.frame_ubicacion = ttk.LabelFrame(self.frame_principal, text="Ubicación")
+        self.frame_ubicacion.pack(fill="x", padx=5, pady=5)
+
+        self.frame_ubicacion_content = ttk.Frame(self.frame_ubicacion)
+        self.frame_ubicacion_content.pack(fill="x", padx=5, pady=5)
+        
+        # Una sola fila - Área, Distrito, Tipo de Servicio y Servicio
+        ttk.Label(self.frame_ubicacion_content, text="Área:").grid(row=0, column=0, padx=5, sticky='w')
+        self.area_var = tk.StringVar()
+        self.combo_area = AutocompleteCombobox(self.frame_ubicacion_content, textvariable=self.area_var, state="normal", width=20)
+        self.combo_area.grid(row=0, column=1, padx=5, sticky='w')
+        
+        ttk.Label(self.frame_ubicacion_content, text="Distrito:").grid(row=0, column=2, padx=5, sticky='w')
+        self.distrito_var = tk.StringVar()
+        self.combo_distrito = AutocompleteCombobox(self.frame_ubicacion_content, textvariable=self.distrito_var, state="normal", width=20)
+        self.combo_distrito.grid(row=0, column=3, padx=5, sticky='w')
+
+        ttk.Label(self.frame_ubicacion_content, text="Tipo de Servicio:").grid(row=0, column=4, padx=5, sticky='w')
+        self.tipo_servicio_var = tk.StringVar()
+        self.combo_tipo_servicio = AutocompleteCombobox(self.frame_ubicacion_content, textvariable=self.tipo_servicio_var, state="normal", width=20)
+        self.combo_tipo_servicio.grid(row=0, column=5, padx=5, sticky='w')
+        
+        ttk.Label(self.frame_ubicacion_content, text="Servicio:").grid(row=0, column=6, padx=5, sticky='w')
+        self.servicio_var = tk.StringVar()
+        self.combo_servicio = AutocompleteCombobox(self.frame_ubicacion_content, textvariable=self.servicio_var, state="normal", width=20)
+        self.combo_servicio.grid(row=0, column=7, padx=5, sticky='w')
+
+        # Frame para Insumos - UNA SOLA LÍNEA
+        self.frame_insumos = ttk.LabelFrame(self.frame_principal, text="Insumo")
+        self.frame_insumos.pack(fill="x", padx=5, pady=5)
+
+        self.frame_insumos_content = ttk.Frame(self.frame_insumos)
+        self.frame_insumos_content.pack(fill="x", padx=5, pady=5)
+        
+        # Una sola fila - Tipo de Insumo, Insumo y Presentación
+        ttk.Label(self.frame_insumos_content, text="Tipo de Insumo:").grid(row=0, column=0, padx=5, sticky='w')
+        self.tipo_insumo_var = tk.StringVar()
+        self.combo_tipo_insumo = AutocompleteCombobox(self.frame_insumos_content, textvariable=self.tipo_insumo_var, state="normal", width=20)
+        self.combo_tipo_insumo.grid(row=0, column=1, padx=5, sticky='w')
+        
+        ttk.Label(self.frame_insumos_content, text="Insumo:").grid(row=0, column=2, padx=5, sticky='w')
+        self.insumo_var = tk.StringVar()
+        self.combo_insumo = AutocompleteCombobox(self.frame_insumos_content, textvariable=self.insumo_var, state="normal", width=25)
+        self.combo_insumo.grid(row=0, column=3, padx=5, sticky='w')
+        
+        ttk.Label(self.frame_insumos_content, text="Presentación:").grid(row=0, column=4, padx=5, sticky='w')
+        self.presentacion_var = tk.StringVar()
+        self.combo_presentacion = AutocompleteCombobox(self.frame_insumos_content, textvariable=self.presentacion_var, state="readonly", width=20)
+        self.combo_presentacion.grid(row=0, column=5, padx=5, sticky='w')
+
+        # Frame para el visor PDF
         self.pdf_frame = ttk.Frame(self.frame_principal)
         self.pdf_frame.pack(fill="both", expand=True, padx=5, pady=5)
+        self.pdf_viewer = None
 
-        # Botones
+        # Frame para botones
         self.frame_botones = ttk.Frame(self.frame_principal)
         self.frame_botones.pack(fill="x", pady=10)
 
-        # Crear un frame interno para organizar los botones en una fila
         botones_grid = ttk.Frame(self.frame_botones)
-        botones_grid.pack(fill="x")
+        botones_grid.pack()
 
-        # Botones
         ttk.Button(botones_grid, text="Generar Vista Previa", command=self.generar_reporte).grid(row=0, column=0, padx=5)
-        ttk.Button(botones_grid, text="Exportar a PDF", command=self.exportar_pdf).grid(row=0, column=1, padx=5)
-        ttk.Button(botones_grid, text="Exportar a Excel", command=self.exportar_excel).grid(row=0, column=2, padx=5)
-        ttk.Button(botones_grid, text="Cerrar", command=self.cerrar_ventana).grid(row=0, column=3, padx=5)
+        ttk.Button(botones_grid, text="Imprimir", command=self.imprimir_pdf).grid(row=0, column=1, padx=5)
+        ttk.Button(botones_grid, text="Exportar a PDF", command=self.exportar_pdf).grid(row=0, column=2, padx=5)
+        ttk.Button(botones_grid, text="Exportar a Excel", command=self.exportar_excel).grid(row=0, column=3, padx=5)
+        ttk.Button(botones_grid, text="Cerrar", command=self.cerrar_ventana).grid(row=0, column=4, padx=5)
 
-        # Vincular eventos para cargar combos dependientes
+        # Vincular eventos de cambio
         self.combo_area.bind('<<ComboboxSelected>>', self.cargar_distritos_por_area)
         self.combo_distrito.bind('<<ComboboxSelected>>', self.cargar_tipos_servicio)
         self.combo_tipo_servicio.bind('<<ComboboxSelected>>', self.cargar_servicios)
@@ -119,91 +210,165 @@ class ReporteDemandaReal:
         self.cargar_tipos_insumo()
         self.cargar_presentaciones()
 
+    def calcular_rango_corte_logistico(self, anio, mes_inicio, mes_final):
+        """
+        Calcula el rango de fechas para el corte logístico.
+        Del 26 del mes anterior al mes inicio hasta el 25 del mes final.
+        Retorna (fecha_inicial, fecha_final) en formato dd/mm/yyyy
+        """
+        # Diccionario de meses en español a números
+        meses_a_numero = {
+            'Enero': 1, 'Febrero': 2, 'Marzo': 3, 'Abril': 4,
+            'Mayo': 5, 'Junio': 6, 'Julio': 7, 'Agosto': 8,
+            'Septiembre': 9, 'Octubre': 10, 'Noviembre': 11, 'Diciembre': 12
+        }
+
+        # Convertir nombres de meses a números
+        mes_inicio_num = meses_a_numero.get(mes_inicio)
+        mes_final_num = meses_a_numero.get(mes_final)
+
+        if not mes_inicio_num or not mes_final_num:
+            raise ValueError("Los meses deben ser válidos")
+
+        try:
+            anio = int(anio)
+        except ValueError:
+            raise ValueError("Año debe ser un número válido")
+
+        # Calcular fecha inicial (26 del mes anterior al mes inicio)
+        if mes_inicio_num == 1:  # Si es enero, el mes anterior es diciembre del año anterior
+            fecha_ini = datetime(anio - 1, 12, 26)
+        else:
+            fecha_ini = datetime(anio, mes_inicio_num - 1, 26)
+
+        # Calcular fecha final (25 del mes final)
+        fecha_fin = datetime(anio, mes_final_num, 25)
+
+        return fecha_ini.strftime('%d/%m/%Y'), fecha_fin.strftime('%d/%m/%Y')
+
+    def actualizar_fechas_por_corte(self, event=None):
+        """
+        Actualiza las fechas cuando se selecciona año, mes inicio y mes final
+        """
+        try:
+            anio = self.anio_var.get()
+            mes_inicio = self.mes_inicio_var.get()
+            mes_final = self.mes_final_var.get()
+
+            if anio and mes_inicio and mes_final:
+                fecha_ini, fecha_fin = self.calcular_rango_corte_logistico(anio, mes_inicio, mes_final)
+                # Solo para mostrar información, no necesitamos DateEntry
+                print(f"Período: {fecha_ini} - {fecha_fin}")
+        except Exception as e:
+            messagebox.showerror("Error", f"Error al calcular fechas: {str(e)}")
+
     def cargar_areas(self):
-        areas = obtener_areas()
-        lista_areas = [a['nombre'] for a in areas]
-        self.combo_area.set_completion_list(lista_areas)
+        areas_raw = obtener_areas()
+        self.areas = [dict(a) for a in areas_raw] if areas_raw else []
+        if self.areas:
+            opciones = [''] + [a['nombre'] for a in self.areas]
+            self.combo_area.set_completion_list(opciones)
 
     def cargar_distritos_por_area(self, event=None):
-        area_seleccionada = self.combo_area.get()
-        if not area_seleccionada:
-            self.combo_distrito.set_completion_list([])
-            return
-        id_area = obtener_id_area(area_seleccionada)
-        distritos = obtener_distritos_por_area(id_area)
-        lista_distritos = [d['nombre'] for d in distritos]
-        self.combo_distrito.set_completion_list(lista_distritos)
-        self.combo_distrito.set('')
+        area_nombre = self.combo_area.get().strip()
+        if area_nombre:
+            area = next((a for a in self.areas if a['nombre'] == area_nombre), None)
+            if area:
+                distritos = obtener_distritos_por_area(area['id'])
+                self.distritos = distritos or []
+                opciones = [''] + [d['nombre'] for d in self.distritos]
+                self.combo_distrito.set_completion_list(opciones)
+            else:
+                self.distritos = []
+                self.combo_distrito.set_completion_list([''])
+                self.combo_distrito.set('')
+        else:
+            self.distritos = []
+            self.combo_distrito.set_completion_list([''])
+            self.combo_distrito.set('')
 
     def cargar_tipos_servicio(self, event=None):
-        distrito_seleccionado = self.combo_distrito.get()
-        if not distrito_seleccionado:
-            self.combo_tipo_servicio.set_completion_list([])
-            return
-        id_distrito = obtener_id_distrito(distrito_seleccionado)
-        tipos_servicio = obtener_tipos_servicio_por_distrito(id_distrito)
-        lista_tipos = [t['descripcion'] for t in tipos_servicio]
-        self.combo_tipo_servicio.set_completion_list(lista_tipos)
         self.combo_tipo_servicio.set('')
+        distrito_nombre = self.combo_distrito.get().strip()
+        if distrito_nombre:
+            distrito = next((d for d in self.distritos if d['nombre'] == distrito_nombre), None)
+            if distrito:
+                self.tipos_servicio = obtener_tipos_servicio_por_distrito(distrito['id'])
+                opciones = [''] + [t['descripcion'] for t in self.tipos_servicio]
+                self.combo_tipo_servicio.set_completion_list(opciones)
 
     def cargar_servicios(self, event=None):
-        tipo_servicio_seleccionado = self.combo_tipo_servicio.get()
-        if not tipo_servicio_seleccionado:
-            self.combo_servicio.set_completion_list([])
-            return
-        id_tipo_servicio = obtener_id_tipo_servicio(tipo_servicio_seleccionado)
-        servicios = obtener_servicios_por_tipo(id_tipo_servicio)
-        lista_servicios = [s['nombre'] for s in servicios]
-        self.combo_servicio.set_completion_list(lista_servicios)
         self.combo_servicio.set('')
+        tipo_servicio_desc = self.combo_tipo_servicio.get().strip()
+        if tipo_servicio_desc:
+            tipo_servicio = next((t for t in self.tipos_servicio if t['descripcion'] == tipo_servicio_desc), None)
+            if tipo_servicio:
+                servicios = obtener_servicios_por_tipo(tipo_servicio['id'])
+                opciones = [''] + [s['nombre'] for s in servicios]
+                self.combo_servicio.set_completion_list(opciones)
 
     def cargar_tipos_insumo(self):
-        tipos_insumo = obtener_tipos_insumo()
-        lista_tipos = [t['descripcion'] for t in tipos_insumo]
-        self.combo_tipo_insumo.set_completion_list(lista_tipos)
+        self.tipos_insumo = obtener_tipos_insumo()
+        if self.tipos_insumo:
+            opciones = [''] + [t['descripcion'] for t in self.tipos_insumo]
+            self.combo_tipo_insumo.set_completion_list(opciones)
 
     def cargar_insumos(self, event=None):
-        tipo_insumo_seleccionado = self.combo_tipo_insumo.get()
-        if not tipo_insumo_seleccionado:
-            self.combo_insumo.set_completion_list([])
-            return
-        id_tipo_insumo = obtener_id_tipo_insumo(tipo_insumo_seleccionado)
-        insumos = obtener_insumos_por_tipo(id_tipo_insumo)
-        lista_insumos = [i['nombre'] for i in insumos]
-        self.combo_insumo.set_completion_list(lista_insumos)
         self.combo_insumo.set('')
+        self.combo_presentacion.set('')
+        tipo_insumo_desc = self.combo_tipo_insumo.get().strip()
+        if tipo_insumo_desc:
+            tipo_insumo = next((t for t in self.tipos_insumo if t['descripcion'] == tipo_insumo_desc), None)
+            if tipo_insumo:
+                insumos_raw = obtener_insumos_por_tipo(tipo_insumo['id'])
+                # Convertir sqlite3.Row a diccionarios
+                self.insumos = [dict(i) for i in insumos_raw] if insumos_raw else []
+                opciones = [''] + [i['nombre'] for i in self.insumos]
+                self.combo_insumo.set_completion_list(opciones)
 
     def cargar_presentaciones(self):
-        presentaciones = obtener_presentaciones()
-        lista_presentaciones = [p['nombre'] for p in presentaciones]
-        self.combo_presentacion.set_completion_list(lista_presentaciones)
+        presentaciones_raw = obtener_presentaciones()
+        self.presentaciones = [dict(p) for p in presentaciones_raw] if presentaciones_raw else []
+        if self.presentaciones:
+            opciones = [''] + [p['nombre'] for p in self.presentaciones]
+            self.combo_presentacion.set_completion_list(opciones)
 
     def actualizar_presentacion(self, event=None):
-        insumo_seleccionado = self.combo_insumo.get()
-        if not insumo_seleccionado:
+        """
+        Actualiza automáticamente la presentación cuando se selecciona un insumo
+        """
+        insumo_nombre = self.combo_insumo.get().strip()
+        if insumo_nombre and self.insumos:
+            insumo = next((i for i in self.insumos if i['nombre'] == insumo_nombre), None)
+            if insumo:
+                # Buscar la presentación del insumo seleccionado
+                presentacion = insumo.get('nombre_presentacion', '')
+                if presentacion:
+                    self.combo_presentacion.set(presentacion)
+                else:
+                    # Si no tiene presentación específica, buscar en la lista general
+                    if self.presentaciones:
+                        # Tomar la primera presentación disponible como default
+                        self.combo_presentacion.set(self.presentaciones[0]['nombre'])
+                    else:
+                        self.combo_presentacion.set('')
+            else:
+                self.combo_presentacion.set('')
+        else:
             self.combo_presentacion.set('')
-            return
-        tipo_insumo_seleccionado = self.combo_tipo_insumo.get()
-        id_tipo_insumo = obtener_id_tipo_insumo(tipo_insumo_seleccionado)
-        insumos = obtener_insumos_por_tipo(id_tipo_insumo)
-        for insumo in insumos:
-            if insumo['nombre'] == insumo_seleccionado:
-                self.combo_presentacion.set(insumo['nombre_presentacion'] if 'nombre_presentacion' in insumo else '')
-                return
-        self.combo_presentacion.set('')
 
     def procesar_datos(self, movimientos, fecha_ini, fecha_fin):
         datos_procesados = []
         for mov in movimientos:
             datos_procesados.append({
                 'codigo': mov.get('codigo', ''),
-                'nombre_insumo': mov.get('insumo_nombre', ''),
+                'nombre_insumo': mov.get('nombre_insumo', ''),
                 'presentacion': mov.get('nombre_presentacion', ''),
                 'fecha': mov.get('fecha', ''),
                 'tipo_movimiento': mov.get('tipo_movimiento', ''),
                 'cantidad': mov.get('cantidad', 0),
-                'existencia': mov.get('existencia', 0),  # Asegúrate de tener este dato
-                'reajuste': mov.get('reajuste', 0)      # Asegúrate de tener este dato
+                'existencia': mov.get('existencia', 0),
+                'reajuste': mov.get('reajuste', 0)
             })
         return datos_procesados
 
@@ -212,34 +377,376 @@ class ReporteDemandaReal:
             messagebox.showerror("Error", "Primero debe generar la vista previa del reporte.")
             return
 
-        df = pd.DataFrame.from_dict(self.datos, orient='index')
-        df.insert(0, 'Insumo', df.index)
-        df.reset_index(drop=True, inplace=True)
-
-        downloads_path = os.path.expanduser("~/Downloads")
-        full_path = os.path.join(downloads_path, f"Reporte_Demanda_Real_{self.periodo_str}.xlsx")
-
         try:
-            df.to_excel(full_path, index=False)
-            messagebox.showinfo("Éxito", f"Reporte exportado a Excel: {full_path}")
+            import os
+            from datetime import datetime, timedelta
+            
+            # Función para convertir número de columna a letra(s)
+            def col_num_to_letter(col_num):
+                """Convierte número de columna (0-based) a letra(s) de Excel"""
+                result = ""
+                while col_num >= 0:
+                    result = chr(col_num % 26 + ord('A')) + result
+                    col_num = col_num // 26 - 1
+                    if col_num < 0:
+                        break
+                return result
+            
+            # Obtener período para el nombre del archivo
+            anio = self.anio_var.get()
+            mes_inicio = self.mes_inicio_var.get()
+            mes_final = self.mes_final_var.get()
+            periodo_str = f"{mes_inicio}_{mes_final}_{anio}"
+
+            # Generar nombre de archivo con fecha y hora
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            file_name = f"Reporte_Demanda_Real_{periodo_str}_{timestamp}.xlsx"
+
+            # Ruta a la carpeta Descargas
+            downloads_path = os.path.expanduser("~/Downloads")
+            full_path = os.path.join(downloads_path, file_name)
+
+            # Crear archivo Excel
+            writer = pd.ExcelWriter(full_path, engine='xlsxwriter')
+            workbook = writer.book
+            worksheet = workbook.add_worksheet('Demanda_Real')
+
+            # CALCULAR NÚMERO TOTAL DE COLUMNAS PRIMERO
+            fecha_ini_str, fecha_fin_str = self.calcular_rango_corte_logistico(anio, mes_inicio, mes_final)
+            fecha_inicio = datetime.strptime(fecha_ini_str, '%d/%m/%Y')
+            fecha_fin = datetime.strptime(fecha_fin_str, '%d/%m/%Y')
+
+            # Generar lista de días hábiles
+            dias = []
+            fecha_iter = fecha_inicio
+            while fecha_iter <= fecha_fin:
+                if fecha_iter.weekday() < 5:  # 0=lunes, ..., 4=viernes
+                    dias.append(fecha_iter.day)
+                fecha_iter += timedelta(days=1)
+
+            # Calcular columna final (Código + Medicamento + Movimientos + Días + 5 columnas finales)
+            total_columnas = 3 + len(dias) + 5  # A, B, C + días + Total Entregado, Total No Entregado, Demanda, Existencia, Reajuste
+            ultima_columna = col_num_to_letter(total_columnas - 1)  # Convertir a letra de columna
+
+            # ESTILOS
+            title_format = workbook.add_format({
+                'bold': True,
+                'align': 'center',
+                'valign': 'vcenter',
+                'font_size': 12,
+                'text_wrap': True,
+                'font_name': 'Arial'
+            })
+
+            subtitle_format = workbook.add_format({
+                'bold': True,
+                'align': 'center',
+                'valign': 'vcenter',
+                'font_size': 10,
+                'text_wrap': True,
+                'font_name': 'Arial'
+            })
+
+            timestamp_format = workbook.add_format({
+                'align': 'center',
+                'valign': 'vcenter',
+                'font_size': 9,
+                'text_wrap': True,
+                'font_name': 'Arial'
+            })
+
+            filter_format = workbook.add_format({
+                'align': 'left',
+                'valign': 'vcenter',
+                'font_size': 9,
+                'text_wrap': True,
+                'font_name': 'Arial',
+                'border': 1,
+                'border_color': '#D3D3D3'
+            })
+
+            header_format = workbook.add_format({
+                'bold': True,
+                'align': 'center',
+                'valign': 'vcenter',
+                'font_size': 8,
+                'text_wrap': True,
+                'font_name': 'Arial',
+                'bg_color': '#ADD8E6',  # Azul claro
+                'font_color': 'black',
+                'border': 1,
+                'border_color': 'black'
+            })
+
+            data_format = workbook.add_format({
+                'align': 'center',
+                'valign': 'vcenter',
+                'font_size': 8,
+                'font_name': 'Arial',
+                'border': 1,
+                'border_color': 'black'
+            })
+
+            text_format = workbook.add_format({
+                'align': 'left',
+                'valign': 'vcenter',
+                'font_size': 8,
+                'font_name': 'Arial',
+                'border': 1,
+                'border_color': 'black'
+            })
+
+            # TÍTULOS PRINCIPALES - ABARCAN HASTA LA ÚLTIMA COLUMNA
+            worksheet.merge_range(f'A1:{ultima_columna}1', 
+                'DIRECCIÓN DEPARTAMENTAL DE REDES INTEGRADAS DE SERVICIOS DE SALUD DE GUATEMALA,', 
+                title_format)
+            worksheet.merge_range(f'A2:{ultima_columna}2', 'ÁREA NOR ORIENTE', subtitle_format)
+            worksheet.merge_range(f'A3:{ultima_columna}3', 'REGISTRO DIARIO DE CONSUMO Y DEMANDA REAL', subtitle_format)
+            worksheet.merge_range(f'A4:{ultima_columna}4', 
+                f"Generado el: {datetime.now().strftime('%d/%m/%Y %H:%M:%S')}", 
+                timestamp_format)
+
+            # FILTROS EN UNA SOLA FILA (fila 6)
+            filtros = [
+                f"Área: {self.combo_area.get()}",
+                f"Distrito: {self.combo_distrito.get()}",
+                f"Tipo de Servicio: {self.combo_tipo_servicio.get()}",
+                f"Servicio: {self.combo_servicio.get()}"
+            ]
+
+            # Calcular ancho de cada filtro
+            ancho_filtro = max(1, total_columnas // 4)
+            col_actual = 0
+
+            for i, filtro in enumerate(filtros):
+                if i == 3:  # Último filtro, usar todas las columnas restantes
+                    col_fin = total_columnas - 1
+                else:
+                    col_fin = min(col_actual + ancho_filtro - 1, total_columnas - 1)
+                
+                # Evitar merge de una sola celda
+                if col_actual != col_fin:
+                    col_inicio_letra = col_num_to_letter(col_actual)
+                    col_fin_letra = col_num_to_letter(col_fin)
+                    worksheet.merge_range(f'{col_inicio_letra}6:{col_fin_letra}6', filtro, filter_format)
+                else:
+                    col_letra = col_num_to_letter(col_actual)
+                    worksheet.write(f'{col_letra}6', filtro, filter_format)
+                
+                col_actual = col_fin + 1
+
+            # ENCABEZADOS DE LA TABLA (filas 8 y 9) - TODOS EN LAS MISMAS FILAS
+            fila_encabezado_1 = 8
+            fila_encabezado_2 = 9
+
+            # COLUMNAS BÁSICAS (A, B, C)
+            worksheet.merge_range(f'A{fila_encabezado_1}:A{fila_encabezado_2}', 'Código', header_format)
+            worksheet.merge_range(f'B{fila_encabezado_1}:B{fila_encabezado_2}', 'MEDICAMENTO\nNombre, Concentración\ny Presentación', header_format)
+            worksheet.merge_range(f'C{fila_encabezado_1}:C{fila_encabezado_2}', 'DIA DEL MES', header_format)
+
+            # DÍAS DEL MES
+            col_inicio_dias = 3  # Columna D (índice 3)
+            col_fin_dias = col_inicio_dias + len(dias) - 1
+            
+            # Título "DÍA DEL MES" que abarca todos los días (FILA 8)
+            if len(dias) > 1:
+                col_inicio_dias_letra = col_num_to_letter(col_inicio_dias)
+                col_fin_dias_letra = col_num_to_letter(col_fin_dias)
+                worksheet.merge_range(f'{col_inicio_dias_letra}{fila_encabezado_1}:{col_fin_dias_letra}{fila_encabezado_1}', 
+                                    'CANTIDAD DE MEDICAMENTOS Y/O PRODUCTOS A FIN', header_format)
+            else:
+                col_letra = col_num_to_letter(col_inicio_dias)
+                worksheet.write(f'{col_letra}{fila_encabezado_1}', 'CANTIDAD DE MEDICAMENTOS Y/O PRODUCTOS A FIN', header_format)
+
+            # Escribir números de días en la segunda fila (FILA 9)
+            for i, dia in enumerate(dias):
+                col_letra = col_num_to_letter(col_inicio_dias + i)
+                worksheet.write(f'{col_letra}{fila_encabezado_2}', str(dia), header_format)
+
+            # COLUMNAS FINALES - CORREGIDO: TODAS EN LAS MISMAS FILAS 8 Y 9
+            col_total_entregado = col_fin_dias + 1
+            col_total_no_entregado = col_total_entregado + 1
+            col_demanda = col_total_no_entregado + 1
+            col_existencia = col_demanda + 1
+            col_reajuste = col_existencia + 1
+
+            # ESCRIBIR TÍTULOS DE COLUMNAS FINALES EN LAS MISMAS FILAS QUE LOS DÍAS
+            # IMPORTANTE: usar fila_encabezado_1-1 y fila_encabezado_2-1 porque merge_range usa índices 0-based
+            worksheet.merge_range(fila_encabezado_1-1, col_total_entregado, fila_encabezado_2-1, col_total_entregado, 
+                                'Total\nEntregado', header_format)
+            worksheet.merge_range(fila_encabezado_1-1, col_total_no_entregado, fila_encabezado_2-1, col_total_no_entregado, 
+                                'Total\nNo\nEntregado', header_format)
+            worksheet.merge_range(fila_encabezado_1-1, col_demanda, fila_encabezado_2-1, col_demanda, 
+                                'Demanda', header_format)
+            worksheet.merge_range(fila_encabezado_1-1, col_existencia, fila_encabezado_2-1, col_existencia, 
+                                'Existencia', header_format)
+            worksheet.merge_range(fila_encabezado_1-1, col_reajuste, fila_encabezado_2-1, col_reajuste, 
+                                'Reajuste (+) (-)', header_format)
+
+            # DATOS DE LA TABLA - Empezar en fila 10 (sin línea en blanco)
+            fila_actual = 9  # Directamente después de los encabezados
+
+            # Procesar datos de insumos
+            for insumo_key, valores in self.datos.items():
+                # Extraer información del insumo - CORREGIDO
+                if ' - ' in insumo_key:
+                    partes = insumo_key.split(' - ', 1)
+                    codigo = partes[0]
+                    nombre_presentacion = partes[1]
+                else:
+                    # Si no hay separador, usar toda la cadena como nombre y código vacío
+                    codigo = ''
+                    nombre_presentacion = insumo_key
+
+                # Calcular totales
+                total_entregado = valores.get('Total_Entregado', 0)
+                total_no_entregado = valores.get('Total_No_Entregado', 0)
+                demanda = valores.get('Demanda', 0)
+                existencia = valores.get('Existencia', 0)
+                reajuste = valores.get('Reajuste', 0)
+
+                # FILA ENTREGADO
+                # Combinar celdas verticalmente para código y nombre
+                worksheet.merge_range(fila_actual, 0, fila_actual+1, 0, codigo, data_format)  # Código
+                worksheet.merge_range(fila_actual, 1, fila_actual+1, 1, nombre_presentacion, text_format)  # Nombre
+
+                # Movimiento "Entregado"
+                worksheet.write(fila_actual, 2, 'Entregado', data_format)
+
+                # Días - valores entregados
+                for i, dia in enumerate(dias):
+                    valor = valores.get(f'Día_{dia}_Entregado', 0)
+                    worksheet.write(fila_actual, col_inicio_dias + i, valor, data_format)
+
+                # Totales para fila Entregado (combinar verticalmente)
+                worksheet.merge_range(fila_actual, col_total_entregado, fila_actual+1, col_total_entregado, 
+                                    total_entregado, data_format)
+                worksheet.merge_range(fila_actual, col_total_no_entregado, fila_actual+1, col_total_no_entregado, 
+                                    total_no_entregado, data_format)
+                worksheet.merge_range(fila_actual, col_demanda, fila_actual+1, col_demanda, 
+                                    demanda, data_format)
+                worksheet.merge_range(fila_actual, col_existencia, fila_actual+1, col_existencia, 
+                                    existencia, data_format)
+                worksheet.merge_range(fila_actual, col_reajuste, fila_actual+1, col_reajuste, 
+                                    reajuste, data_format)
+
+                # FILA NO ENTREGADO
+                # Movimiento "No Entregado"
+                worksheet.write(fila_actual+1, 2, 'No Entregado', data_format)
+
+                # Días - valores no entregados
+                for i, dia in enumerate(dias):
+                    valor = valores.get(f'Día_{dia}_No_Entregado', 0)
+                    worksheet.write(fila_actual+1, col_inicio_dias + i, valor, data_format)
+
+                fila_actual += 2  # Avanzar 2 filas para el siguiente insumo
+
+            # CONFIGURACIÓN DE COLUMNAS
+            worksheet.set_column('A:A', 8)   # Código
+            worksheet.set_column('B:B', 25)  # Medicamento
+            worksheet.set_column('C:C', 12)  # Movimientos
+            
+            # Días (columnas más estrechas)
+            for i in range(len(dias)):
+                col_letter = col_num_to_letter(col_inicio_dias + i)
+                worksheet.set_column(f'{col_letter}:{col_letter}', 4)
+            
+            # Columnas finales
+            col_total_entregado_letra = col_num_to_letter(col_total_entregado)
+            col_total_no_entregado_letra = col_num_to_letter(col_total_no_entregado)
+            col_demanda_letra = col_num_to_letter(col_demanda)
+            col_existencia_letra = col_num_to_letter(col_existencia)
+            col_reajuste_letra = col_num_to_letter(col_reajuste)
+            
+            worksheet.set_column(f'{col_total_entregado_letra}:{col_total_entregado_letra}', 8)
+            worksheet.set_column(f'{col_total_no_entregado_letra}:{col_total_no_entregado_letra}', 8)
+            worksheet.set_column(f'{col_demanda_letra}:{col_demanda_letra}', 8)
+            worksheet.set_column(f'{col_existencia_letra}:{col_existencia_letra}', 8)
+            worksheet.set_column(f'{col_reajuste_letra}:{col_reajuste_letra}', 10)
+
+            # CONFIGURACIÓN DE PÁGINA - TAMAÑO LEGAL
+            worksheet.set_landscape()
+            worksheet.set_paper(5)  # 5 = Legal (8.5 x 14 pulgadas)
+            worksheet.set_margins(0.5, 0.5, 0.5, 0.5)
+            worksheet.fit_to_pages(1, 0)  # 1 página de ancho, altura automática
+
+            # Cerrar archivo
+            writer.close()
+            
+            # Mensaje con opción de abrir archivo
+            respuesta = messagebox.askyesno(
+                "Éxito", 
+                f"Reporte exportado exitosamente a:\n{full_path}\n\n¿Desea abrir el archivo?"
+            )
+            
+            if respuesta:
+                try:
+                    import sys
+                    if sys.platform.startswith('win'):
+                        os.startfile(full_path)
+                    elif sys.platform.startswith('darwin'):
+                        os.system(f'open "{full_path}"')
+                    else:
+                        os.system(f'xdg-open "{full_path}"')
+                except Exception as e:
+                    messagebox.showwarning("Advertencia", f"No se pudo abrir el archivo automáticamente: {str(e)}")
+
         except Exception as e:
             messagebox.showerror("Error", f"Error al exportar Excel: {str(e)}")
-
+        
     def exportar_pdf(self):
         if not hasattr(self, 'temp_pdf_path') or not self.temp_pdf_path:
             messagebox.showerror("Error", "Primero debe generar la vista previa del reporte.")
             return
 
         downloads_path = os.path.expanduser("~/Downloads")
-        full_path = os.path.join(downloads_path, f"Reporte_Demanda_Real_{self.periodo_str}.pdf")
+        
+        # Generar nombre con timestamp
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        file_name = f"Reporte_Demanda_Real_{self.periodo_str}_{timestamp}.pdf"
+        full_path = os.path.join(downloads_path, file_name)
 
         try:
             import shutil
             shutil.copy2(self.temp_pdf_path, full_path)
-            messagebox.showinfo("Éxito", f"Reporte exportado a PDF: {full_path}")
+            
+            # Mensaje con opción de abrir archivo
+            respuesta = messagebox.askyesno(
+                "Éxito", 
+                f"Reporte exportado exitosamente a:\n{full_path}\n\n¿Desea abrir el archivo?"
+            )
+            
+            if respuesta:
+                try:
+                    import sys
+                    if sys.platform.startswith('win'):
+                        os.startfile(full_path)
+                    elif sys.platform.startswith('darwin'):
+                        os.system(f'open "{full_path}"')
+                    else:
+                        os.system(f'xdg-open "{full_path}"')
+                except Exception as e:
+                    messagebox.showwarning("Advertencia", f"No se pudo abrir el archivo automáticamente: {str(e)}")
+                    
         except Exception as e:
             messagebox.showerror("Error", f"Error al exportar PDF: {str(e)}")
 
+    def imprimir_pdf(self):
+        try:
+            import os
+            import sys
+            if not hasattr(self, 'temp_pdf_path') or not os.path.exists(self.temp_pdf_path):
+                messagebox.showerror("Error", "Primero debe generar la vista previa del PDF.")
+                return
+            if sys.platform.startswith('win'):
+                os.startfile(self.temp_pdf_path)
+            elif sys.platform.startswith('darwin'):
+                os.system(f'open "{self.temp_pdf_path}"')
+            else:
+                os.system(f'xdg-open "{self.temp_pdf_path}"')
+        except Exception as e:
+            messagebox.showerror("Error", f"No se pudo abrir el PDF: {str(e)}")
+    
     def generar_pdf(self, datos_movimientos, ruta_pdf):
         from reportlab.lib import colors
         from reportlab.lib.pagesizes import legal, landscape
@@ -248,22 +755,13 @@ class ReporteDemandaReal:
         from reportlab.lib.units import inch
         from datetime import datetime, timedelta
 
-        # Calcular rango fechas: 26 mes anterior a 25 mes actual
-        hoy = datetime.now()
-        if hoy.day >= 26:
-            fecha_inicio = datetime(hoy.year, hoy.month, 26) - timedelta(days=30)
-            fecha_fin = datetime(hoy.year, hoy.month, 25) + timedelta(days=30)
-        else:
-            mes_actual = hoy.month
-            anio_actual = hoy.year
-            if mes_actual == 1:
-                mes_anterior = 12
-                anio_anterior = anio_actual - 1
-            else:
-                mes_anterior = mes_actual - 1
-                anio_anterior = anio_actual
-            fecha_inicio = datetime(anio_anterior, mes_anterior, 26)
-            fecha_fin = datetime(anio_actual, mes_actual, 25)
+        # USAR LAS FECHAS CALCULADAS DEL CORTE LOGÍSTICO
+        anio = self.anio_var.get()
+        mes_inicio = self.mes_inicio_var.get()
+        mes_final = self.mes_final_var.get()
+        fecha_ini_str, fecha_fin_str = self.calcular_rango_corte_logistico(anio, mes_inicio, mes_final)
+        fecha_inicio = datetime.strptime(fecha_ini_str, '%d/%m/%Y')
+        fecha_fin = datetime.strptime(fecha_fin_str, '%d/%m/%Y')
 
         # Generar lista de días hábiles (lunes a viernes) para columnas
         dias = []
@@ -297,7 +795,7 @@ class ReporteDemandaReal:
                 elif tipo == 'NO ENTREGADO':
                     insumos[key]['no_entregado'][dia_mov] += cantidad
 
-        # Construir tabla
+        # Construir documento PDF
         doc = SimpleDocTemplate(
             ruta_pdf,
             pagesize=landscape(legal),
@@ -307,22 +805,73 @@ class ReporteDemandaReal:
         elementos = []
         estilos = getSampleStyleSheet()
 
-        # Estilo de título personalizado
-        estilo_titulo = ParagraphStyle(
+        # Estilos personalizados
+        title_style = ParagraphStyle(
             'CustomTitle',
-            parent=estilos['Title'],
+            parent=estilos['Heading1'],
             alignment=1,
-            fontSize=16,
-            textColor=colors.white,
-            backColor=colors.HexColor("#0070C0"),
-            spaceAfter=14,
-            fontName='Helvetica-Bold'
+            spaceAfter=15,
+            fontSize=12
         )
-        # Título principal
-        elementos.append(Paragraph("REPORTE DEMANDA REAL", estilo_titulo))
-        elementos.append(Spacer(1, 10))
+        subtitle_style = ParagraphStyle(
+            'CustomSubtitle',
+            parent=estilos['Heading2'],
+            alignment=1,
+            spaceAfter=10,
+            fontSize=10
+        )
+        timestamp_style = ParagraphStyle(
+            'TimestampStyle',
+            parent=estilos['Normal'],
+            alignment=1,
+            spaceAfter=15,
+            fontSize=9
+        )
 
-        # Encabezados
+        # Títulos principales
+        elementos.append(Paragraph(
+            "DIRECCIÓN DEPARTAMENTAL DE REDES INTEGRADAS DE SERVICIOS DE SALUD DE GUATEMALA,",
+            title_style))
+        elementos.append(Paragraph("ÁREA NOR ORIENTE", subtitle_style))
+        elementos.append(Paragraph("REGISTRO DIARIO DE CONSUMO Y DEMANDA REAL", subtitle_style))
+        elementos.append(Paragraph(
+            f"Generado el: {datetime.now().strftime('%d/%m/%Y %H:%M:%S')}",
+            timestamp_style))
+
+        # Filtros en una sola fila horizontal (omitiendo "Insumo")
+        filtros = [
+            f"Área: {self.combo_area.get()}",
+            f"Distrito: {self.combo_distrito.get()}",
+            f"Tipo de Servicio: {self.combo_tipo_servicio.get()}",
+            f"Servicio: {self.combo_servicio.get()}"
+        ]
+
+        # Crear estilo para alineación izquierda
+        left_style = ParagraphStyle(
+            name="LeftAlign",
+            alignment=0,  # 0 = LEFT
+            fontSize=9,
+            fontName='Helvetica'
+        )
+
+        # Crear tabla con una sola fila y 5 columnas
+        data_filtros = [[Paragraph(item, left_style) for item in filtros]]
+
+        # Anchos de columna (ajustar según necesidad)
+        col_widths = [150, 150, 150, 150, 150]
+
+        table_filtros = Table(data_filtros, colWidths=col_widths)
+        table_filtros.setStyle(TableStyle([
+            ('ALIGN', (0,0), (-1,-1), 'LEFT'),
+            ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
+            ('FONTSIZE', (0,0), (-1,-1), 9),
+            ('GRID', (0,0), (-1,-1), 0.5, colors.lightgrey)
+        ]))
+
+        elementos.append(table_filtros)
+        elementos.append(Spacer(1, 30))
+
+        # Encabezados de la tabla
         encabezado1 = [
             'Código',
             'MEDICAMENTO',
@@ -437,9 +986,18 @@ class ReporteDemandaReal:
             messagebox.showerror("Error", "Debe seleccionar todos los filtros hasta Servicio, Insumo y Presentación")
             return
 
-        # Rango fijo de fechas (puedes adaptar)
-        fecha_ini = datetime.now() - timedelta(days=30)
-        fecha_fin = datetime.now()
+        # Obtener fechas del corte logístico
+        anio = self.anio_var.get()
+        mes_inicio = self.mes_inicio_var.get()
+        mes_final = self.mes_final_var.get()
+
+        if not all([anio, mes_inicio, mes_final]):
+            messagebox.showerror("Error", "Debe seleccionar Año, Mes Inicio y Mes Final")
+            return
+
+        fecha_ini_str, fecha_fin_str = self.calcular_rango_corte_logistico(anio, mes_inicio, mes_final)
+        fecha_ini = datetime.strptime(fecha_ini_str, '%d/%m/%Y')
+        fecha_fin = datetime.strptime(fecha_fin_str, '%d/%m/%Y')
 
         if fecha_fin < fecha_ini:
             messagebox.showerror("Error", "La fecha final debe ser mayor a la inicial")
@@ -475,6 +1033,62 @@ class ReporteDemandaReal:
         ]]
 
         datos_movimientos = self.procesar_datos(movimientos_filtrados, fecha_ini, fecha_fin)
+
+        # CREAR LOS ATRIBUTOS NECESARIOS PARA EXCEL
+        # Generar lista de días hábiles para self.dias
+        self.dias = []
+        fecha_iter = fecha_ini
+        while fecha_iter <= fecha_fin:
+            if fecha_iter.weekday() < 5:  # 0=lunes, ..., 4=viernes
+                self.dias.append(fecha_iter.day)
+            fecha_iter += timedelta(days=1)
+
+        # Crear self.datos con la estructura necesaria para Excel
+        self.datos = {}
+        insumos = {}
+        
+        # Agrupar datos por insumo
+        for mov in datos_movimientos:
+            codigo = mov.get('codigo', '')
+            nombre = mov.get('nombre_insumo', '')
+            presentacion = mov.get('presentacion', '')
+            key = f"{codigo} - {nombre} {presentacion}".strip()
+            
+            if key not in insumos:
+                insumos[key] = {
+                    'entregado': {d:0 for d in self.dias},
+                    'no_entregado': {d:0 for d in self.dias},
+                    'existencia': mov.get('existencia', 0),
+                    'reajuste': mov.get('reajuste', 0)
+                }
+            
+            fecha_mov = datetime.strptime(mov['fecha'], '%Y-%m-%d')
+            dia_mov = fecha_mov.day
+            if fecha_ini <= fecha_mov <= fecha_fin:
+                tipo = mov.get('tipo_movimiento', '').upper()
+                cantidad = mov.get('cantidad', 0)
+                if tipo == 'ENTREGADO':
+                    insumos[key]['entregado'][dia_mov] += cantidad
+                elif tipo == 'NO ENTREGADO':
+                    insumos[key]['no_entregado'][dia_mov] += cantidad
+
+        # Convertir a formato para Excel
+        for insumo_key, valores in insumos.items():
+            fila_datos = {}
+            
+            # Agregar días
+            for dia in self.dias:
+                fila_datos[f'Día_{dia}_Entregado'] = valores['entregado'].get(dia, 0)
+                fila_datos[f'Día_{dia}_No_Entregado'] = valores['no_entregado'].get(dia, 0)
+            
+            # Agregar totales
+            fila_datos['Total_Entregado'] = sum(valores['entregado'].values())
+            fila_datos['Total_No_Entregado'] = sum(valores['no_entregado'].values())
+            fila_datos['Demanda'] = sum(valores['entregado'].values())
+            fila_datos['Existencia'] = valores['existencia']
+            fila_datos['Reajuste'] = valores['reajuste']
+            
+            self.datos[insumo_key] = fila_datos
 
         periodo_str = f"{fecha_ini.strftime('%d%m%Y')}_{fecha_fin.strftime('%d%m%Y')}"
         self.periodo_str = periodo_str

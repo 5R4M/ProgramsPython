@@ -870,7 +870,12 @@ def obtener_movimientos_kardex(fecha_inicio, fecha_fin, distrito_nombre=None, ti
                 m.fecha_vencimiento,
                 m.observaciones,
                 d_salida.nombre AS distrito_destino,
-                s_salida.nombre AS servicio_destino
+                s_salida.nombre AS servicio_destino,
+                i.nombre AS nombre_insumo,
+                COALESCE(i.lote, '') AS codigo,
+                COALESCE(p.nombre, '') AS nombre_presentacion,
+                0 AS existencia,
+                0 AS reajuste
             FROM movimiento m
             JOIN tipo_movimiento tm ON m.tipo_movimiento_id = tm.id
             LEFT JOIN servicio s ON m.servicio_id = s.id
@@ -910,7 +915,6 @@ def obtener_movimientos_kardex(fecha_inicio, fecha_fin, distrito_nombre=None, ti
         cursor.execute(query, params)
         resultados = cursor.fetchall()
 
-        # Retornar los datos sin procesar para que sean procesados en reporte_kardex.py
         movimientos = []
         for row in resultados:
             movimientos.append({
@@ -922,7 +926,12 @@ def obtener_movimientos_kardex(fecha_inicio, fecha_fin, distrito_nombre=None, ti
                 'fecha_vencimiento': row['fecha_vencimiento'],
                 'observaciones': row['observaciones'],
                 'distrito_destino': row['distrito_destino'],
-                'servicio_destino': row['servicio_destino']
+                'servicio_destino': row['servicio_destino'],
+                'nombre_insumo': row['nombre_insumo'],
+                'codigo': row['codigo'],
+                'nombre_presentacion': row['nombre_presentacion'],
+                'existencia': row['existencia'],
+                'reajuste': row['reajuste']
             })
 
         return movimientos
