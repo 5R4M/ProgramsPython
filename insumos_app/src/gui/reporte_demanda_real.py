@@ -127,6 +127,10 @@ class ReporteDemandaReal:
         self.combo_mes_inicio.bind('<<ComboboxSelected>>', self.actualizar_fechas_por_corte)
         self.combo_mes_final.bind('<<ComboboxSelected>>', self.actualizar_fechas_por_corte)
 
+        # Frame para combos
+        self.frame_combos = ttk.Frame(self.frame_principal)
+        self.frame_combos.pack(fill="x", padx=5, pady=5)
+        
         # Frame para Ubicación - UNA SOLA LÍNEA
         self.frame_ubicacion = ttk.LabelFrame(self.frame_principal, text="Ubicación")
         self.frame_ubicacion.pack(fill="x", padx=5, pady=5)
@@ -357,19 +361,119 @@ class ReporteDemandaReal:
         else:
             self.combo_presentacion.set('')
 
-    def procesar_datos(self, movimientos, fecha_ini, fecha_fin):
-        datos_procesados = []
+
+    def formato_valor(self, valor):
+        """
+        Formatea un valor numérico, mostrando 0 cuando el valor es 0
+        """
+        try:
+            num = float(valor)
+            return int(num) if num == int(num) else f"{num:.2f}"
+        except (ValueError, TypeError):
+            return "0"
+    
+    def procesar_datos(self, movimientos, fecha_ini, fecha_fin, dias):
+        insumos = {}
+        
         for mov in movimientos:
-            datos_procesados.append({
-                'codigo': mov.get('codigo', ''),
-                'nombre_insumo': mov.get('nombre_insumo', ''),
-                'presentacion': mov.get('nombre_presentacion', ''),
-                'fecha': mov.get('fecha', ''),
-                'tipo_movimiento': mov.get('tipo_movimiento', ''),
-                'cantidad': mov.get('cantidad', 0),
-                'existencia': mov.get('existencia', 0),
-                'reajuste': mov.get('reajuste', 0)
-            })
+            # Usar get() con valores por defecto para evitar KeyError
+            codigo = mov.get('codigo', '')
+            nombre_insumo = mov.get('nombre_insumo', '')
+            presentacion = mov.get('nombre_presentacion', '')
+            
+            insumo_key = f"{codigo}_{nombre_insumo}_{presentacion}"
+            
+            if insumo_key not in insumos:
+                insumos[insumo_key] = {
+                    'codigo': codigo,
+                    'nombre_insumo': nombre_insumo,
+                    'presentacion': presentacion,
+                    'entregado': {dia: 0 for dia in dias},  # Usar el parámetro dias
+                    'no_entregado': {dia: 0 for dia in dias},  # Usar el parámetro dias
+                    'inventario_inicial': 0,
+                    'entrada_nivel_superior': 0,
+                    'salida_nivel_inferior': 0,
+                    'reajuste_positivo': 0,
+                    'reajuste_negativo': 0
+                }
+            
+            # Usar get() para obtener valores de manera segura
+            fecha_str = mov.get('fecha', '')
+            if not fecha_str:
+                continue  # Saltar si no hay fecha
+                
+            try:
+                fecha_mov = datetime.strptime(fecha_str, '%Y-%m-%d')
+            except ValueError:
+                continue  # Saltar si la fecha no es válida
+                
+            dia = fecha_mov.day
+            cantidad = mov.get('cantidad', 0)
+            tipo_mov = mov.get('tipo_movimiento', '')
+            
+            if tipo_mov == 'ENTREGADO' and dia in dias:  # Usar el parámetro dias
+                insumos[insumo_key]['entregado'][dia] += cantidad
+            elif tipo_mov == 'NO ENTREGADO' and dia in dias:  # Usar el parámetro dias
+                insumos[insumo_key]['no_entregado'][dia] += cantidad
+            elif tipo_mov == 'INVENTARIO INICIAL':
+                insumos[insumo_key]['inventario_inicial'] += cantidad
+            elif tipo_mov == 'ENTRADA NIVEL SUPERIOR':
+                insumos[insumo_key]['entrada_nivel_superior'] += cantidad
+            elif tipo_mov == 'SALIDA NIVEL INFERIOR':
+                insumos[insumo_key]['salida_nivel_inferior'] += cantidad
+            elif tipo_mov == 'REAJUSTE POSITIVO':
+                insumos[insumo_key]['reajuste_positivo'] += cantidad
+            elif tipo_mov == 'REAJUSTE NEGATIVO':
+                insumos[insumo_key]['reajuste_negativo'] += cantidad
+        
+        # Resto del código permanece igual...
+        datos_procesados = {}
+        for insumo_key, valores in insumos.items():
+            fila_datos = {
+                'codigo': valores['codigo'],
+                'nombre_insumo': valores['nombre_insumo'],
+                'presentacion': valores['presentacion']
+            }
+            
+            # Agregar días
+            for dia in dias:  # Usar el parámetro dias
+                fila_datos[f'Día_{dia}_Entregado'] = self.formato_valor(valores['entregado'].get(dia, 0))
+                fila_datos[f'Día_{dia}_No_Entregado'] = self.formato_valor(valores['no_entregado'].get(dia, 0))
+            
+            # Calcular totales
+            total_entregado = sum(valores['entregado'].values())
+            total_no_entregado = sum(valores['no_entregado'].values())
+            
+            # Calcular reajuste total (positivo - negativo)
+            reajuste_total = valores['reajuste_positivo'] - valores['reajuste_negativo']
+            
+            # Calcular existencia según la fórmula
+            existencia = (valores['inventario_inicial'] + 
+                        valores['entrada_nivel_superior'] + 
+                        valores['reajuste_positivo'] - 
+                        valores['salida_nivel_inferior'] - 
+                        total_entregado - 
+                        valores['reajuste_negativo'])
+            
+            # Agregar totales
+            fila_datos['Total_Entregado'] = self.formato_valor(total_entregado)
+            fila_datos['Total_No_Entregado'] = self.formato_valor(total_no_entregado)
+            fila_datos['Demanda'] = self.formato_valor(total_entregado + total_no_entregado)
+            fila_datos['Existencia'] = self.formato_valor(existencia)
+            fila_datos['Reajuste'] = self.formato_valor(reajuste_total)
+            
+            # Guardar valores originales para el PDF
+            fila_datos['_valores_originales'] = {
+                'entregado': valores['entregado'],
+                'no_entregado': valores['no_entregado'],
+                'total_entregado': total_entregado,
+                'total_no_entregado': total_no_entregado,
+                'existencia': existencia,
+                'reajuste': reajuste_total
+            }
+            
+            datos_procesados[insumo_key] = fila_datos
+        
         return datos_procesados
 
     def exportar_excel(self):
@@ -778,22 +882,48 @@ class ReporteDemandaReal:
             nombre = mov.get('nombre_insumo', '')
             presentacion = mov.get('presentacion', '')
             key = (codigo, f"{nombre} {presentacion}".strip())
+            
             if key not in insumos:
                 insumos[key] = {
                     'entregado': {d:0 for d in dias},
                     'no_entregado': {d:0 for d in dias},
-                    'existencia': mov.get('existencia', 0),
-                    'reajuste': mov.get('reajuste', 0)
+                    'inventario_inicial': 0,
+                    'entrada_nivel_superior': 0,
+                    'salida_nivel_inferior': 0,
+                    'reajuste_positivo': 0,
+                    'reajuste_negativo': 0
                 }
+            
             fecha_mov = datetime.strptime(mov['fecha'], '%Y-%m-%d')
             dia_mov = fecha_mov.day
+            tipo = mov.get('tipo_movimiento', '').upper()
+            cantidad = mov.get('cantidad', 0)
+            
             if fecha_inicio <= fecha_mov <= fecha_fin:
-                tipo = mov.get('tipo_movimiento', '').upper()
-                cantidad = mov.get('cantidad', 0)
-                if tipo == 'ENTREGADO':
+                if tipo == 'ENTREGADO' and dia_mov in dias:
                     insumos[key]['entregado'][dia_mov] += cantidad
-                elif tipo == 'NO ENTREGADO':
+                elif tipo == 'NO ENTREGADO' and dia_mov in dias:
                     insumos[key]['no_entregado'][dia_mov] += cantidad
+            
+            # Procesar todos los movimientos para el cálculo de existencia (sin filtro de fecha)
+            if tipo == 'INVENTARIO INICIAL':
+                insumos[key]['inventario_inicial'] += cantidad
+            elif tipo == 'ENTRADA NIVEL SUPERIOR':
+                insumos[key]['entrada_nivel_superior'] += cantidad
+            elif tipo == 'SALIDA NIVEL INFERIOR':
+                insumos[key]['salida_nivel_inferior'] += cantidad
+            elif tipo == 'REAJUSTE POSITIVO':
+                insumos[key]['reajuste_positivo'] += cantidad
+            elif tipo == 'REAJUSTE NEGATIVO':
+                insumos[key]['reajuste_negativo'] += cantidad
+
+        # Función para formatear valores (mostrar vacío si es 0)
+        def formato_valor(valor):
+            try:
+                num = float(valor)
+                return int(num) if num == int(num) else f"{num:.2f}"
+            except (ValueError, TypeError):
+                return "0"
 
         # Construir documento PDF
         doc = SimpleDocTemplate(
@@ -838,7 +968,7 @@ class ReporteDemandaReal:
             f"Generado el: {datetime.now().strftime('%d/%m/%Y %H:%M:%S')}",
             timestamp_style))
 
-        # Filtros en una sola fila horizontal (omitiendo "Insumo")
+        # Filtros en una sola fila horizontal
         filtros = [
             f"Área: {self.combo_area.get()}",
             f"Distrito: {self.combo_distrito.get()}",
@@ -854,11 +984,9 @@ class ReporteDemandaReal:
             fontName='Helvetica'
         )
 
-        # Crear tabla con una sola fila y 5 columnas
+        # Crear tabla con una sola fila y 4 columnas
         data_filtros = [[Paragraph(item, left_style) for item in filtros]]
-
-        # Anchos de columna (ajustar según necesidad)
-        col_widths = [150, 150, 150, 150, 150]
+        col_widths = [150, 150, 150, 150]
 
         table_filtros = Table(data_filtros, colWidths=col_widths)
         table_filtros.setStyle(TableStyle([
@@ -893,33 +1021,50 @@ class ReporteDemandaReal:
         data = [encabezado1, encabezado2]
 
         for (codigo, nombre_pres), valores in insumos.items():
+            # Calcular totales de entregado y no entregado
             total_entregado = sum(valores['entregado'].get(d, 0) for d in dias)
             total_no_entregado = sum(valores['no_entregado'].get(d, 0) for d in dias)
+            
+            # Calcular reajuste total (positivo - negativo)
+            reajuste_total = valores['reajuste_positivo'] - valores['reajuste_negativo']
+            
+            # Calcular existencia según la fórmula:
+            # Inventario inicial + Entrada nivel superior + Reajuste positivo - Salida nivel inferior - Entregado - Reajuste negativo
+            existencia = (valores['inventario_inicial'] + 
+                        valores['entrada_nivel_superior'] + 
+                        valores['reajuste_positivo'] - 
+                        valores['salida_nivel_inferior'] - 
+                        total_entregado - 
+                        valores['reajuste_negativo'])
 
-            # Fila Entregado (nombre_pres aquí)
+            # Fila Entregado
             fila_entregado = [
                 codigo,              # Código
-                nombre_pres,         # Medicamento (nombre del insumo, aquí va el texto)
+                nombre_pres,         # Medicamento
                 'Entregado'
             ]
             for d in dias:
-                fila_entregado.append(valores['entregado'].get(d, 0))
+                valor = valores['entregado'].get(d, 0)
+                fila_entregado.append(formato_valor(valor))
+            
             fila_entregado += [
-                total_entregado,     # Total Entregado
-                total_no_entregado,  # Total No Entregado (mostrar aquí, SPAN)
-                total_entregado,     # Demanda
-                valores['existencia'],
-                valores['reajuste']
+                formato_valor(total_entregado),                             # Total Entregado
+                formato_valor(total_no_entregado),                          # Total No Entregado
+                formato_valor(total_entregado + total_no_entregado),        # Demanda
+                formato_valor(existencia),                                  # Existencia calculada
+                formato_valor(reajuste_total)                               # Reajuste calculado
             ]
 
-            # Fila No Entregado (vacío en las celdas con SPAN)
+            # Fila No Entregado
             fila_no_entregado = [
                 '',                  # Código (vacío, SPAN)
                 '',                  # Medicamento (vacío, SPAN)
                 'No Entregado'
             ]
             for d in dias:
-                fila_no_entregado.append(valores['no_entregado'].get(d, 0))
+                valor = valores['no_entregado'].get(d, 0)
+                fila_no_entregado.append(formato_valor(valor))
+            
             fila_no_entregado += [
                 '',                  # Total Entregado (vacío, SPAN)
                 '',                  # Total No Entregado (vacío, SPAN)
@@ -960,7 +1105,7 @@ class ReporteDemandaReal:
         while fila_inicio < len(data):
             fila_fin = fila_inicio + 1  # la fila de No Entregado
             estilos_tabla.append(('SPAN', (0, fila_inicio), (0, fila_fin)))  # Código
-            estilos_tabla.append(('SPAN', (1, fila_inicio), (1, fila_fin)))  # Medicamento (nombre_pres)
+            estilos_tabla.append(('SPAN', (1, fila_inicio), (1, fila_fin)))  # Medicamento
             estilos_tabla.append(('SPAN', (len(dias)+3, fila_inicio), (len(dias)+3, fila_fin)))  # Total Entregado
             estilos_tabla.append(('SPAN', (len(dias)+4, fila_inicio), (len(dias)+4, fila_fin)))  # Total No Entregado
             estilos_tabla.append(('SPAN', (len(dias)+5, fila_inicio), (len(dias)+5, fila_fin)))  # Demanda
@@ -979,9 +1124,7 @@ class ReporteDemandaReal:
             self.combo_distrito.get(),
             self.combo_tipo_servicio.get(),
             self.combo_servicio.get(),
-            self.combo_tipo_insumo.get(),
-            self.combo_insumo.get(),
-            self.combo_presentacion.get()
+            self.combo_tipo_insumo.get()
         ]):
             messagebox.showerror("Error", "Debe seleccionar todos los filtros hasta Servicio, Insumo y Presentación")
             return
@@ -1002,6 +1145,14 @@ class ReporteDemandaReal:
         if fecha_fin < fecha_ini:
             messagebox.showerror("Error", "La fecha final debe ser mayor a la inicial")
             return
+
+        # DEFINIR self.dias ANTES de llamar a procesar_datos
+        self.dias = []
+        fecha_iter = fecha_ini
+        while fecha_iter <= fecha_fin:
+            if fecha_iter.weekday() < 5:  # 0=lunes, ..., 4=viernes
+                self.dias.append(fecha_iter.day)
+            fecha_iter += timedelta(days=1)
 
         # Obtener nombres de los combos
         distrito_nombre = self.combo_distrito.get()
@@ -1032,45 +1183,58 @@ class ReporteDemandaReal:
             'ENTREGADO', 'NO ENTREGADO', 'REAJUSTE POSITIVO', 'REAJUSTE NEGATIVO', 'INVENTARIO INICIAL', 'ENTRADA NIVEL SUPERIOR', 'SALDO ANTERIOR'
         ]]
 
-        datos_movimientos = self.procesar_datos(movimientos_filtrados, fecha_ini, fecha_fin)
-
-        # CREAR LOS ATRIBUTOS NECESARIOS PARA EXCEL
-        # Generar lista de días hábiles para self.dias
-        self.dias = []
-        fecha_iter = fecha_ini
-        while fecha_iter <= fecha_fin:
-            if fecha_iter.weekday() < 5:  # 0=lunes, ..., 4=viernes
-                self.dias.append(fecha_iter.day)
-            fecha_iter += timedelta(days=1)
+        # AHORA SÍ llamar a procesar_datos con self.dias ya definido
+        datos_movimientos = self.procesar_datos(movimientos_filtrados, fecha_ini, fecha_fin, self.dias)
 
         # Crear self.datos con la estructura necesaria para Excel
         self.datos = {}
         insumos = {}
         
         # Agrupar datos por insumo
-        for mov in datos_movimientos:
+        for mov in movimientos_filtrados:  # Usar movimientos_filtrados en lugar de datos_movimientos
             codigo = mov.get('codigo', '')
             nombre = mov.get('nombre_insumo', '')
-            presentacion = mov.get('presentacion', '')
+            presentacion = mov.get('nombre_presentacion', '')  # Usar nombre_presentacion
             key = f"{codigo} - {nombre} {presentacion}".strip()
             
             if key not in insumos:
                 insumos[key] = {
                     'entregado': {d:0 for d in self.dias},
                     'no_entregado': {d:0 for d in self.dias},
-                    'existencia': mov.get('existencia', 0),
-                    'reajuste': mov.get('reajuste', 0)
+                    'inventario_inicial': 0,
+                    'entrada_nivel_superior': 0,
+                    'salida_nivel_inferior': 0,
+                    'reajuste_positivo': 0,
+                    'reajuste_negativo': 0
                 }
             
-            fecha_mov = datetime.strptime(mov['fecha'], '%Y-%m-%d')
-            dia_mov = fecha_mov.day
-            if fecha_ini <= fecha_mov <= fecha_fin:
-                tipo = mov.get('tipo_movimiento', '').upper()
-                cantidad = mov.get('cantidad', 0)
-                if tipo == 'ENTREGADO':
-                    insumos[key]['entregado'][dia_mov] += cantidad
-                elif tipo == 'NO ENTREGADO':
-                    insumos[key]['no_entregado'][dia_mov] += cantidad
+            fecha_str = mov.get('fecha', '')
+            if fecha_str:
+                try:
+                    fecha_mov = datetime.strptime(fecha_str, '%Y-%m-%d')
+                    dia_mov = fecha_mov.day
+                    tipo = mov.get('tipo_movimiento', '').upper()
+                    cantidad = mov.get('cantidad', 0)
+                    
+                    if fecha_ini <= fecha_mov <= fecha_fin:
+                        if tipo == 'ENTREGADO' and dia_mov in self.dias:
+                            insumos[key]['entregado'][dia_mov] += cantidad
+                        elif tipo == 'NO ENTREGADO' and dia_mov in self.dias:
+                            insumos[key]['no_entregado'][dia_mov] += cantidad
+                    
+                    # Procesar movimientos para cálculo de existencia
+                    if tipo == 'INVENTARIO INICIAL':
+                        insumos[key]['inventario_inicial'] += cantidad
+                    elif tipo == 'ENTRADA NIVEL SUPERIOR':
+                        insumos[key]['entrada_nivel_superior'] += cantidad
+                    elif tipo == 'SALIDA NIVEL INFERIOR':
+                        insumos[key]['salida_nivel_inferior'] += cantidad
+                    elif tipo == 'REAJUSTE POSITIVO':
+                        insumos[key]['reajuste_positivo'] += cantidad
+                    elif tipo == 'REAJUSTE NEGATIVO':
+                        insumos[key]['reajuste_negativo'] += cantidad
+                except ValueError:
+                    continue
 
         # Convertir a formato para Excel
         for insumo_key, valores in insumos.items():
@@ -1081,12 +1245,23 @@ class ReporteDemandaReal:
                 fila_datos[f'Día_{dia}_Entregado'] = valores['entregado'].get(dia, 0)
                 fila_datos[f'Día_{dia}_No_Entregado'] = valores['no_entregado'].get(dia, 0)
             
+            # Calcular totales
+            total_entregado = sum(valores['entregado'].values())
+            total_no_entregado = sum(valores['no_entregado'].values())
+            reajuste_total = valores['reajuste_positivo'] - valores['reajuste_negativo']
+            existencia = (valores['inventario_inicial'] + 
+                        valores['entrada_nivel_superior'] + 
+                        valores['reajuste_positivo'] - 
+                        valores['salida_nivel_inferior'] - 
+                        total_entregado - 
+                        valores['reajuste_negativo'])
+            
             # Agregar totales
-            fila_datos['Total_Entregado'] = sum(valores['entregado'].values())
-            fila_datos['Total_No_Entregado'] = sum(valores['no_entregado'].values())
-            fila_datos['Demanda'] = sum(valores['entregado'].values())
-            fila_datos['Existencia'] = valores['existencia']
-            fila_datos['Reajuste'] = valores['reajuste']
+            fila_datos['Total_Entregado'] = total_entregado
+            fila_datos['Total_No_Entregado'] = total_no_entregado
+            fila_datos['Demanda'] = total_entregado + total_no_entregado
+            fila_datos['Existencia'] = existencia
+            fila_datos['Reajuste'] = reajuste_total
             
             self.datos[insumo_key] = fila_datos
 
@@ -1096,7 +1271,7 @@ class ReporteDemandaReal:
         import tempfile
         temp_dir = tempfile.gettempdir()
         self.temp_pdf_path = os.path.join(temp_dir, f"vista_previa_demanda_real_{periodo_str}.pdf")
-        self.generar_pdf(datos_movimientos, self.temp_pdf_path)
+        self.generar_pdf(movimientos_filtrados, self.temp_pdf_path)  # Usar movimientos_filtrados
 
         self.generar_vista_previa_pdf()
 

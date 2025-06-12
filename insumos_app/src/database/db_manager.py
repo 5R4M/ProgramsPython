@@ -1336,3 +1336,109 @@ def eliminar_movimiento(mov_id):
         return False
     finally:
         conn.close()
+        
+# ------ OPERACIONES DEMANDA--------
+
+def obtener_movimientos_demanda_real(fecha_inicio, fecha_fin, distrito_nombre=None, tipo_servicio_desc=None,
+                                   servicio_nombre=None, tipo_insumo_desc=None, insumo_nombre=None,
+                                   presentacion_nombre=None):
+    """
+    Función específica para obtener movimientos para el reporte de demanda real
+    Incluye todos los tipos de movimiento necesarios para el cálculo
+    Maneja parámetros opcionales (pueden ser None)
+    """
+    conn = conectar_db()
+    if not conn:
+        return []
+
+    try:
+        cursor = conn.cursor()
+
+        query = """
+            SELECT
+                m.fecha_registro AS fecha,
+                m.referencia,
+                tm.descripcion AS tipo_movimiento,
+                m.cantidad,
+                m.lote,
+                m.fecha_vencimiento,
+                m.observaciones,
+                d_salida.nombre AS distrito_destino,
+                s_salida.nombre AS servicio_destino,
+                i.nombre AS nombre_insumo,
+                COALESCE(i.lote, '') AS codigo,
+                COALESCE(p.nombre, '') AS presentacion
+            FROM movimiento m
+            JOIN tipo_movimiento tm ON m.tipo_movimiento_id = tm.id
+            LEFT JOIN servicio s ON m.servicio_id = s.id
+            LEFT JOIN tipo_servicio ts ON s.id_tipo_servicio = ts.id
+            LEFT JOIN distrito d ON ts.id_distrito = d.id
+            LEFT JOIN distrito d_salida ON m.salida_distrito_id = d_salida.id
+            LEFT JOIN servicio s_salida ON m.salida_servicio_id = s_salida.id
+            LEFT JOIN insumo i ON m.insumo_id = i.id
+            LEFT JOIN tipo_insumo ti ON i.id_tipo_insumo = ti.id
+            LEFT JOIN insumo_presentacion ip ON i.id = ip.insumo_id
+            LEFT JOIN presentacion p ON ip.presentacion_id = p.id
+            WHERE m.fecha_registro BETWEEN ? AND ?
+            AND tm.descripcion IN ('ENTREGADO', 'NO ENTREGADO', 'INVENTARIO INICIAL', 
+                                 'ENTRADA NIVEL SUPERIOR', 'SALIDA NIVEL INFERIOR',
+                                 'REAJUSTE POSITIVO', 'REAJUSTE NEGATIVO')
+        """
+
+        params = [fecha_inicio, fecha_fin]
+        
+        # Solo agregar filtros si los parámetros no son None y no están vacíos
+        if distrito_nombre and distrito_nombre.strip():
+            query += " AND d.nombre = ?"
+            params.append(distrito_nombre)
+            
+        if tipo_servicio_desc and tipo_servicio_desc.strip():
+            query += " AND ts.descripcion = ?"
+            params.append(tipo_servicio_desc)
+            
+        if servicio_nombre and servicio_nombre.strip():
+            query += " AND s.nombre = ?"
+            params.append(servicio_nombre)
+            
+        if tipo_insumo_desc and tipo_insumo_desc.strip():
+            query += " AND ti.descripcion = ?"
+            params.append(tipo_insumo_desc)
+            
+        # Estos son opcionales - solo filtrar si se proporcionan
+        if insumo_nombre and insumo_nombre.strip():
+            query += " AND i.nombre = ?"
+            params.append(insumo_nombre)
+            
+        if presentacion_nombre and presentacion_nombre.strip():
+            query += " AND p.nombre = ?"
+            params.append(presentacion_nombre)
+
+        query += " ORDER BY m.fecha_registro ASC, m.id ASC"
+
+        cursor.execute(query, params)
+        resultados = cursor.fetchall()
+
+        movimientos = []
+        for row in resultados:
+            movimientos.append({
+                'fecha': row['fecha'],
+                'referencia': row['referencia'],
+                'tipo_movimiento': row['tipo_movimiento'],
+                'cantidad': float(row['cantidad']) if row['cantidad'] else 0,
+                'lote': row['lote'],
+                'fecha_vencimiento': row['fecha_vencimiento'],
+                'observaciones': row['observaciones'],
+                'distrito_destino': row['distrito_destino'],
+                'servicio_destino': row['servicio_destino'],
+                'nombre_insumo': row['nombre_insumo'],
+                'codigo': row['codigo'],
+                'presentacion': row['presentacion']
+            })
+
+        return movimientos
+
+    except sqlite3.Error as e:
+        print(f"Error al obtener movimientos demanda real: {e}")
+        return []
+    finally:
+        conn.close()

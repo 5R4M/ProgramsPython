@@ -11,10 +11,11 @@ from ttkwidgets.autocomplete import AutocompleteCombobox
 
 # Nuevos imports para PDF
 from reportlab.lib import colors
-from reportlab.lib.pagesizes import letter, landscape
+from reportlab.lib.pagesizes import letter, landscape, legal
 from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.units import inch
+
 
 # Agregar el directorio raíz del proyecto al PATH de Python
 sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
@@ -363,52 +364,58 @@ class ReporteKardex:
         self.combo_anio.bind('<<ComboboxSelected>>', self.actualizar_fechas_por_corte)
         self.combo_mes_inicio.bind('<<ComboboxSelected>>', self.actualizar_fechas_por_corte)
         self.combo_mes_final.bind('<<ComboboxSelected>>', self.actualizar_fechas_por_corte)
-
-        # Inicializar visibilidad
-        self.actualizar_visibilidad_fechas()
-
+        
         # Frame para combos
         self.frame_combos = ttk.Frame(self.frame_principal)
         self.frame_combos.pack(fill="x", padx=5, pady=5)
 
+        # Inicializar visibilidad
+        self.actualizar_visibilidad_fechas()
+
         # Primera fila de combos
-        self.frame_combos1 = ttk.Frame(self.frame_combos)
-        self.frame_combos1.pack(fill="x", pady=5)
+        self.frame_ubicacion = ttk.LabelFrame(self.frame_combos, text="Ubicación")
+        self.frame_ubicacion.pack(fill="x", padx=5, pady=5)
+        
+        self.frame_ubicacion_content = ttk.Frame(self.frame_ubicacion)
+        self.frame_ubicacion_content.pack(fill="x", padx=5, pady=5)
         
         # Grid DENTRO del frame_combos1 (esto es válido)
-        ttk.Label(self.frame_combos1, text="Área:").grid(row=0, column=0, padx=5, sticky='w')
+        ttk.Label(self.frame_ubicacion_content, text="Área:").grid(row=0, column=0, padx=5, sticky='w')
         self.area_var = tk.StringVar()
-        self.combo_area = AutocompleteCombobox(self.frame_combos1, textvariable=self.area_var, state="normal", width=20)
+        self.combo_area = AutocompleteCombobox(self.frame_ubicacion_content, textvariable=self.area_var, state="normal", width=20)
         self.combo_area.grid(row=0, column=1, padx=5, sticky='w')
-        ttk.Label(self.frame_combos1, text="Distrito:").grid(row=0, column=2, padx=5, sticky='w')
+        ttk.Label(self.frame_ubicacion_content, text="Distrito:").grid(row=0, column=2, padx=5, sticky='w')
         self.distrito_var = tk.StringVar()
-        self.combo_distrito = AutocompleteCombobox(self.frame_combos1, textvariable=self.distrito_var, state="normal", width=20)
+        self.combo_distrito = AutocompleteCombobox(self.frame_ubicacion_content, textvariable=self.distrito_var, state="normal", width=20)
         self.combo_distrito.grid(row=0, column=3, padx=5, sticky='w')
-        ttk.Label(self.frame_combos1, text="Tipo de Servicio:").grid(row=0, column=4, padx=5, sticky='w')
+        ttk.Label(self.frame_ubicacion_content, text="Tipo de Servicio:").grid(row=0, column=4, padx=5, sticky='w')
         self.tipo_servicio_var = tk.StringVar()
-        self.combo_tipo_servicio = AutocompleteCombobox(self.frame_combos1, textvariable=self.tipo_servicio_var, state="normal", width=20)
+        self.combo_tipo_servicio = AutocompleteCombobox(self.frame_ubicacion_content, textvariable=self.tipo_servicio_var, state="normal", width=20)
         self.combo_tipo_servicio.grid(row=0, column=5, padx=5, sticky='w')
-        ttk.Label(self.frame_combos1, text="Servicio:").grid(row=0, column=6, padx=5, sticky='w')
+        ttk.Label(self.frame_ubicacion_content, text="Servicio:").grid(row=0, column=6, padx=5, sticky='w')
         self.servicio_var = tk.StringVar()
-        self.combo_servicio = AutocompleteCombobox(self.frame_combos1, textvariable=self.servicio_var, state="normal", width=20)
+        self.combo_servicio = AutocompleteCombobox(self.frame_ubicacion_content, textvariable=self.servicio_var, state="normal", width=20)
         self.combo_servicio.grid(row=0, column=7, padx=5, sticky='w')
 
         # Segunda fila de combos
-        self.frame_combos2 = ttk.Frame(self.frame_combos)
-        self.frame_combos2.pack(fill="x", pady=5)
+        self.frame_insumo = ttk.LabelFrame(self.frame_combos, text="Insumo")
+        self.frame_insumo.pack(fill="x", padx=5, pady=5)
+        
+        self.frame_insumo_content = ttk.Frame(self.frame_insumo)
+        self.frame_insumo_content.pack(fill="x", padx=5, pady=5)
         
         # Grid DENTRO del frame_combos2 (esto es válido)
-        ttk.Label(self.frame_combos2, text="Tipo de Insumo:").grid(row=0, column=0, padx=5, sticky='w')
+        ttk.Label(self.frame_insumo_content, text="Tipo de Insumo:").grid(row=0, column=0, padx=5, sticky='w')
         self.tipo_insumo_var = tk.StringVar()
-        self.combo_tipo_insumo = AutocompleteCombobox(self.frame_combos2, textvariable=self.tipo_insumo_var, state="normal", width=20)
+        self.combo_tipo_insumo = AutocompleteCombobox(self.frame_insumo_content, textvariable=self.tipo_insumo_var, state="normal", width=20)
         self.combo_tipo_insumo.grid(row=0, column=1, padx=5, sticky='w')
-        ttk.Label(self.frame_combos2, text="Insumo:").grid(row=0, column=2, padx=5, sticky='w')
+        ttk.Label(self.frame_insumo_content, text="Insumo:").grid(row=0, column=2, padx=5, sticky='w')
         self.insumo_var = tk.StringVar()
-        self.combo_insumo = AutocompleteCombobox(self.frame_combos2, textvariable=self.insumo_var, state="normal", width=20)
+        self.combo_insumo = AutocompleteCombobox(self.frame_insumo_content, textvariable=self.insumo_var, state="normal", width=20)
         self.combo_insumo.grid(row=0, column=3, padx=5, sticky='w')
-        ttk.Label(self.frame_combos2, text="Presentación:").grid(row=0, column=4, padx=5, sticky='w')
+        ttk.Label(self.frame_insumo_content, text="Presentación:").grid(row=0, column=4, padx=5, sticky='w')
         self.presentacion_var = tk.StringVar()
-        self.combo_presentacion = AutocompleteCombobox(self.frame_combos2, textvariable=self.presentacion_var, state="normal", width=20)
+        self.combo_presentacion = AutocompleteCombobox(self.frame_insumo_content, textvariable=self.presentacion_var, state="normal", width=20)
         self.combo_presentacion.grid(row=0, column=5, padx=5, sticky='w')
 
         # Frame para el visor PDF (SOLO pack aquí y en sus hijos)
@@ -881,7 +888,7 @@ class ReporteKardex:
         try:
             doc = SimpleDocTemplate(
                 ruta_pdf,
-                pagesize=landscape(letter),
+                pagesize=landscape(legal),
                 rightMargin=36,
                 leftMargin=36,
                 topMargin=36,
@@ -1034,19 +1041,19 @@ class ReporteKardex:
 
                 # Crear tabla con formato y anchos ajustados
                 colWidths = [
-                    0.7*inch,  # Fecha
-                    0.8*inch,  # Ref.
-                    1.5*inch,  # Remitente
-                    0.6*inch,  # Entrada
-                    0.7*inch,  # P.Unit.
-                    0.7*inch,  # V.Total
-                    0.8*inch,  # Lote
-                    0.7*inch,  # F.Venc.
-                    0.6*inch,  # Salidas
-                    0.6*inch,  # Reaj.
-                    0.6*inch,  # Cant.
-                    0.6*inch,  # Saldo
-                    1.1*inch   # Obs.
+                    0.8*inch,  # Fecha (era 0.7)
+                    0.9*inch,  # Ref. (era 0.8)
+                    1.7*inch,  # Remitente (era 1.5)
+                    0.7*inch,  # Entrada (era 0.6)
+                    0.8*inch,  # P.Unit. (era 0.7)
+                    0.8*inch,  # V.Total (era 0.7)
+                    0.9*inch,  # Lote (era 0.8)
+                    0.8*inch,  # F.Venc. (era 0.7)
+                    0.7*inch,  # Salidas (era 0.6)
+                    0.7*inch,  # Reaj. (era 0.6)
+                    0.7*inch,  # Cant. (era 0.6)
+                    0.7*inch,  # Saldo (era 0.6)
+                    1.3*inch   # Obs. (era 1.1
                 ]
 
                 table = Table(data, colWidths=colWidths)
@@ -1349,8 +1356,11 @@ class ReporteKardex:
 
         # Configuración de página
         worksheet.set_landscape()
-        worksheet.set_paper(9)
+        worksheet.set_paper(5)
         worksheet.fit_to_pages(1, 1)
+        
+        # Centrar Hoja
+        worksheet.center_horizontally()
 
         # Ajustar anchos de columna
         worksheet.set_column('A:A', 10)    # Fecha
