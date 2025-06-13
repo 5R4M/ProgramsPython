@@ -1442,3 +1442,240 @@ def obtener_movimientos_demanda_real(fecha_inicio, fecha_fin, distrito_nombre=No
         return []
     finally:
         conn.close()
+
+# ------ OPERACIONES BRES--------
+
+def obtener_movimientos_historicos(codigo_insumo, fecha_inicio, fecha_fin, distrito=None, tipo_servicio=None, servicio=None):
+    """
+    Obtiene los movimientos históricos de un insumo específico para calcular promedios
+    """
+    conn = conectar_db()
+    if not conn:
+        return []
+
+    try:
+        cursor = conn.cursor()
+        
+        # Query base para obtener movimientos históricos
+        query = """
+        SELECT 
+            tm.descripcion as tipo_movimiento,
+            m.cantidad,
+            m.fecha_registro as fecha,
+            i.lote as codigo_insumo,
+            i.nombre as nombre_insumo
+        FROM movimiento m
+        INNER JOIN insumo i ON m.insumo_id = i.id
+        INNER JOIN tipo_movimiento tm ON m.tipo_movimiento_id = tm.id
+        LEFT JOIN servicio s ON m.servicio_id = s.id
+        LEFT JOIN tipo_servicio ts ON s.id_tipo_servicio = ts.id
+        LEFT JOIN distrito d ON ts.id_distrito = d.id
+        WHERE i.lote = ?
+        AND m.fecha_registro BETWEEN ? AND ?
+        AND tm.descripcion IN ('ENTREGADO', 'NO ENTREGADO')
+        """
+        
+        params = [codigo_insumo, fecha_inicio, fecha_fin]
+        
+        # Agregar filtros opcionales
+        if distrito:
+            query += " AND d.nombre = ?"
+            params.append(distrito)
+            
+        if tipo_servicio:
+            query += " AND ts.descripcion = ?"
+            params.append(tipo_servicio)
+            
+        if servicio:
+            query += " AND s.nombre = ?"
+            params.append(servicio)
+        
+        query += " ORDER BY m.fecha_registro"
+        
+        cursor.execute(query, params)
+        resultados = cursor.fetchall()
+        
+        # Convertir a lista de diccionarios
+        movimientos = []
+        for row in resultados:
+            movimientos.append({
+                'tipo_movimiento': row['tipo_movimiento'],
+                'cantidad': float(row['cantidad']) if row['cantidad'] else 0,
+                'fecha': row['fecha'],
+                'codigo_insumo': row['codigo_insumo'],
+                'nombre_insumo': row['nombre_insumo']
+            })
+        
+        return movimientos
+        
+    except sqlite3.Error as e:
+        print(f"Error al obtener movimientos históricos: {e}")
+        return []
+    finally:
+        conn.close()
+
+def obtener_demanda_por_meses(codigo_insumo, fecha_inicio, fecha_fin, distrito=None, tipo_servicio=None, servicio=None):
+    """
+    Obtiene la demanda agrupada por mes para calcular promedios más precisos
+    """
+    conn = conectar_db()
+    if not conn:
+        return []
+
+    try:
+        cursor = conn.cursor()
+        
+        query = """
+        SELECT 
+            strftime('%Y', m.fecha_registro) as anio,
+            strftime('%m', m.fecha_registro) as mes,
+            SUM(m.cantidad) as demanda_total
+        FROM movimiento m
+        INNER JOIN insumo i ON m.insumo_id = i.id
+        INNER JOIN tipo_movimiento tm ON m.tipo_movimiento_id = tm.id
+        LEFT JOIN servicio s ON m.servicio_id = s.id
+        LEFT JOIN tipo_servicio ts ON s.id_tipo_servicio = ts.id
+        LEFT JOIN distrito d ON ts.id_distrito = d.id
+        WHERE i.lote = ?
+        AND m.fecha_registro BETWEEN ? AND ?
+        AND tm.descripcion IN ('ENTREGADO', 'NO ENTREGADO')
+        """
+        
+        params = [codigo_insumo, fecha_inicio, fecha_fin]
+        
+        # Agregar filtros opcionales
+        if distrito:
+            query += " AND d.nombre = ?"
+            params.append(distrito)
+            
+        if tipo_servicio:
+            query += " AND ts.descripcion = ?"
+            params.append(tipo_servicio)
+            
+        if servicio:
+            query += " AND s.nombre = ?"
+            params.append(servicio)
+        
+        query += " GROUP BY strftime('%Y', m.fecha_registro), strftime('%m', m.fecha_registro) ORDER BY anio, mes"
+        
+        cursor.execute(query, params)
+        resultados = cursor.fetchall()
+        
+        # Convertir a lista de diccionarios
+        demanda_mensual = []
+        for row in resultados:
+            demanda_mensual.append({
+                'anio': int(row['anio']),
+                'mes': int(row['mes']),
+                'demanda_total': float(row['demanda_total']) if row['demanda_total'] else 0
+            })
+        
+        return demanda_mensual
+        
+    except sqlite3.Error as e:
+        print(f"Error al obtener demanda por meses: {e}")
+        return []
+    finally:
+        conn.close()
+
+def obtener_movimientos_bres(fecha_inicio, fecha_fin, distrito_nombre=None, tipo_servicio_desc=None,
+                            servicio_nombre=None, tipo_insumo_desc=None, insumo_nombre=None,
+                            presentacion_nombre=None):
+    """
+    Función específica para obtener movimientos para el reporte BRES
+    """
+    conn = conectar_db()
+    if not conn:
+        return []
+
+    try:
+        cursor = conn.cursor()
+
+        query = """
+            SELECT
+                m.fecha_registro AS fecha,
+                m.referencia,
+                tm.descripcion AS tipo_movimiento,
+                m.cantidad,
+                m.lote,
+                m.fecha_vencimiento,
+                m.observaciones,
+                d_salida.nombre AS distrito_destino,
+                s_salida.nombre AS servicio_destino,
+                i.nombre AS nombre_insumo,
+                COALESCE(i.lote, '') AS codigo_insumo,
+                COALESCE(p.nombre, '') AS presentacion
+            FROM movimiento m
+            JOIN tipo_movimiento tm ON m.tipo_movimiento_id = tm.id
+            LEFT JOIN servicio s ON m.servicio_id = s.id
+            LEFT JOIN tipo_servicio ts ON s.id_tipo_servicio = ts.id
+            LEFT JOIN distrito d ON ts.id_distrito = d.id
+            LEFT JOIN distrito d_salida ON m.salida_distrito_id = d_salida.id
+            LEFT JOIN servicio s_salida ON m.salida_servicio_id = s_salida.id
+            LEFT JOIN insumo i ON m.insumo_id = i.id
+            LEFT JOIN tipo_insumo ti ON i.id_tipo_insumo = ti.id
+            LEFT JOIN insumo_presentacion ip ON i.id = ip.insumo_id
+            LEFT JOIN presentacion p ON ip.presentacion_id = p.id
+            WHERE m.fecha_registro BETWEEN ? AND ?
+            AND tm.descripcion IN ('ENTREGADO', 'NO ENTREGADO', 'INVENTARIO INICIAL', 
+                                 'ENTRADA NIVEL SUPERIOR', 'SALIDA NIVEL INFERIOR',
+                                 'REAJUSTE POSITIVO', 'REAJUSTE NEGATIVO')
+        """
+
+        params = [fecha_inicio, fecha_fin]
+        
+        # Solo agregar filtros si los parámetros no son None y no están vacíos
+        if distrito_nombre and distrito_nombre.strip():
+            query += " AND d.nombre = ?"
+            params.append(distrito_nombre)
+            
+        if tipo_servicio_desc and tipo_servicio_desc.strip():
+            query += " AND ts.descripcion = ?"
+            params.append(tipo_servicio_desc)
+            
+        if servicio_nombre and servicio_nombre.strip():
+            query += " AND s.nombre = ?"
+            params.append(servicio_nombre)
+            
+        if tipo_insumo_desc and tipo_insumo_desc.strip():
+            query += " AND ti.descripcion = ?"
+            params.append(tipo_insumo_desc)
+            
+        # Estos son opcionales - solo filtrar si se proporcionan
+        if insumo_nombre and insumo_nombre.strip():
+            query += " AND i.nombre = ?"
+            params.append(insumo_nombre)
+            
+        if presentacion_nombre and presentacion_nombre.strip():
+            query += " AND p.nombre = ?"
+            params.append(presentacion_nombre)
+
+        query += " ORDER BY m.fecha_registro ASC, m.id ASC"
+
+        cursor.execute(query, params)
+        resultados = cursor.fetchall()
+
+        movimientos = []
+        for row in resultados:
+            movimientos.append({
+                'fecha': row['fecha'],
+                'referencia': row['referencia'],
+                'tipo_movimiento': row['tipo_movimiento'],
+                'cantidad': float(row['cantidad']) if row['cantidad'] else 0,
+                'lote': row['lote'],
+                'fecha_vencimiento': row['fecha_vencimiento'],
+                'observaciones': row['observaciones'],
+                'distrito_destino': row['distrito_destino'],
+                'servicio_destino': row['servicio_destino'],
+                'nombre_insumo': row['nombre_insumo'],
+                'codigo_insumo': row['codigo_insumo'],
+                'presentacion': row['presentacion']
+            })
+
+        return movimientos
+
+    except sqlite3.Error as e:
+        print(f"Error al obtener movimientos BRES: {e}")
+        return []
+    finally:
+        conn.close()
