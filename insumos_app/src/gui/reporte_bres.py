@@ -24,6 +24,7 @@ from PIL import Image, ImageTk
 sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
 from src.database.db_manager import (
+    conectar_db,
     obtener_areas,
     obtener_distritos,
     obtener_tipos_servicio_por_distrito,
@@ -47,11 +48,9 @@ class ReporteBres:
     def formato_float(self, valor):
         try:
             num = float(valor)
-            if num == 0:
-                return ""  # Retornar cadena vacía si es 0
-            return f"{num:.2f}"
+            return f"{num:.2f}"  # Siempre mostrar formato con 2 decimales
         except (ValueError, TypeError):
-            return ""
+            return "0.00"  # Mostrar 0.00 en lugar de cadena vacía
     
     def __init__(self, parent_frame, main_window=None):
         self.parent = parent_frame
@@ -74,50 +73,112 @@ class ReporteBres:
 
     def procesar_datos_bres(self, movimientos_raw, fecha_ini, fecha_fin):
         """
-        Procesa los datos para generar el reporte BRES
+        Procesa los datos para generar el reporte BRES con cantidades individuales por insumo.
+        Filtra por nivel jerárquico seleccionado con lógica flexible.
         """
-        # Agrupar movimientos por insumo
+        # Determinar filtros seleccionados
+        area_seleccionada = self.combo_area.get().strip() if self.combo_area.get() else None
+        distrito_seleccionado = self.combo_distrito.get().strip() if self.combo_distrito.get() else None
+        tipo_servicio_seleccionado = self.combo_tipo_servicio.get().strip() if self.combo_tipo_servicio.get() else None
+        servicio_seleccionado = self.combo_servicio.get().strip() if self.combo_servicio.get() else None
+
         insumos_dict = {}
-        
+        movimientos_individuales = {}
+
         for mov in movimientos_raw:
-            codigo_insumo = mov.get('codigo_insumo', '')
+            # Obtener los valores del movimiento y normalizar
+            mov_area = mov.get('area_nombre')
+            mov_distrito = mov.get('distrito_nombre') 
+            mov_tipo_servicio = mov.get('tipo_servicio_descripcion')
+            mov_servicio = mov.get('servicio_nombre')
+            
+            # Normalizar valores None y 'None' string
+            if mov_tipo_servicio in [None, 'None', 'null', '']:
+                mov_tipo_servicio = None
+            if mov_servicio in [None, 'None', 'null', '']:
+                mov_servicio = None
+            if mov_distrito in [None, 'None', 'null', '']:
+                mov_distrito = None
+            if mov_area in [None, 'None', 'null', '']:
+                mov_area = None
+
+            # **FILTRADO POR NIVEL SELECCIONADO CON LÓGICA FLEXIBLE**
+            incluir_movimiento = False
+            
+            if servicio_seleccionado:
+                # Nivel SERVICIO: debe coincidir área, distrito y servicio
+                # El tipo de servicio puede ser flexible si no está bien asociado
+                if (mov_area == area_seleccionada and 
+                    mov_distrito == distrito_seleccionado and
+                    mov_servicio == servicio_seleccionado):
+                    incluir_movimiento = True
+                    
+            elif tipo_servicio_seleccionado:
+                # Nivel TIPO SERVICIO: debe coincidir área, distrito y tipo servicio
+                # Y NO debe tener servicio específico
+                if (mov_area == area_seleccionada and 
+                    mov_distrito == distrito_seleccionado and
+                    mov_tipo_servicio == tipo_servicio_seleccionado and
+                    mov_servicio is None):
+                    incluir_movimiento = True
+                    
+            elif distrito_seleccionado:
+                # Nivel DISTRITO: debe coincidir área y distrito
+                # Y NO debe tener tipo servicio ni servicio específicos
+                if (mov_area == area_seleccionada and 
+                    mov_distrito == distrito_seleccionado and
+                    mov_tipo_servicio is None and
+                    mov_servicio is None):
+                    incluir_movimiento = True
+                    
+            elif area_seleccionada:
+                # Nivel ÁREA: debe coincidir área
+                # Y NO debe tener distrito, tipo servicio ni servicio específicos
+                if (mov_area == area_seleccionada and 
+                    mov_distrito is None and
+                    mov_tipo_servicio is None and
+                    mov_servicio is None):
+                    incluir_movimiento = True
+                    
+            else:
+                # Sin filtros: incluir todos los movimientos
+                incluir_movimiento = True
+
+            # Si no cumple el filtro, saltar este movimiento
+            if not incluir_movimiento:
+                continue
+
+            # Usar el ID del insumo como código único
+            codigo_insumo = str(mov.get('codigo_insumo', ''))
             nombre_insumo = mov.get('nombre_insumo', '')
             tipo_movimiento = mov.get('tipo_movimiento', '').upper()
-            
-            # Buscar la cantidad
+
+            # Obtener cantidad
             cantidad = 0
-            posibles_campos_cantidad = [
-                'cantidad', 'cantidad_movimiento', 'cantidad_entrada', 'cantidad_salida',
-                'qty', 'quantity', 'cant', 'cantidades', 'valor_cantidad'
-            ]
+            if mov.get('cantidad') is not None:
+                try:
+                    cantidad = float(mov['cantidad'])
+                except (ValueError, TypeError):
+                    cantidad = 0
 
-            for campo in posibles_campos_cantidad:
-                if campo in mov and mov[campo] is not None:
-                    try:
-                        cantidad = float(mov[campo])
-                        break
-                    except (ValueError, TypeError):
-                        continue
-
-            # Inicializar insumo si no existe
+            # Inicializar diccionario del insumo si no existe
             if codigo_insumo not in insumos_dict:
                 insumos_dict[codigo_insumo] = {
                     'codigo_insumo': codigo_insumo,
                     'nombre_insumo': nombre_insumo,
                     'saldo_anterior': 0,
-                    'entradas_nivel_superior': 0,
+                    'entrada_nivel_superior': 0,
                     'entregado_usuario': 0,
                     'no_entregado': 0,
                     'reajuste_positivo': 0,
                     'reajuste_negativo': 0,
-                    'movimientos_historicos': []  # Para calcular promedio
                 }
 
-            # Clasificar movimientos
+            # SUMAR cantidades por tipo de movimiento para cada insumo individual
             if tipo_movimiento == 'INVENTARIO INICIAL':
                 insumos_dict[codigo_insumo]['saldo_anterior'] += cantidad
             elif tipo_movimiento == 'ENTRADA NIVEL SUPERIOR':
-                insumos_dict[codigo_insumo]['entradas_nivel_superior'] += cantidad
+                insumos_dict[codigo_insumo]['entrada_nivel_superior'] += cantidad
             elif tipo_movimiento == 'ENTREGADO':
                 insumos_dict[codigo_insumo]['entregado_usuario'] += cantidad
             elif tipo_movimiento == 'NO ENTREGADO':
@@ -127,12 +188,28 @@ class ReporteBres:
             elif tipo_movimiento == 'REAJUSTE NEGATIVO':
                 insumos_dict[codigo_insumo]['reajuste_negativo'] += cantidad
 
-        # Obtener datos históricos para promedio (últimos 3 meses)
-        fecha_inicio_historico = fecha_ini - timedelta(days=90)  # Aproximadamente 3 meses
-        
-        # Procesar cada insumo
+            # Guardar movimientos individuales para referencia
+            if codigo_insumo not in movimientos_individuales:
+                movimientos_individuales[codigo_insumo] = {}
+            if tipo_movimiento not in movimientos_individuales[codigo_insumo]:
+                movimientos_individuales[codigo_insumo][tipo_movimiento] = []
+            movimientos_individuales[codigo_insumo][tipo_movimiento].append({
+                'cantidad': cantidad,
+                'fecha': mov.get('fecha'),
+                'referencia': mov.get('referencia'),
+                'lote': mov.get('lote'),
+                'fecha_vencimiento': mov.get('fecha_vencimiento'),
+                'observaciones': mov.get('observaciones'),
+            })
+
+        # Solo usar saldo mes anterior si NO hay inventario inicial
+        for codigo, datos in insumos_dict.items():
+            if datos['saldo_anterior'] == 0:
+                datos['saldo_anterior'] = self.obtener_saldo_mes_anterior(codigo, fecha_ini)
+
+        # Calcular datos finales y preparar lista para reporte
         datos_procesados = []
-        
+
         for codigo, datos in insumos_dict.items():
             # Calcular demanda
             demanda = datos['entregado_usuario'] + datos['no_entregado']
@@ -140,100 +217,171 @@ class ReporteBres:
             # Calcular reajustes netos
             reajustes_netos = datos['reajuste_positivo'] - datos['reajuste_negativo']
             
-            # Calcular saldo mes siguiente
+            # **CÁLCULO CORRECTO DEL SALDO MES SIGUIENTE**
             saldo_mes_siguiente = (
-                datos['saldo_anterior'] + 
-                datos['entradas_nivel_superior'] - 
-                datos['entregado_usuario'] + 
+                datos['saldo_anterior'] +
+                datos['entrada_nivel_superior'] -
+                datos['entregado_usuario'] +
                 reajustes_netos
             )
             
-            # Existencia física (mismo que saldo mes siguiente por ahora)
+            # **EXISTENCIA FÍSICA EN BODEGA = SALDO MES SIGUIENTE**
             existencia_fisica = saldo_mes_siguiente
             
-            # Obtener promedio mensual (aquí necesitarías implementar la lógica para obtener datos históricos)
-            promedio_mensual = self.calcular_promedio_mensual(codigo, fecha_inicio_historico, fecha_fin)
+            # **PROMEDIO MENSUAL DE DEMANDA REAL (3 MESES)**
+            promedio_mensual = self.calcular_promedio_demanda_real(codigo, fecha_ini, fecha_fin)
             
-            # Meses de existencia disponible
-            meses_existencia = 0
-            if promedio_mensual > 0:
-                meses_existencia = existencia_fisica / promedio_mensual
+            # **MESES DE EXISTENCIA DISPONIBLE**
+            meses_existencia = existencia_fisica / promedio_mensual if promedio_mensual > 0 else 0
             
-            # Cantidad máxima (usando nivel máximo seleccionado)
+            # **CANTIDAD MÁXIMA**
             nivel_maximo = float(self.nivel_maximo_var.get()) if self.nivel_maximo_var.get() else 6
             cantidad_maxima = promedio_mensual * nivel_maximo
             
-            # Cantidad a solicitar
-            cantidad_solicitar = max(0, cantidad_maxima - existencia_fisica)
-            
+            # **CANTIDAD A SOLICITAR** (permitir valores negativos)
+            cantidad_solicitar = cantidad_maxima - existencia_fisica
+
             datos_procesados.append({
                 'codigo_insumo': codigo,
                 'nombre_insumo': datos['nombre_insumo'],
                 'saldo_anterior': self.formato_float(datos['saldo_anterior']),
-                'entradas_nivel_superior': self.formato_float(datos['entradas_nivel_superior']),
+                'entradas_nivel_superior': self.formato_float(datos['entrada_nivel_superior']),
                 'entregado_usuario': self.formato_float(datos['entregado_usuario']),
                 'no_entregado': self.formato_float(datos['no_entregado']),
                 'demanda': self.formato_float(demanda),
-                'reajustes': f"+{self.formato_float(datos['reajuste_positivo'])} -{self.formato_float(datos['reajuste_negativo'])}" if datos['reajuste_positivo'] > 0 or datos['reajuste_negativo'] > 0 else "",
+                'reajustes': f"+{self.formato_float(datos['reajuste_positivo'])} -{self.formato_float(datos['reajuste_negativo'])}" if datos['reajuste_positivo'] > 0 or datos['reajuste_negativo'] > 0 else "0.00",
                 'saldo_mes_siguiente': self.formato_float(saldo_mes_siguiente),
                 'existencia_fisica': self.formato_float(existencia_fisica),
                 'promedio_mensual': self.formato_float(promedio_mensual),
                 'meses_existencia': self.formato_float(meses_existencia),
                 'cantidad_maxima': self.formato_float(cantidad_maxima),
-                'cantidad_solicitar': self.formato_float(cantidad_solicitar)
+                'cantidad_solicitar': self.formato_float(cantidad_solicitar),
+                'movimientos_individuales': movimientos_individuales.get(codigo, {})
             })
-        
+
         return datos_procesados
 
-    def calcular_promedio_mensual(self, codigo_insumo, fecha_inicio, fecha_fin):
+    def calcular_promedio_demanda_real(self, codigo_insumo, fecha_ini, fecha_fin):
         """
-        Calcula el promedio mensual de demanda real para un insumo
-        basado en los últimos 3 meses de datos históricos
+        Calcula el promedio mensual de demanda real sumando la demanda de los 
+        dos meses anteriores más la demanda del mes actual dividido entre 3
         """
         try:
-            # Importar las funciones de db_manager
-            from src.database.db_manager import obtener_demanda_por_meses
+            from datetime import datetime, timedelta
+            import calendar
             
-            # Calcular fecha de inicio para los últimos 3 meses
-            fecha_inicio_historico = fecha_inicio - timedelta(days=90)  # Aproximadamente 3 meses atrás
+            # Calcular fechas para los 3 meses (2 anteriores + actual)
+            fecha_actual = fecha_fin
             
-            # Obtener demanda por meses
-            demanda_mensual = obtener_demanda_por_meses(
-                codigo_insumo,
-                fecha_inicio_historico.strftime('%Y-%m-%d'),
-                fecha_fin.strftime('%Y-%m-%d'),
-                self.combo_distrito.get() if self.combo_distrito.get() else None,
-                self.combo_tipo_servicio.get() if self.combo_tipo_servicio.get() else None,
-                self.combo_servicio.get() if self.combo_servicio.get() else None
-            )
+            # Mes actual
+            inicio_mes_actual = fecha_actual.replace(day=26)
+            if inicio_mes_actual > fecha_actual:
+                # Si el día 26 es posterior a la fecha actual, tomar el mes anterior
+                if inicio_mes_actual.month == 1:
+                    inicio_mes_actual = inicio_mes_actual.replace(year=inicio_mes_actual.year-1, month=12)
+                else:
+                    inicio_mes_actual = inicio_mes_actual.replace(month=inicio_mes_actual.month-1)
             
-            if not demanda_mensual:
-                # Si no hay datos históricos, intentar calcular con datos actuales
-                return self.calcular_promedio_periodo_actual(codigo_insumo, fecha_inicio, fecha_fin)
+            fin_mes_actual = fecha_actual
             
-            # Calcular promedio de los meses disponibles
-            total_demanda = sum(mes['demanda_total'] for mes in demanda_mensual)
-            num_meses = len(demanda_mensual)
+            # Mes anterior (1 mes atrás)
+            if inicio_mes_actual.month == 1:
+                inicio_mes_anterior = inicio_mes_actual.replace(year=inicio_mes_actual.year-1, month=12, day=26)
+                fin_mes_anterior = datetime(inicio_mes_actual.year, inicio_mes_actual.month, 25)
+            else:
+                inicio_mes_anterior = inicio_mes_actual.replace(month=inicio_mes_actual.month-1, day=26)
+                fin_mes_anterior = datetime(inicio_mes_actual.year, inicio_mes_actual.month, 25)
             
-            if num_meses == 0:
-                return 0.0
+            # Mes anterior al anterior (2 meses atrás)
+            if inicio_mes_anterior.month == 1:
+                inicio_mes_anterior2 = inicio_mes_anterior.replace(year=inicio_mes_anterior.year-1, month=12, day=26)
+                fin_mes_anterior2 = datetime(inicio_mes_anterior.year, inicio_mes_anterior.month, 25)
+            else:
+                inicio_mes_anterior2 = inicio_mes_anterior.replace(month=inicio_mes_anterior.month-1, day=26)
+                fin_mes_anterior2 = datetime(inicio_mes_anterior.year, inicio_mes_anterior.month, 25)
             
-            promedio = total_demanda / num_meses
+            # Obtener demanda de cada mes
+            demanda_mes_actual = self.obtener_demanda_mes(codigo_insumo, inicio_mes_actual, fin_mes_actual)
+            demanda_mes_anterior = self.obtener_demanda_mes(codigo_insumo, inicio_mes_anterior, fin_mes_anterior2)
+            demanda_mes_anterior2 = self.obtener_demanda_mes(codigo_insumo, inicio_mes_anterior2, fin_mes_anterior2)
             
-            # Si tenemos menos de 3 meses de datos, ajustar el cálculo
-            if num_meses < 3:
-                # Complementar con datos del período actual si es necesario
-                promedio_actual = self.calcular_promedio_periodo_actual(codigo_insumo, fecha_inicio, fecha_fin)
-                # Hacer un promedio ponderado
-                if promedio_actual > 0:
-                    promedio = (promedio * num_meses + promedio_actual) / (num_meses + 1)
+            # Calcular promedio de los 3 meses
+            total_demanda = demanda_mes_actual + demanda_mes_anterior + demanda_mes_anterior2
+            promedio = total_demanda / 3
             
             return round(promedio, 2)
             
         except Exception as e:
-            print(f"Error calculando promedio mensual para {codigo_insumo}: {e}")
-            # En caso de error, intentar calcular con datos del período actual
-            return self.calcular_promedio_periodo_actual(codigo_insumo, fecha_inicio, fecha_fin)
+            print(f"Error calculando promedio demanda real para {codigo_insumo}: {e}")
+            return 0.0
+
+    def obtener_demanda_mes(self, codigo_insumo, fecha_inicio, fecha_fin):
+        """
+        Obtiene la demanda total de un insumo en un período específico
+        aplicando filtro de nivel seleccionado con lógica flexible
+        """
+        try:
+            conn = conectar_db()
+            if not conn:
+                return 0.0
+                
+            cursor = conn.cursor()
+            
+            # Determinar filtros seleccionados
+            area_seleccionada = self.combo_area.get().strip() if self.combo_area.get() else None
+            distrito_seleccionado = self.combo_distrito.get().strip() if self.combo_distrito.get() else None
+            tipo_servicio_seleccionado = self.combo_tipo_servicio.get().strip() if self.combo_tipo_servicio.get() else None
+            servicio_seleccionado = self.combo_servicio.get().strip() if self.combo_servicio.get() else None
+
+            query = """
+            SELECT SUM(m.cantidad) as total_demanda
+            FROM movimiento m
+            INNER JOIN insumo i ON m.insumo_id = i.id
+            INNER JOIN tipo_movimiento tm ON m.tipo_movimiento_id = tm.id
+            LEFT JOIN servicio s ON m.servicio_id = s.id
+            LEFT JOIN tipo_servicio ts ON s.id_tipo_servicio = ts.id
+            LEFT JOIN distrito d ON ts.id_distrito = d.id
+            LEFT JOIN area a ON d.id_area = a.id
+            WHERE i.id = ?
+            AND m.fecha_registro BETWEEN ? AND ?
+            AND tm.descripcion IN ('ENTREGADO', 'NO ENTREGADO')
+            """
+            
+            params = [int(codigo_insumo), fecha_inicio.strftime('%Y-%m-%d'), fecha_fin.strftime('%Y-%m-%d')]
+            
+            # **APLICAR FILTRO DE NIVEL SELECCIONADO CON LÓGICA FLEXIBLE**
+            if servicio_seleccionado:
+                # Nivel SERVICIO: filtrar por área, distrito y servicio
+                query += " AND a.nombre = ? AND d.nombre = ? AND s.nombre = ?"
+                params.extend([area_seleccionada, distrito_seleccionado, servicio_seleccionado])
+                
+            elif tipo_servicio_seleccionado:
+                # Nivel TIPO SERVICIO: filtrar por área, distrito y tipo servicio (sin servicio específico)
+                query += " AND a.nombre = ? AND d.nombre = ? AND ts.descripcion = ? AND s.nombre IS NULL"
+                params.extend([area_seleccionada, distrito_seleccionado, tipo_servicio_seleccionado])
+                
+            elif distrito_seleccionado:
+                # Nivel DISTRITO: filtrar por área y distrito (sin tipo servicio ni servicio)
+                query += " AND a.nombre = ? AND d.nombre = ? AND ts.descripcion IS NULL AND s.nombre IS NULL"
+                params.extend([area_seleccionada, distrito_seleccionado])
+                
+            elif area_seleccionada:
+                # Nivel ÁREA: filtrar solo por área (sin distrito, tipo servicio ni servicio)
+                query += " AND a.nombre = ? AND d.nombre IS NULL AND ts.descripcion IS NULL AND s.nombre IS NULL"
+                params.append(area_seleccionada)
+            
+            cursor.execute(query, params)
+            resultado = cursor.fetchone()
+            
+            total_demanda = float(resultado['total_demanda']) if resultado and resultado['total_demanda'] else 0.0
+            return total_demanda
+            
+        except Exception as e:
+            print(f"Error obteniendo demanda del mes: {e}")
+            return 0.0
+        finally:
+            if conn:
+                conn.close()
 
     def calcular_promedio_periodo_actual(self, codigo_insumo, fecha_inicio, fecha_fin):
         """
@@ -695,12 +843,13 @@ class ReporteBres:
             movimientos_raw = obtener_movimientos_bres(
                 fecha_ini.strftime('%Y-%m-%d'),
                 fecha_fin.strftime('%Y-%m-%d'),
-                self.combo_distrito.get() if self.combo_distrito.get() else None,
-                self.combo_tipo_servicio.get() if self.combo_tipo_servicio.get() else None,
-                self.combo_servicio.get() if self.combo_servicio.get() else None,
-                self.combo_tipo_insumo.get() if self.combo_tipo_insumo.get() else None,
-                self.combo_insumo.get() if self.combo_insumo.get() else None,
-                self.combo_presentacion.get() if self.combo_presentacion.get() else None
+                area_nombre=self.combo_area.get() if self.combo_area.get() else None,
+                distrito_nombre=self.combo_distrito.get() if self.combo_distrito.get() else None,
+                tipo_servicio_desc=self.combo_tipo_servicio.get() if self.combo_tipo_servicio.get() else None,
+                servicio_nombre=self.combo_servicio.get() if self.combo_servicio.get() else None,
+                tipo_insumo_desc=self.combo_tipo_insumo.get() if self.combo_tipo_insumo.get() else None,
+                insumo_nombre=self.combo_insumo.get() if self.combo_insumo.get() else None,
+                presentacion_nombre=self.combo_presentacion.get() if self.combo_presentacion.get() else None
             )
 
             if not movimientos_raw:

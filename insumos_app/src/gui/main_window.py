@@ -179,13 +179,32 @@ class MainWindow:
             self.root.destroy()
 
     def clear_content_frame(self):
-        # Si guardas la instancia de la pantalla actual:
-        if hasattr(self, 'pantalla_actual') and self.pantalla_actual:
-            if hasattr(self.pantalla_actual, 'destroy'):
-                self.pantalla_actual.destroy()
-            self.pantalla_actual = None
-        for widget in self.main_content_frame.winfo_children():
-            widget.destroy()
+        """Limpia el contenido del frame principal de forma segura"""
+        try:
+            # Limpiar referencia a pantalla actual
+            if hasattr(self, 'pantalla_actual') and self.pantalla_actual:
+                # Llamar método destroy si existe
+                if hasattr(self.pantalla_actual, 'destroy'):
+                    try:
+                        self.pantalla_actual.destroy()
+                    except:
+                        pass
+                self.pantalla_actual = None
+            
+            # Verificar que el frame principal existe
+            if hasattr(self, 'main_content_frame') and self.main_content_frame.winfo_exists():
+                # Destruir todos los widgets hijos
+                for widget in self.main_content_frame.winfo_children():
+                    try:
+                        widget.destroy()
+                    except:
+                        pass
+                
+                # Forzar actualización
+                self.main_content_frame.update_idletasks()
+            
+        except Exception as e:
+            print(f"Error limpiando frame: {e}")
 
     def show_welcome_screen(self):
         """Muestra la pantalla de bienvenida"""
@@ -267,12 +286,29 @@ class MainWindow:
         self.pantalla_actual = GestionMovimientos(self.main_content_frame, self)
 
     def load_reporte_kardex(self):
-        if not self.verify_database_connection():
-            messagebox.showerror("Error", "No se puede conectar a la base de datos")
-            return
-        self.clear_content_frame()
-        self.reset_window_size()
-        self.pantalla_actual = ReporteKardex(self.main_content_frame, self)
+        """Carga la pantalla de reporte Kardex"""
+        try:
+            if not self.verify_database_connection():
+                messagebox.showerror("Error", "No se puede conectar a la base de datos")
+                return
+                
+            # Limpiar pantalla actual
+            self.clear_content_frame()
+            
+            # Verificar que el frame principal existe
+            if not hasattr(self, 'main_content_frame') or not self.main_content_frame.winfo_exists():
+                messagebox.showerror("Error", "Frame principal no disponible")
+                return
+                
+            # Restaurar tamaño de ventana
+            self.reset_window_size()
+            
+            # Crear nueva pantalla
+            self.pantalla_actual = ReporteKardex(self.main_content_frame, self)
+            
+        except Exception as e:
+            print(f"Error cargando reporte Kardex: {e}")
+            messagebox.showerror("Error", f"Error al cargar reporte Kardex: {str(e)}")
 
     def load_gestion_usuarios(self):
         if not self.verify_database_connection():

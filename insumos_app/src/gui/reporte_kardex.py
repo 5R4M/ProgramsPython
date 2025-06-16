@@ -653,27 +653,31 @@ class ReporteKardex:
                 messagebox.showerror("Error", "Debe seleccionar un insumo")
                 return
 
-            # Obtener datos
+            # Obtener datos - MODIFICACIÓN AQUÍ
             movimientos_raw = obtener_movimientos_kardex(
                 fecha_ini.strftime('%Y-%m-%d'),
                 fecha_fin.strftime('%Y-%m-%d'),
-                self.combo_distrito.get(),
-                self.combo_tipo_servicio.get(),
-                self.combo_servicio.get(),
-                self.combo_tipo_insumo.get(),
-                self.combo_insumo.get(),
-                self.combo_presentacion.get()
+                self.combo_distrito.get() if self.combo_distrito.get().strip() else None,
+                self.combo_tipo_servicio.get() if self.combo_tipo_servicio.get().strip() else None,
+                self.combo_servicio.get() if self.combo_servicio.get().strip() else None,
+                self.combo_tipo_insumo.get() if self.combo_tipo_insumo.get().strip() else None,
+                self.combo_insumo.get() if self.combo_insumo.get().strip() else None,
+                self.combo_presentacion.get() if self.combo_presentacion.get().strip() else None,
+                self.combo_area.get() if self.combo_area.get().strip() else None  # NUEVO PARÁMETRO
             )
 
             if not movimientos_raw:
                 messagebox.showinfo("Info", "No hay datos para mostrar")
                 return
 
-            # Ordenar movimientos y calcular saldo
-            movimientos_ordenados = self.ordenar_movimientos(movimientos_raw)
+            # Filtrar movimientos por nivel jerárquico - NUEVA LÍNEA
+            movimientos_filtrados = self.filtrar_movimientos_por_nivel(movimientos_raw)
+
+            # Ordenar movimientos y calcular saldo - USAR MOVIMIENTOS FILTRADOS
+            movimientos_ordenados = self.ordenar_movimientos(movimientos_filtrados)
             self.movimientos_data = self.calcular_saldo_acumulado(movimientos_ordenados)
 
-            # Generar PDF temporal
+            # Resto del código permanece igual...
             import tempfile
             import os
 
@@ -684,7 +688,7 @@ class ReporteKardex:
             # Generar el PDF en el archivo temporal
             self.generar_pdf(self.temp_pdf_path, es_vista_previa=True)
 
-            # Importar las bibliotecas necesarias
+            # Resto del código para mostrar el PDF...
             import fitz  # PyMuPDF
             from PIL import Image, ImageTk
 
@@ -775,7 +779,7 @@ class ReporteKardex:
             # Capturar y mostrar cualquier error que ocurra
             import traceback
             error_detallado = traceback.format_exc()
-            print(f"Error detallado:\n{error_detallado}")  # Para deb
+            print(f"Error detallado:\n{error_detallado}")  # Para debug
             messagebox.showerror(
                 "Error",
                 f"Error al generar vista previa:\n{str(e)}\n\nPor favor, verifique los datos e intente nuevamente."
@@ -837,20 +841,24 @@ class ReporteKardex:
                 movimientos_raw = obtener_movimientos_kardex(
                     fecha_ini.strftime('%Y-%m-%d'),
                     fecha_fin.strftime('%Y-%m-%d'),
-                    self.combo_distrito.get(),
-                    self.combo_tipo_servicio.get(),
-                    self.combo_servicio.get(),
-                    self.combo_tipo_insumo.get(),
-                    self.combo_insumo.get(),
-                    self.combo_presentacion.get()
+                    self.combo_distrito.get() if self.combo_distrito.get().strip() else None,
+                    self.combo_tipo_servicio.get() if self.combo_tipo_servicio.get().strip() else None,
+                    self.combo_servicio.get() if self.combo_servicio.get().strip() else None,
+                    self.combo_tipo_insumo.get() if self.combo_tipo_insumo.get().strip() else None,
+                    self.combo_insumo.get() if self.combo_insumo.get().strip() else None,
+                    self.combo_presentacion.get() if self.combo_presentacion.get().strip() else None,
+                    self.combo_area.get() if self.combo_area.get().strip() else None  # NUEVO PARÁMETRO
                 )
 
                 if not movimientos_raw:
                     messagebox.showinfo("Info", "No hay datos para mostrar")
                     return
 
-                # Ordenar movimientos y calcular saldo
-                movimientos_ordenados = self.ordenar_movimientos(movimientos_raw)
+                # Filtrar movimientos por nivel jerárquico - NUEVA LÍNEA
+                movimientos_filtrados = self.filtrar_movimientos_por_nivel(movimientos_raw)
+
+                # Ordenar movimientos y calcular saldo - USAR MOVIMIENTOS FILTRADOS
+                movimientos_ordenados = self.ordenar_movimientos(movimientos_filtrados)
                 self.movimientos_data = self.calcular_saldo_acumulado(movimientos_ordenados)
 
             # Generar nombre de archivo con fecha y hora
@@ -1130,20 +1138,24 @@ class ReporteKardex:
             movimientos_raw = obtener_movimientos_kardex(
                 fecha_ini.strftime('%Y-%m-%d'),
                 fecha_fin.strftime('%Y-%m-%d'),
-                self.combo_distrito.get(),
-                self.combo_tipo_servicio.get(),
-                self.combo_servicio.get(),
-                self.combo_tipo_insumo.get(),
-                self.combo_insumo.get(),
-                self.combo_presentacion.get()
+                self.combo_distrito.get() if self.combo_distrito.get().strip() else None,
+                self.combo_tipo_servicio.get() if self.combo_tipo_servicio.get().strip() else None,
+                self.combo_servicio.get() if self.combo_servicio.get().strip() else None,
+                self.combo_tipo_insumo.get() if self.combo_tipo_insumo.get().strip() else None,
+                self.combo_insumo.get() if self.combo_insumo.get().strip() else None,
+                self.combo_presentacion.get() if self.combo_presentacion.get().strip() else None,
+                self.combo_area.get() if self.combo_area.get().strip() else None  # NUEVO PARÁMETRO
             )
 
             if not movimientos_raw:
                 messagebox.showinfo("Info", "No hay datos para mostrar")
                 return
 
-            # Ordenar movimientos y calcular saldo
-            movimientos_ordenados = self.ordenar_movimientos(movimientos_raw)
+            # Filtrar movimientos por nivel jerárquico - NUEVA LÍNEA
+            movimientos_filtrados = self.filtrar_movimientos_por_nivel(movimientos_raw)
+
+            # Ordenar movimientos y calcular saldo - USAR MOVIMIENTOS FILTRADOS
+            movimientos_ordenados = self.ordenar_movimientos(movimientos_filtrados)
             movimientos = self.calcular_saldo_acumulado(movimientos_ordenados)
 
             # Crear DataFrame y generar Excel
@@ -1394,6 +1406,64 @@ class ReporteKardex:
                     self.main_window.show_main_menu()
                 except:
                     pass
+    
+    def filtrar_movimientos_por_nivel(self, movimientos):
+        """
+        Filtra los movimientos según el nivel jerárquico seleccionado
+        """
+        # Obtener valores seleccionados
+        area_seleccionada = self.combo_area.get().strip()
+        distrito_seleccionado = self.combo_distrito.get().strip()
+        tipo_servicio_seleccionado = self.combo_tipo_servicio.get().strip()
+        servicio_seleccionado = self.combo_servicio.get().strip()
+        
+        # Determinar el nivel de filtrado
+        nivel_filtro = None
+        filtro_valor = None
+        
+        if servicio_seleccionado:
+            nivel_filtro = "servicio"
+            filtro_valor = servicio_seleccionado
+        elif tipo_servicio_seleccionado:
+            nivel_filtro = "tipo_servicio"
+            filtro_valor = tipo_servicio_seleccionado
+        elif distrito_seleccionado:
+            nivel_filtro = "distrito"
+            filtro_valor = distrito_seleccionado
+        elif area_seleccionada:
+            nivel_filtro = "area"
+            filtro_valor = area_seleccionada
+        
+        # Si no hay filtro específico, devolver todos los movimientos
+        if not nivel_filtro:
+            return movimientos
+        
+        # Filtrar movimientos según el nivel seleccionado
+        movimientos_filtrados = []
+        for mov in movimientos:
+            incluir_movimiento = False
+            
+            if nivel_filtro == "servicio":
+                # Solo incluir si el movimiento pertenece al servicio específico
+                if mov.get('servicio_nombre') == filtro_valor:
+                    incluir_movimiento = True
+            elif nivel_filtro == "tipo_servicio":
+                # Solo incluir si el movimiento pertenece al tipo de servicio específico
+                if mov.get('tipo_servicio_desc') == filtro_valor:
+                    incluir_movimiento = True
+            elif nivel_filtro == "distrito":
+                # Solo incluir si el movimiento pertenece al distrito específico
+                if mov.get('distrito_nombre') == filtro_valor:
+                    incluir_movimiento = True
+            elif nivel_filtro == "area":
+                # Solo incluir si el movimiento pertenece al área específica
+                if mov.get('area_nombre') == filtro_valor:
+                    incluir_movimiento = True
+            
+            if incluir_movimiento:
+                movimientos_filtrados.append(mov)
+        
+        return movimientos_filtrados
     
     def destroy(self):
         if hasattr(self, 'frame_principal'):

@@ -852,7 +852,7 @@ def verificar_tablas():
 
 def obtener_movimientos_kardex(fecha_inicio, fecha_fin, distrito_nombre=None, tipo_servicio_desc=None,
                                servicio_nombre=None, tipo_insumo_desc=None, insumo_nombre=None,
-                               presentacion_nombre=None):
+                               presentacion_nombre=None, area_nombre=None):
     conn = conectar_db()
     if not conn:
         return []
@@ -875,12 +875,17 @@ def obtener_movimientos_kardex(fecha_inicio, fecha_fin, distrito_nombre=None, ti
                 COALESCE(i.lote, '') AS codigo,
                 COALESCE(p.nombre, '') AS nombre_presentacion,
                 0 AS existencia,
-                0 AS reajuste
+                0 AS reajuste,
+                a.nombre AS area_nombre,
+                d2.nombre AS distrito_nombre,
+                ts.descripcion AS tipo_servicio_desc,
+                s.nombre AS servicio_nombre
             FROM movimiento m
             JOIN tipo_movimiento tm ON m.tipo_movimiento_id = tm.id
             LEFT JOIN servicio s ON m.servicio_id = s.id
             LEFT JOIN tipo_servicio ts ON s.id_tipo_servicio = ts.id
-            LEFT JOIN distrito d ON ts.id_distrito = d.id
+            LEFT JOIN distrito d2 ON ts.id_distrito = d2.id
+            LEFT JOIN area a ON d2.id_area = a.id
             LEFT JOIN distrito d_salida ON m.salida_distrito_id = d_salida.id
             LEFT JOIN servicio s_salida ON m.salida_servicio_id = s_salida.id
             LEFT JOIN insumo i ON m.insumo_id = i.id
@@ -891,22 +896,39 @@ def obtener_movimientos_kardex(fecha_inicio, fecha_fin, distrito_nombre=None, ti
         """
 
         params = [fecha_inicio, fecha_fin]
-        if distrito_nombre:
-            query += " AND d.nombre = ?"
+        
+        # Filtrar por área
+        if area_nombre and area_nombre.strip():
+            query += " AND a.nombre = ?"
+            params.append(area_nombre)
+            
+        # Filtrar por distrito
+        if distrito_nombre and distrito_nombre.strip():
+            query += " AND d2.nombre = ?"
             params.append(distrito_nombre)
-        if tipo_servicio_desc:
+            
+        # Filtrar por tipo de servicio
+        if tipo_servicio_desc and tipo_servicio_desc.strip():
             query += " AND ts.descripcion = ?"
             params.append(tipo_servicio_desc)
-        if servicio_nombre:
+            
+        # Filtrar por servicio
+        if servicio_nombre and servicio_nombre.strip():
             query += " AND s.nombre = ?"
             params.append(servicio_nombre)
-        if tipo_insumo_desc:
+            
+        # Filtrar por tipo de insumo
+        if tipo_insumo_desc and tipo_insumo_desc.strip():
             query += " AND ti.descripcion = ?"
             params.append(tipo_insumo_desc)
-        if insumo_nombre:
+            
+        # Filtrar por insumo
+        if insumo_nombre and insumo_nombre.strip():
             query += " AND i.nombre = ?"
             params.append(insumo_nombre)
-        if presentacion_nombre:
+            
+        # Filtrar por presentación
+        if presentacion_nombre and presentacion_nombre.strip():
             query += " AND p.nombre = ?"
             params.append(presentacion_nombre)
 
@@ -931,7 +953,11 @@ def obtener_movimientos_kardex(fecha_inicio, fecha_fin, distrito_nombre=None, ti
                 'codigo': row['codigo'],
                 'nombre_presentacion': row['nombre_presentacion'],
                 'existencia': row['existencia'],
-                'reajuste': row['reajuste']
+                'reajuste': row['reajuste'],
+                'area_nombre': row['area_nombre'],
+                'distrito_nombre': row['distrito_nombre'],
+                'tipo_servicio_desc': row['tipo_servicio_desc'],
+                'servicio_nombre': row['servicio_nombre']
             })
 
         return movimientos
@@ -1578,104 +1604,82 @@ def obtener_demanda_por_meses(codigo_insumo, fecha_inicio, fecha_fin, distrito=N
     finally:
         conn.close()
 
-def obtener_movimientos_bres(fecha_inicio, fecha_fin, distrito_nombre=None, tipo_servicio_desc=None,
-                            servicio_nombre=None, tipo_insumo_desc=None, insumo_nombre=None,
-                            presentacion_nombre=None):
+def obtener_movimientos_bres(fecha_inicio, fecha_fin, area_nombre=None, distrito_nombre=None, tipo_servicio_desc=None,
+                               servicio_nombre=None, tipo_insumo_desc=None, insumo_nombre=None,
+                               presentacion_nombre=None):
+    query = """
+        SELECT
+            m.fecha_registro AS fecha,
+            m.referencia,
+            tm.descripcion AS tipo_movimiento,
+            m.cantidad,
+            m.lote,
+            m.fecha_vencimiento,
+            m.observaciones,
+            d_salida.nombre AS distrito_destino,
+            s_salida.nombre AS servicio_destino,
+            i.nombre AS nombre_insumo,
+            i.id AS codigo_insumo,
+            COALESCE(p.nombre, '') AS presentacion,
+            a.nombre AS area_nombre,
+            d2.nombre AS distrito_nombre,
+            ts.descripcion AS tipo_servicio_desc,
+            s.nombre AS servicio_nombre
+        FROM movimiento m
+        JOIN tipo_movimiento tm ON m.tipo_movimiento_id = tm.id
+        LEFT JOIN servicio s ON m.servicio_id = s.id
+        LEFT JOIN tipo_servicio ts ON s.id_tipo_servicio = ts.id
+        LEFT JOIN distrito d2 ON ts.id_distrito = d2.id
+        LEFT JOIN area a ON d2.id_area = a.id
+        LEFT JOIN distrito d_salida ON m.salida_distrito_id = d_salida.id
+        LEFT JOIN servicio s_salida ON m.salida_servicio_id = s_salida.id
+        LEFT JOIN insumo i ON m.insumo_id = i.id
+        LEFT JOIN tipo_insumo ti ON i.id_tipo_insumo = ti.id
+        LEFT JOIN insumo_presentacion ip ON i.id = ip.insumo_id
+        LEFT JOIN presentacion p ON ip.presentacion_id = p.id
+        WHERE m.fecha_registro BETWEEN ? AND ?
+        AND tm.descripcion IN ('ENTREGADO', 'NO ENTREGADO', 'INVENTARIO INICIAL', 
+                            'ENTRADA NIVEL SUPERIOR', 'SALIDA NIVEL INFERIOR',
+                            'REAJUSTE POSITIVO', 'REAJUSTE NEGATIVO')
     """
-    Función específica para obtener movimientos para el reporte BRES
-    """
-    conn = conectar_db()
-    if not conn:
-        return []
 
-    try:
-        cursor = conn.cursor()
+    params = [fecha_inicio, fecha_fin]
 
-        query = """
-            SELECT
-                m.fecha_registro AS fecha,
-                m.referencia,
-                tm.descripcion AS tipo_movimiento,
-                m.cantidad,
-                m.lote,
-                m.fecha_vencimiento,
-                m.observaciones,
-                d_salida.nombre AS distrito_destino,
-                s_salida.nombre AS servicio_destino,
-                i.nombre AS nombre_insumo,
-                COALESCE(i.lote, '') AS codigo_insumo,
-                COALESCE(p.nombre, '') AS presentacion
-            FROM movimiento m
-            JOIN tipo_movimiento tm ON m.tipo_movimiento_id = tm.id
-            LEFT JOIN servicio s ON m.servicio_id = s.id
-            LEFT JOIN tipo_servicio ts ON s.id_tipo_servicio = ts.id
-            LEFT JOIN distrito d ON ts.id_distrito = d.id
-            LEFT JOIN distrito d_salida ON m.salida_distrito_id = d_salida.id
-            LEFT JOIN servicio s_salida ON m.salida_servicio_id = s_salida.id
-            LEFT JOIN insumo i ON m.insumo_id = i.id
-            LEFT JOIN tipo_insumo ti ON i.id_tipo_insumo = ti.id
-            LEFT JOIN insumo_presentacion ip ON i.id = ip.insumo_id
-            LEFT JOIN presentacion p ON ip.presentacion_id = p.id
-            WHERE m.fecha_registro BETWEEN ? AND ?
-            AND tm.descripcion IN ('ENTREGADO', 'NO ENTREGADO', 'INVENTARIO INICIAL', 
-                                 'ENTRADA NIVEL SUPERIOR', 'SALIDA NIVEL INFERIOR',
-                                 'REAJUSTE POSITIVO', 'REAJUSTE NEGATIVO')
-        """
+    if area_nombre and area_nombre.strip():
+        query += " AND a.nombre = ?"
+        params.append(area_nombre)
 
-        params = [fecha_inicio, fecha_fin]
-        
-        # Solo agregar filtros si los parámetros no son None y no están vacíos
-        if distrito_nombre and distrito_nombre.strip():
-            query += " AND d.nombre = ?"
-            params.append(distrito_nombre)
-            
-        if tipo_servicio_desc and tipo_servicio_desc.strip():
-            query += " AND ts.descripcion = ?"
-            params.append(tipo_servicio_desc)
-            
-        if servicio_nombre and servicio_nombre.strip():
-            query += " AND s.nombre = ?"
-            params.append(servicio_nombre)
-            
-        if tipo_insumo_desc and tipo_insumo_desc.strip():
-            query += " AND ti.descripcion = ?"
-            params.append(tipo_insumo_desc)
-            
-        # Estos son opcionales - solo filtrar si se proporcionan
-        if insumo_nombre and insumo_nombre.strip():
-            query += " AND i.nombre = ?"
-            params.append(insumo_nombre)
-            
-        if presentacion_nombre and presentacion_nombre.strip():
-            query += " AND p.nombre = ?"
-            params.append(presentacion_nombre)
+    if distrito_nombre and distrito_nombre.strip():
+        query += " AND d2.nombre = ?"
+        params.append(distrito_nombre)
 
-        query += " ORDER BY m.fecha_registro ASC, m.id ASC"
+    if tipo_servicio_desc and tipo_servicio_desc.strip():
+        query += " AND ts.descripcion = ?"
+        params.append(tipo_servicio_desc)
 
-        cursor.execute(query, params)
-        resultados = cursor.fetchall()
+    if servicio_nombre and servicio_nombre.strip():
+        query += " AND s.nombre = ?"
+        params.append(servicio_nombre)
 
-        movimientos = []
-        for row in resultados:
-            movimientos.append({
-                'fecha': row['fecha'],
-                'referencia': row['referencia'],
-                'tipo_movimiento': row['tipo_movimiento'],
-                'cantidad': float(row['cantidad']) if row['cantidad'] else 0,
-                'lote': row['lote'],
-                'fecha_vencimiento': row['fecha_vencimiento'],
-                'observaciones': row['observaciones'],
-                'distrito_destino': row['distrito_destino'],
-                'servicio_destino': row['servicio_destino'],
-                'nombre_insumo': row['nombre_insumo'],
-                'codigo_insumo': row['codigo_insumo'],
-                'presentacion': row['presentacion']
-            })
+    if insumo_nombre and insumo_nombre.strip():
+        query += " AND i.nombre = ?"
+        params.append(insumo_nombre)
 
-        return movimientos
+    if tipo_insumo_desc and tipo_insumo_desc.strip():
+        query += " AND ti.descripcion = ?"
+        params.append(tipo_insumo_desc)
 
-    except sqlite3.Error as e:
-        print(f"Error al obtener movimientos BRES: {e}")
-        return []
-    finally:
-        conn.close()
+    if presentacion_nombre and presentacion_nombre.strip():
+        query += " AND p.nombre = ?"
+        params.append(presentacion_nombre)
+
+    query += " ORDER BY m.fecha_registro"
+
+    conn = sqlite3.connect(DB_PATH)
+    conn.row_factory = sqlite3.Row
+    cursor = conn.cursor()
+    cursor.execute(query, params)
+    rows = cursor.fetchall()
+    conn.close()
+
+    return [dict(row) for row in rows]
