@@ -388,8 +388,8 @@ class ReporteDemandaReal:
                     'codigo': codigo,
                     'nombre_insumo': nombre_insumo,
                     'presentacion': presentacion,
-                    'entregado': {dia: 0 for dia in dias},  # Usar el parámetro dias
-                    'no_entregado': {dia: 0 for dia in dias},  # Usar el parámetro dias
+                    'entregado': {dia: 0 for dia in dias},
+                    'no_entregado': {dia: 0 for dia in dias},
                     'inventario_inicial': 0,
                     'entrada_nivel_superior': 0,
                     'salida_nivel_inferior': 0,
@@ -400,20 +400,20 @@ class ReporteDemandaReal:
             # Usar get() para obtener valores de manera segura
             fecha_str = mov.get('fecha', '')
             if not fecha_str:
-                continue  # Saltar si no hay fecha
+                continue
                 
             try:
                 fecha_mov = datetime.strptime(fecha_str, '%Y-%m-%d')
             except ValueError:
-                continue  # Saltar si la fecha no es válida
+                continue
                 
             dia = fecha_mov.day
             cantidad = mov.get('cantidad', 0)
             tipo_mov = mov.get('tipo_movimiento', '')
             
-            if tipo_mov == 'ENTREGADO' and dia in dias:  # Usar el parámetro dias
+            if tipo_mov == 'ENTREGADO' and dia in dias:
                 insumos[insumo_key]['entregado'][dia] += cantidad
-            elif tipo_mov == 'NO ENTREGADO' and dia in dias:  # Usar el parámetro dias
+            elif tipo_mov == 'NO ENTREGADO' and dia in dias:
                 insumos[insumo_key]['no_entregado'][dia] += cantidad
             elif tipo_mov == 'INVENTARIO INICIAL':
                 insumos[insumo_key]['inventario_inicial'] += cantidad
@@ -426,17 +426,19 @@ class ReporteDemandaReal:
             elif tipo_mov == 'REAJUSTE NEGATIVO':
                 insumos[insumo_key]['reajuste_negativo'] += cantidad
         
-        # Resto del código permanece igual...
+        # **AGREGAR NUMERACIÓN SECUENCIAL**
         datos_procesados = {}
+        contador = 1  # Iniciar contador en 1
+        
         for insumo_key, valores in insumos.items():
             fila_datos = {
-                'codigo': valores['codigo'],
+                'codigo': str(contador),  # **ASIGNAR NÚMERO SECUENCIAL**
                 'nombre_insumo': valores['nombre_insumo'],
                 'presentacion': valores['presentacion']
             }
             
             # Agregar días
-            for dia in dias:  # Usar el parámetro dias
+            for dia in dias:
                 fila_datos[f'Día_{dia}_Entregado'] = self.formato_valor(valores['entregado'].get(dia, 0))
                 fila_datos[f'Día_{dia}_No_Entregado'] = self.formato_valor(valores['no_entregado'].get(dia, 0))
             
@@ -472,7 +474,9 @@ class ReporteDemandaReal:
                 'reajuste': reajuste_total
             }
             
-            datos_procesados[insumo_key] = fila_datos
+            # **USAR EL CONTADOR COMO CLAVE PARA MANTENER EL ORDEN**
+            datos_procesados[f"{contador:03d}_{insumo_key}"] = fila_datos
+            contador += 1  # Incrementar contador
         
         return datos_procesados
 
@@ -675,7 +679,6 @@ class ReporteDemandaReal:
             col_reajuste = col_existencia + 1
 
             # ESCRIBIR TÍTULOS DE COLUMNAS FINALES EN LAS MISMAS FILAS QUE LOS DÍAS
-            # IMPORTANTE: usar fila_encabezado_1-1 y fila_encabezado_2-1 porque merge_range usa índices 0-based
             worksheet.merge_range(fila_encabezado_1-1, col_total_entregado, fila_encabezado_2-1, col_total_entregado, 
                                 'Total\nEntregado', header_format)
             worksheet.merge_range(fila_encabezado_1-1, col_total_no_entregado, fila_encabezado_2-1, col_total_no_entregado, 
@@ -690,12 +693,12 @@ class ReporteDemandaReal:
             # DATOS DE LA TABLA - Empezar en fila 10 (sin línea en blanco)
             fila_actual = 9  # Directamente después de los encabezados
 
-            # Procesar datos de insumos
+            # **PROCESAR DATOS DE INSUMOS CON NUMERACIÓN SECUENCIAL**
             for insumo_key, valores in self.datos.items():
-                # Extraer información del insumo - CORREGIDO
+                # **EXTRAER NÚMERO SECUENCIAL DEL INICIO DE LA CLAVE**
                 if ' - ' in insumo_key:
                     partes = insumo_key.split(' - ', 1)
-                    codigo = partes[0]
+                    codigo = partes[0]  # Número secuencial (001, 002, etc.)
                     nombre_presentacion = partes[1]
                 else:
                     # Si no hay separador, usar toda la cadena como nombre y código vacío
@@ -711,7 +714,7 @@ class ReporteDemandaReal:
 
                 # FILA ENTREGADO
                 # Combinar celdas verticalmente para código y nombre
-                worksheet.merge_range(fila_actual, 0, fila_actual+1, 0, codigo, data_format)  # Código
+                worksheet.merge_range(fila_actual, 0, fila_actual+1, 0, codigo, data_format)  # **Código secuencial**
                 worksheet.merge_range(fila_actual, 1, fila_actual+1, 1, nombre_presentacion, text_format)  # Nombre
 
                 # Movimiento "Entregado"
@@ -875,13 +878,13 @@ class ReporteDemandaReal:
                 dias.append(fecha_iter.day)
             fecha_iter += timedelta(days=1)
 
-        # Agrupar datos por insumo (codigo, nombre+presentacion)
+        # Agrupar datos por insumo (codigo_original, nombre+presentacion)
         insumos = {}
         for mov in datos_movimientos:
-            codigo = mov.get('codigo', '')
+            codigo_original = mov.get('codigo', '')
             nombre = mov.get('nombre_insumo', '')
-            presentacion = mov.get('presentacion', '')
-            key = (codigo, f"{nombre} {presentacion}".strip())
+            presentacion = mov.get('nombre_presentacion', '')
+            key = (codigo_original, f"{nombre} {presentacion}".strip())
             
             if key not in insumos:
                 insumos[key] = {
@@ -1020,7 +1023,9 @@ class ReporteDemandaReal:
 
         data = [encabezado1, encabezado2]
 
-        for (codigo, nombre_pres), valores in insumos.items():
+        # **AGREGAR DATOS CON NUMERACIÓN SECUENCIAL**
+        contador = 1
+        for (codigo_original, nombre_pres), valores in insumos.items():
             # Calcular totales de entregado y no entregado
             total_entregado = sum(valores['entregado'].get(d, 0) for d in dias)
             total_no_entregado = sum(valores['no_entregado'].get(d, 0) for d in dias)
@@ -1029,7 +1034,6 @@ class ReporteDemandaReal:
             reajuste_total = valores['reajuste_positivo'] - valores['reajuste_negativo']
             
             # Calcular existencia según la fórmula:
-            # Inventario inicial + Entrada nivel superior + Reajuste positivo - Salida nivel inferior - Entregado - Reajuste negativo
             existencia = (valores['inventario_inicial'] + 
                         valores['entrada_nivel_superior'] + 
                         valores['reajuste_positivo'] - 
@@ -1037,9 +1041,9 @@ class ReporteDemandaReal:
                         total_entregado - 
                         valores['reajuste_negativo'])
 
-            # Fila Entregado
+            # Fila Entregado - **USAR CONTADOR SECUENCIAL**
             fila_entregado = [
-                codigo,              # Código
+                str(contador),       # **NÚMERO SECUENCIAL EN LUGAR DEL CÓDIGO ORIGINAL**
                 nombre_pres,         # Medicamento
                 'Entregado'
             ]
@@ -1075,6 +1079,7 @@ class ReporteDemandaReal:
 
             data.append(fila_entregado)
             data.append(fila_no_entregado)
+            contador += 1  # **INCREMENTAR CONTADOR**
 
         # Anchos de columna
         col_widths = [0.5*inch, 1.5*inch, 0.8*inch] + [0.3*inch] * len(dias) + [0.5*inch, 0.5*inch, 0.5*inch, 0.5*inch, 0.7*inch]
@@ -1183,22 +1188,20 @@ class ReporteDemandaReal:
             'ENTREGADO', 'NO ENTREGADO', 'REAJUSTE POSITIVO', 'REAJUSTE NEGATIVO', 'INVENTARIO INICIAL', 'ENTRADA NIVEL SUPERIOR', 'SALDO ANTERIOR'
         ]]
 
-        # AHORA SÍ llamar a procesar_datos con self.dias ya definido
-        datos_movimientos = self.procesar_datos(movimientos_filtrados, fecha_ini, fecha_fin, self.dias)
-
-        # Crear self.datos con la estructura necesaria para Excel
-        self.datos = {}
+        # Agrupar datos por insumo
         insumos = {}
         
-        # Agrupar datos por insumo
-        for mov in movimientos_filtrados:  # Usar movimientos_filtrados en lugar de datos_movimientos
+        for mov in movimientos_filtrados:
             codigo = mov.get('codigo', '')
             nombre = mov.get('nombre_insumo', '')
-            presentacion = mov.get('nombre_presentacion', '')  # Usar nombre_presentacion
-            key = f"{codigo} - {nombre} {presentacion}".strip()
+            presentacion = mov.get('nombre_presentacion', '')
+            key = f"{codigo}_{nombre}_{presentacion}"
             
             if key not in insumos:
                 insumos[key] = {
+                    'codigo_original': codigo,
+                    'nombre': nombre,
+                    'presentacion': presentacion,
                     'entregado': {d:0 for d in self.dias},
                     'no_entregado': {d:0 for d in self.dias},
                     'inventario_inicial': 0,
@@ -1236,7 +1239,10 @@ class ReporteDemandaReal:
                 except ValueError:
                     continue
 
-        # Convertir a formato para Excel
+        # **CONVERTIR A FORMATO PARA EXCEL CON NUMERACIÓN SECUENCIAL**
+        self.datos = {}
+        contador = 1
+        
         for insumo_key, valores in insumos.items():
             fila_datos = {}
             
@@ -1263,7 +1269,11 @@ class ReporteDemandaReal:
             fila_datos['Existencia'] = existencia
             fila_datos['Reajuste'] = reajuste_total
             
-            self.datos[insumo_key] = fila_datos
+            # **USAR CONTADOR COMO CLAVE CON INFORMACIÓN DEL INSUMO**
+            nombre_completo = f"{valores['nombre']} - {valores['presentacion']}"
+            nueva_clave = f"{contador:03d} - {nombre_completo}"
+            self.datos[nueva_clave] = fila_datos
+            contador += 1
 
         periodo_str = f"{fecha_ini.strftime('%d%m%Y')}_{fecha_fin.strftime('%d%m%Y')}"
         self.periodo_str = periodo_str
@@ -1271,7 +1281,7 @@ class ReporteDemandaReal:
         import tempfile
         temp_dir = tempfile.gettempdir()
         self.temp_pdf_path = os.path.join(temp_dir, f"vista_previa_demanda_real_{periodo_str}.pdf")
-        self.generar_pdf(movimientos_filtrados, self.temp_pdf_path)  # Usar movimientos_filtrados
+        self.generar_pdf(movimientos_filtrados, self.temp_pdf_path)
 
         self.generar_vista_previa_pdf()
 

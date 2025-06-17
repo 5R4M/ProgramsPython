@@ -673,9 +673,30 @@ class ReporteKardex:
             # Filtrar movimientos por nivel jerárquico - NUEVA LÍNEA
             movimientos_filtrados = self.filtrar_movimientos_por_nivel(movimientos_raw)
 
+            # VALIDAR SI HAY DATOS DESPUÉS DEL FILTRADO
+            if not movimientos_filtrados:
+                messagebox.showwarning(
+                    "Sin datos", 
+                    "No hay movimientos para mostrar con los filtros seleccionados.\n\n"
+                    "Verifique que:\n"
+                    "• Existan movimientos en el rango de fechas seleccionado\n"
+                    "• Los movimientos estén guardados en el nivel jerárquico seleccionado\n"
+                    "• Los filtros de insumo sean correctos"
+                )
+                return  # No generar el reporte si no hay datos
+
             # Ordenar movimientos y calcular saldo - USAR MOVIMIENTOS FILTRADOS
             movimientos_ordenados = self.ordenar_movimientos(movimientos_filtrados)
             self.movimientos_data = self.calcular_saldo_acumulado(movimientos_ordenados)
+
+            # VALIDAR NUEVAMENTE DESPUÉS DEL PROCESAMIENTO
+            if not self.movimientos_data:
+                messagebox.showwarning(
+                    "Sin datos", 
+                    "No se pudieron procesar los datos para el reporte.\n"
+                    "Verifique los filtros seleccionados."
+                )
+                return
 
             # Resto del código permanece igual...
             import tempfile
@@ -857,9 +878,30 @@ class ReporteKardex:
                 # Filtrar movimientos por nivel jerárquico - NUEVA LÍNEA
                 movimientos_filtrados = self.filtrar_movimientos_por_nivel(movimientos_raw)
 
+                # VALIDAR SI HAY DATOS DESPUÉS DEL FILTRADO
+                if not movimientos_filtrados:
+                    messagebox.showwarning(
+                        "Sin datos", 
+                        "No hay movimientos para mostrar con los filtros seleccionados.\n\n"
+                        "Verifique que:\n"
+                        "• Existan movimientos en el rango de fechas seleccionado\n"
+                        "• Los movimientos estén guardados en el nivel jerárquico seleccionado\n"
+                        "• Los filtros de insumo sean correctos"
+                    )
+                    return  # No generar el reporte si no hay datos
+
                 # Ordenar movimientos y calcular saldo - USAR MOVIMIENTOS FILTRADOS
                 movimientos_ordenados = self.ordenar_movimientos(movimientos_filtrados)
                 self.movimientos_data = self.calcular_saldo_acumulado(movimientos_ordenados)
+
+                # VALIDAR NUEVAMENTE DESPUÉS DEL PROCESAMIENTO
+                if not self.movimientos_data:
+                    messagebox.showwarning(
+                        "Sin datos", 
+                        "No se pudieron procesar los datos para el reporte.\n"
+                        "Verifique los filtros seleccionados."
+                    )
+                    return
 
             # Generar nombre de archivo con fecha y hora
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -1154,9 +1196,30 @@ class ReporteKardex:
             # Filtrar movimientos por nivel jerárquico - NUEVA LÍNEA
             movimientos_filtrados = self.filtrar_movimientos_por_nivel(movimientos_raw)
 
+            # VALIDAR SI HAY DATOS DESPUÉS DEL FILTRADO
+            if not movimientos_filtrados:
+                messagebox.showwarning(
+                    "Sin datos", 
+                    "No hay movimientos para mostrar con los filtros seleccionados.\n\n"
+                    "Verifique que:\n"
+                    "• Existan movimientos en el rango de fechas seleccionado\n"
+                    "• Los movimientos estén guardados en el nivel jerárquico seleccionado\n"
+                    "• Los filtros de insumo sean correctos"
+                )
+                return  # No generar el reporte si no hay datos
+
             # Ordenar movimientos y calcular saldo - USAR MOVIMIENTOS FILTRADOS
             movimientos_ordenados = self.ordenar_movimientos(movimientos_filtrados)
             movimientos = self.calcular_saldo_acumulado(movimientos_ordenados)
+
+            # VALIDAR NUEVAMENTE DESPUÉS DEL PROCESAMIENTO
+            if not movimientos:
+                messagebox.showwarning(
+                    "Sin datos", 
+                    "No se pudieron procesar los datos para el reporte.\n"
+                    "Verifique los filtros seleccionados."
+                )
+                return
 
             # Crear DataFrame y generar Excel
             full_path = self.generar_excel(movimientos, periodo)
@@ -1409,7 +1472,8 @@ class ReporteKardex:
     
     def filtrar_movimientos_por_nivel(self, movimientos):
         """
-        Filtra los movimientos según el nivel jerárquico seleccionado
+        Filtra los movimientos según el nivel jerárquico seleccionado.
+        Solo muestra movimientos que fueron guardados exactamente en el nivel seleccionado.
         """
         # Obtener valores seleccionados
         area_seleccionada = self.combo_area.get().strip()
@@ -1417,47 +1481,59 @@ class ReporteKardex:
         tipo_servicio_seleccionado = self.combo_tipo_servicio.get().strip()
         servicio_seleccionado = self.combo_servicio.get().strip()
         
-        # Determinar el nivel de filtrado
-        nivel_filtro = None
-        filtro_valor = None
-        
-        if servicio_seleccionado:
-            nivel_filtro = "servicio"
-            filtro_valor = servicio_seleccionado
-        elif tipo_servicio_seleccionado:
-            nivel_filtro = "tipo_servicio"
-            filtro_valor = tipo_servicio_seleccionado
-        elif distrito_seleccionado:
-            nivel_filtro = "distrito"
-            filtro_valor = distrito_seleccionado
-        elif area_seleccionada:
-            nivel_filtro = "area"
-            filtro_valor = area_seleccionada
-        
-        # Si no hay filtro específico, devolver todos los movimientos
-        if not nivel_filtro:
+        # Si no hay ningún filtro de ubicación, devolver todos los movimientos
+        if not any([area_seleccionada, distrito_seleccionado, tipo_servicio_seleccionado, servicio_seleccionado]):
             return movimientos
         
-        # Filtrar movimientos según el nivel seleccionado
         movimientos_filtrados = []
+        
         for mov in movimientos:
+            # Obtener datos del movimiento - manejar NULL/None correctamente
+            mov_area = mov.get('area_nombre')
+            mov_distrito = mov.get('distrito_nombre')
+            mov_tipo_servicio = mov.get('tipo_servicio_desc')
+            mov_servicio = mov.get('servicio_nombre')
+            
+            # Función auxiliar para verificar si un campo está vacío/nulo
+            def es_nulo_o_vacio(valor):
+                return valor is None or valor == '' or str(valor).strip() == '' or str(valor).lower() in ['null', 'none']
+            
             incluir_movimiento = False
             
-            if nivel_filtro == "servicio":
-                # Solo incluir si el movimiento pertenece al servicio específico
-                if mov.get('servicio_nombre') == filtro_valor:
+            # CASO 1: Solo se seleccionó ÁREA
+            if area_seleccionada and not distrito_seleccionado and not tipo_servicio_seleccionado and not servicio_seleccionado:
+                # Incluir si: área coincide Y distrito/tipo_servicio/servicio son NULL/None/vacío
+                if (mov_area == area_seleccionada and 
+                    es_nulo_o_vacio(mov_distrito) and 
+                    es_nulo_o_vacio(mov_tipo_servicio) and 
+                    es_nulo_o_vacio(mov_servicio)):
                     incluir_movimiento = True
-            elif nivel_filtro == "tipo_servicio":
-                # Solo incluir si el movimiento pertenece al tipo de servicio específico
-                if mov.get('tipo_servicio_desc') == filtro_valor:
+            
+            # CASO 2: Se seleccionó ÁREA + DISTRITO
+            elif area_seleccionada and distrito_seleccionado and not tipo_servicio_seleccionado and not servicio_seleccionado:
+                # Incluir si: área y distrito coinciden Y tipo_servicio/servicio son NULL/None/vacío
+                if (mov_area == area_seleccionada and 
+                    mov_distrito == distrito_seleccionado and 
+                    es_nulo_o_vacio(mov_tipo_servicio) and 
+                    es_nulo_o_vacio(mov_servicio)):
                     incluir_movimiento = True
-            elif nivel_filtro == "distrito":
-                # Solo incluir si el movimiento pertenece al distrito específico
-                if mov.get('distrito_nombre') == filtro_valor:
+            
+            # CASO 3: Se seleccionó ÁREA + DISTRITO + TIPO DE SERVICIO
+            elif area_seleccionada and distrito_seleccionado and tipo_servicio_seleccionado and not servicio_seleccionado:
+                # Incluir si: área, distrito y tipo_servicio coinciden Y servicio es NULL/None/vacío
+                if (mov_area == area_seleccionada and 
+                    mov_distrito == distrito_seleccionado and 
+                    mov_tipo_servicio == tipo_servicio_seleccionado and 
+                    es_nulo_o_vacio(mov_servicio)):
                     incluir_movimiento = True
-            elif nivel_filtro == "area":
-                # Solo incluir si el movimiento pertenece al área específica
-                if mov.get('area_nombre') == filtro_valor:
+            
+            # CASO 4: Se seleccionó ÁREA + DISTRITO + TIPO DE SERVICIO + SERVICIO
+            elif area_seleccionada and distrito_seleccionado and tipo_servicio_seleccionado and servicio_seleccionado:
+                # Incluir si: todos los niveles coinciden exactamente
+                if (mov_area == area_seleccionada and 
+                    mov_distrito == distrito_seleccionado and 
+                    mov_tipo_servicio == tipo_servicio_seleccionado and 
+                    mov_servicio == servicio_seleccionado):
                     incluir_movimiento = True
             
             if incluir_movimiento:

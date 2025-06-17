@@ -876,18 +876,22 @@ def obtener_movimientos_kardex(fecha_inicio, fecha_fin, distrito_nombre=None, ti
                 COALESCE(p.nombre, '') AS nombre_presentacion,
                 0 AS existencia,
                 0 AS reajuste,
-                a.nombre AS area_nombre,
-                d2.nombre AS distrito_nombre,
-                ts.descripcion AS tipo_servicio_desc,
-                s.nombre AS servicio_nombre
+                -- USAR LOS DATOS DIRECTOS DEL MOVIMIENTO, NO JOINS COMPLEJOS
+                a_directa.nombre AS area_nombre,
+                d_directa.nombre AS distrito_nombre,
+                ts_directa.descripcion AS tipo_servicio_desc,
+                s_directa.nombre AS servicio_nombre
             FROM movimiento m
             JOIN tipo_movimiento tm ON m.tipo_movimiento_id = tm.id
-            LEFT JOIN servicio s ON m.servicio_id = s.id
-            LEFT JOIN tipo_servicio ts ON s.id_tipo_servicio = ts.id
-            LEFT JOIN distrito d2 ON ts.id_distrito = d2.id
-            LEFT JOIN area a ON d2.id_area = a.id
+            -- JOINs directos con los IDs guardados en el movimiento
+            LEFT JOIN area a_directa ON m.area_id = a_directa.id
+            LEFT JOIN distrito d_directa ON m.distrito_id = d_directa.id
+            LEFT JOIN servicio s_directa ON m.servicio_id = s_directa.id
+            LEFT JOIN tipo_servicio ts_directa ON s_directa.id_tipo_servicio = ts_directa.id
+            -- JOINs para salida nivel inferior
             LEFT JOIN distrito d_salida ON m.salida_distrito_id = d_salida.id
             LEFT JOIN servicio s_salida ON m.salida_servicio_id = s_salida.id
+            -- JOINs para insumo y presentación
             LEFT JOIN insumo i ON m.insumo_id = i.id
             LEFT JOIN tipo_insumo ti ON i.id_tipo_insumo = ti.id
             LEFT JOIN insumo_presentacion ip ON i.id = ip.insumo_id
@@ -897,26 +901,9 @@ def obtener_movimientos_kardex(fecha_inicio, fecha_fin, distrito_nombre=None, ti
 
         params = [fecha_inicio, fecha_fin]
         
-        # Filtrar por área
-        if area_nombre and area_nombre.strip():
-            query += " AND a.nombre = ?"
-            params.append(area_nombre)
-            
-        # Filtrar por distrito
-        if distrito_nombre and distrito_nombre.strip():
-            query += " AND d2.nombre = ?"
-            params.append(distrito_nombre)
-            
-        # Filtrar por tipo de servicio
-        if tipo_servicio_desc and tipo_servicio_desc.strip():
-            query += " AND ts.descripcion = ?"
-            params.append(tipo_servicio_desc)
-            
-        # Filtrar por servicio
-        if servicio_nombre and servicio_nombre.strip():
-            query += " AND s.nombre = ?"
-            params.append(servicio_nombre)
-            
+        # SOLO filtrar por tipo de insumo, insumo y presentación (no por ubicación)
+        # El filtrado por ubicación se hará después en filtrar_movimientos_por_nivel
+        
         # Filtrar por tipo de insumo
         if tipo_insumo_desc and tipo_insumo_desc.strip():
             query += " AND ti.descripcion = ?"

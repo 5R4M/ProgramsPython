@@ -20,6 +20,7 @@ from src.gui.gestion_movimientos import GestionMovimientos
 from src.gui.reporte_kardex import ReporteKardex
 from src.gui.reporte_demanda_real import ReporteDemandaReal
 from src.gui.reporte_bres import ReporteBres
+from src.gui.importar_exportar_manager import ImportarExportarManager, crear_gestor_importar_exportar
 
 class MainWindow:
     def __init__(self, usuario):
@@ -343,6 +344,17 @@ class MainWindow:
         self.clear_content_frame()
         self.reset_window_size()
         self.pantalla_actual = ReporteBres(self.main_content_frame, self)
+        
+    def load_importar_exportar(self):
+        """Carga la ventana de gestión de importación/exportación"""
+        if not self.verify_database_connection():
+            messagebox.showerror("Error", "No se puede conectar a la base de datos")
+            return
+        
+        try:
+            crear_gestor_importar_exportar(DB_PATH, self.root)
+        except Exception as e:
+            messagebox.showerror("Error", f"Error al abrir gestor de datos: {str(e)}")
 
     def create_menu(self):
         # Frame para el menú lateral
@@ -410,6 +422,7 @@ class MainWindow:
             self.create_menu_button("Gestión de Insumos", self.load_gestion_insumos)
             self.create_menu_button("Gestión de Servicios", self.load_gestion_servicios)
             self.create_menu_button("Gestión de Movimientos", self.load_gestion_movimientos)
+            self.create_menu_button("Import/Export Datos", self.load_importar_exportar)
         if rol in ("usuario", "admin", "super_admin"):
             self.create_menu_button("Ingreso de Insumos", self.load_ingreso_insumos)
             self.create_menu_button("Reporte Kardex", self.load_reporte_kardex)

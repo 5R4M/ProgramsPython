@@ -336,13 +336,13 @@ class ReporteBres:
             query = """
             SELECT SUM(m.cantidad) as total_demanda
             FROM movimiento m
-            INNER JOIN insumo i ON m.insumo_id = i.id
             INNER JOIN tipo_movimiento tm ON m.tipo_movimiento_id = tm.id
-            LEFT JOIN servicio s ON m.servicio_id = s.id
-            LEFT JOIN tipo_servicio ts ON s.id_tipo_servicio = ts.id
-            LEFT JOIN distrito d ON ts.id_distrito = d.id
-            LEFT JOIN area a ON d.id_area = a.id
-            WHERE i.id = ?
+            -- JOINs directos con los IDs guardados en el movimiento
+            LEFT JOIN area a_directa ON m.area_id = a_directa.id
+            LEFT JOIN distrito d_directa ON m.distrito_id = d_directa.id
+            LEFT JOIN servicio s_directa ON m.servicio_id = s_directa.id
+            LEFT JOIN tipo_servicio ts_directa ON s_directa.id_tipo_servicio = ts_directa.id
+            WHERE m.insumo_id = ?
             AND m.fecha_registro BETWEEN ? AND ?
             AND tm.descripcion IN ('ENTREGADO', 'NO ENTREGADO')
             """
@@ -352,22 +352,22 @@ class ReporteBres:
             # **APLICAR FILTRO DE NIVEL SELECCIONADO CON LÓGICA FLEXIBLE**
             if servicio_seleccionado:
                 # Nivel SERVICIO: filtrar por área, distrito y servicio
-                query += " AND a.nombre = ? AND d.nombre = ? AND s.nombre = ?"
+                query += " AND a_directa.nombre = ? AND d_directa.nombre = ? AND s_directa.nombre = ?"
                 params.extend([area_seleccionada, distrito_seleccionado, servicio_seleccionado])
                 
             elif tipo_servicio_seleccionado:
                 # Nivel TIPO SERVICIO: filtrar por área, distrito y tipo servicio (sin servicio específico)
-                query += " AND a.nombre = ? AND d.nombre = ? AND ts.descripcion = ? AND s.nombre IS NULL"
+                query += " AND a_directa.nombre = ? AND d_directa.nombre = ? AND ts_directa.descripcion = ? AND s_directa.nombre IS NULL"
                 params.extend([area_seleccionada, distrito_seleccionado, tipo_servicio_seleccionado])
                 
             elif distrito_seleccionado:
                 # Nivel DISTRITO: filtrar por área y distrito (sin tipo servicio ni servicio)
-                query += " AND a.nombre = ? AND d.nombre = ? AND ts.descripcion IS NULL AND s.nombre IS NULL"
+                query += " AND a_directa.nombre = ? AND d_directa.nombre = ? AND ts_directa.descripcion IS NULL AND s_directa.nombre IS NULL"
                 params.extend([area_seleccionada, distrito_seleccionado])
                 
             elif area_seleccionada:
                 # Nivel ÁREA: filtrar solo por área (sin distrito, tipo servicio ni servicio)
-                query += " AND a.nombre = ? AND d.nombre IS NULL AND ts.descripcion IS NULL AND s.nombre IS NULL"
+                query += " AND a_directa.nombre = ? AND d_directa.nombre IS NULL AND ts_directa.descripcion IS NULL AND s_directa.nombre IS NULL"
                 params.append(area_seleccionada)
             
             cursor.execute(query, params)
@@ -1278,6 +1278,67 @@ class ReporteBres:
                     self.main_window.show_main_menu()
                 except:
                     pass
+    
+    def filtrar_movimientos_por_nivel(self, movimientos):
+        """
+        Filtra los movimientos según el nivel jerárquico seleccionado
+        """
+        if not movimientos:
+            return []
+
+        # Obtener valores seleccionados
+        area_seleccionada = self.combo_area.get().strip()
+        distrito_seleccionado = self.combo_distrito.get().strip()
+        tipo_servicio_seleccionado = self.combo_tipo_servicio.get().strip()
+        servicio_seleccionado = self.combo_servicio.get().strip()
+
+        def es_null_o_vacio(valor):
+            return valor is None or valor == '' or valor == 'None'
+
+        movimientos_filtrados = []
+        
+        for mov in movimientos:
+            area_mov = mov.get('area_nombre')
+            distrito_mov = mov.get('distrito_nombre')
+            tipo_servicio_mov = mov.get('tipo_servicio_desc')
+            servicio_mov = mov.get('servicio_nombre')
+            
+            incluir = False
+            
+            # Determinar el nivel de filtrado según las selecciones
+            if servicio_seleccionado:
+                # Filtro hasta servicio - debe coincidir exactamente
+                if (area_mov == area_seleccionada and 
+                    distrito_mov == distrito_seleccionado and
+                    tipo_servicio_mov == tipo_servicio_seleccionado and
+                    servicio_mov == servicio_seleccionado):
+                    incluir = True
+            elif tipo_servicio_seleccionado:
+                # Filtro hasta tipo de servicio
+                if (area_mov == area_seleccionada and 
+                    distrito_mov == distrito_seleccionado and
+                    tipo_servicio_mov == tipo_servicio_seleccionado and
+                    es_null_o_vacio(servicio_mov)):
+                    incluir = True
+            elif distrito_seleccionado:
+                # Filtro hasta distrito
+                if (area_mov == area_seleccionada and 
+                    distrito_mov == distrito_seleccionado and
+                    es_null_o_vacio(tipo_servicio_mov) and
+                    es_null_o_vacio(servicio_mov)):
+                    incluir = True
+            elif area_seleccionada:
+                # Filtro solo por área
+                if (area_mov == area_seleccionada and 
+                    es_null_o_vacio(distrito_mov) and
+                    es_null_o_vacio(tipo_servicio_mov) and
+                    es_null_o_vacio(servicio_mov)):
+                    incluir = True
+            
+            if incluir:
+                movimientos_filtrados.append(mov)
+        
+        return movimientos_filtrados
     
     def destroy(self):
         if hasattr(self, 'frame_principal'):
