@@ -14,6 +14,20 @@ class GestionUsuarios:
     def setup_ui(self):
         for widget in self.parent.winfo_children():
             widget.destroy()
+            
+        # Agregar título principal
+        title_frame = ttk.Frame(self.parent)
+        title_frame.pack(fill='x', padx=10, pady=(10, 5))
+
+        ttk.Label(title_frame, text="Gestión de Usuarios del Sistema",
+                font=('Segoe UI', 16, 'bold')).pack(anchor='w')
+
+        ttk.Label(title_frame, text="Administre los usuarios y sus permisos de acceso",
+                font=('Segoe UI', 10)).pack(anchor='w', pady=(2, 0))
+
+        # Separador
+        ttk.Separator(self.parent, orient='horizontal').pack(fill='x', padx=10, pady=5)
+            
         frame = ttk.LabelFrame(self.parent, text="Gestión de Usuarios")
         frame.pack(fill="both", expand=True, padx=10, pady=10)
 

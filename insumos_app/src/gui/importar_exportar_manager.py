@@ -10,8 +10,10 @@ from tkinter import ttk
 class ImportarExportarManager:
     """Clase para manejar importación y exportación de datos de la base de datos"""
     
-    def __init__(self, db_path):
-        self.db_path = db_path
+    def __init__(self, parent_frame, main_window):
+        self.parent_frame = parent_frame
+        self.main_window = main_window
+        self.db_path = main_window.db_path if hasattr(main_window, 'db_path') else 'database.db'
         
         # Definir las tablas y su orden de dependencias
         self.tablas_orden = [
@@ -46,7 +48,175 @@ class ImportarExportarManager:
             'usuarios': ['id', 'username', 'password', 'nombre_completo', 'rol', 
                         'activo', 'fecha_creacion']
         }
+        
+        self.crear_interfaz()
 
+    def crear_interfaz(self):
+        """Crea la interfaz integrada en el panel principal"""
+        # Frame principal que ocupa todo el espacio disponible
+        main_frame = ttk.Frame(self.parent_frame)
+        main_frame.pack(fill='both', expand=True, padx=10, pady=10)  # Reducir padding
+        
+        # Título principal - más compacto
+        title_frame = ttk.Frame(main_frame)
+        title_frame.pack(fill='x', pady=(0, 10))  # Reducir padding vertical
+        
+        ttk.Label(title_frame, text="Gestión de Importación y Exportación de Datos", 
+                font=('Segoe UI', 16, 'bold')).pack()
+        
+        ttk.Label(title_frame, text="Administre los respaldos y transferencias de datos del sistema", 
+                font=('Segoe UI', 10)).pack(pady=(2,0))  # Reducir padding
+        
+        # Crear notebook para pestañas - que ocupe todo el espacio restante
+        self.notebook = ttk.Notebook(main_frame)
+        self.notebook.pack(fill='both', expand=True, pady=5)  # Reducir padding
+        
+        # Configurar estilos
+        style = ttk.Style()
+        style.configure('Title.TLabel', font=('Segoe UI', 14, 'bold'))
+        style.configure('Subtitle.TLabel', font=('Segoe UI', 12, 'bold'))
+        style.configure('Info.TLabel', font=('Segoe UI', 10))
+        style.configure('Action.TButton', font=('Segoe UI', 10), padding=(15, 8))
+        
+        self.crear_pestana_backup()
+        self.crear_pestana_tablas()
+
+    def crear_pestana_backup(self):
+        """Crea la pestaña de backup completo"""
+        frame_backup = ttk.Frame(self.notebook)
+        self.notebook.add(frame_backup, text="🗄️ Backup Completo")
+        
+        # Crear canvas y scrollbar para scroll
+        canvas = tk.Canvas(frame_backup)
+        scrollbar = ttk.Scrollbar(frame_backup, orient="vertical", command=canvas.yview)
+        scrollable_frame = ttk.Frame(canvas)
+        
+        scrollable_frame.bind(
+            "<Configure>",
+            lambda e: canvas.configure(scrollregion=canvas.bbox("all"))
+        )
+        
+        canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
+        canvas.configure(yscrollcommand=scrollbar.set)
+        
+        # Sección de exportación - padding reducido
+        export_frame = ttk.LabelFrame(scrollable_frame, text="📤 Exportación de Backup", padding=15)
+        export_frame.pack(fill='x', padx=10, pady=5)  # Reducir padding
+        
+        ttk.Label(export_frame, text="Crear un archivo de respaldo con todos los datos del sistema", 
+                font=('Segoe UI', 10)).pack(anchor='w', pady=(0,10))
+        
+        ttk.Button(export_frame, text="🗄️ Exportar Backup Completo", 
+                style='Action.TButton',
+                command=self.exportar_datos_completos).pack(anchor='w')
+        
+        # Sección de importación - padding reducido
+        import_frame = ttk.LabelFrame(scrollable_frame, text="📥 Importación de Backup", padding=15)
+        import_frame.pack(fill='x', padx=10, pady=5)  # Reducir padding
+        
+        ttk.Label(import_frame, text="Restaurar datos desde un archivo de respaldo", 
+                font=('Segoe UI', 10)).pack(anchor='w', pady=(0,10))
+        
+        button_frame = ttk.Frame(import_frame)
+        button_frame.pack(fill='x')
+        
+        ttk.Button(button_frame, text="📥 Importar (Mantener Datos)", 
+                style='Action.TButton',
+                command=lambda: self.importar_datos_completos(limpiar_antes=False)).pack(side='left', padx=(0,10))
+        
+        ttk.Button(button_frame, text="⚠️ Importar (Reemplazar Todo)", 
+                style='Action.TButton',
+                command=lambda: self.importar_datos_completos(limpiar_antes=True)).pack(side='left')
+        
+        # Información de seguridad - que ocupe el espacio restante
+        warning_frame = ttk.LabelFrame(scrollable_frame, text="⚠️ Información Importante", padding=15)
+        warning_frame.pack(fill='both', expand=True, padx=10, pady=5)  # expand=True para ocupar espacio restante
+        
+        warning_text = """• Mantener Datos: Agrega/actualiza registros sin eliminar datos existentes
+    • Reemplazar Todo: ELIMINA todos los datos actuales antes de importar
+    • Siempre haga un backup antes de importar datos importantes
+    • Los archivos de backup incluyen información sensible (usuarios y contraseñas)
+    • El proceso puede tomar varios minutos dependiendo del tamaño de los datos"""
+        
+        ttk.Label(warning_frame, text=warning_text, 
+                font=('Segoe UI', 9), justify='left').pack(anchor='nw', fill='both', expand=True)
+        
+        # Configurar scroll
+        canvas.pack(side="left", fill="both", expand=True)
+        scrollbar.pack(side="right", fill="y")
+
+    def crear_pestana_tablas(self):
+        """Crea la pestaña de tablas individuales"""
+        frame_tablas = ttk.Frame(self.notebook)
+        self.notebook.add(frame_tablas, text="📊 Tablas Individuales")
+        
+        # Crear canvas y scrollbar para scroll
+        canvas = tk.Canvas(frame_tablas)
+        scrollbar = ttk.Scrollbar(frame_tablas, orient="vertical", command=canvas.yview)
+        scrollable_frame = ttk.Frame(canvas)
+        
+        scrollable_frame.bind(
+            "<Configure>",
+            lambda e: canvas.configure(scrollregion=canvas.bbox("all"))
+        )
+        
+        canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
+        canvas.configure(yscrollcommand=scrollbar.set)
+        
+        # Selección de tabla - padding reducido
+        selection_frame = ttk.LabelFrame(scrollable_frame, text="🎯 Selección de Tabla", padding=15)
+        selection_frame.pack(fill='x', padx=10, pady=5)
+        
+        ttk.Label(selection_frame, text="Seleccionar tabla para exportar/importar:", 
+                font=('Segoe UI', 10)).pack(anchor='w', pady=(0,8))
+        
+        self.combo_tabla = ttk.Combobox(selection_frame, values=self.tablas_orden, 
+                                    state="readonly", font=('Segoe UI', 10), width=30)
+        self.combo_tabla.pack(fill='x', pady=(0,10))
+        self.combo_tabla.set(self.tablas_orden[0])
+        
+        # Botones de acción
+        action_frame = ttk.Frame(selection_frame)
+        action_frame.pack(fill='x')
+        
+        ttk.Button(action_frame, text="📤 Exportar a Excel", 
+                style='Action.TButton',
+                command=self.exportar_tabla_seleccionada).pack(side='left', padx=(0,10))
+        
+        ttk.Button(action_frame, text="📥 Importar desde Excel/CSV", 
+                style='Action.TButton',
+                command=self.importar_tabla_seleccionada).pack(side='left')
+        
+        # Información de tablas - que ocupe todo el espacio restante
+        info_tablas_frame = ttk.LabelFrame(scrollable_frame, text="ℹ️ Información de Tablas", padding=15)
+        info_tablas_frame.pack(fill='both', expand=True, padx=10, pady=5)  # expand=True para ocupar espacio restante
+        
+        info_tablas_text = """Descripción de las principales tablas del sistema:
+
+    • area: Áreas geográficas del sistema
+    • distrito: Distritos organizados por área
+    • tipo_servicio: Tipos de servicios médicos disponibles
+    • servicio: Servicios específicos por tipo
+    • tipo_insumo: Categorías de insumos médicos
+    • presentacion: Formas de presentación de insumos (tabletas, ampollas, etc.)
+    • insumo: Insumos médicos registrados en el sistema
+    • movimiento: Registro completo de todos los movimientos de insumos
+    • usuarios: Usuarios del sistema (requiere permisos especiales)
+
+    Formatos soportados para importación/exportación:
+    • Excel (.xlsx) - Recomendado para tablas individuales
+    • CSV (.csv) - Compatible con la mayoría de sistemas
+    • JSON (.json) - Para backups completos del sistema
+
+    La exportación de tablas incluye información relacionada cuando es posible."""
+        
+        ttk.Label(info_tablas_frame, text=info_tablas_text, 
+                font=('Segoe UI', 9), justify='left').pack(anchor='nw', fill='both', expand=True)
+        
+        # Configurar scroll
+        canvas.pack(side="left", fill="both", expand=True)
+        scrollbar.pack(side="right", fill="y")
+    
     def exportar_datos_completos(self, ruta_archivo=None):
         """Exporta todos los datos de la base de datos a un archivo JSON"""
         try:
@@ -417,150 +587,6 @@ class ImportarExportarManager:
         finally:
             if 'conn' in locals():
                 conn.close()
-
-    def crear_ventana_gestion(self, parent=None):
-        """Crea una ventana para gestionar importación/exportación con diseño profesional"""
-        ventana = tk.Toplevel(parent) if parent else tk.Tk()
-        ventana.title("Gestión de Importación y Exportación de Datos")
-        ventana.geometry("800x700")
-        ventana.resizable(True, True)
-        
-        # Configurar icono y estilo
-        ventana.configure(bg='#f0f0f0')
-        
-        # Centrar ventana
-        ventana.update_idletasks()
-        x = (ventana.winfo_screenwidth() - 800) // 2
-        y = (ventana.winfo_screenheight() - 700) // 2
-        ventana.geometry(f"800x700+{x}+{y}")
-        
-        # Crear notebook para pestañas
-        notebook = ttk.Notebook(ventana)
-        notebook.pack(fill='both', expand=True, padx=20, pady=20)
-        
-        # Configurar estilos
-        style = ttk.Style()
-        style.configure('Title.TLabel', font=('Segoe UI', 16, 'bold'))
-        style.configure('Subtitle.TLabel', font=('Segoe UI', 12, 'bold'))
-        style.configure('Info.TLabel', font=('Segoe UI', 10))
-        style.configure('Action.TButton', font=('Segoe UI', 10), padding=(20, 10))
-        
-        # PESTAÑA 1: BACKUP COMPLETO
-        frame_backup = ttk.Frame(notebook)
-        notebook.add(frame_backup, text="🗄️ Backup Completo")
-        
-        # Título principal
-        title_frame = ttk.Frame(frame_backup)
-        title_frame.pack(fill='x', padx=20, pady=20)
-        
-        ttk.Label(title_frame, text="Gestión de Backup Completo", 
-                 style='Title.TLabel').pack()
-        
-        ttk.Label(title_frame, text="Exportar e importar todos los datos del sistema", 
-                 style='Info.TLabel').pack(pady=(5,0))
-        
-        # Sección de exportación
-        export_frame = ttk.LabelFrame(frame_backup, text="📤 Exportación", padding=20)
-        export_frame.pack(fill='x', padx=20, pady=10)
-        
-        ttk.Label(export_frame, text="Crear un archivo de respaldo con todos los datos del sistema", 
-                 style='Info.TLabel').pack(anchor='w', pady=(0,10))
-        
-        ttk.Button(export_frame, text="🗄️ Exportar Backup Completo", 
-                  style='Action.TButton',
-                  command=self.exportar_datos_completos).pack(anchor='w')
-        
-        # Sección de importación
-        import_frame = ttk.LabelFrame(frame_backup, text="📥 Importación", padding=20)
-        import_frame.pack(fill='x', padx=20, pady=10)
-        
-        ttk.Label(import_frame, text="Restaurar datos desde un archivo de respaldo", 
-                 style='Info.TLabel').pack(anchor='w', pady=(0,10))
-        
-        button_frame = ttk.Frame(import_frame)
-        button_frame.pack(fill='x')
-        
-        ttk.Button(button_frame, text="📥 Importar (Mantener Datos)", 
-                  style='Action.TButton',
-                  command=lambda: self.importar_datos_completos(limpiar_antes=False)).pack(side='left', padx=(0,10))
-        
-        ttk.Button(button_frame, text="⚠️ Importar (Reemplazar Todo)", 
-                  style='Action.TButton',
-                  command=lambda: self.importar_datos_completos(limpiar_antes=True)).pack(side='left')
-        
-        # Información de seguridad
-        warning_frame = ttk.LabelFrame(frame_backup, text="⚠️ Información Importante", padding=20)
-        warning_frame.pack(fill='x', padx=20, pady=10)
-        
-        warning_text = """• Mantener Datos: Agrega/actualiza registros sin eliminar datos existentes
-• Reemplazar Todo: ELIMINA todos los datos actuales antes de importar
-• Siempre haga un backup antes de importar datos importantes
-• Los archivos de backup incluyen información sensible (usuarios y contraseñas)"""
-        
-        ttk.Label(warning_frame, text=warning_text, 
-                 style='Info.TLabel', justify='left').pack(anchor='w')
-        
-        # PESTAÑA 2: TABLAS INDIVIDUALES
-        frame_tablas = ttk.Frame(notebook)
-        notebook.add(frame_tablas, text="📊 Tablas Individuales")
-        
-        # Título
-        title_frame2 = ttk.Frame(frame_tablas)
-        title_frame2.pack(fill='x', padx=20, pady=20)
-        
-        ttk.Label(title_frame2, text="Gestión de Tablas Individuales", 
-                 style='Title.TLabel').pack()
-        
-        ttk.Label(title_frame2, text="Exportar e importar datos de tablas específicas", 
-                 style='Info.TLabel').pack(pady=(5,0))
-        
-        # Selección de tabla
-        selection_frame = ttk.LabelFrame(frame_tablas, text="🎯 Selección de Tabla", padding=20)
-        selection_frame.pack(fill='x', padx=20, pady=10)
-        
-        ttk.Label(selection_frame, text="Seleccionar tabla:", 
-                 style='Info.TLabel').pack(anchor='w', pady=(0,5))
-        
-        self.combo_tabla = ttk.Combobox(selection_frame, values=self.tablas_orden, 
-                                       state="readonly", font=('Segoe UI', 10))
-        self.combo_tabla.pack(fill='x', pady=(0,10))
-        self.combo_tabla.set(self.tablas_orden[0])
-        
-        # Botones de acción
-        action_frame = ttk.Frame(selection_frame)
-        action_frame.pack(fill='x')
-        
-        ttk.Button(action_frame, text="📤 Exportar a Excel", 
-                  style='Action.TButton',
-                  command=self.exportar_tabla_seleccionada).pack(side='left', padx=(0,10))
-        
-        ttk.Button(action_frame, text="📥 Importar desde Excel/CSV", 
-                  style='Action.TButton',
-                  command=self.importar_tabla_seleccionada).pack(side='left')
-        
-        # Información de tablas
-        info_tablas_frame = ttk.LabelFrame(frame_tablas, text="ℹ️ Información de Tablas", padding=20)
-        info_tablas_frame.pack(fill='both', expand=True, padx=20, pady=10)
-        
-        info_tablas_text = """Descripción de las principales tablas:
-
-• area: Áreas geográficas del sistema
-• distrito: Distritos organizados por área
-• tipo_servicio: Tipos de servicios médicos
-• servicio: Servicios específicos por tipo
-• tipo_insumo: Categorías de insumos médicos
-• presentacion: Formas de presentación de insumos
-• insumo: Insumos médicos registrados
-• movimiento: Registro de todos los movimientos de insumos
-• usuarios: Usuarios del sistema (requiere permisos especiales)
-
-Formatos soportados: Excel (.xlsx) y CSV (.csv)
-La exportación incluye información relacionada cuando es posible."""
-        
-        ttk.Label(info_tablas_frame, text=info_tablas_text, 
-                 style='Info.TLabel', justify='left').pack(anchor='nw', fill='both', expand=True)
-        
-        return ventana
     
     def exportar_tabla_seleccionada(self):
         """Exporta la tabla seleccionada en el combobox"""
@@ -579,19 +605,3 @@ def crear_gestor_importar_exportar(db_path, parent=None):
     """Función helper para crear el gestor desde el sistema principal"""
     gestor = ImportarExportarManager(db_path)
     return gestor.crear_ventana_gestion(parent)
-
-# Ejemplo de uso
-if __name__ == "__main__":
-    # Para pruebas independientes
-    try:
-        from src.database import DB_PATH
-    except:
-        DB_PATH = "test.db"
-    
-    root = tk.Tk()
-    root.withdraw()  # Ocultar ventana principal
-    
-    gestor = ImportarExportarManager(DB_PATH)
-    ventana = gestor.crear_ventana_gestion()
-    
-    root.mainloop()

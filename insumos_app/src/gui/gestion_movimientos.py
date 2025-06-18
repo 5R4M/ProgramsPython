@@ -30,6 +30,20 @@ class GestionMovimientos:
         ventana.geometry(f'{width}x{height}+{x}+{y}')
 
     def setup_ui(self):
+        
+        # Agregar título principal
+        title_frame = ttk.Frame(self.parent)
+        title_frame.pack(fill='x', padx=10, pady=(10, 5))
+
+        ttk.Label(title_frame, text="Gestión de Movimientos del Sistema",
+                font=('Segoe UI', 16, 'bold')).pack(anchor='w')
+
+        ttk.Label(title_frame, text="Administre los movimientos",
+                font=('Segoe UI', 10)).pack(anchor='w', pady=(2, 0))
+
+        # Separador
+        ttk.Separator(self.parent, orient='horizontal').pack(fill='x', padx=10, pady=5)
+        
         self.notebook = ttk.Notebook(self.parent)
         self.notebook.pack(fill="both", expand=True, padx=10, pady=5)
 
@@ -43,11 +57,12 @@ class GestionMovimientos:
         self.actualizar_tipos()
 
     def setup_tipos_tab(self):
+                
         frame_excel = ttk.LabelFrame(self.tab_tipos, text="Carga desde Excel")
         frame_excel.pack(fill="x", padx=5, pady=5)
         ttk.Button(frame_excel, text="Cargar Excel", command=self.cargar_excel_tipos).pack(side="left", padx=5, pady=5)
         ttk.Button(frame_excel, text="Exportar a Excel", command=self.exportar_excel_tipos).pack(side="left", padx=5, pady=5)
-
+        
         frame_lista = ttk.LabelFrame(self.tab_tipos, text="Tipos de Movimiento")
         frame_lista.pack(fill="both", expand=True, padx=5, pady=5)
 

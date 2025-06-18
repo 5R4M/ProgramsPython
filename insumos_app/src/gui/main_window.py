@@ -346,15 +346,25 @@ class MainWindow:
         self.pantalla_actual = ReporteBres(self.main_content_frame, self)
         
     def load_importar_exportar(self):
-        """Carga la ventana de gestión de importación/exportación"""
+        """Carga la interfaz de gestión de importación/exportación integrada"""
         if not self.verify_database_connection():
             messagebox.showerror("Error", "No se puede conectar a la base de datos")
             return
         
+        self.clear_content_frame()
+        self.reset_window_size()
+        
+        # Obtener la ruta de la base de datos desde el módulo database
         try:
-            crear_gestor_importar_exportar(DB_PATH, self.root)
-        except Exception as e:
-            messagebox.showerror("Error", f"Error al abrir gestor de datos: {str(e)}")
+            from src.database import DB_PATH
+            db_path = DB_PATH
+        except:
+            db_path = 'database.db'  # Fallback
+        
+        # Crear la instancia del gestor integrado
+        self.pantalla_actual = ImportarExportarManager(self.main_content_frame, self)
+        # Pasar la ruta de la base de datos
+        self.pantalla_actual.db_path = db_path
 
     def create_menu(self):
         # Frame para el menú lateral

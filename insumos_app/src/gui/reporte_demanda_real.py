@@ -68,6 +68,20 @@ class ReporteDemandaReal:
         self.setup_ui()
 
     def setup_ui(self):
+        
+        # Agregar título principal
+        title_frame = ttk.Frame(self.parent)
+        title_frame.pack(fill='x', padx=10, pady=(10, 5))
+
+        ttk.Label(title_frame, text="Reporte Demanda Real por Servicio de Salud",
+                font=('Segoe UI', 16, 'bold')).pack(anchor='w')
+
+        ttk.Label(title_frame, text="Consulte demanda de los movimientos de los insumos",
+                font=('Segoe UI', 10)).pack(anchor='w', pady=(2, 0))
+
+        # Separador
+        ttk.Separator(self.parent, orient='horizontal').pack(fill='x', padx=10, pady=5)
+        
         # Frame principal - USAR PACK PARA TODO
         self.frame_principal = ttk.LabelFrame(self.parent, text="Filtros de Reporte Demanda Real")
         self.frame_principal.pack(fill="both", expand=True, padx=10, pady=5)

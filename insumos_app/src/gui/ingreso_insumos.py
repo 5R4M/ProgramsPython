@@ -62,6 +62,20 @@ class IngresoInsumos:
     # 1. Métodos de configuración de UI
     
     def setup_ui(self):
+        
+        # Agregar título principal
+        title_frame = ttk.Frame(self.parent)
+        title_frame.pack(fill='x', padx=10, pady=(10, 5))
+
+        ttk.Label(title_frame, text="Ingreso de Movimientos al Sistema",
+                font=('Segoe UI', 16, 'bold')).pack(anchor='w')
+
+        ttk.Label(title_frame, text="Ingrese los movimientos de los insumos",
+                font=('Segoe UI', 10)).pack(anchor='w', pady=(2, 0))
+
+        # Separador
+        ttk.Separator(self.parent, orient='horizontal').pack(fill='x', padx=10, pady=5)
+        
         # --- Tu código GUI original sin cambios ---
         # Frame Nivel de Bodega (radio buttons)
         self.frame_nivel_bodega = ttk.LabelFrame(self.parent, text="Nivel de Bodega")
@@ -234,7 +248,7 @@ class IngresoInsumos:
             'observaciones', 'tipo_insumo', 'area', 'distrito', 'tipo_servicio'
         )
 
-        self.tree = ttk.Treeview(self.frame_movimientos, columns=columns, show='headings')
+        self.tree = ttk.Treeview(self.frame_movimientos, columns=columns, show='headings', height=5)
         self.tree.pack(fill="both", expand=True, padx=5, pady=5)
 
         encabezados = {
