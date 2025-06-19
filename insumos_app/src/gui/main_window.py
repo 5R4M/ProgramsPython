@@ -44,6 +44,7 @@ class MainWindow:
         style.set_theme("arc")  # Otros temas disponibles: 'equilux', 'breeze', etc.
 
         self.setup_window()
+        self.load_icons()
         self.create_menu()
 
         # Crear el frame principal que contendrá el contenido
@@ -72,6 +73,44 @@ class MainWindow:
         # Manejar el cierre de la ventana principal
         self.root.protocol("WM_DELETE_WINDOW", self.on_closing)
 
+    def load_icons(self):
+        """Carga los iconos para los botones del menú"""
+        self.icons = {}
+        icon_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'utils', 'icons')
+        
+        # Crear directorio de iconos si no existe
+        if not os.path.exists(icon_path):
+            os.makedirs(icon_path)
+        
+        # Mapeo de iconos
+        icon_files = {
+            'usuarios': 'usuario.png',
+            'insumos': 'insumo.png',
+            'servicios': 'servicio.png',
+            'movimientos': 'movimiento.png',
+            'import_export': 'importar-exportar.png',
+            'ingreso': 'ingreso.png',
+            'kardex': 'kardex.png',
+            'demanda': 'demanda-real.png',
+            'correcciones': 'correcion.png',
+            'bres': 'bres.png',
+            'salir': 'salir.png'
+        }
+        
+        # Cargar iconos
+        for key, filename in icon_files.items():
+            try:
+                icon_full_path = os.path.join(icon_path, filename)
+                if os.path.exists(icon_full_path):
+                    image = Image.open(icon_full_path)
+                    image = image.resize((16, 16), Image.Resampling.LANCZOS)
+                    self.icons[key] = ImageTk.PhotoImage(image)
+                else:
+                    self.icons[key] = None
+            except Exception as e:
+                print(f"Error cargando icono {filename}: {e}")
+                self.icons[key] = None
+    
     def setup_window(self):
         """Configura la ventana principal con tamaño estándar"""
         # Configurar tamaño y centrar ventana
@@ -428,35 +467,43 @@ class MainWindow:
         # Botones según rol
         rol = self.usuario['rol']
         if rol in ("admin", "super_admin"):
-            self.create_menu_button("Gestión de Usuarios", self.load_gestion_usuarios)
-            self.create_menu_button("Gestión de Insumos", self.load_gestion_insumos)
-            self.create_menu_button("Gestión de Servicios", self.load_gestion_servicios)
-            self.create_menu_button("Gestión de Movimientos", self.load_gestion_movimientos)
-            self.create_menu_button("Import/Export Datos", self.load_importar_exportar)
+            self.create_menu_button("Gestión de Usuarios", self.load_gestion_usuarios, 'usuarios')
+            self.create_menu_button("Gestión de Insumos", self.load_gestion_insumos, 'insumos')
+            self.create_menu_button("Gestión de Servicios", self.load_gestion_servicios, 'servicios')
+            self.create_menu_button("Gestión de Movimientos", self.load_gestion_movimientos, 'movimientos')
+            self.create_menu_button("Import/Export Datos", self.load_importar_exportar, 'import_export')
         if rol in ("usuario", "admin", "super_admin"):
-            self.create_menu_button("Ingreso de Insumos", self.load_ingreso_insumos)
-            self.create_menu_button("Reporte Kardex", self.load_reporte_kardex)
-            self.create_menu_button("Reporte Demanda Real", self.load_reporte_demanda_real)
-            self.create_menu_button("Correcciones", self.load_correccion_movimientos)
-            self.create_menu_button("Reporte BRES", self.load_reporte_bres)
+            self.create_menu_button("Ingreso de Insumos", self.load_ingreso_insumos, 'ingreso')
+            self.create_menu_button("Reporte Kardex", self.load_reporte_kardex, 'kardex')
+            self.create_menu_button("Reporte Demanda Real", self.load_reporte_demanda_real, 'demanda')
+            self.create_menu_button("Correcciones", self.load_correccion_movimientos, 'correcciones')
+            self.create_menu_button("Reporte BRES", self.load_reporte_bres, 'bres')
 
-        # Botón de salir en la parte inferior
-        ttk.Button(self.menu_frame,
+        # Botón de salir
+        btn_salir = ttk.Button(self.menu_frame,
             text="Salir",
             style='Menu.TButton',
-            command=self.on_closing).pack(pady=10, padx=10, side='bottom')
+            image=self.icons.get('salir'),
+            compound='left',
+            command=self.on_closing)
+        btn_salir.pack(pady=10, padx=10, side='bottom')
 
-    def create_menu_button(self, text, command):
+    def create_menu_button(self, text, command, icon_key=None):
         btn_frame = ttk.Frame(self.menu_frame)
         btn_frame.pack(fill='x', pady=2)
+
+        # Obtener icono si existe
+        icon = self.icons.get(icon_key) if icon_key else None
 
         btn = ttk.Button(btn_frame,
                         text=text,
                         style='Menu.TButton',
-                        command=command)
+                        command=command,
+                        image=icon,
+                        compound='left')  # Icono a la izquierda del texto
         btn.pack(padx=5)
 
-        # Efectos hover usando el estado active
+        # Efectos hover
         def on_enter(e):
             btn.state(['active'])
         def on_leave(e):
