@@ -103,7 +103,7 @@ class MainWindow:
                 icon_full_path = os.path.join(icon_path, filename)
                 if os.path.exists(icon_full_path):
                     image = Image.open(icon_full_path)
-                    image = image.resize((16, 16), Image.Resampling.LANCZOS)
+                    image = image.resize((18, 18), Image.Resampling.LANCZOS)
                     self.icons[key] = ImageTk.PhotoImage(image)
                 else:
                     self.icons[key] = None
@@ -471,7 +471,7 @@ class MainWindow:
             self.create_menu_button("Gestión de Insumos", self.load_gestion_insumos, 'insumos')
             self.create_menu_button("Gestión de Servicios", self.load_gestion_servicios, 'servicios')
             self.create_menu_button("Gestión de Movimientos", self.load_gestion_movimientos, 'movimientos')
-            self.create_menu_button("Import/Export Datos", self.load_importar_exportar, 'import_export')
+            self.create_menu_button("Importar/Exportar Datos", self.load_importar_exportar, 'import_export')
         if rol in ("usuario", "admin", "super_admin"):
             self.create_menu_button("Ingreso de Insumos", self.load_ingreso_insumos, 'ingreso')
             self.create_menu_button("Reporte Kardex", self.load_reporte_kardex, 'kardex')

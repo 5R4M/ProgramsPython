@@ -11,153 +11,285 @@ sys.path.append(project_root)
 
 from src.database.db_manager import verificar_credenciales
 from src.gui.main_window import MainWindow
-
 from src.database.db_manager import verificar_credenciales, crear_tabla_usuarios
 
 class LoginWindow:
     def __init__(self):
-        
         crear_tabla_usuarios()
         
         self.root = tk.Tk()
-        self.root.title("Inicio de Sesión")
-        self.root.geometry("500x600")
-        self.root.configure(bg='#f0f0f0')  # Color de fondo suave
-
-        # Hacer que la ventana no sea redimensionable
+        self.root.title("Sistema de Gestión de Insumos")
+        self.root.geometry("800x450")
+        self.root.configure(bg='#f8f9fa')
         self.root.resizable(False, False)
 
         # Centrar la ventana
         screen_width = self.root.winfo_screenwidth()
         screen_height = self.root.winfo_screenheight()
-        x = (screen_width - 500) // 2
-        y = (screen_height - 600) // 2
-        self.root.geometry(f"500x600+{x}+{y}")
+        x = (screen_width - 800) // 2
+        y = (screen_height - 450) // 2
+        self.root.geometry(f"800x450+{x}+{y}")
 
-        # Aplicar tema
-        style = ThemedStyle(self.root)
-        style.set_theme("arc")
-
-        # Configurar estilos personalizados
-        style.configure('Custom.TFrame', background='#ffffff')
-        style.configure('Title.TLabel',
-                       font=('Helvetica', 16, 'bold'),
-                       background='#ffffff',
-                       foreground='#2c3e50')
-        style.configure('Subtitle.TLabel',
-                       font=('Helvetica', 12),
-                       background='#ffffff',
-                       foreground='#34495e')
-        style.configure('Custom.TButton',
-                       font=('Helvetica', 11),
-                       padding=10)
-
+        # Cargar iconos
+        self.load_icons()
+        
+        # Variable para mostrar/ocultar contraseña
+        self.show_password = False
+        
         self.setup_ui()
 
+    def load_icons(self):
+        """Carga los iconos para la ventana de login"""
+        self.icons = {}
+        icon_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'utils', 'icons')
+        
+        if not os.path.exists(icon_path):
+            os.makedirs(icon_path)
+        
+        icon_files = {
+            'user': 'user.png',
+            'password': 'lock.png',
+            'login': 'log-in.png',
+            'eye': 'eye.png',
+            'eye_off': 'eye-off.png',
+            'medical': 'medical-box.png'
+        }
+        
+        for key, filename in icon_files.items():
+            try:
+                icon_full_path = os.path.join(icon_path, filename)
+                if os.path.exists(icon_full_path):
+                    image = Image.open(icon_full_path)
+                    # Diferentes tamaños - AQUÍ AUMENTAS LOS TAMAÑOS
+                    self.icons[f'{key}_20'] = ImageTk.PhotoImage(image.resize((20, 20), Image.Resampling.LANCZOS))  # Iconos pequeños (ojo)
+                    self.icons[f'{key}_24'] = ImageTk.PhotoImage(image.resize((24, 24), Image.Resampling.LANCZOS))  # Iconos campos de entrada
+                    self.icons[f'{key}_18'] = ImageTk.PhotoImage(image.resize((18, 18), Image.Resampling.LANCZOS))  # Icono botón login
+                    self.icons[f'{key}_120'] = ImageTk.PhotoImage(image.resize((120, 120), Image.Resampling.LANCZOS))  # Icono principal
+                else:
+                    print(f"Icono no encontrado: {filename}")
+            except Exception as e:
+                print(f"Error cargando icono {filename}: {e}")
+
     def setup_ui(self):
-        # Frame principal con fondo blanco y sombra
-        main_frame = ttk.Frame(self.root, style='Custom.TFrame', padding="30")
-        main_frame.place(relx=0.5, rely=0.5, anchor="center", width=400, height=500)
+        # Frame principal que contiene todo
+        main_container = tk.Frame(self.root, bg='#f8f9fa')
+        main_container.pack(fill='both', expand=True)
 
-        # Configurar el grid para el frame principal
-        main_frame.grid_rowconfigure(0, weight=1)
-        main_frame.grid_rowconfigure(1, weight=1)
-        main_frame.grid_rowconfigure(2, weight=1)  # Para "ÁREA NOR ORIENTE"
-        main_frame.grid_rowconfigure(3, weight=2)
-        main_frame.grid_columnconfigure(0, weight=1)
+        # Panel izquierdo (información)
+        left_panel = tk.Frame(main_container, bg='#2c3e50', width=400)
+        left_panel.pack(side='left', fill='y')
+        left_panel.pack_propagate(False)
 
-        # Logo o Imagen
-        try:
-            logo_path = os.path.join(project_root, "assets", "logo.png")
-            logo_image = Image.open(logo_path)
-            logo_image = logo_image.resize((150, 150))
-            logo_photo = ImageTk.PhotoImage(logo_image)
-            logo_label = ttk.Label(main_frame, image=logo_photo, background='#ffffff')
-            logo_label.image = logo_photo
-            logo_label.grid(row=0, column=0, pady=(0, 10))
-        except:
-            title_label = ttk.Label(
-                main_frame,
-                text="BIENVENIDO",
-                style='Title.TLabel'
-            )
-            title_label.grid(row=0, column=0, pady=(0, 10))
+        # Contenido del panel izquierdo
+        left_content = tk.Frame(left_panel, bg='#2c3e50')
+        left_content.place(relx=0.5, rely=0.5, anchor='center')
 
-        # Título del sistema (dividido en dos líneas)
-        system_title_frame = ttk.Frame(main_frame, style='Custom.TFrame')
-        system_title_frame.grid(row=1, column=0, pady=(0, 5))
+        # Icono principal más grande
+        if hasattr(self, 'icons') and 'medical_80' in self.icons:
+            icon_label = tk.Label(left_content, image=self.icons['medical_80'], bg='#2c3e50')
+            icon_label.pack(pady=(0, 15))
 
-        system_title_line1 = ttk.Label(
-            system_title_frame,
-            text="SISTEMA DE GESTIÓN",
-            style='Title.TLabel'
+        # Título principal más pequeño
+        title_label = tk.Label(
+            left_content,
+            text="SISTEMA DE GESTIÓN\nDE INSUMOS",
+            font=('Segoe UI', 18, 'bold'),
+            bg='#2c3e50',
+            fg='#ffffff',
+            justify='center'
         )
-        system_title_line1.pack()
+        title_label.pack(pady=(0, 8))
 
-        system_title_line2 = ttk.Label(
-            system_title_frame,
-            text="DE INSUMOS",
-            style='Title.TLabel'
-        )
-        system_title_line2.pack()
-
-        # "ÁREA NOR ORIENTE" arriba del formulario
-        area_label = ttk.Label(
-            main_frame,
+        # Subtítulo más pequeño
+        subtitle_label = tk.Label(
+            left_content,
             text="ÁREA NOR ORIENTE",
-            font=('Helvetica', 14, 'bold'),
-            background='#ffffff',
-            foreground='#2c3e50'
+            font=('Segoe UI', 12),
+            bg='#2c3e50',
+            fg='#bdc3c7'
         )
-        area_label.grid(row=2, column=0, pady=20)
+        subtitle_label.pack(pady=(0, 20))
 
-        # Frame para el formulario
-        form_frame = ttk.Frame(main_frame, style='Custom.TFrame')
-        form_frame.grid(row=3, column=0, sticky="nsew", pady=10)
+        # Información adicional más pequeña
+        info_text = """• Control de inventario
+                    • Gestión de movimientos
+                    • Reportes detallados
+                    • Sistema seguro"""
 
-        # Usuario
-        username_frame = ttk.Frame(form_frame, style='Custom.TFrame')
-        username_frame.pack(fill="x", pady=5)
-
-        ttk.Label(username_frame,
-                 text="Usuario:",
-                 font=('Helvetica', 10),
-                 background='#ffffff').pack(anchor="w")
-
-        self.username_entry = ttk.Entry(username_frame,
-                                      font=('Helvetica', 11),
-                                      width=30)
-        self.username_entry.pack(fill="x", pady=(5, 0))
-
-        # Contraseña
-        password_frame = ttk.Frame(form_frame, style='Custom.TFrame')
-        password_frame.pack(fill="x", pady=15)
-
-        ttk.Label(password_frame,
-                 text="Contraseña:",
-                 font=('Helvetica', 10),
-                 background='#ffffff').pack(anchor="w")
-
-        self.password_entry = ttk.Entry(password_frame,
-                                      show="•",
-                                      font=('Helvetica', 11),
-                                      width=30)
-        self.password_entry.pack(fill="x", pady=(5, 0))
-
-        # Botón de inicio de sesión
-        login_button = ttk.Button(
-            form_frame,
-            text="INICIAR SESIÓN",
-            style='Custom.TButton',
-            command=self.login
+        info_label = tk.Label(
+            left_content,
+            text=info_text,
+            font=('Segoe UI', 9),
+            bg='#2c3e50',
+            fg='#95a5a6',
+            justify='left'
         )
-        login_button.pack(fill="x", pady=(30, 0))
+        info_label.pack()
+
+        # Panel derecho (formulario)
+        right_panel = tk.Frame(main_container, bg='#ffffff', width=350)
+        right_panel.pack(side='right', fill='both', expand=True)
+        right_panel.pack_propagate(False)
+
+        # Contenedor del formulario
+        form_container = tk.Frame(right_panel, bg='#ffffff')
+        form_container.place(relx=0.5, rely=0.5, anchor='center')
+
+        # Título del formulario
+        form_title = tk.Label(
+            form_container,
+            text="Iniciar Sesión",
+            font=('Segoe UI', 20, 'bold'),
+            bg='#ffffff',
+            fg='#2c3e50'
+        )
+        form_title.pack(pady=(0, 30))
+
+        # Campo Usuario
+        self.create_input_field(form_container, "Usuario", "user", False)
+        
+        # Campo Contraseña
+        self.create_input_field(form_container, "Contraseña", "password", True)
+
+        # Botón de login con icono
+        login_btn_frame = tk.Frame(form_container, bg='#ffffff')
+        login_btn_frame.pack(pady=(25, 15), fill='x')
+
+        # Crear botón con icono
+        if hasattr(self, 'icons') and 'login_20' in self.icons:
+            login_btn = tk.Button(
+                login_btn_frame,
+                text="  INICIAR SESIÓN",
+                font=('Segoe UI', 11, 'bold'),
+                bg='#3498db',
+                fg='white',
+                relief='flat',
+                padx=30,
+                pady=10,
+                cursor='hand2',
+                image=self.icons['login_20'],
+                compound='left',
+                command=self.login
+            )
+        else:
+            login_btn = tk.Button(
+                login_btn_frame,
+                text="INICIAR SESIÓN",
+                font=('Segoe UI', 11, 'bold'),
+                bg='#3498db',
+                fg='white',
+                relief='flat',
+                padx=30,
+                pady=10,
+                cursor='hand2',
+                command=self.login
+            )
+        
+        login_btn.pack(fill='x')
+
+        # Efectos hover para el botón
+        def on_enter(e):
+            login_btn.configure(bg='#2980b9')
+        def on_leave(e):
+            login_btn.configure(bg='#3498db')
+        
+        login_btn.bind('<Enter>', on_enter)
+        login_btn.bind('<Leave>', on_leave)
+
+        # Información de ayuda
+        help_label = tk.Label(
+            form_container,
+            text="¿Problemas para acceder? Contacte al administrador",
+            font=('Segoe UI', 8),
+            bg='#ffffff',
+            fg='#7f8c8d'
+        )
+        help_label.pack(pady=(15, 0))
 
         # Vincular Enter a login
         self.root.bind('<Return>', lambda e: self.login())
 
-        # Dar foco al campo de usuario
-        self.username_entry.focus()
+        # Dar foco al primer campo
+        if hasattr(self, 'username_entry'):
+            self.username_entry.focus()
+
+    def create_input_field(self, parent, label_text, icon_key, is_password):
+        """Crear un campo de entrada con icono y estilo moderno"""
+        # Frame contenedor
+        field_frame = tk.Frame(parent, bg='#ffffff')
+        field_frame.pack(fill='x', pady=(0, 15))
+
+        # Label
+        label = tk.Label(
+            field_frame,
+            text=label_text,
+            font=('Segoe UI', 10, 'bold'),
+            bg='#ffffff',
+            fg='#34495e'
+        )
+        label.pack(anchor='w', pady=(0, 6))
+
+        # Frame para el input con borde
+        input_frame = tk.Frame(field_frame, bg='#ecf0f1', relief='solid', bd=1)
+        input_frame.pack(fill='x')
+
+        # Icono
+        if hasattr(self, 'icons') and f'{icon_key}_24' in self.icons:
+            icon_label = tk.Label(
+                input_frame,
+                image=self.icons[f'{icon_key}_24'],
+                bg='#ecf0f1'
+            )
+            icon_label.pack(side='left', padx=(10, 6), pady=10)
+
+        # Entry
+        if is_password:
+            self.password_entry = tk.Entry(
+                input_frame,
+                font=('Segoe UI', 10),
+                bg='#ecf0f1',
+                fg='#2c3e50',
+                relief='flat',
+                bd=0,
+                show='•'
+            )
+            self.password_entry.pack(side='left', fill='x', expand=True, pady=10)
+            
+            # Botón para mostrar/ocultar contraseña
+            if hasattr(self, 'icons') and 'eye_24' in self.icons:
+                self.toggle_btn = tk.Button(
+                    input_frame,
+                    image=self.icons['eye_24'],
+                    bg='#ecf0f1',
+                    relief='flat',
+                    bd=0,
+                    cursor='hand2',
+                    command=self.toggle_password_visibility
+                )
+                self.toggle_btn.pack(side='right', padx=(6, 10), pady=10)
+        else:
+            self.username_entry = tk.Entry(
+                input_frame,
+                font=('Segoe UI', 10),
+                bg='#ecf0f1',
+                fg='#2c3e50',
+                relief='flat',
+                bd=0
+            )
+            self.username_entry.pack(side='left', fill='x', expand=True, pady=10, padx=(0, 10))
+
+    def toggle_password_visibility(self):
+        """Alterna la visibilidad de la contraseña"""
+        self.show_password = not self.show_password
+        
+        if self.show_password:
+            self.password_entry.configure(show="")
+            if hasattr(self, 'icons') and 'eye_off_24' in self.icons:
+                self.toggle_btn.configure(image=self.icons['eye_off_24'])
+        else:
+            self.password_entry.configure(show="•")
+            if hasattr(self, 'icons') and 'eye_24' in self.icons:
+                self.toggle_btn.configure(image=self.icons['eye_24'])
 
     def login(self):
         username = self.username_entry.get().strip().lower()

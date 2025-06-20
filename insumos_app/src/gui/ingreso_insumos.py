@@ -129,55 +129,74 @@ class IngresoInsumos:
         self.frame_insumos = ttk.LabelFrame(self.parent, text="Insumos")
         self.frame_insumos.pack(fill="x", padx=10, pady=10)
 
-        # Configurar columnas para que se distribuyan bien
-        for col in range(6):
-            self.frame_insumos.columnconfigure(col, weight=1)
+        # Configurar columnas para que se distribuyan bien - AUMENTAR PESO DE ALGUNAS COLUMNAS
+        self.frame_insumos.columnconfigure(0, weight=1)
+        self.frame_insumos.columnconfigure(1, weight=2)  # Más espacio para comboboxes
+        self.frame_insumos.columnconfigure(2, weight=1)
+        self.frame_insumos.columnconfigure(3, weight=1)
+        self.frame_insumos.columnconfigure(4, weight=2)  # Más espacio para fecha
+        self.frame_insumos.columnconfigure(5, weight=1)
 
         # Tipo de Insumo
         ttk.Label(self.frame_insumos, text="Tipo de Insumo:", anchor="w").grid(row=0, column=0, padx=5, pady=5, sticky="w")
         tipos_insumo = [ti['descripcion'] for ti in obtener_tipos_insumo() or []]
         self.tipo_insumo_cb = AutocompleteCombobox(self.frame_insumos, textvariable=self.tipo_insumo_var, width=25, completevalues=tipos_insumo, state="normal")
-        self.tipo_insumo_cb.grid(row=0, column=1, padx=5, pady=5, sticky="w")
+        self.tipo_insumo_cb.grid(row=0, column=1, padx=5, pady=5, sticky="ew")  # Cambiar a "ew"
 
         # Insumo
         ttk.Label(self.frame_insumos, text="Insumo:", anchor="w").grid(row=0, column=2, padx=5, pady=5, sticky="w")
         self.insumo_cb = AutocompleteCombobox(self.frame_insumos, textvariable=self.insumo_var, width=25, completevalues=[], state="normal")
-        self.insumo_cb.grid(row=0, column=3, padx=5, pady=5, sticky="w")
+        self.insumo_cb.grid(row=0, column=3, padx=5, pady=5, sticky="ew")  # Cambiar a "ew"
 
         # Presentación
         ttk.Label(self.frame_insumos, text="Presentación:", anchor="w").grid(row=0, column=4, padx=5, pady=5, sticky="w")
         self.presentacion_cb = AutocompleteCombobox(self.frame_insumos, textvariable=self.presentacion_var, width=25, completevalues=[], state="normal")
-        self.presentacion_cb.grid(row=0, column=5, padx=5, pady=5, sticky="w")
+        self.presentacion_cb.grid(row=0, column=5, padx=5, pady=5, sticky="ew")  # Cambiar a "ew"
 
+        # FILA 2 - Reorganizar para mejor distribución
         # Lote
         ttk.Label(self.frame_insumos, text="Lote:", anchor="w").grid(row=1, column=0, padx=5, pady=5, sticky="w")
-        self.lote_entry = ttk.Entry(self.frame_insumos, textvariable=self.lote_var)
-        self.lote_entry.grid(row=1, column=1, padx=5, pady=5, sticky="ew")
 
-        # Checkbox Sin lote
+        # Frame para lote y checkbox - SOLUCIÓN PRINCIPAL
+        frame_lote = ttk.Frame(self.frame_insumos)
+        frame_lote.grid(row=1, column=1, padx=5, pady=5, sticky="ew")
+        frame_lote.columnconfigure(0, weight=3)  # Entry más grande
+        frame_lote.columnconfigure(1, weight=1)  # Checkbox más pequeño
+
+        self.lote_entry = ttk.Entry(frame_lote, textvariable=self.lote_var)
+        self.lote_entry.grid(row=0, column=0, padx=(0, 5), sticky="ew")
+
+        # Checkbox Sin lote - TEXTO MÁS CORTO
         self.sin_lote_var = tk.BooleanVar()
         self.check_sin_lote = ttk.Checkbutton(
-            self.frame_insumos,
-            text="Sin lote",
+            frame_lote,
+            text="Sin\nlote",  # Texto en una sola línea
             variable=self.sin_lote_var,
             command=lambda: self.lote_entry.config(state='disabled' if self.sin_lote_var.get() else 'normal')
         )
-        self.check_sin_lote.grid(row=1, column=2, padx=5, pady=5, sticky="w")
+        self.check_sin_lote.grid(row=0, column=1, sticky="w")
 
         # Fecha de Vencimiento
-        ttk.Label(self.frame_insumos, text="Fecha de Vencimiento:", anchor="w").grid(row=1, column=3, padx=5, pady=5, sticky="w")
-        self.fecha_venc = DateEntry(self.frame_insumos, width=25, background='darkblue', foreground='white', borderwidth=2, date_pattern='dd/mm/yyyy')
-        self.fecha_venc.grid(row=1, column=4, padx=5, pady=5, sticky="w")
+        ttk.Label(self.frame_insumos, text="Fecha Vencimiento:", anchor="w").grid(row=1, column=2, padx=5, pady=5, sticky="w")  # Texto más corto
 
-        # Checkbox Sin fecha de vencimiento
+        # Frame para fecha y checkbox
+        frame_fecha = ttk.Frame(self.frame_insumos)
+        frame_fecha.grid(row=1, column=3, columnspan=2, padx=5, pady=5, sticky="ew")  # Usar 2 columnas
+        frame_fecha.columnconfigure(0, weight=2)  # DateEntry más grande
+        frame_fecha.columnconfigure(1, weight=1)  # Checkbox
+
+        self.fecha_venc = DateEntry(frame_fecha, width=15, background='darkblue', foreground='white', borderwidth=2, date_pattern='dd/mm/yyyy')
+        self.fecha_venc.grid(row=0, column=0, padx=(0, 5), sticky="ew")
+
+        # Checkbox Sin fecha de vencimiento - TEXTO MÁS CORTO
         self.sin_fecha_venc = tk.BooleanVar()
         self.check_sin_fecha = ttk.Checkbutton(
-            self.frame_insumos,
-            text="Sin fecha de vencimiento",
+            frame_fecha,
+            text="Sin fecha\nVencimiento",  # Texto más corto
             variable=self.sin_fecha_venc,
             command=self.toggle_fecha_vencimiento
         )
-        self.check_sin_fecha.grid(row=1, column=5, padx=5, pady=5, sticky="w")
+        self.check_sin_fecha.grid(row=0, column=1, sticky="w")
         
         # Frame Registro de Movimiento
         self.frame_registro = ttk.LabelFrame(self.parent, text="Registro de Movimiento")
@@ -605,8 +624,8 @@ class IngresoInsumos:
         editar_ventana.title("Editar Movimiento")
 
         # Tamaño inicial amplio para que se vean bien los widgets con los anchos que tienes
-        ancho_ventana = 1000
-        alto_ventana = 400
+        ancho_ventana = 1100
+        alto_ventana = 450
 
         # Obtener dimensiones de pantalla para centrar
         screen_width = editar_ventana.winfo_screenwidth()
@@ -618,6 +637,19 @@ class IngresoInsumos:
         editar_ventana.geometry(f"{ancho_ventana}x{alto_ventana}+{x}+{y}")
         editar_ventana.resizable(True, True)
 
+        def toggle_lote_edit():
+            if edit_sin_lote_var.get():
+                lote_entry.delete(0, tk.END)
+                lote_entry.config(state='disabled')
+            else:
+                lote_entry.config(state='normal')
+
+        def toggle_fecha_venc_edit():
+            if edit_sin_fecha_venc.get():
+                fecha_venc_edit.configure(state='disabled')
+            else:
+                fecha_venc_edit.configure(state='normal')
+        
         # Variables para edición
         edit_nivel_bodega_var = tk.StringVar(value="area")  # Default, luego se ajusta
         edit_area_var = tk.StringVar()
@@ -631,6 +663,8 @@ class IngresoInsumos:
         edit_salida_distrito_var = tk.StringVar()
         edit_salida_tipo_servicio_var = tk.StringVar()
         edit_salida_servicio_var = tk.StringVar()
+        edit_sin_lote_var = tk.BooleanVar()
+        edit_sin_fecha_venc = tk.BooleanVar()
 
         PADDING = 10
 
@@ -716,30 +750,20 @@ class IngresoInsumos:
         tipo_mov_cb.grid(row=0, column=5, padx=5, pady=5, sticky="ew")
 
         ttk.Label(frame_detalles, text="Lote:", width=15, anchor="w").grid(row=1, column=0, padx=5, pady=5, sticky="w")
-        lote_entry = ttk.Entry(frame_detalles, width=27)
-        lote_entry.grid(row=1, column=1, padx=5, pady=5, sticky="ew")
+        lote_frame = ttk.Frame(frame_detalles)
+        lote_frame.grid(row=1, column=1, padx=5, pady=5, sticky="ew")
+        lote_entry = ttk.Entry(lote_frame, width=20)
+        lote_entry.pack(side="left", fill="x", expand=True)
+        edit_check_sin_lote = ttk.Checkbutton(lote_frame, text="Sin\nlote", variable=edit_sin_lote_var, command=toggle_lote_edit)
+        edit_check_sin_lote.pack(side="right", padx=(5, 0))
 
-        edit_sin_lote_var = tk.BooleanVar()
-        edit_check_sin_lote = ttk.Checkbutton(
-            frame_detalles,
-            text="Sin lote",
-            variable=edit_sin_lote_var,
-            command=lambda: lote_entry.config(state='disabled' if edit_sin_lote_var.get() else 'normal')
-        )
-        edit_check_sin_lote.grid(row=1, column=2, padx=5, pady=5, sticky="w")
-
-        ttk.Label(frame_detalles, text="Fecha Vencimiento:", width=15, anchor="w").grid(row=1, column=2, padx=5, pady=5, sticky="w")
-        fecha_venc_edit = DateEntry(frame_detalles, width=25, background='darkblue', foreground='white', borderwidth=2, date_pattern='dd/mm/yyyy')
-        fecha_venc_edit.grid(row=1, column=3, padx=5, pady=5, sticky="ew")
-        
-        edit_sin_fecha_venc = tk.BooleanVar()
-        edit_check_sin_fecha = ttk.Checkbutton(
-            frame_detalles,
-            text="Sin fecha de vencimiento",
-            variable=edit_sin_fecha_venc,
-            command=lambda: fecha_venc_edit.configure(state='disabled' if edit_sin_fecha_venc.get() else 'normal')
-        )
-        edit_check_sin_fecha.grid(row=2, column=2, padx=5, pady=5, sticky="w")
+        ttk.Label(frame_detalles, text="Fecha\nVencimiento:", width=15, anchor="w").grid(row=1, column=2, padx=5, pady=5, sticky="w")
+        fecha_venc_frame = ttk.Frame(frame_detalles)
+        fecha_venc_frame.grid(row=1, column=3, padx=5, pady=5, sticky="ew")
+        fecha_venc_edit = DateEntry(fecha_venc_frame, width=15, background='darkblue', foreground='white', borderwidth=2, date_pattern='dd/mm/yyyy')
+        fecha_venc_edit.pack(side="left")
+        edit_check_sin_fecha = ttk.Checkbutton(fecha_venc_frame, text="Sin fecha\nvencimiento", variable=edit_sin_fecha_venc, command=toggle_fecha_venc_edit)
+        edit_check_sin_fecha.pack(side="right", padx=(5, 0))
 
         ttk.Label(frame_detalles, text="Cantidad:", width=15, anchor="w").grid(row=1, column=4, padx=5, pady=5, sticky="w")
         cantidad_entry = ttk.Entry(frame_detalles, width=27)
@@ -832,7 +856,7 @@ class IngresoInsumos:
                 
         def ajustar_tamano_ventana_editar(mostrar_salida):
             ancho_base = 1000
-            alto_base = 400
+            alto_base = 450
 
             editar_ventana.update_idletasks()
             altura_frame = frame_salida_nivel_inferior_edit.winfo_reqheight() + 50  # margen extra
@@ -972,26 +996,37 @@ class IngresoInsumos:
         # 3. Funciones de carga y guardado
         
         def cargar_datos_iniciales():
-            if valores[8] and valores[9]:  
-                edit_nivel_bodega_var.set("area")
+        # Determinar nivel de bodega basado en los datos del movimiento
+            area_valor = valores[13] if len(valores) > 13 else ''
+            distrito_valor = valores[14] if len(valores) > 14 else ''
+            tipo_servicio_valor = valores[15] if len(valores) > 15 else ''
+            servicio_valor = valores[5]
+            
+            # Determinar nivel de bodega
+            if servicio_valor and tipo_servicio_valor and distrito_valor:
+                edit_nivel_bodega_var.set("servicio")
+            elif distrito_valor and not servicio_valor:
+                edit_nivel_bodega_var.set("distrito")
             else:
                 edit_nivel_bodega_var.set("area")
 
             actualizar_estado_comboboxes_edit()
-            actualizar_estado_salida_nivel_inferior_edit()
             
-            # Cargar valores en campos
-            edit_area_var.set(self.area_var.get())
-            edit_distrito_var.set(self.distrito_var.get())
-            edit_tipo_servicio_var.set(self.tipo_servicio_var.get())
-            edit_servicio_var.set(self.servicio_var.get())
-            edit_tipo_insumo_var.set(self.tipo_insumo_var.get())
+            # Cargar valores DESDE EL TREEVIEW, no desde las variables principales
+            edit_area_var.set(area_valor)
+            edit_distrito_var.set(distrito_valor)
+            edit_tipo_servicio_var.set(tipo_servicio_valor)
+            edit_servicio_var.set(servicio_valor)
+            edit_tipo_insumo_var.set(valores[12])  # tipo_insumo desde treeview
             edit_insumo_var.set(valores[3])
             edit_presentacion_var.set(valores[4])
+            
+            # Resto del código igual...
             fecha_edit.set_date(datetime.strptime(valores[0], '%d/%m/%Y').date())
             referencia_entry.delete(0, tk.END)
             referencia_entry.insert(0, valores[1])
             edit_tipo_movimiento_var.set(valores[2])
+            
             if valores[6] == "N/A":
                 edit_sin_lote_var.set(True)
                 lote_entry.config(state='disabled')
@@ -1001,6 +1036,7 @@ class IngresoInsumos:
             lote_entry.delete(0, 'end')
             if valores[6] != "N/A":
                 lote_entry.insert(0, valores[6])
+                
             if valores[7] == "N/A":
                 fecha_venc_edit.set_date(datetime.now().date())
                 fecha_venc_edit.configure(state='disabled')
@@ -1009,6 +1045,7 @@ class IngresoInsumos:
                 fecha_venc_edit.set_date(datetime.strptime(valores[7], '%d/%m/%Y').date())
                 fecha_venc_edit.configure(state='normal')
                 edit_sin_fecha_venc.set(False)
+                
             cantidad_entry.delete(0, tk.END)
             cantidad_entry.insert(0, valores[8])
             observaciones_entry.delete(0, tk.END)
@@ -1017,11 +1054,9 @@ class IngresoInsumos:
 
             # Salida nivel inferior
             edit_salida_distrito_var.set(valores[9] if valores[9] else '')
-            edit_salida_tipo_servicio_var.set('')
             edit_salida_servicio_var.set(valores[10] if valores[10] else '')
 
-            # Actualizar estado combos y frame salida
-            actualizar_estado_comboboxes_edit()
+            # Actualizar estado final
             actualizar_estado_salida_nivel_inferior_edit()
         
         editar_ventana.after(100, cargar_datos_iniciales)
@@ -1030,7 +1065,11 @@ class IngresoInsumos:
 
         # Botones Guardar y Cerrar
         frame_botones = ttk.Frame(main_frame)
-        frame_botones.pack(pady=10)
+        frame_botones.pack(pady=20)
+        
+        # Crear un frame interno para centrar los botones
+        botones_inner = ttk.Frame(frame_botones)
+        botones_inner.pack(anchor="center")
         
         def guardar_cambios():
             try:
@@ -1070,8 +1109,8 @@ class IngresoInsumos:
             except Exception as e:
                 messagebox.showerror("Error", f"Error al actualizar movimiento: {str(e)}")
 
-        ttk.Button(frame_botones, text="Guardar", command=guardar_cambios).pack(side="left", padx=5)
-        ttk.Button(frame_botones, text="Cerrar", command=editar_ventana.destroy).pack(side="left", padx=5)           
+        ttk.Button(botones_inner, text="Guardar", command=guardar_cambios, width=15).pack(side="left", padx=10)
+        ttk.Button(botones_inner, text="Cerrar", command=editar_ventana.destroy, width=15).pack(side="left", padx=10)        
 
         # Bindings
         edit_nivel_bodega_var.trace_add('write', actualizar_estado_comboboxes_edit)
