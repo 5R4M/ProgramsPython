@@ -113,24 +113,26 @@ class IngresoInsumos:
             pass
     
     def setup_styles(self):
-        """Configura los estilos profesionales para la interfaz"""
-        # Colores del tema profesional (mantener igual)
+        """Configurar estilos y colores para la interfaz"""
+        # **PALETA DE COLORES PROFESIONAL**
         self.COLORS = {
-            'primary': '#2c3e50',
-            'secondary': '#34495e',
-            'accent': '#3498db',
-            'success': '#27ae60',
-            'warning': '#f39c12',
-            'danger': '#e74c3c',
-            'light': '#ecf0f1',
-            'white': '#ffffff',
-            'text_dark': '#2c3e50',
-            'text_light': '#7f8c8d',
-            'hover': '#3498db',
-            'active': '#2980b9',
-            'card_bg': '#ffffff',
-            'border': '#bdc3c7'
+            'primary': '#2E86AB',      # Azul principal
+            'secondary': '#A23B72',    # Rosa/Morado
+            'success': '#27AE60',      # Verde éxito
+            'warning': '#F39C12',      # Naranja advertencia
+            'danger': '#E74C3C',       # Rojo peligro
+            'accent': '#8E44AD',       # Morado acento
+            'light': '#F8F9FA',        # Gris muy claro
+            'white': '#FFFFFF',        # Blanco
+            'text_dark': '#2C3E50',    # Texto oscuro
+            'text_light': '#7F8C8D',   # Texto claro
+            'border': '#BDC3C7'        # Borde
         }
+        
+        # **CONFIGURACIÓN DE ANCHOS UNIFORMES**
+        self.UNIFORM_WIDTH = 500  # Ancho uniforme para todos los frames principales
+        self.WIDGET_WIDTH = 18    # Ancho uniforme para widgets (Entry, Combobox, etc.)
+        self.BUTTON_WIDTH = 15    # Ancho uniforme para botones
 
         style = ttk.Style()
         
@@ -144,7 +146,7 @@ class IngresoInsumos:
         style.configure('Card.TLabelframe.Label',
             background=self.COLORS['white'],
             foreground=self.COLORS['primary'],
-            font=('Segoe UI', 10, 'bold'),
+            font=('Segoe UI', 9, 'bold'),
             padding=(8, 3))
         
         # Estilo para botones principales 
@@ -157,8 +159,8 @@ class IngresoInsumos:
             foreground=self.COLORS['white'])
         
         style.map('Primary.TButton',
-            background=[('active', self.COLORS['hover']),
-            ('pressed', self.COLORS['active'])])
+            background=[('active', '#1F5F8B'),
+            ('pressed', '#1A4F7A')])
         
         # Estilo para botones de acción 
         style.configure('Action.TButton',
@@ -180,6 +182,36 @@ class IngresoInsumos:
     
     # 1. Métodos de configuración de UI
     
+    def create_compact_frame(self, parent, title, bg_color='white', header_color='primary'):
+        """Crear frame compacto con header profesional"""
+        # Contenedor principal
+        container = tk.Frame(parent, bg=self.COLORS['light'])
+        container.pack(fill="x", padx=15, pady=3)  # Padding reducido
+        
+        # Frame principal más compacto
+        main_frame = tk.Frame(container, 
+                            bg=self.COLORS[bg_color], 
+                            relief='solid', 
+                            borderwidth=1)
+        main_frame.pack(fill="x", padx=8, pady=3)  # Padding reducido
+        
+        # Header más compacto
+        header = tk.Frame(main_frame, bg=self.COLORS[header_color], height=22)  # Altura reducida
+        header.pack(fill='x')
+        header.pack_propagate(False)
+        
+        tk.Label(header, 
+                text=title, 
+                font=('Segoe UI', 9, 'bold'),  # Fuente más pequeña
+                fg=self.COLORS['white'], 
+                bg=self.COLORS[header_color]).pack(side='left', padx=10, pady=3)  # Padding reducido
+        
+        # Contenido más compacto
+        content = tk.Frame(main_frame, bg=self.COLORS[bg_color])
+        content.pack(fill='x', padx=10, pady=6)  # Padding reducido
+        
+        return content, container
+        
     def setup_ui(self):
         
         # Frame principal que contendrá el canvas y scrollbar
@@ -206,33 +238,33 @@ class IngresoInsumos:
         self.canvas_window = self.canvas.create_window((0, 0), window=self.scrollable_frame, anchor="nw")
         
         # **HEADER PRINCIPAL**
-        header_frame = tk.Frame(self.scrollable_frame, bg=self.COLORS['white'], height=60)
+        header_frame = tk.Frame(self.scrollable_frame, bg=self.COLORS['primary'], height=70)
         
         header_frame.pack(fill='x', padx=0, pady=0)
         header_frame.pack_propagate(False)
-        
-        # Frame interno con padding
-        header_inner = tk.Frame(header_frame, bg=self.COLORS['white'])
+
+        # Frame interno con padding - CAMBIO: fondo primary
+        header_inner = tk.Frame(header_frame, bg=self.COLORS['primary'])
         header_inner.pack(fill='both', expand=True, padx=15, pady=8)
-        
+
         # Título principal
         title_label = tk.Label(header_inner, 
-                            text="Ingreso de Movimientos al Sistema",
-                            font=('Segoe UI', 14, 'bold'),
-                            fg=self.COLORS['primary'],
-                            bg=self.COLORS['white'])
+                    text="📦 SISTEMA DE INVENTARIO - INGRESO DE INSUMOS",
+                    font=('Segoe UI', 12, 'bold'),  # Más compacto
+                    fg=self.COLORS['white'],        # Texto blanco
+                    bg=self.COLORS['primary'])      # Fondo primary
         title_label.pack(anchor='w')
-        
-        # Subtítulo
+
+        # Subtítulo - CAMBIO: texto blanco y fondo primary
         subtitle_label = tk.Label(header_inner,
                                 text="Registre los movimientos de insumos de manera eficiente y organizada",
                                 font=('Segoe UI', 8),
-                                fg=self.COLORS['text_light'],
-                                bg=self.COLORS['white'])
+                                fg=self.COLORS['white'],     # CAMBIO: texto blanco
+                                bg=self.COLORS['primary'])   # CAMBIO: fondo primary
         subtitle_label.pack(anchor='w', pady=(2, 0))
         
         # Línea decorativa
-        line_frame = tk.Frame(header_inner, bg=self.COLORS['accent'], height=2)
+        line_frame = tk.Frame(header_inner, bg=self.COLORS['white'], height=4)
         line_frame.pack(fill='x', pady=(5, 0))
         
         # Frame Nivel de Bodega (radio buttons)
@@ -240,28 +272,28 @@ class IngresoInsumos:
         nivel_container.pack(fill="x", padx=15, pady=5)
         
         self.frame_nivel_bodega = tk.Frame(nivel_container, 
-                                        bg=self.COLORS['white'], 
+                                        bg=self.COLORS['light'], 
                                         relief='solid', 
                                         borderwidth=1)
         self.frame_nivel_bodega.pack(fill="x", padx=8, pady=5)
         
         # Header del frame
-        nivel_header = tk.Frame(self.frame_nivel_bodega, bg=self.COLORS['primary'], height=25)
+        nivel_header = tk.Frame(self.frame_nivel_bodega, bg=self.COLORS['primary'], height=22)
         nivel_header.pack(fill='x')
         nivel_header.pack_propagate(False)
         
         tk.Label(nivel_header, 
                 text="🏢 Nivel de Bodega", 
-                font=('Segoe UI', 10, 'bold'),
+                font=('Segoe UI', 9, 'bold'),
                 fg=self.COLORS['white'], 
                 bg=self.COLORS['primary']).pack(side='left', padx=10, pady=4)
         
         # Contenido del frame
-        nivel_content = tk.Frame(self.frame_nivel_bodega, bg=self.COLORS['white'])
+        nivel_content = tk.Frame(self.frame_nivel_bodega, bg=self.COLORS['light'])
         nivel_content.pack(fill='x', padx=12, pady=6)
         
         # Radio buttons con estilo mejorado
-        rb_frame = tk.Frame(nivel_content, bg=self.COLORS['white'])
+        rb_frame = tk.Frame(nivel_content, bg=self.COLORS['light'])
         rb_frame.pack(anchor='w')
         
         rb_area = tk.Radiobutton(rb_frame, 
@@ -270,7 +302,7 @@ class IngresoInsumos:
                                 value="area",
                                 command=self.actualizar_estado_comboboxes,
                                 font=('Segoe UI', 9),
-                                bg=self.COLORS['white'],
+                                bg=self.COLORS['light'],
                                 fg=self.COLORS['text_dark'],
                                 selectcolor=self.COLORS['white'],
                                 activebackground=self.COLORS['white'])
@@ -281,7 +313,7 @@ class IngresoInsumos:
                                     value="distrito",
                                     command=self.actualizar_estado_comboboxes,
                                     font=('Segoe UI', 9),
-                                    bg=self.COLORS['white'],
+                                    bg=self.COLORS['light'],
                                     fg=self.COLORS['text_dark'],
                                     selectcolor=self.COLORS['white'],
                                     activebackground=self.COLORS['white'])
@@ -292,7 +324,7 @@ class IngresoInsumos:
                                     value="servicio",
                                     command=self.actualizar_estado_comboboxes,
                                     font=('Segoe UI', 9),
-                                    bg=self.COLORS['white'],
+                                    bg=self.COLORS['light'],
                                     fg=self.COLORS['text_dark'],
                                     selectcolor=self.COLORS['white'],
                                     activebackground=self.COLORS['white'])
@@ -306,7 +338,7 @@ class IngresoInsumos:
         servicios_container.pack(fill="x", padx=15, pady=5)
         
         self.frame_servicios = tk.Frame(servicios_container, 
-                                    bg=self.COLORS['white'], 
+                                    bg=self.COLORS['light'], 
                                     relief='solid', 
                                     borderwidth=1)
         self.frame_servicios.pack(fill="x", padx=8, pady=5)
@@ -323,74 +355,80 @@ class IngresoInsumos:
                 bg=self.COLORS['success']).pack(side='left', padx=10, pady=4)
         
         # Contenido del frame con grid mejorado
-        servicios_content = tk.Frame(self.frame_servicios, bg=self.COLORS['white'])
+        servicios_content = tk.Frame(self.frame_servicios, bg=self.COLORS['light'])
         servicios_content.pack(fill='x', padx=12, pady=6)
         
         # Configurar grid
         for i in range(4):
             servicios_content.columnconfigure(i*2+1, weight=1)
         
+        # **PRIMERA FILA: ÁREA Y DISTRITO**
         # Área
         tk.Label(servicios_content, text="Área:", 
                 font=('Segoe UI', 8, 'bold'),
                 fg=self.COLORS['text_dark'],
-                bg=self.COLORS['white']).grid(row=0, column=0, padx=(0, 8), pady=6, sticky="w")
-        
+                bg=self.COLORS['light']).grid(row=0, column=0, padx=(0, 8), pady=6, sticky="w")
+
         areas = [a['nombre'] for a in obtener_areas() or []]
         self.area_var = tk.StringVar()
         self.area_cb = AutocompleteCombobox(servicios_content, 
                                         textvariable=self.area_var, 
-                                        width=16, 
+                                        width=40,  # Ancho reducido para mejor distribución
                                         completevalues=areas, 
                                         state="normal",
                                         font=('Segoe UI', 8))
-        self.area_cb.grid(row=0, column=1, padx=(0, 15), pady=6, sticky="ew")
-        
+        self.area_cb.grid(row=0, column=1, padx=(0, 40), pady=8, sticky="ew")
+
         # Distrito
         tk.Label(servicios_content, text="Distrito:", 
-                font=('Segoe UI', 9, 'bold'),
+                font=('Segoe UI', 8, 'bold'),
                 fg=self.COLORS['text_dark'],
-                bg=self.COLORS['white']).grid(row=0, column=2, padx=(0, 8), pady=6, sticky="w")
-        
+                bg=self.COLORS['light']).grid(row=0, column=2, padx=(0, 8), pady=6, sticky="w")
+
         self.distrito_var = tk.StringVar()
         distritos = [d['nombre'] for d in obtener_distritos() or []]
         self.distrito_cb = AutocompleteCombobox(servicios_content, 
                                             textvariable=self.distrito_var, 
-                                            width=18, 
+                                            width=40,  # Ancho reducido para mejor distribución
                                             completevalues=distritos, 
                                             state="normal",
-                                            font=('Segoe UI', 9))
-        self.distrito_cb.grid(row=0, column=3, padx=(0, 20), pady=8, sticky="ew")
-        
+                                            font=('Segoe UI', 8))
+        self.distrito_cb.grid(row=0, column=3, padx=(0, 40), pady=8, sticky="ew")
+
+        # **SEPARADOR**
+        separator_frame1 = tk.Frame(servicios_content, bg=self.COLORS['border'], height=1)
+        separator_frame1.grid(row=1, column=0, columnspan=8, sticky="ew", pady=10)
+
+        # **SEGUNDA FILA: TIPO DE SERVICIO Y SERVICIO**
         # Tipo de Servicio
         tk.Label(servicios_content, text="Tipo de Servicio:", 
-                font=('Segoe UI', 9, 'bold'),
+                font=('Segoe UI', 8, 'bold'),
                 fg=self.COLORS['text_dark'],
-                bg=self.COLORS['white']).grid(row=1, column=0, padx=(0, 8), pady=6, sticky="w")
-        
+                bg=self.COLORS['light']).grid(row=2, column=0, padx=(0, 8), pady=6, sticky="w")
+
         self.tipo_servicio_var = tk.StringVar()
         self.tipo_servicio_cb = AutocompleteCombobox(servicios_content, 
                                                     textvariable=self.tipo_servicio_var, 
-                                                    width=18, 
+                                                    width=40,  # Ancho reducido para mejor distribución
                                                     completevalues=[], 
                                                     state="normal",
-                                                    font=('Segoe UI', 9))
-        self.tipo_servicio_cb.grid(row=1, column=1, padx=(0, 20), pady=8, sticky="ew")
-        
+                                                    font=('Segoe UI', 8))
+        self.tipo_servicio_cb.grid(row=2, column=1, padx=(0, 40), pady=8, sticky="ew")
+
         # Servicio
         tk.Label(servicios_content, text="Servicio:", 
-                font=('Segoe UI', 9, 'bold'),
+                font=('Segoe UI', 8, 'bold'),
                 fg=self.COLORS['text_dark'],
-                bg=self.COLORS['white']).grid(row=1, column=2, padx=(0, 8), pady=6, sticky="w")
-        
+                bg=self.COLORS['light']).grid(row=2, column=2, padx=(0, 8), pady=6, sticky="w")
+
         self.servicio_var = tk.StringVar()
         self.servicio_cb = AutocompleteCombobox(servicios_content, 
                                             textvariable=self.servicio_var, 
-                                            width=18, 
+                                            width=40,  # Ancho reducido para mejor distribución
                                             completevalues=[], 
                                             state="normal",
-                                            font=('Segoe UI', 9))
-        self.servicio_cb.grid(row=1, column=3, padx=(0, 20), pady=8, sticky="ew")
+                                            font=('Segoe UI', 8))
+        self.servicio_cb.grid(row=2, column=3, padx=(0, 40), pady=8, sticky="ew")
         
         # Inicializar distritos vacíos
         self.distrito_cb.config(completevalues=[])
@@ -398,27 +436,27 @@ class IngresoInsumos:
 
         # **FRAME INSUMOS MEJORADO**
         insumos_container = tk.Frame(self.scrollable_frame, bg=self.COLORS['light'])
-        insumos_container.pack(fill="x", padx=20, pady=8)
+        insumos_container.pack(fill="x", padx=15, pady=5)
 
         self.frame_insumos = tk.Frame(insumos_container,
-            bg=self.COLORS['white'],
+            bg=self.COLORS['light'],
             relief='solid',
             borderwidth=1)
-        self.frame_insumos.pack(fill="x", padx=10, pady=10)
+        self.frame_insumos.pack(fill="x", padx=8, pady=6)
 
         # Header del frame
-        insumos_header = tk.Frame(self.frame_insumos, bg=self.COLORS['warning'], height=30)
+        insumos_header = tk.Frame(self.frame_insumos, bg=self.COLORS['warning'], height=22)
         insumos_header.pack(fill='x')
         insumos_header.pack_propagate(False)
 
         tk.Label(insumos_header,
             text="💊 Gestión de Insumos",
-            font=('Segoe UI', 10, 'bold'),
+            font=('Segoe UI', 9, 'bold'),
             fg=self.COLORS['white'],
             bg=self.COLORS['warning']).pack(side='left', padx=12, pady=6)
 
         # Contenido del frame
-        insumos_content = tk.Frame(self.frame_insumos, bg=self.COLORS['white'])
+        insumos_content = tk.Frame(self.frame_insumos, bg=self.COLORS['light'])
         insumos_content.pack(fill='x', padx=15, pady=10)
 
         # Configurar grid
@@ -429,7 +467,7 @@ class IngresoInsumos:
         tk.Label(insumos_content, text="Tipo de Insumo:",
             font=('Segoe UI', 9, 'bold'),
             fg=self.COLORS['text_dark'],
-            bg=self.COLORS['white']).grid(row=0, column=0, padx=(0, 8), pady=6, sticky="w")
+            bg=self.COLORS['light']).grid(row=0, column=0, padx=(0, 8), pady=6, sticky="w")
 
         tipos_insumo = [ti['descripcion'] for ti in obtener_tipos_insumo() or []]
         self.tipo_insumo_cb = AutocompleteCombobox(insumos_content,
@@ -444,7 +482,7 @@ class IngresoInsumos:
         tk.Label(insumos_content, text="Insumo:",
             font=('Segoe UI', 9, 'bold'),
             fg=self.COLORS['text_dark'],
-            bg=self.COLORS['white']).grid(row=0, column=2, padx=(0, 8), pady=6, sticky="w")
+            bg=self.COLORS['light']).grid(row=0, column=2, padx=(0, 8), pady=6, sticky="w")
 
         self.insumo_cb = AutocompleteCombobox(insumos_content,
             textvariable=self.insumo_var,
@@ -458,7 +496,7 @@ class IngresoInsumos:
         tk.Label(insumos_content, text="Presentación:",
             font=('Segoe UI', 9, 'bold'),
             fg=self.COLORS['text_dark'],
-            bg=self.COLORS['white']).grid(row=0, column=4, padx=(0, 8), pady=6, sticky="w")
+            bg=self.COLORS['light']).grid(row=0, column=4, padx=(0, 8), pady=6, sticky="w")
 
         self.presentacion_cb = AutocompleteCombobox(insumos_content,
             textvariable=self.presentacion_var,
@@ -466,7 +504,7 @@ class IngresoInsumos:
             completevalues=[],
             state="normal",
             font=('Segoe UI', 9))
-        self.presentacion_cb.grid(row=0, column=5, padx=0, pady=8, sticky="ew")
+        self.presentacion_cb.grid(row=0, column=5, padx=(0,20), pady=8, sticky="ew")
 
         # **SEGUNDA FILA - Lote y Fecha de Vencimiento**
         # Separador visual
@@ -477,10 +515,10 @@ class IngresoInsumos:
         tk.Label(insumos_content, text="Lote:",
             font=('Segoe UI', 9, 'bold'),
             fg=self.COLORS['text_dark'],
-            bg=self.COLORS['white']).grid(row=2, column=0, padx=(0, 8), pady=6, sticky="w")
+            bg=self.COLORS['light']).grid(row=2, column=0, padx=(0, 8), pady=6, sticky="w")
 
         # Frame para lote y checkbox
-        frame_lote = tk.Frame(insumos_content, bg=self.COLORS['white'])
+        frame_lote = tk.Frame(insumos_content, bg=self.COLORS['light'])
         frame_lote.grid(row=2, column=1, padx=(0, 20), pady=8, sticky="ew")
         frame_lote.columnconfigure(0, weight=1)
 
@@ -496,7 +534,7 @@ class IngresoInsumos:
             variable=self.sin_lote_var,
             command=lambda: self.lote_entry.config(state='disabled' if self.sin_lote_var.get() else 'normal'),
             font=('Segoe UI', 9),
-            bg=self.COLORS['white'],
+            bg=self.COLORS['light'],
             fg=self.COLORS['text_dark'],
             selectcolor=self.COLORS['white'],
             activebackground=self.COLORS['white'])
@@ -506,10 +544,10 @@ class IngresoInsumos:
         tk.Label(insumos_content, text="Fecha Vencimiento:",
             font=('Segoe UI', 9, 'bold'),
             fg=self.COLORS['text_dark'],
-            bg=self.COLORS['white']).grid(row=2, column=2, padx=(0, 8), pady=6, sticky="w")
+            bg=self.COLORS['light']).grid(row=2, column=2, padx=(0, 8), pady=6, sticky="w")
 
         # Frame para fecha y checkbox
-        frame_fecha = tk.Frame(insumos_content, bg=self.COLORS['white'])
+        frame_fecha = tk.Frame(insumos_content, bg=self.COLORS['light'])
         frame_fecha.grid(row=2, column=3, columnspan=2, padx=0, pady=8, sticky="ew")
         frame_fecha.columnconfigure(0, weight=1)
 
@@ -529,35 +567,35 @@ class IngresoInsumos:
             variable=self.sin_fecha_venc,
             command=self.toggle_fecha_vencimiento,
             font=('Segoe UI', 9),
-            bg=self.COLORS['white'],
+            bg=self.COLORS['light'],
             fg=self.COLORS['text_dark'],
             selectcolor=self.COLORS['white'],
             activebackground=self.COLORS['white'])
-        self.check_sin_fecha.grid(row=0, column=1, sticky="w")
+        self.check_sin_fecha.grid(row=0, column=2, sticky="w")
         
         # **FRAME REGISTRO DE MOVIMIENTO MEJORADO**
         registro_container = tk.Frame(self.scrollable_frame, bg=self.COLORS['light'])
-        registro_container.pack(fill="x", padx=20, pady=8)
+        registro_container.pack(fill="x", padx=15, pady=5)
 
         self.frame_registro = tk.Frame(registro_container,
-            bg=self.COLORS['white'],
+            bg=self.COLORS['light'],
             relief='solid',
             borderwidth=1)
-        self.frame_registro.pack(fill="x", padx=10, pady=10)
+        self.frame_registro.pack(fill="x", padx=8, pady=6)
 
         # Header del frame
-        registro_header = tk.Frame(self.frame_registro, bg=self.COLORS['accent'], height=30)
+        registro_header = tk.Frame(self.frame_registro, bg=self.COLORS['accent'], height=22)
         registro_header.pack(fill='x')
         registro_header.pack_propagate(False)
 
         tk.Label(registro_header,
             text="📋 Registro de Movimiento",
-            font=('Segoe UI', 10, 'bold'),
-            fg=self.COLORS['white'],
+            font=('Segoe UI', 9, 'bold'),
+            fg=self.COLORS['light'],
             bg=self.COLORS['accent']).pack(side='left', padx=12, pady=6)
 
         # Contenido del frame
-        registro_content = tk.Frame(self.frame_registro, bg=self.COLORS['white'])
+        registro_content = tk.Frame(self.frame_registro, bg=self.COLORS['light'])
         registro_content.pack(fill='x', padx=15, pady=10)
 
         # Configurar grid
@@ -569,7 +607,7 @@ class IngresoInsumos:
         tk.Label(registro_content, text="Fecha de Registro:",
             font=('Segoe UI', 9, 'bold'),
             fg=self.COLORS['text_dark'],
-            bg=self.COLORS['white']).grid(row=0, column=0, padx=(0, 8), pady=6, sticky="w")
+            bg=self.COLORS['light']).grid(row=0, column=0, padx=(0, 8), pady=6, sticky="w")
 
         self.fecha_reg = DateEntry(registro_content, 
             width=18, 
@@ -584,7 +622,7 @@ class IngresoInsumos:
         tk.Label(registro_content, text="Referencia:",
             font=('Segoe UI', 9, 'bold'),
             fg=self.COLORS['text_dark'],
-            bg=self.COLORS['white']).grid(row=0, column=2, padx=(0, 8), pady=6, sticky="w")
+            bg=self.COLORS['light']).grid(row=0, column=2, padx=(0, 8), pady=6, sticky="w")
 
         self.referencia_entry = ttk.Entry(registro_content, 
             width=20,
@@ -595,7 +633,7 @@ class IngresoInsumos:
         tk.Label(registro_content, text="Tipo de Movimiento:",
             font=('Segoe UI', 9, 'bold'),
             fg=self.COLORS['text_dark'],
-            bg=self.COLORS['white']).grid(row=0, column=4, padx=(0, 9), pady=6, sticky="w")
+            bg=self.COLORS['light']).grid(row=0, column=4, padx=(0, 9), pady=6, sticky="w")
 
         tipos_movimiento = [tm['descripcion'] for tm in obtener_tipos_movimiento() or []]
         self.tipo_mov_cb = AutocompleteCombobox(registro_content,
@@ -615,7 +653,7 @@ class IngresoInsumos:
         tk.Label(registro_content, text="Cantidad:",
             font=('Segoe UI', 9, 'bold'),
             fg=self.COLORS['text_dark'],
-            bg=self.COLORS['white']).grid(row=2, column=0, padx=(0, 8), pady=6, sticky="w")
+            bg=self.COLORS['light']).grid(row=2, column=0, padx=(0, 8), pady=6, sticky="w")
 
         self.cantidad_entry = ttk.Entry(registro_content, 
             width=18,
@@ -626,7 +664,7 @@ class IngresoInsumos:
         tk.Label(registro_content, text="Observaciones:",
             font=('Segoe UI', 9, 'bold'),
             fg=self.COLORS['text_dark'],
-            bg=self.COLORS['white']).grid(row=2, column=2, padx=(0, 8), pady=6, sticky="w")
+            bg=self.COLORS['light']).grid(row=2, column=2, padx=(0, 8), pady=6, sticky="w")
 
         self.observaciones_entry = ttk.Entry(registro_content, 
             width=40,
@@ -637,23 +675,23 @@ class IngresoInsumos:
         salida_container = tk.Frame(self.scrollable_frame, bg=self.COLORS['light'])
         
         self.frame_salida_nivel_inferior = tk.Frame(salida_container,
-            bg=self.COLORS['white'],
+            bg=self.COLORS['light'],
             relief='solid',
             borderwidth=1)
 
         # Header del frame
-        salida_header = tk.Frame(self.frame_salida_nivel_inferior, bg=self.COLORS['danger'], height=25)
+        salida_header = tk.Frame(self.frame_salida_nivel_inferior, bg=self.COLORS['danger'], height=22)
         salida_header.pack(fill='x')
         salida_header.pack_propagate(False)
 
         tk.Label(salida_header,
             text="🔄 Salida a Nivel Inferior",
             font=('Segoe UI', 9, 'bold'),
-            fg=self.COLORS['white'],
+            fg=self.COLORS['light'],
             bg=self.COLORS['danger']).pack(side='left', padx=10, pady=4)
 
         # Contenido del frame
-        salida_content = tk.Frame(self.frame_salida_nivel_inferior, bg=self.COLORS['white'])
+        salida_content = tk.Frame(self.frame_salida_nivel_inferior, bg=self.COLORS['light'])
         salida_content.pack(fill='x', padx=12, pady=6)
 
         # Configurar grid
@@ -664,7 +702,7 @@ class IngresoInsumos:
         tk.Label(salida_content, text="Distrito:",
             font=('Segoe UI', 9, 'bold'),
             fg=self.COLORS['text_dark'],
-            bg=self.COLORS['white']).grid(row=0, column=0, padx=(0, 8), pady=6, sticky="w")
+            bg=self.COLORS['light']).grid(row=0, column=0, padx=(0, 8), pady=6, sticky="w")
 
         distritos = [d['nombre'] for d in obtener_distritos() or []]
         self.salida_distrito_cb = AutocompleteCombobox(salida_content,
@@ -679,7 +717,7 @@ class IngresoInsumos:
         tk.Label(salida_content, text="Tipo de Servicio:",
             font=('Segoe UI', 9, 'bold'),
             fg=self.COLORS['text_dark'],
-            bg=self.COLORS['white']).grid(row=0, column=2, padx=(0, 8), pady=6, sticky="w")
+            bg=self.COLORS['light']).grid(row=0, column=2, padx=(0, 8), pady=6, sticky="w")
 
         self.salida_tipo_servicio_cb = AutocompleteCombobox(salida_content,
             textvariable=self.salida_tipo_servicio_var,
@@ -693,7 +731,7 @@ class IngresoInsumos:
         tk.Label(salida_content, text="Servicio:",
             font=('Segoe UI', 9, 'bold'),
             fg=self.COLORS['text_dark'],
-            bg=self.COLORS['white']).grid(row=0, column=4, padx=(0, 8), pady=6, sticky="w")
+            bg=self.COLORS['light']).grid(row=0, column=4, padx=(0, 8), pady=6, sticky="w")
 
         self.salida_servicio_cb = AutocompleteCombobox(salida_content,
             textvariable=self.salida_servicio_var,
@@ -716,13 +754,13 @@ class IngresoInsumos:
         btn_container = tk.Frame(self.scrollable_frame, bg=self.COLORS['light'])
         btn_container.pack(fill="x", padx=20, pady=10)
 
-        btn_inner = tk.Frame(btn_container, bg=self.COLORS['white'])
+        btn_inner = tk.Frame(btn_container, bg=self.COLORS['light'])
         btn_inner.pack(padx=10, pady=10)
 
         self.btn_agregar = tk.Button(btn_inner,
             text="➕ Agregar Movimiento",
             command=self.agregar_movimiento,
-            font=('Segoe UI', 10, 'bold'),
+            font=('Segoe UI', 9, 'bold'),
             bg=self.COLORS['success'],
             fg=self.COLORS['white'],
             relief='flat',
@@ -746,7 +784,7 @@ class IngresoInsumos:
         movimientos_container.pack(fill="both", expand=True, padx=20, pady=8)
 
         self.frame_movimientos = tk.Frame(movimientos_container,
-            bg=self.COLORS['white'],
+            bg=self.COLORS['light'],
             relief='solid',
             borderwidth=1)
         self.frame_movimientos.pack(fill="both", expand=True, padx=10, pady=10)
@@ -763,7 +801,7 @@ class IngresoInsumos:
             bg=self.COLORS['secondary']).pack(side='left', padx=15, pady=10)
 
         # Contenido del treeview
-        tree_content = tk.Frame(self.frame_movimientos, bg=self.COLORS['white'])
+        tree_content = tk.Frame(self.frame_movimientos, bg=self.COLORS['light'])
         tree_content.pack(fill="both", expand=True, padx=15, pady=15)
 
         columns = (
@@ -881,11 +919,11 @@ class IngresoInsumos:
         botones_container = tk.Frame(self.scrollable_frame, bg=self.COLORS['light'])
         botones_container.pack(fill="x", padx=20, pady=10)
 
-        self.frame_botones = tk.Frame(botones_container, bg=self.COLORS['white'])
+        self.frame_botones = tk.Frame(botones_container, bg=self.COLORS['light'])
         self.frame_botones.pack(fill="x", padx=10, pady=10)
 
         # Frame interno para centrar botones
-        botones_inner = tk.Frame(self.frame_botones, bg=self.COLORS['white'])
+        botones_inner = tk.Frame(self.frame_botones, bg=self.COLORS['light'])
         botones_inner.pack(expand=True, pady=15)
 
         # Botón Editar
@@ -1045,28 +1083,40 @@ class IngresoInsumos:
         nivel = self.nivel_bodega_var.get()
 
         if tipo_mov == "SALIDA NIVEL INFERIOR":
-            # **MOSTRAR CON EL MISMO PADDING QUE OTROS FRAMES**
+            # **MOSTRAR EL FRAME DE SALIDA NIVEL INFERIOR**
             if not self.salida_container.winfo_ismapped():
-                # Encontrar el contenedor del botón agregar
+                # Buscar el contenedor del botón agregar de manera más simple
                 btn_container = None
                 for child in self.scrollable_frame.winfo_children():
-                    if hasattr(child, 'winfo_children'):
+                    # Buscar por el tipo de widget y contenido
+                    if isinstance(child, tk.Frame):
                         for subchild in child.winfo_children():
-                            if hasattr(subchild, 'winfo_children'):
-                                for btn in subchild.winfo_children():
-                                    if hasattr(btn, 'cget') and btn.cget('text') == '➕ Agregar Movimiento':
-                                        btn_container = child
-                                        break
+                            if isinstance(subchild, tk.Frame):
+                                for widget in subchild.winfo_children():
+                                    if isinstance(widget, tk.Button):
+                                        try:
+                                            # Verificar si es el botón correcto usando el texto
+                                            if hasattr(widget, 'cget') and '➕' in str(widget.cget('text')):
+                                                btn_container = child
+                                                break
+                                        except tk.TclError:
+                                            # Si hay error al obtener el texto, continuar
+                                            continue
+                                if btn_container:
+                                    break
+                        if btn_container:
+                            break
                 
                 # Empaquetar con el mismo padding que otros frames
                 if btn_container:
-                    self.salida_container.pack(fill="x", padx=15, pady=5, before=btn_container)  # ← MISMO PADDING
+                    self.salida_container.pack(fill="x", padx=15, pady=5, before=btn_container)
                 else:
+                    # Si no encuentra el botón, simplemente agregar al final
                     self.salida_container.pack(fill="x", padx=15, pady=5)
 
             # Mostrar el frame dentro del contenedor
             if not self.frame_salida_nivel_inferior.winfo_ismapped():
-                self.frame_salida_nivel_inferior.pack(fill="x", padx=8, pady=5)  # ← MISMO PADDING
+                self.frame_salida_nivel_inferior.pack(fill="x", padx=8, pady=5)
 
             # Configurar estados según nivel
             if nivel == "area":
@@ -1087,8 +1137,11 @@ class IngresoInsumos:
             # **ACTUALIZAR LAYOUT DESPUÉS DE MOSTRAR**
             self.parent.after_idle(self.update_layout)
         else:
-            # Ocultar el frame
-            self.salida_container.pack_forget()
+            # **OCULTAR EL FRAME**
+            if self.salida_container.winfo_ismapped():
+                self.salida_container.pack_forget()
+            
+            # Limpiar valores
             self.salida_distrito_var.set('')
             self.salida_tipo_servicio_var.set('')
             self.salida_servicio_var.set('')
@@ -1308,7 +1361,7 @@ class IngresoInsumos:
 
         editar_ventana = tk.Toplevel(self.parent)
         editar_ventana.title("Editar Movimiento")
-        editar_ventana.configure(bg=self.COLORS['white'])
+        editar_ventana.configure(bg=self.COLORS['light'])
 
         # Configurar dimensiones iniciales (como main_window.py)
         ancho_ventana = 100
@@ -1362,7 +1415,7 @@ class IngresoInsumos:
         style.configure("Custom.TLabelframe.Label",
             background=self.COLORS['white'],
             foreground=self.COLORS['text_dark'],
-            font=('Segoe UI', 10, 'bold'))
+            font=('Segoe UI', 9, 'bold'))
 
         def toggle_lote_edit():
             if edit_sin_lote_var.get():
@@ -1394,9 +1447,9 @@ class IngresoInsumos:
         edit_sin_fecha_venc = tk.BooleanVar()
 
         # **CONTENEDOR PRINCIPAL CON SCROLL**
-        main_canvas = tk.Canvas(editar_ventana, bg=self.COLORS['white'], highlightthickness=0)
+        main_canvas = tk.Canvas(editar_ventana, bg=self.COLORS['light'], highlightthickness=0)
         main_scrollbar = ttk.Scrollbar(editar_ventana, orient="vertical", command=main_canvas.yview)
-        scrollable_frame = tk.Frame(main_canvas, bg=self.COLORS['white'])
+        scrollable_frame = tk.Frame(main_canvas, bg=self.COLORS['light'])
 
         scrollable_frame.bind(
             "<Configure>",
@@ -1424,15 +1477,15 @@ class IngresoInsumos:
         # **FRAME NIVEL DE BODEGA**
         self.frame_nivel_bodega_edit = tk.LabelFrame(scrollable_frame, 
             text="Nivel de Bodega", 
-            font=('Segoe UI', 10, 'bold'),
-            bg=self.COLORS['white'], 
+            font=('Segoe UI', 9, 'bold'),
+            bg=self.COLORS['light'], 
             fg=self.COLORS['text_dark'],
             bd=2, 
             relief='solid')
         self.frame_nivel_bodega_edit.pack(fill="x", padx=20, pady=15)
 
         # Radiobuttons para nivel de bodega
-        radio_frame = tk.Frame(self.frame_nivel_bodega_edit, bg=self.COLORS['white'])
+        radio_frame = tk.Frame(self.frame_nivel_bodega_edit, bg=self.COLORS['light'])
         radio_frame.pack(fill="x", padx=15, pady=15)
 
         self.radio_area_edit = ttk.Radiobutton(radio_frame, 
@@ -1459,14 +1512,14 @@ class IngresoInsumos:
         # **FRAME SERVICIOS**
         self.frame_servicios_edit = tk.LabelFrame(scrollable_frame, 
             text="Servicios", 
-            font=('Segoe UI', 10, 'bold'),
-            bg=self.COLORS['white'], 
+            font=('Segoe UI', 9, 'bold'),
+            bg=self.COLORS['light'], 
             fg=self.COLORS['text_dark'],
             bd=2, 
             relief='solid')
         self.frame_servicios_edit.pack(fill="x", padx=20, pady=15)
 
-        servicios_content = tk.Frame(self.frame_servicios_edit, bg=self.COLORS['white'])
+        servicios_content = tk.Frame(self.frame_servicios_edit, bg=self.COLORS['light'])
         servicios_content.pack(fill="x", padx=15, pady=15)
 
         # Configurar grid
@@ -1475,70 +1528,70 @@ class IngresoInsumos:
 
         # Labels y comboboxes para servicios
         tk.Label(servicios_content, text="Área:", font=('Segoe UI', 9), 
-                bg=self.COLORS['white'], fg=self.COLORS['text_dark']).grid(row=0, column=0, padx=5, pady=8, sticky="w")
+                bg=self.COLORS['light'], fg=self.COLORS['text_dark']).grid(row=0, column=0, padx=5, pady=8, sticky="w")
         area_cb = AutocompleteCombobox(servicios_content, textvariable=edit_area_var, width=25, state="normal")
         area_cb.set_completion_list([a['nombre'] for a in obtener_areas() or []])
         area_cb.grid(row=0, column=1, padx=5, pady=8, sticky="ew")
 
         tk.Label(servicios_content, text="Distrito:", font=('Segoe UI', 9), 
-                bg=self.COLORS['white'], fg=self.COLORS['text_dark']).grid(row=0, column=2, padx=5, pady=8, sticky="w")
+                bg=self.COLORS['light'], fg=self.COLORS['text_dark']).grid(row=0, column=2, padx=5, pady=8, sticky="w")
         distrito_cb = AutocompleteCombobox(servicios_content, textvariable=edit_distrito_var, width=25, state="normal")
         distrito_cb.set_completion_list([d['nombre'] for d in obtener_distritos() or []])
         distrito_cb.grid(row=0, column=3, padx=5, pady=8, sticky="ew")
 
         tk.Label(servicios_content, text="Tipo de Servicio:", font=('Segoe UI', 9), 
-                bg=self.COLORS['white'], fg=self.COLORS['text_dark']).grid(row=0, column=4, padx=5, pady=8, sticky="w")
+                bg=self.COLORS['light'], fg=self.COLORS['text_dark']).grid(row=0, column=4, padx=5, pady=8, sticky="w")
         tipo_servicio_cb = AutocompleteCombobox(servicios_content, textvariable=edit_tipo_servicio_var, width=25, state="normal")
         tipo_servicio_cb.grid(row=0, column=5, padx=5, pady=8, sticky="ew")
 
         tk.Label(servicios_content, text="Servicio:", font=('Segoe UI', 9), 
-                bg=self.COLORS['white'], fg=self.COLORS['text_dark']).grid(row=0, column=6, padx=5, pady=8, sticky="w")
+                bg=self.COLORS['light'], fg=self.COLORS['text_dark']).grid(row=0, column=6, padx=5, pady=8, sticky="w")
         servicio_cb = AutocompleteCombobox(servicios_content, textvariable=edit_servicio_var, width=25, state="normal")
         servicio_cb.grid(row=0, column=7, padx=5, pady=8, sticky="ew")
 
         # **FRAME INSUMOS**
         self.frame_insumos_edit = tk.LabelFrame(scrollable_frame, 
             text="Insumos", 
-            font=('Segoe UI', 10, 'bold'),
-            bg=self.COLORS['white'], 
+            font=('Segoe UI', 9, 'bold'),
+            bg=self.COLORS['light'], 
             fg=self.COLORS['text_dark'],
             bd=2, 
             relief='solid')
         self.frame_insumos_edit.pack(fill="x", padx=20, pady=15)
 
-        insumos_content = tk.Frame(self.frame_insumos_edit, bg=self.COLORS['white'])
+        insumos_content = tk.Frame(self.frame_insumos_edit, bg=self.COLORS['light'])
         insumos_content.pack(fill="x", padx=15, pady=15)
 
         for col in range(6):
             insumos_content.columnconfigure(col, weight=1)
 
         tk.Label(insumos_content, text="Tipo de Insumo:", font=('Segoe UI', 9), 
-                bg=self.COLORS['white'], fg=self.COLORS['text_dark']).grid(row=0, column=0, padx=5, pady=8, sticky="w")
+                bg=self.COLORS['light'], fg=self.COLORS['text_dark']).grid(row=0, column=0, padx=5, pady=8, sticky="w")
         tipo_insumo_cb = AutocompleteCombobox(insumos_content, textvariable=edit_tipo_insumo_var, width=25, state="normal")
         tipo_insumo_cb.set_completion_list([ti['descripcion'] for ti in obtener_tipos_insumo() or []])
         tipo_insumo_cb.grid(row=0, column=1, padx=5, pady=8, sticky="ew")
 
         tk.Label(insumos_content, text="Insumo:", font=('Segoe UI', 9), 
-                bg=self.COLORS['white'], fg=self.COLORS['text_dark']).grid(row=0, column=2, padx=5, pady=8, sticky="w")
+                bg=self.COLORS['light'], fg=self.COLORS['text_dark']).grid(row=0, column=2, padx=5, pady=8, sticky="w")
         insumo_cb = AutocompleteCombobox(insumos_content, textvariable=edit_insumo_var, width=25, state="normal")
         insumo_cb.grid(row=0, column=3, padx=5, pady=8, sticky="ew")
 
         tk.Label(insumos_content, text="Presentación:", font=('Segoe UI', 9), 
-                bg=self.COLORS['white'], fg=self.COLORS['text_dark']).grid(row=0, column=4, padx=5, pady=8, sticky="w")
+                bg=self.COLORS['light'], fg=self.COLORS['text_dark']).grid(row=0, column=4, padx=5, pady=8, sticky="w")
         presentacion_cb = AutocompleteCombobox(insumos_content, textvariable=edit_presentacion_var, width=25, state="normal")
         presentacion_cb.grid(row=0, column=5, padx=5, pady=8, sticky="ew")
 
         # **FRAME DETALLES DEL MOVIMIENTO**
         self.frame_detalles_edit = tk.LabelFrame(scrollable_frame, 
             text="Detalles del Movimiento", 
-            font=('Segoe UI', 10, 'bold'),
-            bg=self.COLORS['white'], 
+            font=('Segoe UI', 9, 'bold'),
+            bg=self.COLORS['light'], 
             fg=self.COLORS['text_dark'],
             bd=2, 
             relief='solid')
         self.frame_detalles_edit.pack(fill="x", padx=20, pady=15)
 
-        detalles_content = tk.Frame(self.frame_detalles_edit, bg=self.COLORS['white'])
+        detalles_content = tk.Frame(self.frame_detalles_edit, bg=self.COLORS['light'])
         detalles_content.pack(fill="x", padx=15, pady=15)
 
         for col in range(6):
@@ -1546,25 +1599,25 @@ class IngresoInsumos:
 
         # Primera fila
         tk.Label(detalles_content, text="Fecha de Registro:", font=('Segoe UI', 9), 
-                bg=self.COLORS['white'], fg=self.COLORS['text_dark']).grid(row=0, column=0, padx=5, pady=8, sticky="w")
+                bg=self.COLORS['light'], fg=self.COLORS['text_dark']).grid(row=0, column=0, padx=5, pady=8, sticky="w")
         fecha_edit = DateEntry(detalles_content, width=25, background='darkblue', foreground='white', borderwidth=2, date_pattern='dd/mm/yyyy')
         fecha_edit.grid(row=0, column=1, padx=5, pady=8, sticky="ew")
 
         tk.Label(detalles_content, text="Referencia:", font=('Segoe UI', 9), 
-                bg=self.COLORS['white'], fg=self.COLORS['text_dark']).grid(row=0, column=2, padx=5, pady=8, sticky="w")
+                bg=self.COLORS['light'], fg=self.COLORS['text_dark']).grid(row=0, column=2, padx=5, pady=8, sticky="w")
         referencia_entry = ttk.Entry(detalles_content, width=27)
         referencia_entry.grid(row=0, column=3, padx=5, pady=8, sticky="ew")
 
         tk.Label(detalles_content, text="Tipo Movimiento:", font=('Segoe UI', 9), 
-                bg=self.COLORS['white'], fg=self.COLORS['text_dark']).grid(row=0, column=4, padx=5, pady=8, sticky="w")
+                bg=self.COLORS['light'], fg=self.COLORS['text_dark']).grid(row=0, column=4, padx=5, pady=8, sticky="w")
         tipo_mov_cb = AutocompleteCombobox(detalles_content, textvariable=edit_tipo_movimiento_var, width=25, state="normal")
         tipo_mov_cb.set_completion_list([tm['descripcion'] for tm in obtener_tipos_movimiento() or []])
         tipo_mov_cb.grid(row=0, column=5, padx=5, pady=8, sticky="ew")
 
         # Segunda fila
         tk.Label(detalles_content, text="Lote:", font=('Segoe UI', 9), 
-                bg=self.COLORS['white'], fg=self.COLORS['text_dark']).grid(row=1, column=0, padx=5, pady=8, sticky="w")
-        lote_frame = tk.Frame(detalles_content, bg=self.COLORS['white'])
+                bg=self.COLORS['light'], fg=self.COLORS['text_dark']).grid(row=1, column=0, padx=5, pady=8, sticky="w")
+        lote_frame = tk.Frame(detalles_content, bg=self.COLORS['light'])
         lote_frame.grid(row=1, column=1, padx=5, pady=8, sticky="ew")
         lote_entry = ttk.Entry(lote_frame, width=20)
         lote_entry.pack(side="left", fill="x", expand=True)
@@ -1573,8 +1626,8 @@ class IngresoInsumos:
         edit_check_sin_lote.pack(side="right", padx=(5, 0))
 
         tk.Label(detalles_content, text="Fecha\nVencimiento:", font=('Segoe UI', 9), 
-                bg=self.COLORS['white'], fg=self.COLORS['text_dark']).grid(row=1, column=2, padx=5, pady=8, sticky="w")
-        fecha_venc_frame = tk.Frame(detalles_content, bg=self.COLORS['white'])
+                bg=self.COLORS['light'], fg=self.COLORS['text_dark']).grid(row=1, column=2, padx=5, pady=8, sticky="w")
+        fecha_venc_frame = tk.Frame(detalles_content, bg=self.COLORS['light'])
         fecha_venc_frame.grid(row=1, column=3, padx=5, pady=8, sticky="ew")
         fecha_venc_edit = DateEntry(fecha_venc_frame, width=15, background='darkblue', foreground='white', borderwidth=2, date_pattern='dd/mm/yyyy')
         fecha_venc_edit.pack(side="left")
@@ -1583,45 +1636,45 @@ class IngresoInsumos:
         edit_check_sin_fecha.pack(side="right", padx=(5, 0))
 
         tk.Label(detalles_content, text="Cantidad:", font=('Segoe UI', 9), 
-                bg=self.COLORS['white'], fg=self.COLORS['text_dark']).grid(row=1, column=4, padx=5, pady=8, sticky="w")
+                bg=self.COLORS['light'], fg=self.COLORS['text_dark']).grid(row=1, column=4, padx=5, pady=8, sticky="w")
         cantidad_entry = ttk.Entry(detalles_content, width=27)
         cantidad_entry.grid(row=1, column=5, padx=5, pady=8, sticky="ew")
 
         # Tercera fila
         tk.Label(detalles_content, text="Observaciones:", font=('Segoe UI', 9), 
-                bg=self.COLORS['white'], fg=self.COLORS['text_dark']).grid(row=2, column=0, padx=5, pady=8, sticky="w")
+                bg=self.COLORS['light'], fg=self.COLORS['text_dark']).grid(row=2, column=0, padx=5, pady=8, sticky="w")
         observaciones_entry = ttk.Entry(detalles_content, width=80)
         observaciones_entry.grid(row=2, column=1, columnspan=5, padx=5, pady=8, sticky="ew")
 
         # **FRAME SALIDA NIVEL INFERIOR (INICIALMENTE OCULTO)**
         self.frame_salida_nivel_inferior_edit = tk.LabelFrame(scrollable_frame, 
             text="Salida Nivel Inferior", 
-            font=('Segoe UI', 10, 'bold'),
-            bg=self.COLORS['white'], 
+            font=('Segoe UI', 9, 'bold'),
+            bg=self.COLORS['light'], 
             fg=self.COLORS['text_dark'],
             bd=2, 
             relief='solid')
 
-        salida_content = tk.Frame(self.frame_salida_nivel_inferior_edit, bg=self.COLORS['white'])
+        salida_content = tk.Frame(self.frame_salida_nivel_inferior_edit, bg=self.COLORS['light'])
         salida_content.pack(fill="x", padx=15, pady=15)
 
         for col in range(6):
             salida_content.columnconfigure(col, weight=1)
 
         tk.Label(salida_content, text="Distrito:", font=('Segoe UI', 9), 
-                bg=self.COLORS['white'], fg=self.COLORS['text_dark']).grid(row=0, column=0, padx=5, pady=8, sticky="w")
+                bg=self.COLORS['light'], fg=self.COLORS['text_dark']).grid(row=0, column=0, padx=5, pady=8, sticky="w")
         salida_distrito_cb = AutocompleteCombobox(salida_content, textvariable=edit_salida_distrito_var, width=25, 
                                                 completevalues=[d['nombre'] for d in obtener_distritos() or []], state="disabled")
         salida_distrito_cb.grid(row=0, column=1, padx=5, pady=8, sticky="ew")
 
         tk.Label(salida_content, text="Tipo de Servicio:", font=('Segoe UI', 9), 
-                bg=self.COLORS['white'], fg=self.COLORS['text_dark']).grid(row=0, column=2, padx=5, pady=8, sticky="w")
+                bg=self.COLORS['light'], fg=self.COLORS['text_dark']).grid(row=0, column=2, padx=5, pady=8, sticky="w")
         salida_tipo_servicio_cb = AutocompleteCombobox(salida_content, textvariable=edit_salida_tipo_servicio_var, width=25, 
                                                     completevalues=[], state="disabled")
         salida_tipo_servicio_cb.grid(row=0, column=3, padx=5, pady=8, sticky="ew")
 
         tk.Label(salida_content, text="Servicio:", font=('Segoe UI', 9), 
-                bg=self.COLORS['white'], fg=self.COLORS['text_dark']).grid(row=0, column=4, padx=5, pady=8, sticky="w")
+                bg=self.COLORS['light'], fg=self.COLORS['text_dark']).grid(row=0, column=4, padx=5, pady=8, sticky="w")
         salida_servicio_cb = AutocompleteCombobox(salida_content, textvariable=edit_salida_servicio_var, width=25, 
                                                 completevalues=[], state="disabled")
         salida_servicio_cb.grid(row=0, column=5, padx=5, pady=8, sticky="ew")
@@ -1861,10 +1914,10 @@ class IngresoInsumos:
         editar_ventana.after(100, cargar_datos_iniciales)
 
         # **FRAME BOTONES**
-        frame_botones = tk.Frame(scrollable_frame, bg=self.COLORS['white'])
+        frame_botones = tk.Frame(scrollable_frame, bg=self.COLORS['light'])
         frame_botones.pack(fill="x", padx=20, pady=30)
         
-        botones_container = tk.Frame(frame_botones, bg=self.COLORS['white'])
+        botones_container = tk.Frame(frame_botones, bg=self.COLORS['light'])
         botones_container.pack(anchor="center")
         
         def guardar_cambios():
@@ -1911,7 +1964,7 @@ class IngresoInsumos:
             command=guardar_cambios,
             bg=self.COLORS['success'], 
             fg='white',
-            font=('Segoe UI', 10, 'bold'),
+            font=('Segoe UI', 9, 'bold'),
             relief='flat',
             padx=30, 
             pady=10,
@@ -1923,7 +1976,7 @@ class IngresoInsumos:
             command=editar_ventana.destroy,
             bg=self.COLORS['danger'], 
             fg='white',
-            font=('Segoe UI', 10, 'bold'),
+            font=('Segoe UI', 9, 'bold'),
             relief='flat',
             padx=30, 
             pady=10,
