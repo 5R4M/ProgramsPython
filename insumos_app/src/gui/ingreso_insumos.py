@@ -6,6 +6,8 @@ import sys
 import os
 from ttkwidgets.autocomplete import AutocompleteCombobox
 
+import os
+
 # Agregar el directorio raíz del proyecto al PATH de Python
 sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
@@ -57,6 +59,7 @@ class IngresoInsumos:
         self.PADDING_Y = 5
         
         self.setup_styles()
+        self.cargar_iconos()
         
         self.setup_ui()
         self.setup_bindings()
@@ -180,6 +183,34 @@ class IngresoInsumos:
             background=self.COLORS['white'],
             foreground=self.COLORS['text_light'])
     
+    def cargar_iconos(self):
+        """Cargar iconos PNG"""
+        try:
+            # __file__ está en .../src/gui/archivo.py
+            base_dir = os.path.dirname(os.path.dirname(__file__))  # Sube un nivel: de gui/ a src/
+            icons_path = os.path.join(base_dir, "utils", "icons")
+            
+            self.icon_area = tk.PhotoImage(file=os.path.join(icons_path, "area.png")).subsample(2, 2)
+            self.icon_distrito = tk.PhotoImage(file=os.path.join(icons_path, "distrito.png")).subsample(2, 2)
+            self.icon_servicio = tk.PhotoImage(file=os.path.join(icons_path, "servicio_1.png")).subsample(2, 2)
+            
+            self.icon_agregar = tk.PhotoImage(file=os.path.join(icons_path, "agregar.png")).subsample(2, 2)
+            self.icon_editar = tk.PhotoImage(file=os.path.join(icons_path, "editar.png")).subsample(2, 2)
+            self.icon_eliminar = tk.PhotoImage(file=os.path.join(icons_path, "eliminar.png")).subsample(2, 2)
+            self.icon_guardar = tk.PhotoImage(file=os.path.join(icons_path, "guardar.png")).subsample(2, 2)
+            self.icon_cerrar = tk.PhotoImage(file=os.path.join(icons_path, "cerrar.png")).subsample(2, 2)
+            
+        except Exception as e:
+            print(f"Error cargando iconos: {e}")
+            self.icon_area = None
+            self.icon_distrito = None
+            self.icon_servicio = None
+            self.icon_agregar = None
+            self.icon_editar = None
+            self.icon_eliminar = None
+            self.icon_guardar = None
+            self.icon_cerrar = None
+        
     # 1. Métodos de configuración de UI
     
     def create_compact_frame(self, parent, title, bg_color='white', header_color='primary'):
@@ -249,7 +280,7 @@ class IngresoInsumos:
 
         # Título principal
         title_label = tk.Label(header_inner, 
-                    text="📦 SISTEMA DE INVENTARIO - INGRESO DE INSUMOS",
+                    text="SISTEMA DE INVENTARIO - INGRESO DE INSUMOS",
                     font=('Segoe UI', 12, 'bold'),  # Más compacto
                     fg=self.COLORS['white'],        # Texto blanco
                     bg=self.COLORS['primary'])      # Fondo primary
@@ -297,9 +328,24 @@ class IngresoInsumos:
         rb_frame.pack(fill='x', pady=10)
 
         rb_area = tk.Radiobutton(rb_frame, 
-                                text="📍 Área", 
+                        text="Área",
+                        image=self.icon_area,
+                        compound='left',  # Icono a la izquierda
+                        variable=self.nivel_bodega_var, 
+                        value="area",
+                        command=self.actualizar_estado_comboboxes,
+                        font=('Segoe UI', 9),
+                        bg=self.COLORS['light'],
+                        fg=self.COLORS['text_dark'],
+                        selectcolor=self.COLORS['white'],
+                        activebackground=self.COLORS['white'])
+
+        rb_distrito = tk.Radiobutton(rb_frame, 
+                                text="Distrito",
+                                image=self.icon_distrito,
+                                compound='left',
                                 variable=self.nivel_bodega_var, 
-                                value="area",
+                                value="distrito",
                                 command=self.actualizar_estado_comboboxes,
                                 font=('Segoe UI', 9),
                                 bg=self.COLORS['light'],
@@ -307,19 +353,10 @@ class IngresoInsumos:
                                 selectcolor=self.COLORS['white'],
                                 activebackground=self.COLORS['white'])
 
-        rb_distrito = tk.Radiobutton(rb_frame, 
-                                    text="🏛️ Distrito", 
-                                    variable=self.nivel_bodega_var, 
-                                    value="distrito",
-                                    command=self.actualizar_estado_comboboxes,
-                                    font=('Segoe UI', 9),
-                                    bg=self.COLORS['light'],
-                                    fg=self.COLORS['text_dark'],
-                                    selectcolor=self.COLORS['white'],
-                                    activebackground=self.COLORS['white'])
-
         rb_servicio = tk.Radiobutton(rb_frame, 
-                                    text="🏥 Servicio", 
+                                    text="Servicio",
+                                    image=self.icon_servicio,
+                                    compound='left',
                                     variable=self.nivel_bodega_var, 
                                     value="servicio",
                                     command=self.actualizar_estado_comboboxes,
@@ -737,26 +774,20 @@ class IngresoInsumos:
         btn_inner.pack(padx=10, pady=10)
 
         self.btn_agregar = tk.Button(btn_inner,
-            text="➕ Agregar Movimiento",
+            text="Agregar Movimiento",
+            image=self.icon_agregar,
+            compound='left',
             command=self.agregar_movimiento,
             font=('Segoe UI', 9, 'bold'),
-            bg=self.COLORS['success'],
-            fg=self.COLORS['white'],
-            relief='flat',
-            borderwidth=0,
+            bg=self.COLORS['light'],         
+            fg=self.COLORS['text_dark'],      
+            relief='flat',                    
+            borderwidth=0,                    
+            highlightthickness=0,             
             padx=25,
             pady=8,
             cursor='hand2')
         self.btn_agregar.pack()
-
-        # Efectos hover para el botón
-        def on_enter_agregar(e):
-            self.btn_agregar.config(bg='#229954')
-        def on_leave_agregar(e):
-            self.btn_agregar.config(bg=self.COLORS['success'])
-
-        self.btn_agregar.bind('<Enter>', on_enter_agregar)
-        self.btn_agregar.bind('<Leave>', on_leave_agregar)
 
         # **FRAME MOVIMIENTOS MEJORADO**
         movimientos_container = tk.Frame(self.scrollable_frame, bg=self.COLORS['light'])
@@ -821,7 +852,7 @@ class IngresoInsumos:
             foreground=[('active', 'white')])
 
         style.map("Custom.Treeview",
-            background=[('selected', self.COLORS['accent'])],
+            background=[('selected', self.COLORS['text_light'])],
             foreground=[('selected', 'white')])
 
         # **CONFIGURAR GRID PARA POSICIONAMIENTO CORRECTO DE SCROLLBARS**
@@ -838,7 +869,7 @@ class IngresoInsumos:
         # **CONFIGURACIÓN MEJORADA DE COLUMNAS DEL TREEVIEW**
         # Configurar headers y columnas con anchos específicos
         encabezados = {
-            'fecha_registro': 'FECHA EGISTRO',
+            'fecha_registro': 'FECHA REGISTRO',
             'referencia': 'REFERENCIA',
             'tipo_movimiento': 'TIPO MOVIMIENTO',
             'insumo': 'INSUMO',
@@ -953,13 +984,16 @@ class IngresoInsumos:
 
         # Botón Editar
         self.btn_editar = tk.Button(botones_inner,
-            text="✏️ Editar",
+            text="Editar",
+            image=self.icon_editar,
+            compound='left',
             command=self.editar_movimiento,
             font=('Segoe UI', 9, 'bold'),
-            bg=self.COLORS['warning'],
-            fg=self.COLORS['white'],
+            bg=self.COLORS['light'],          
+            fg=self.COLORS['text_dark'],      
             relief='flat',
             borderwidth=0,
+            highlightthickness=0,
             padx=15,
             pady=6,
             cursor='hand2')
@@ -967,13 +1001,16 @@ class IngresoInsumos:
 
         # Botón Eliminar
         self.btn_eliminar = tk.Button(botones_inner,
-            text="🗑️ Eliminar",
+            text="Eliminar",
+            image=self.icon_eliminar,
+            compound='left',
             command=self.eliminar_movimiento,
             font=('Segoe UI', 9, 'bold'),
-            bg=self.COLORS['danger'],
-            fg=self.COLORS['white'],
+            bg=self.COLORS['light'],
+            fg=self.COLORS['text_dark'],
             relief='flat',
             borderwidth=0,
+            highlightthickness=0,
             padx=15,
             pady=6,
             cursor='hand2')
@@ -981,13 +1018,16 @@ class IngresoInsumos:
 
         # Botón Guardar
         self.btn_guardar = tk.Button(botones_inner,
-            text="💾 Guardar Movimientos",
+            text="Guardar Movimientos",
+            image=self.icon_guardar,
+            compound='left',
             command=self.guardar_movimientos,
             font=('Segoe UI', 9, 'bold'),
-            bg=self.COLORS['success'],
-            fg=self.COLORS['white'],
+            bg=self.COLORS['light'],
+            fg=self.COLORS['text_dark'],
             relief='flat',
             borderwidth=0,
+            highlightthickness=0,
             padx=15,
             pady=6,
             cursor='hand2')
@@ -995,31 +1035,20 @@ class IngresoInsumos:
 
         # Botón Cerrar
         self.btn_cerrar = tk.Button(botones_inner,
-            text="❌ Cerrar",
+            text="Cerrar",
+            image=self.icon_cerrar,
+            compound='left',
             command=self.cerrar_ventana,
             font=('Segoe UI', 9, 'bold'),
-            bg=self.COLORS['secondary'],
-            fg=self.COLORS['white'],
+            bg=self.COLORS['light'],
+            fg=self.COLORS['text_dark'],
             relief='flat',
             borderwidth=0,
+            highlightthickness=0,
             padx=15,
             pady=6,
             cursor='hand2')
         self.btn_cerrar.pack(side="right", padx=10)
-
-        # Efectos hover para todos los botones
-        def create_hover_effect(button, normal_color, hover_color):
-            def on_enter(e):
-                button.config(bg=hover_color)
-            def on_leave(e):
-                button.config(bg=normal_color)
-            button.bind('<Enter>', on_enter)
-            button.bind('<Leave>', on_leave)
-
-        create_hover_effect(self.btn_editar, self.COLORS['warning'], '#e67e22')
-        create_hover_effect(self.btn_eliminar, self.COLORS['danger'], '#c0392b')
-        create_hover_effect(self.btn_guardar, self.COLORS['success'], '#229954')
-        create_hover_effect(self.btn_cerrar, self.COLORS['secondary'], '#2c3e50')
 
         # Ocultar inicialmente el frame de salida nivel inferior
         self.frame_salida_nivel_inferior.pack_forget()
@@ -1121,7 +1150,7 @@ class IngresoInsumos:
                                     if isinstance(widget, tk.Button):
                                         try:
                                             # Verificar si es el botón correcto usando el texto
-                                            if hasattr(widget, 'cget') and '➕' in str(widget.cget('text')):
+                                            if hasattr(widget, 'cget') and 'Agregar Movimiento' in str(widget.cget('text')):
                                                 btn_container = child
                                                 break
                                         except tk.TclError:
