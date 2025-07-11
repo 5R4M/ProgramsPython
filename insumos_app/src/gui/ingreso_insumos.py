@@ -1500,8 +1500,12 @@ class IngresoInsumos:
         edit_sin_lote_var = tk.BooleanVar()
         edit_sin_fecha_venc = tk.BooleanVar()
 
-        # **CONTENEDOR PRINCIPAL CON SCROLL**
-        main_canvas = tk.Canvas(editar_ventana, bg=self.COLORS['light'], highlightthickness=0)
+        # CONTENEDOR PRINCIPAL CON SCROLL
+        container = tk.Frame(editar_ventana)
+        container.pack(fill='both', expand=True)
+
+        main_canvas = tk.Canvas(container, bg=self.COLORS['light'], highlightthickness=0)
+        scrollbar = ttk.Scrollbar(container, orient='vertical', command=main_canvas.yview)
         scrollable_frame = tk.Frame(main_canvas, bg=self.COLORS['light'])
 
         scrollable_frame.bind(
@@ -1510,10 +1514,13 @@ class IngresoInsumos:
         )
 
         main_canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
-        main_canvas.pack(side="left", fill="both", expand=True)
+        main_canvas.configure(yscrollcommand=scrollbar.set)
 
-        # **HEADER PRINCIPAL**
-        header_frame = tk.Frame(scrollable_frame, bg=self.COLORS['primary'], height=80)
+        main_canvas.pack(side="left", fill="both", expand=True)
+        scrollbar.pack(side="right", fill="y")
+
+        # HEADER PRINCIPAL
+        header_frame = tk.Frame(scrollable_frame, bg=self.COLORS['primary'], height=40)
         header_frame.pack(fill="x", padx=20, pady=(20, 0))
         header_frame.pack_propagate(False)
 
@@ -1524,208 +1531,211 @@ class IngresoInsumos:
             fg='white')
         header_label.pack(expand=True)
 
-        # **FRAME NIVEL DE BODEGA**
-        self.frame_nivel_bodega_edit = tk.LabelFrame(scrollable_frame, 
-            text="Nivel de Bodega", 
-            font=('Segoe UI', 9, 'bold'),
-            bg=self.COLORS['light'], 
-            fg=self.COLORS['text_dark'],
-            bd=2, 
-            relief='solid')
+        # FRAME NIVEL DE BODEGA (con estilo mejorado)
+        self.frame_nivel_bodega_edit = tk.Frame(scrollable_frame, bg=self.COLORS['light'], relief='solid', borderwidth=1)
         self.frame_nivel_bodega_edit.pack(fill="x", padx=20, pady=15)
 
-        # Radiobuttons para nivel de bodega
-        radio_frame = tk.Frame(self.frame_nivel_bodega_edit, bg=self.COLORS['light'])
-        radio_frame.pack(fill="x", padx=15, pady=15)
+        nivel_header = tk.Frame(self.frame_nivel_bodega_edit, bg=self.COLORS['primary'], height=22)
+        nivel_header.pack(fill='x')
+        nivel_header.pack_propagate(False)
 
-        self.radio_area_edit = ttk.Radiobutton(radio_frame, 
-            text="Área", 
-            variable=edit_nivel_bodega_var, 
-            value="area",
-            style="Custom.TRadiobutton")
-        self.radio_area_edit.pack(side="left", padx=(0, 30))
+        tk.Label(nivel_header, 
+                text="🏢 Nivel de Bodega", 
+                font=('Segoe UI', 9, 'bold'),
+                fg=self.COLORS['white'], 
+                bg=self.COLORS['primary']).pack(side='left', padx=10, pady=4)
 
-        self.radio_distrito_edit = ttk.Radiobutton(radio_frame, 
-            text="Distrito", 
-            variable=edit_nivel_bodega_var, 
-            value="distrito",
-            style="Custom.TRadiobutton")
-        self.radio_distrito_edit.pack(side="left", padx=(0, 30))
+        nivel_content = tk.Frame(self.frame_nivel_bodega_edit, bg=self.COLORS['light'])
+        nivel_content.pack(fill='x', padx=12, pady=6)
 
-        self.radio_servicio_edit = ttk.Radiobutton(radio_frame, 
-            text="Servicio", 
-            variable=edit_nivel_bodega_var, 
-            value="servicio",
-            style="Custom.TRadiobutton")
-        self.radio_servicio_edit.pack(side="left")
+        # Radiobuttons con estilo mejorado
+        rb_area = tk.Radiobutton(nivel_content, text="Área", image=self.icon_area, compound='left',
+                                variable=edit_nivel_bodega_var, value="area",
+                                font=('Segoe UI', 9), bg=self.COLORS['light'], fg=self.COLORS['text_dark'],
+                                selectcolor=self.COLORS['white'], activebackground=self.COLORS['white'])
+        rb_distrito = tk.Radiobutton(nivel_content, text="Distrito", image=self.icon_distrito, compound='left',
+                                    variable=edit_nivel_bodega_var, value="distrito",
+                                    font=('Segoe UI', 9), bg=self.COLORS['light'], fg=self.COLORS['text_dark'],
+                                    selectcolor=self.COLORS['white'], activebackground=self.COLORS['white'])
+        rb_servicio = tk.Radiobutton(nivel_content, text="Servicio", image=self.icon_servicio, compound='left',
+                                    variable=edit_nivel_bodega_var, value="servicio",
+                                    font=('Segoe UI', 9), bg=self.COLORS['light'], fg=self.COLORS['text_dark'],
+                                    selectcolor=self.COLORS['white'], activebackground=self.COLORS['white'])
 
-        # **FRAME SERVICIOS**
-        self.frame_servicios_edit = tk.LabelFrame(scrollable_frame, 
-            text="Servicios", 
-            font=('Segoe UI', 9, 'bold'),
-            bg=self.COLORS['light'], 
-            fg=self.COLORS['text_dark'],
-            bd=2, 
-            relief='solid')
+        rb_area.grid(row=0, column=0, padx=(0, 20), pady=5, sticky="w")
+        rb_distrito.grid(row=0, column=1, padx=(0, 20), pady=5, sticky="w")
+        rb_servicio.grid(row=0, column=2, padx=(0, 20), pady=5, sticky="w")
+
+        # FRAME SERVICIOS (con estilo mejorado)
+        self.frame_servicios_edit = tk.Frame(scrollable_frame, bg=self.COLORS['light'], relief='solid', borderwidth=1)
         self.frame_servicios_edit.pack(fill="x", padx=20, pady=15)
 
-        servicios_content = tk.Frame(self.frame_servicios_edit, bg=self.COLORS['light'])
-        servicios_content.pack(fill="x", padx=15, pady=15)
+        servicios_header = tk.Frame(self.frame_servicios_edit, bg=self.COLORS['primary'], height=25)
+        servicios_header.pack(fill='x')
+        servicios_header.pack_propagate(False)
 
-        # Configurar grid
+        tk.Label(servicios_header, text="🏥 Configuración de Servicios", font=('Segoe UI', 9, 'bold'),
+                fg=self.COLORS['white'], bg=self.COLORS['primary']).pack(side='left', padx=10, pady=4)
+
+        servicios_content = tk.Frame(self.frame_servicios_edit, bg=self.COLORS['light'])
+        servicios_content.pack(fill="x", padx=12, pady=6)
+
         for col in range(8):
             servicios_content.columnconfigure(col, weight=1)
 
-        # Labels y comboboxes para servicios
-        tk.Label(servicios_content, text="Área:", font=('Segoe UI', 9), 
+        # Aquí agregas tus labels y comboboxes para servicios con grid, igual que antes
+        tk.Label(servicios_content, text="Área:", font=('Segoe UI', 9),
                 bg=self.COLORS['light'], fg=self.COLORS['text_dark']).grid(row=0, column=0, padx=5, pady=8, sticky="w")
         area_cb = AutocompleteCombobox(servicios_content, textvariable=edit_area_var, width=25, state="normal")
         area_cb.set_completion_list([a['nombre'] for a in obtener_areas() or []])
         area_cb.grid(row=0, column=1, padx=5, pady=8, sticky="ew")
 
-        tk.Label(servicios_content, text="Distrito:", font=('Segoe UI', 9), 
+        tk.Label(servicios_content, text="Distrito:", font=('Segoe UI', 9),
                 bg=self.COLORS['light'], fg=self.COLORS['text_dark']).grid(row=0, column=2, padx=5, pady=8, sticky="w")
         distrito_cb = AutocompleteCombobox(servicios_content, textvariable=edit_distrito_var, width=25, state="normal")
         distrito_cb.set_completion_list([d['nombre'] for d in obtener_distritos() or []])
         distrito_cb.grid(row=0, column=3, padx=5, pady=8, sticky="ew")
 
-        tk.Label(servicios_content, text="Tipo de Servicio:", font=('Segoe UI', 9), 
+        tk.Label(servicios_content, text="Tipo de Servicio:", font=('Segoe UI', 9),
                 bg=self.COLORS['light'], fg=self.COLORS['text_dark']).grid(row=0, column=4, padx=5, pady=8, sticky="w")
         tipo_servicio_cb = AutocompleteCombobox(servicios_content, textvariable=edit_tipo_servicio_var, width=25, state="normal")
         tipo_servicio_cb.grid(row=0, column=5, padx=5, pady=8, sticky="ew")
 
-        tk.Label(servicios_content, text="Servicio:", font=('Segoe UI', 9), 
+        tk.Label(servicios_content, text="Servicio:", font=('Segoe UI', 9),
                 bg=self.COLORS['light'], fg=self.COLORS['text_dark']).grid(row=0, column=6, padx=5, pady=8, sticky="w")
         servicio_cb = AutocompleteCombobox(servicios_content, textvariable=edit_servicio_var, width=25, state="normal")
         servicio_cb.grid(row=0, column=7, padx=5, pady=8, sticky="ew")
 
-        # **FRAME INSUMOS**
-        self.frame_insumos_edit = tk.LabelFrame(scrollable_frame, 
-            text="Insumos", 
-            font=('Segoe UI', 9, 'bold'),
-            bg=self.COLORS['light'], 
-            fg=self.COLORS['text_dark'],
-            bd=2, 
-            relief='solid')
+        # FRAME INSUMOS (con estilo mejorado)
+        self.frame_insumos_edit = tk.Frame(scrollable_frame, bg=self.COLORS['light'], relief='solid', borderwidth=1)
         self.frame_insumos_edit.pack(fill="x", padx=20, pady=15)
 
+        insumos_header = tk.Frame(self.frame_insumos_edit, bg=self.COLORS['primary'], height=25)
+        insumos_header.pack(fill='x')
+        insumos_header.pack_propagate(False)
+
+        tk.Label(insumos_header, text="💊 Gestión de Insumos", font=('Segoe UI', 9, 'bold'),
+                fg=self.COLORS['white'], bg=self.COLORS['primary']).pack(side='left', padx=10, pady=4)
+
         insumos_content = tk.Frame(self.frame_insumos_edit, bg=self.COLORS['light'])
-        insumos_content.pack(fill="x", padx=15, pady=15)
+        insumos_content.pack(fill="x", padx=12, pady=6)
 
         for col in range(6):
             insumos_content.columnconfigure(col, weight=1)
 
-        tk.Label(insumos_content, text="Tipo de Insumo:", font=('Segoe UI', 9), 
+        # Aquí agregas tus labels y comboboxes para insumos con grid, igual que antes
+        tk.Label(insumos_content, text="Tipo de Insumo:", font=('Segoe UI', 9),
                 bg=self.COLORS['light'], fg=self.COLORS['text_dark']).grid(row=0, column=0, padx=5, pady=8, sticky="w")
         tipo_insumo_cb = AutocompleteCombobox(insumos_content, textvariable=edit_tipo_insumo_var, width=25, state="normal")
         tipo_insumo_cb.set_completion_list([ti['descripcion'] for ti in obtener_tipos_insumo() or []])
         tipo_insumo_cb.grid(row=0, column=1, padx=5, pady=8, sticky="ew")
 
-        tk.Label(insumos_content, text="Insumo:", font=('Segoe UI', 9), 
+        tk.Label(insumos_content, text="Insumo:", font=('Segoe UI', 9),
                 bg=self.COLORS['light'], fg=self.COLORS['text_dark']).grid(row=0, column=2, padx=5, pady=8, sticky="w")
         insumo_cb = AutocompleteCombobox(insumos_content, textvariable=edit_insumo_var, width=25, state="normal")
         insumo_cb.grid(row=0, column=3, padx=5, pady=8, sticky="ew")
 
-        tk.Label(insumos_content, text="Presentación:", font=('Segoe UI', 9), 
+        tk.Label(insumos_content, text="Presentación:", font=('Segoe UI', 9),
                 bg=self.COLORS['light'], fg=self.COLORS['text_dark']).grid(row=0, column=4, padx=5, pady=8, sticky="w")
         presentacion_cb = AutocompleteCombobox(insumos_content, textvariable=edit_presentacion_var, width=25, state="normal")
         presentacion_cb.grid(row=0, column=5, padx=5, pady=8, sticky="ew")
 
-        # **FRAME DETALLES DEL MOVIMIENTO**
-        self.frame_detalles_edit = tk.LabelFrame(scrollable_frame, 
-            text="Detalles del Movimiento", 
-            font=('Segoe UI', 9, 'bold'),
-            bg=self.COLORS['light'], 
-            fg=self.COLORS['text_dark'],
-            bd=2, 
-            relief='solid')
+        # FRAME DETALLES DEL MOVIMIENTO (con estilo mejorado)
+        self.frame_detalles_edit = tk.Frame(scrollable_frame, bg=self.COLORS['light'], relief='solid', borderwidth=1)
         self.frame_detalles_edit.pack(fill="x", padx=20, pady=15)
 
+        detalles_header = tk.Frame(self.frame_detalles_edit, bg=self.COLORS['primary'], height=25)
+        detalles_header.pack(fill='x')
+        detalles_header.pack_propagate(False)
+
+        tk.Label(detalles_header, text="📋 Detalles del Movimiento", font=('Segoe UI', 9, 'bold'),
+                fg=self.COLORS['white'], bg=self.COLORS['primary']).pack(side='left', padx=10, pady=4)
+
         detalles_content = tk.Frame(self.frame_detalles_edit, bg=self.COLORS['light'])
-        detalles_content.pack(fill="x", padx=15, pady=15)
+        detalles_content.pack(fill="x", padx=12, pady=6)
 
         for col in range(6):
             detalles_content.columnconfigure(col, weight=1)
 
-        # Primera fila
-        tk.Label(detalles_content, text="Fecha de Registro:", font=('Segoe UI', 9), 
+        # Aquí agregas tus widgets para detalles con grid, igual que antes
+        tk.Label(detalles_content, text="Fecha de Registro:", font=('Segoe UI', 9),
                 bg=self.COLORS['light'], fg=self.COLORS['text_dark']).grid(row=0, column=0, padx=5, pady=8, sticky="w")
         fecha_edit = DateEntry(detalles_content, width=25, background='darkblue', foreground='white', borderwidth=2, date_pattern='dd/mm/yyyy')
         fecha_edit.grid(row=0, column=1, padx=5, pady=8, sticky="ew")
 
-        tk.Label(detalles_content, text="Referencia:", font=('Segoe UI', 9), 
+        tk.Label(detalles_content, text="Referencia:", font=('Segoe UI', 9),
                 bg=self.COLORS['light'], fg=self.COLORS['text_dark']).grid(row=0, column=2, padx=5, pady=8, sticky="w")
         referencia_entry = ttk.Entry(detalles_content, width=27)
         referencia_entry.grid(row=0, column=3, padx=5, pady=8, sticky="ew")
 
-        tk.Label(detalles_content, text="Tipo Movimiento:", font=('Segoe UI', 9), 
+        tk.Label(detalles_content, text="Tipo Movimiento:", font=('Segoe UI', 9),
                 bg=self.COLORS['light'], fg=self.COLORS['text_dark']).grid(row=0, column=4, padx=5, pady=8, sticky="w")
         tipo_mov_cb = AutocompleteCombobox(detalles_content, textvariable=edit_tipo_movimiento_var, width=25, state="normal")
         tipo_mov_cb.set_completion_list([tm['descripcion'] for tm in obtener_tipos_movimiento() or []])
         tipo_mov_cb.grid(row=0, column=5, padx=5, pady=8, sticky="ew")
 
-        # Segunda fila
-        tk.Label(detalles_content, text="Lote:", font=('Segoe UI', 9), 
+        tk.Label(detalles_content, text="Lote:", font=('Segoe UI', 9),
                 bg=self.COLORS['light'], fg=self.COLORS['text_dark']).grid(row=1, column=0, padx=5, pady=8, sticky="w")
         lote_frame = tk.Frame(detalles_content, bg=self.COLORS['light'])
         lote_frame.grid(row=1, column=1, padx=5, pady=8, sticky="ew")
         lote_entry = ttk.Entry(lote_frame, width=20)
         lote_entry.pack(side="left", fill="x", expand=True)
-        edit_check_sin_lote = ttk.Checkbutton(lote_frame, text="Sin\nlote", variable=edit_sin_lote_var, 
+        edit_check_sin_lote = ttk.Checkbutton(lote_frame, text="Sin\nlote", variable=edit_sin_lote_var,
                                             command=toggle_lote_edit, style="Custom.TCheckbutton")
         edit_check_sin_lote.pack(side="right", padx=(5, 0))
 
-        tk.Label(detalles_content, text="Fecha\nVencimiento:", font=('Segoe UI', 9), 
+        tk.Label(detalles_content, text="Fecha\nVencimiento:", font=('Segoe UI', 9),
                 bg=self.COLORS['light'], fg=self.COLORS['text_dark']).grid(row=1, column=2, padx=5, pady=8, sticky="w")
         fecha_venc_frame = tk.Frame(detalles_content, bg=self.COLORS['light'])
         fecha_venc_frame.grid(row=1, column=3, padx=5, pady=8, sticky="ew")
         fecha_venc_edit = DateEntry(fecha_venc_frame, width=15, background='darkblue', foreground='white', borderwidth=2, date_pattern='dd/mm/yyyy')
         fecha_venc_edit.pack(side="left")
-        edit_check_sin_fecha = ttk.Checkbutton(fecha_venc_frame, text="Sin fecha\nvencimiento", variable=edit_sin_fecha_venc, 
+        edit_check_sin_fecha = ttk.Checkbutton(fecha_venc_frame, text="Sin fecha\nvencimiento", variable=edit_sin_fecha_venc,
                                             command=toggle_fecha_venc_edit, style="Custom.TCheckbutton")
         edit_check_sin_fecha.pack(side="right", padx=(5, 0))
 
-        tk.Label(detalles_content, text="Cantidad:", font=('Segoe UI', 9), 
+        tk.Label(detalles_content, text="Cantidad:", font=('Segoe UI', 9),
                 bg=self.COLORS['light'], fg=self.COLORS['text_dark']).grid(row=1, column=4, padx=5, pady=8, sticky="w")
         cantidad_entry = ttk.Entry(detalles_content, width=27)
         cantidad_entry.grid(row=1, column=5, padx=5, pady=8, sticky="ew")
 
-        # Tercera fila
-        tk.Label(detalles_content, text="Observaciones:", font=('Segoe UI', 9), 
+        tk.Label(detalles_content, text="Observaciones:", font=('Segoe UI', 9),
                 bg=self.COLORS['light'], fg=self.COLORS['text_dark']).grid(row=2, column=0, padx=5, pady=8, sticky="w")
         observaciones_entry = ttk.Entry(detalles_content, width=80)
         observaciones_entry.grid(row=2, column=1, columnspan=5, padx=5, pady=8, sticky="ew")
 
-        # **FRAME SALIDA NIVEL INFERIOR (INICIALMENTE OCULTO)**
-        self.frame_salida_nivel_inferior_edit = tk.LabelFrame(scrollable_frame, 
-            text="Salida Nivel Inferior", 
-            font=('Segoe UI', 9, 'bold'),
-            bg=self.COLORS['light'], 
-            fg=self.COLORS['text_dark'],
-            bd=2, 
-            relief='solid')
+        # FRAME SALIDA NIVEL INFERIOR (con estilo mejorado)
+        self.frame_salida_nivel_inferior_edit = tk.Frame(scrollable_frame, bg=self.COLORS['light'], relief='solid', borderwidth=1)
+        self.frame_salida_nivel_inferior_edit.pack(fill="x", padx=20, pady=15)
+
+        salida_header = tk.Frame(self.frame_salida_nivel_inferior_edit, bg=self.COLORS['primary'], height=25)
+        salida_header.pack(fill='x')
+        salida_header.pack_propagate(False)
+
+        tk.Label(salida_header, text="🔄 Salida a Nivel Inferior", font=('Segoe UI', 9, 'bold'),
+                fg=self.COLORS['white'], bg=self.COLORS['primary']).pack(side='left', padx=10, pady=4)
 
         salida_content = tk.Frame(self.frame_salida_nivel_inferior_edit, bg=self.COLORS['light'])
-        salida_content.pack(fill="x", padx=15, pady=15)
+        salida_content.pack(fill='x', padx=12, pady=6)
 
         for col in range(6):
             salida_content.columnconfigure(col, weight=1)
 
-        tk.Label(salida_content, text="Distrito:", font=('Segoe UI', 9), 
+        tk.Label(salida_content, text="Distrito:", font=('Segoe UI', 9),
                 bg=self.COLORS['light'], fg=self.COLORS['text_dark']).grid(row=0, column=0, padx=5, pady=8, sticky="w")
-        salida_distrito_cb = AutocompleteCombobox(salida_content, textvariable=edit_salida_distrito_var, width=25, 
+        salida_distrito_cb = AutocompleteCombobox(salida_content, textvariable=edit_salida_distrito_var, width=25,
                                                 completevalues=[d['nombre'] for d in obtener_distritos() or []], state="disabled")
         salida_distrito_cb.grid(row=0, column=1, padx=5, pady=8, sticky="ew")
 
-        tk.Label(salida_content, text="Tipo de Servicio:", font=('Segoe UI', 9), 
+        tk.Label(salida_content, text="Tipo de Servicio:", font=('Segoe UI', 9),
                 bg=self.COLORS['light'], fg=self.COLORS['text_dark']).grid(row=0, column=2, padx=5, pady=8, sticky="w")
-        salida_tipo_servicio_cb = AutocompleteCombobox(salida_content, textvariable=edit_salida_tipo_servicio_var, width=25, 
+        salida_tipo_servicio_cb = AutocompleteCombobox(salida_content, textvariable=edit_salida_tipo_servicio_var, width=25,
                                                     completevalues=[], state="disabled")
         salida_tipo_servicio_cb.grid(row=0, column=3, padx=5, pady=8, sticky="ew")
 
-        tk.Label(salida_content, text="Servicio:", font=('Segoe UI', 9), 
+        tk.Label(salida_content, text="Servicio:", font=('Segoe UI', 9),
                 bg=self.COLORS['light'], fg=self.COLORS['text_dark']).grid(row=0, column=4, padx=5, pady=8, sticky="w")
-        salida_servicio_cb = AutocompleteCombobox(salida_content, textvariable=edit_salida_servicio_var, width=25, 
+        salida_servicio_cb = AutocompleteCombobox(salida_content, textvariable=edit_salida_servicio_var, width=25,
                                                 completevalues=[], state="disabled")
         salida_servicio_cb.grid(row=0, column=5, padx=5, pady=8, sticky="ew")
 
@@ -2011,26 +2021,34 @@ class IngresoInsumos:
         # Botones con estilo
         btn_guardar = tk.Button(botones_container, 
             text="GUARDAR", 
+            image=self.icon_guardar,
+            compound='left',
             command=guardar_cambios,
-            bg=self.COLORS['success'], 
-            fg='white',
+            bg=self.COLORS['light'], 
+            fg=self.COLORS['text_dark'],
             font=('Segoe UI', 9, 'bold'),
             relief='flat',
-            padx=30, 
+            padx=10, 
             pady=10,
-            cursor='hand2')
+            cursor='hand2',
+            borderwidth=0,
+            highlightthickness=0)
         btn_guardar.pack(side="left", padx=10)
 
         btn_cerrar = tk.Button(botones_container, 
             text="CERRAR", 
+            image=self.icon_cerrar,
+            compound='left',
             command=editar_ventana.destroy,
-            bg=self.COLORS['danger'], 
-            fg='white',
+            bg=self.COLORS['light'], 
+            fg=self.COLORS['text_dark'],
             font=('Segoe UI', 9, 'bold'),
             relief='flat',
-            padx=30, 
+            padx=10, 
             pady=10,
-            cursor='hand2')
+            cursor='hand2',
+            borderwidth=0,
+            highlightthickness=0)
         btn_cerrar.pack(side="left", padx=10)
 
         # **BINDINGS**
