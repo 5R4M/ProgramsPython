@@ -40,6 +40,8 @@ class CorreccionMovimientos:
     def __init__(self, parent_frame, main_window=None):
         self.parent = parent_frame
         self.main_window = main_window
+        self.setup_styles()
+        self.cargar_iconos()  # Carga los iconos PNG aquí
         self.movimientos_data = None
 
         # Crear estilos para los frames
@@ -57,34 +59,168 @@ class CorreccionMovimientos:
 
         self.setup_ui()
 
-    def setup_ui(self):
+    def cargar_iconos(self):
+        try:
+            base_dir = os.path.dirname(os.path.dirname(__file__))  # Sube un nivel: de gui/ a src/
+            icons_path = os.path.join(base_dir, "utils", "icons")
+            
+            # Ajusta la ruta según tu proyecto
+            self.icon_editar = tk.PhotoImage(file=os.path.join(icons_path, "editar.png")).subsample(2, 2)
+            self.icon_eliminar = tk.PhotoImage(file=os.path.join(icons_path, "eliminar.png")).subsample(2, 2)
+            self.icon_cerrar = tk.PhotoImage(file=os.path.join(icons_path, "cerrar.png")).subsample(2, 2)
+        except Exception as e:
+            print(f"Error cargando iconos: {e}")
+            self.icon_editar = None
+            self.icon_eliminar = None
+            self.icon_cerrar = None
+
+    def create_titled_frame(self, parent, title):
+        container = tk.Frame(parent, bg=self.COLORS['white'], relief='solid', borderwidth=1)
+        container.pack(fill='x', padx=10, pady=5)
+
+        header = tk.Frame(container, bg=self.COLORS['primary'], height=25)
+        header.pack(fill='x')
+        header.pack_propagate(False)
+
+        label = tk.Label(header, text=title, font=('Segoe UI', 9, 'bold'),
+                        fg=self.COLORS['white'], bg=self.COLORS['primary'])
+        label.pack(side='left', padx=10, pady=3)
+
+        content = tk.Frame(container, bg=self.COLORS['white'])
+        content.pack(fill='both', expand=True, padx=10, pady=10)
+
+        return container, content
+
+    def setup_styles(self):
+        self.COLORS = {
+            'primary': '#2E86AB',
+            'secondary': '#A23B72',
+            'success': '#27AE60',
+            'warning': '#F39C12',
+            'danger': '#E74C3C',
+            'accent': '#8E44AD',
+            'light': '#F8F9FA',
+            'white': '#FFFFFF',
+            'text_dark': '#2C3E50',
+            'text_light': '#7F8C8D',
+            'border': '#BDC3C7'
+        }
+
+        style = ttk.Style()
+        style.theme_use('clam')
         
-        # Agregar título principal
-        title_frame = ttk.Frame(self.parent)
-        title_frame.pack(fill='x', padx=10, pady=(10, 5))
+        style.configure('White.TFrame', background=self.COLORS['white'])
+        
+        # Estilo para labels con fondo blanco
+        style.configure('White.TLabel',
+            background=self.COLORS['white'],
+            foreground=self.COLORS['text_dark'],
+            font=('Segoe UI', 9))
 
-        ttk.Label(title_frame, text="Correcciones Movimientos de Insumos",
-                font=('Segoe UI', 16, 'bold')).pack(anchor='w')
+        # Estilo para botones con fondo blanco
+        style.configure('White.TButton',
+            background=self.COLORS['white'],
+            foreground=self.COLORS['text_dark'],
+            font=('Segoe UI', 9),
+            relief='flat',
+            borderwidth=0)
+        style.map('White.TButton',
+            background=[('active', self.COLORS['light']),
+                        ('pressed', self.COLORS['light'])])
+        
+        style.configure('Card.TLabelframe',
+            background=self.COLORS['white'],
+            relief='solid',
+            borderwidth=1,
+            labeloutside=False)
 
-        ttk.Label(title_frame, text="Corrija los movimientos de los insumos",
-                font=('Segoe UI', 10)).pack(anchor='w', pady=(2, 0))
+        style.configure('Card.TLabelframe.Label',
+            background=self.COLORS['primary'],
+            foreground=self.COLORS['light'],
+            font=('Segoe UI', 9, 'bold'),
+            padding=(8, 3))
+
+        style.configure('Primary.TButton',
+            font=('Segoe UI', 9, 'bold'),
+            padding=(12, 6),
+            relief='flat',
+            borderwidth=0,
+            background=self.COLORS['primary'],
+            foreground=self.COLORS['white'])
+
+        style.map('Primary.TButton',
+            background=[('active', '#1F5F8B'),
+                        ('pressed', '#1A4F7A')])
+
+        style.configure('Title.TLabel',
+            font=('Segoe UI', 14, 'bold'),
+            background=self.COLORS['white'],
+            foreground=self.COLORS['primary'])
+
+        style.configure('Subtitle.TLabel',
+            font=('Segoe UI', 9),
+            background=self.COLORS['white'],
+            foreground=self.COLORS['text_light'])
+
+        style.configure("Custom.Treeview",
+            background=self.COLORS['white'],
+            foreground=self.COLORS['text_dark'],
+            rowheight=25,
+            fieldbackground=self.COLORS['white'],
+            font=('Segoe UI', 8),
+            borderwidth=1,
+            relief='solid')
+
+        style.configure("Custom.Treeview.Heading",
+            background=self.COLORS['primary'],
+            foreground='white',
+            font=('Segoe UI', 9, 'bold'),
+            relief='raised',
+            borderwidth=1)
+
+    def setup_ui(self):
+        # --- Título principal ---
+        title_frame = tk.Frame(self.parent, bg=self.COLORS['primary'], height=70)
+        title_frame.pack(fill='x', padx=0, pady=(10, 5))
+        title_frame.pack_propagate(False)
+
+        title_inner = tk.Frame(title_frame, bg=self.COLORS['primary'])
+        title_inner.pack(fill='both', expand=True, padx=15, pady=8)
+
+        tk.Label(title_inner,
+                text="Correcciones Movimientos de Insumos",
+                font=('Segoe UI', 12, 'bold'),
+                fg=self.COLORS['white'],
+                bg=self.COLORS['primary']).pack(anchor='w')
+
+        tk.Label(title_inner,
+                text="Corrija los movimientos de los insumos",
+                font=('Segoe UI', 8),
+                fg=self.COLORS['white'],
+                bg=self.COLORS['primary']).pack(anchor='w', pady=(2, 0))
 
         # Separador
         ttk.Separator(self.parent, orient='horizontal').pack(fill='x', padx=10, pady=5)
-        
-        # Frame principal - USAR PACK PARA TODO
-        self.frame_principal = ttk.LabelFrame(self.parent, text="Filtros de Búsqueda")
-        self.frame_principal.pack(fill="both", expand=True, padx=10, pady=5)
 
-        # Frame para fechas
-        self.frame_fechas = ttk.LabelFrame(self.frame_principal, text="Selección de Fechas")
-        self.frame_fechas.pack(fill="x", padx=5, pady=5)
+        # Frame principal con título personalizado
+        self.frame_principal_container, self.frame_principal = self.create_titled_frame(self.parent, "Filtros de Búsqueda")
+        self.frame_principal_container.config(bg=self.COLORS['white'])
+        self.frame_principal.config(bg=self.COLORS['white'])
+        self.frame_principal_container.pack(fill="x", expand=False, padx=10, pady=5)
+        self.frame_principal_container.config(width=900)
+
+        # Frame para fechas con título personalizado
+        self.frame_fechas_container, self.frame_fechas = self.create_titled_frame(self.frame_principal, "Selección de Fechas")
+        self.frame_fechas_container.config(bg=self.COLORS['white'])
+        self.frame_fechas.config(bg=self.COLORS['white'])
+        self.frame_fechas_container.pack(fill="x", expand=False, padx=5, pady=5)
+        self.frame_fechas_container.config(width=900)
 
         # Frame para rango de fechas
-        self.frame_rango = ttk.Frame(self.frame_fechas)
+        self.frame_rango = ttk.Frame(self.frame_fechas, style='White.TFrame')
         self.frame_rango.pack(fill="x", padx=5, pady=2)
 
-        ttk.Label(self.frame_rango, text="Fecha Inicial:").grid(row=0, column=0, padx=5)
+        ttk.Label(self.frame_rango, text="Fecha Inicial:", style='White.TLabel').grid(row=0, column=0, padx=5)
         self.fecha_inicial = DateEntry(
             self.frame_rango,
             width=12,
@@ -93,7 +229,7 @@ class CorreccionMovimientos:
         )
         self.fecha_inicial.grid(row=0, column=1, padx=5)
 
-        ttk.Label(self.frame_rango, text="Fecha Final:").grid(row=0, column=2, padx=5)
+        ttk.Label(self.frame_rango, text="Fecha Final:", style='White.TLabel').grid(row=0, column=2, padx=5)
         self.fecha_final = DateEntry(
             self.frame_rango,
             width=12,
@@ -103,76 +239,95 @@ class CorreccionMovimientos:
         self.fecha_final.grid(row=0, column=3, padx=5)
 
         # Frame para combos
-        self.frame_combos = ttk.Frame(self.frame_principal)
-        self.frame_combos.pack(fill="x", padx=5, pady=5)
+        self.frame_combos = ttk.Frame(self.frame_principal, style='White.TFrame')
+        self.frame_combos.pack(fill="x", expand=False, padx=5, pady=5)
+        self.frame_combos.config(width=900)
 
-        # Primera fila de combos
-        self.frame_combos1 = ttk.LabelFrame(self.frame_combos, text="Selección de Ubicación")
-        self.frame_combos1.pack(fill="x", pady=5)
+        # Primera fila de combos con título personalizado
+        self.frame_combos1_container, self.frame_combos1 = self.create_titled_frame(self.frame_combos, "Selección de Ubicación")
+        self.frame_combos1_container.config(bg=self.COLORS['white'])
+        self.frame_combos1.config(bg=self.COLORS['white'])
+        self.frame_combos1_container.pack(fill="x", expand=False, pady=5)
+        self.frame_combos1_container.config(width=900)
 
-        # Grid DENTRO del frame_combos1
-        ttk.Label(self.frame_combos1, text="Área:").grid(row=0, column=0, padx=5, sticky='w')
+        label_style = {'style': 'White.TLabel'}
+        ttk.Label(self.frame_combos1, text="Área:", **label_style).grid(row=0, column=0, padx=5, sticky='w')
         self.area_var = tk.StringVar()
-        self.combo_area = AutocompleteCombobox(self.frame_combos1, textvariable=self.area_var, state="normal", width=18)
+        self.combo_area = AutocompleteCombobox(self.frame_combos1, textvariable=self.area_var, state="normal", width=18, font=('Segoe UI', 9))
         self.combo_area.grid(row=0, column=1, padx=5, sticky='w')
 
-        ttk.Label(self.frame_combos1, text="Distrito:").grid(row=0, column=2, padx=5, sticky='w')
+        ttk.Label(self.frame_combos1, text="Distrito:", **label_style).grid(row=0, column=2, padx=5, sticky='w')
         self.distrito_var = tk.StringVar()
-        self.combo_distrito = AutocompleteCombobox(self.frame_combos1, textvariable=self.distrito_var, state="normal", width=18)
+        self.combo_distrito = AutocompleteCombobox(self.frame_combos1, textvariable=self.distrito_var, state="normal", width=18, font=('Segoe UI', 9))
         self.combo_distrito.grid(row=0, column=3, padx=5, sticky='w')
 
-        ttk.Label(self.frame_combos1, text="Tipo de Servicio:").grid(row=0, column=4, padx=5, sticky='w')
+        ttk.Label(self.frame_combos1, text="Tipo de Servicio:", **label_style).grid(row=0, column=4, padx=5, sticky='w')
         self.tipo_servicio_var = tk.StringVar()
-        self.combo_tipo_servicio = AutocompleteCombobox(self.frame_combos1, textvariable=self.tipo_servicio_var, state="normal", width=18)
+        self.combo_tipo_servicio = AutocompleteCombobox(self.frame_combos1, textvariable=self.tipo_servicio_var, state="normal", width=18, font=('Segoe UI', 9))
         self.combo_tipo_servicio.grid(row=0, column=5, padx=5, sticky='w')
 
-        ttk.Label(self.frame_combos1, text="Servicio:").grid(row=0, column=6, padx=5, sticky='w')
+        ttk.Label(self.frame_combos1, text="Servicio:", **label_style).grid(row=0, column=6, padx=5, sticky='w')
         self.servicio_var = tk.StringVar()
-        self.combo_servicio = AutocompleteCombobox(self.frame_combos1, textvariable=self.servicio_var, state="normal", width=18)
+        self.combo_servicio = AutocompleteCombobox(self.frame_combos1, textvariable=self.servicio_var, state="normal", width=18, font=('Segoe UI', 9))
         self.combo_servicio.grid(row=0, column=7, padx=5, sticky='w')
 
-        # Segunda fila de combos
-        self.frame_combos2 = ttk.LabelFrame(self.frame_combos, text="Selección de Insumos / Tipo Movimiento")
-        self.frame_combos2.pack(fill="x", pady=5)
+        # Segunda fila de combos con título personalizado
+        self.frame_combos2_container, self.frame_combos2 = self.create_titled_frame(self.frame_combos, "Selección de Insumos / Tipo Movimiento")
+        self.frame_combos2_container.config(bg=self.COLORS['white'])
+        self.frame_combos2.config(bg=self.COLORS['white'])
+        self.frame_combos2_container.pack(fill="x", expand=False, pady=5)
+        self.frame_combos2_container.config(width=900)
 
-        # Grid DENTRO del frame_combos2
-        ttk.Label(self.frame_combos2, text="Tipo\nInsumo:").grid(row=0, column=0, padx=5, sticky='w')
+        ttk.Label(self.frame_combos2, text="Tipo\nInsumo:", **label_style).grid(row=0, column=0, padx=5, sticky='w')
         self.tipo_insumo_var = tk.StringVar()
-        self.combo_tipo_insumo = AutocompleteCombobox(self.frame_combos2, textvariable=self.tipo_insumo_var, state="normal", width=18)
+        self.combo_tipo_insumo = AutocompleteCombobox(self.frame_combos2, textvariable=self.tipo_insumo_var, state="normal", width=18, font=('Segoe UI', 9))
         self.combo_tipo_insumo.grid(row=0, column=1, padx=5, sticky='w')
 
-        ttk.Label(self.frame_combos2, text="Insumo:").grid(row=0, column=2, padx=5, sticky='w')
+        ttk.Label(self.frame_combos2, text="Insumo:", **label_style).grid(row=0, column=2, padx=5, sticky='w')
         self.insumo_var = tk.StringVar()
-        self.combo_insumo = AutocompleteCombobox(self.frame_combos2, textvariable=self.insumo_var, state="normal", width=18)
+        self.combo_insumo = AutocompleteCombobox(self.frame_combos2, textvariable=self.insumo_var, state="normal", width=18, font=('Segoe UI', 9))
         self.combo_insumo.grid(row=0, column=3, padx=5, sticky='w')
 
-        ttk.Label(self.frame_combos2, text="Presentación:").grid(row=0, column=4, padx=5, sticky='w')
+        ttk.Label(self.frame_combos2, text="Presentación:", **label_style).grid(row=0, column=4, padx=5, sticky='w')
         self.presentacion_var = tk.StringVar()
-        self.combo_presentacion = AutocompleteCombobox(self.frame_combos2, textvariable=self.presentacion_var, state="normal", width=18)
+        self.combo_presentacion = AutocompleteCombobox(self.frame_combos2, textvariable=self.presentacion_var, state="normal", width=18, font=('Segoe UI', 9))
         self.combo_presentacion.grid(row=0, column=5, padx=5, sticky='w')
 
-        ttk.Label(self.frame_combos2, text="Tipo\nMovimiento:").grid(row=0, column=6, padx=5, sticky='w')
+        ttk.Label(self.frame_combos2, text="Tipo\nMovimiento:", **label_style).grid(row=0, column=6, padx=5, sticky='w')
         self.tipo_movimiento_var = tk.StringVar()
-        self.combo_tipo_movimiento = AutocompleteCombobox(self.frame_combos2, textvariable=self.tipo_movimiento_var, state="normal", width=18)
+        self.combo_tipo_movimiento = AutocompleteCombobox(self.frame_combos2, textvariable=self.tipo_movimiento_var, state="normal", width=18, font=('Segoe UI', 9))
         self.combo_tipo_movimiento.grid(row=0, column=7, padx=5, sticky='w')
 
         # Frame para botones de búsqueda
         self.frame_botones_busqueda = ttk.Frame(self.frame_principal)
         self.frame_botones_busqueda.pack(fill="x", pady=5)
 
-        ttk.Button(self.frame_botones_busqueda, text="Buscar Movimientos", command=self.buscar_movimientos).pack(side="left", padx=5)
-        ttk.Button(self.frame_botones_busqueda, text="Limpiar Filtros", command=self.limpiar_filtros).pack(side="left", padx=5)
+        btn_style = 'Primary.TButton'
+        ttk.Button(self.frame_botones_busqueda, text="🔍 Buscar Movimientos", style=btn_style, command=self.buscar_movimientos).pack(side="left", padx=5)
+        ttk.Button(self.frame_botones_busqueda, text="🧹 Limpiar Filtros", style=btn_style, command=self.limpiar_filtros).pack(side="left", padx=5)
 
-        # Frame para el Treeview
-        self.frame_treeview = ttk.LabelFrame(self.frame_principal, text="Resultados")
-        self.frame_treeview.pack(fill="both", expand=True, padx=5, pady=5)
+        # Frame para el Treeview con título personalizado
+        self.frame_treeview_container, self.frame_treeview = self.create_titled_frame(self.frame_principal, "Resultados")
+        self.frame_treeview_container.pack(fill="x", expand=False, padx=5, pady=5)
+        self.frame_treeview_container.config(width=900)
 
-        # Crear Treeview con scrollbars
-        self.tree_frame = ttk.Frame(self.frame_treeview)
-        self.tree_frame.pack(fill="both", expand=True, padx=5, pady=5)
-        
+        # Frame para Treeview compacto
+        self.tree_frame = tk.Frame(self.frame_treeview, bg=self.COLORS['white'], relief='solid', borderwidth=1)
+        self.tree_frame.pack(fill="x", expand=False, padx=5, pady=5)
+        self.tree_frame.pack_propagate(True)
+        self.tree_frame.config(height=5 * 25 + 30)  # 5 filas * rowheight + espacio encabezado
+
         style = ttk.Style()
-        style.configure("Treeview.Heading", font=("Courier", 9))
+        style.configure("Custom.Treeview.Heading",
+                        font=("Segoe UI", 9, "bold"),
+                        background=self.COLORS['primary'],
+                        foreground='white')
+        style.configure("Custom.Treeview",
+                        font=("Segoe UI", 9),
+                        rowheight=25,
+                        background=self.COLORS['white'],
+                        foreground=self.COLORS['text_dark'],
+                        fieldbackground=self.COLORS['white'])
 
         # Scrollbars para el Treeview
         self.tree_scroll_y = ttk.Scrollbar(self.tree_frame)
@@ -181,21 +336,18 @@ class CorreccionMovimientos:
         self.tree_scroll_x = ttk.Scrollbar(self.tree_frame, orient="horizontal")
         self.tree_scroll_x.pack(side="bottom", fill="x")
 
-        # Configurar estilos
-        style = ttk.Style()
-        style.configure("Treeview.Heading", font=("Consolas", 9, "bold"))
-        style.configure("Treeview", font=("Consolas", 9), rowheight=25)
-
-        # Crear Treeview
+        # Crear Treeview con altura 5 filas
         self.tree = ttk.Treeview(
             self.tree_frame,
             columns=self.COLUMNAS,
             show="headings",
             yscrollcommand=self.tree_scroll_y.set,
-            xscrollcommand=self.tree_scroll_x.set
+            xscrollcommand=self.tree_scroll_x.set,
+            style="Custom.Treeview",
+            height=8  # Aquí la reducción a 5 filas visibles
         )
 
-        # Títulos simples y claros
+        # Configurar encabezados y columnas (igual que antes)
         encabezados = {
             'ID': 'ID',
             'Fecha': 'FECHA',
@@ -216,59 +368,101 @@ class CorreccionMovimientos:
 
         for col in self.COLUMNAS:
             self.tree.heading(col, text=encabezados[col])
-
-            # Anchos aumentados basados en los títulos
             if col == "Área":
-                width = 120  # Ancho para "ÁREA"
+                width = 120
             elif col == "Distrito":
-                width = 120  # Ancho para "DISTRITO"
+                width = 120
             elif col == "Tipo de Servicio":
-                width = 150  # Ancho para "TIPO SERVICIO"
+                width = 150
             elif col == "Referencia":
-                width = 120  # Aumentado para "REFERENCIA"
+                width = 120
             elif col == "Observaciones":
-                width = 250  # Aumentado para "OBSERVACIONES"
+                width = 250
             elif col == "Tipo de Movimiento":
-                width = 180  # Aumentado para "TIPO MOVIMIENTO"
+                width = 180
             elif col == "Fecha Vencimiento":
-                width = 150  # Aumentado para "F. VENCIMIENTO"
+                width = 150
             elif col in ["Servicio", "Insumo"]:
-                width = 160  # Aumentado para "SERVICIO" e "INSUMO"
+                width = 160
             elif col in ["Distrito Salida", "Servicio Salida"]:
-                width = 140  # Aumentado para "DIST. SALIDA" y "SERV. SALIDA"
+                width = 140
             elif col == "Cantidad":
-                width = 120  # Aumentado para "CANTIDAD"
+                width = 120
             elif col == "Fecha":
-                width = 110  # Aumentado para "FECHA"
+                width = 110
             elif col == "Lote":
-                width = 100  # Aumentado para "LOTE"
+                width = 100
             else:
-                width = 100  # Ancho por defecto
+                width = 100
 
-            # Configurar alineación
-            if col in ["Cantidad"]:
-                self.tree.column(col, width=width, anchor='center')
-            elif col in ["Fecha", "Fecha Vencimiento"]:
+            if col in ["Cantidad", "Fecha", "Fecha Vencimiento"]:
                 self.tree.column(col, width=width, anchor='center')
             else:
                 self.tree.column(col, width=width, anchor='w')
 
         self.tree.column("ID", width=0, stretch=False)
-                    
-        # Empaquetar el Treeview
         self.tree.pack(side="left", fill="both", expand=True)
 
-        # Configurar scrollbars
         self.tree_scroll_y.config(command=self.tree.yview)
         self.tree_scroll_x.config(command=self.tree.xview)
 
         # Frame para botones de acción
-        self.frame_botones_accion = ttk.Frame(self.frame_principal)
+        self.frame_botones_accion = tk.Frame(self.frame_principal, bg=self.COLORS['white'])
         self.frame_botones_accion.pack(fill="x", pady=10)
 
-        ttk.Button(self.frame_botones_accion, text="Editar Movimiento", command=self.editar_movimiento).pack(side="left", padx=5)
-        ttk.Button(self.frame_botones_accion, text="Eliminar Movimiento", command=self.eliminar_movimiento).pack(side="left", padx=5)
-        ttk.Button(self.frame_botones_accion, text="Cerrar", command=self.cerrar_ventana).pack(side="right", padx=5)
+        btn_padx = 10
+        btn_pady = 6
+        btn_font = ('Segoe UI', 9, 'bold')
+        btn_bg = self.COLORS['white']
+        btn_fg = self.COLORS['text_dark']
+
+        self.btn_editar = tk.Button(self.frame_botones_accion,
+            text="Editar",
+            image=self.icon_editar,
+            compound='left',
+            command=self.editar_movimiento,
+            font=btn_font,
+            bg=btn_bg,
+            fg=btn_fg,
+            relief='flat',
+            borderwidth=0,
+            highlightthickness=0,
+            padx=25,
+            pady=btn_pady,
+            cursor='hand2')
+        self.btn_editar.pack(side="left", padx=btn_padx)
+
+        self.btn_eliminar = tk.Button(self.frame_botones_accion,
+            text="Eliminar",
+            image=self.icon_eliminar,
+            compound='left',
+            command=self.eliminar_movimiento,
+            font=btn_font,
+            bg=btn_bg,
+            fg=btn_fg,
+            relief='flat',
+            borderwidth=0,
+            highlightthickness=0,
+            padx=25,
+            pady=btn_pady,
+            cursor='hand2')
+        self.btn_eliminar.pack(side="left", padx=btn_padx)
+
+        self.btn_cerrar = tk.Button(self.frame_botones_accion,
+            text="Cerrar",
+            image=self.icon_cerrar,
+            compound='left',
+            command=self.cerrar_ventana,
+            font=btn_font,
+            bg=btn_bg,
+            fg=btn_fg,
+            relief='flat',
+            borderwidth=0,
+            highlightthickness=0,
+            padx=25,
+            pady=btn_pady,
+            cursor='hand2')
+        self.btn_cerrar.pack(side="right", padx=btn_padx)
 
         # Vincular eventos de cambio
         self.combo_area.bind('<<ComboboxSelected>>', self.cargar_distritos_por_area)
