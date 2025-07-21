@@ -1018,7 +1018,7 @@ class IngresoInsumos:
 
         # Botón Guardar
         self.btn_guardar = tk.Button(botones_inner,
-            text="Guardar Movimientos",
+            text="Guardar",
             image=self.icon_guardar,
             compound='left',
             command=self.guardar_movimientos,

@@ -377,17 +377,17 @@ class MainWindow:
     def create_nav_button(self, parent, text, command, icon_key):
         """Crea un botón de navegación"""
         btn = tk.Button(parent,
-                       text=f"  {text}",
-                       font=('Segoe UI', 11),
-                       bg=self.COLORS['primary'],
-                       fg=self.COLORS['white'],
-                       relief='flat',
-                       borderwidth=0,
-                       padx=20,
-                       pady=12,
-                       anchor='w',
-                       cursor='hand2',
-                       command=command)
+                    text=f"  {text}",
+                    font=('Segoe UI', 11),
+                    bg=self.COLORS['primary'],
+                    fg=self.COLORS['white'],
+                    relief='flat',
+                    borderwidth=0,
+                    padx=20,
+                    pady=12,
+                    anchor='w',
+                    cursor='hand2',
+                    command=command)
 
         # Agregar icono si existe
         if self.icons.get(icon_key):
@@ -395,14 +395,18 @@ class MainWindow:
 
         btn.pack(fill="x", padx=20, pady=2)
 
-        # Efectos hover
+        # Efectos hover mejorados
         def on_enter(e):
             btn.config(bg=self.COLORS['hover'])
+        
         def on_leave(e):
             btn.config(bg=self.COLORS['primary'])
+        
         def on_click(e):
+            # Cambiar a color activo momentáneamente
             btn.config(bg=self.COLORS['active'])
-            parent.after(100, lambda: btn.config(bg=self.COLORS['hover']))
+            # Después de ejecutar el comando, volver al color normal
+            parent.after(150, lambda: btn.config(bg=self.COLORS['primary']))
 
         btn.bind('<Enter>', on_enter)
         btn.bind('<Leave>', on_leave)

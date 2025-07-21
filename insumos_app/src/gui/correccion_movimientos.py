@@ -68,23 +68,26 @@ class CorreccionMovimientos:
             self.icon_editar = tk.PhotoImage(file=os.path.join(icons_path, "editar.png")).subsample(2, 2)
             self.icon_eliminar = tk.PhotoImage(file=os.path.join(icons_path, "eliminar.png")).subsample(2, 2)
             self.icon_cerrar = tk.PhotoImage(file=os.path.join(icons_path, "cerrar.png")).subsample(2, 2)
+            self.icon_buscar = tk.PhotoImage(file=os.path.join(icons_path, "buscar.png")).subsample(2, 2)
+            self.icon_limpiar = tk.PhotoImage(file=os.path.join(icons_path, "limpiar.png")).subsample(2, 2)
         except Exception as e:
             print(f"Error cargando iconos: {e}")
             self.icon_editar = None
             self.icon_eliminar = None
             self.icon_cerrar = None
+            self.icon_buscar = None
+            self.icon_limpiar = None
 
     def create_titled_frame(self, parent, title):
         container = tk.Frame(parent, bg=self.COLORS['white'], relief='solid', borderwidth=1)
-        container.pack(fill='x', padx=10, pady=5)
 
-        header = tk.Frame(container, bg=self.COLORS['primary'], height=25)
+        header = tk.Frame(container, bg=self.COLORS['primary'], height=20)  # Reducido de 25 a 20
         header.pack(fill='x')
         header.pack_propagate(False)
 
-        label = tk.Label(header, text=title, font=('Segoe UI', 9, 'bold'),
+        label = tk.Label(header, text=title, font=('Segoe UI', 8, 'bold'),  # Reducido de 9 a 8
                         fg=self.COLORS['white'], bg=self.COLORS['primary'])
-        label.pack(side='left', padx=10, pady=3)
+        label.pack(side='left', padx=10, pady=2)  # Reducido pady de 3 a 2
 
         content = tk.Frame(container, bg=self.COLORS['white'])
         content.pack(fill='both', expand=True, padx=10, pady=10)
@@ -177,6 +180,19 @@ class CorreccionMovimientos:
             font=('Segoe UI', 9, 'bold'),
             relief='raised',
             borderwidth=1)
+        
+        style.configure('Search.TButton',
+            font=('Segoe UI', 9, 'bold'),
+            padding=(8, 4),
+            relief='flat',
+            borderwidth=0,
+            background=self.COLORS['primary'],
+            foreground=self.COLORS['white'],
+            focuscolor='none')
+
+        style.map('Search.TButton',
+            background=[('active', '#1F5F8B'),
+                        ('pressed', '#1A4F7A')])
 
     def setup_ui(self):
         # --- Título principal ---
@@ -202,110 +218,225 @@ class CorreccionMovimientos:
         # Separador
         ttk.Separator(self.parent, orient='horizontal').pack(fill='x', padx=10, pady=5)
 
-        # Frame principal con título personalizado
-        self.frame_principal_container, self.frame_principal = self.create_titled_frame(self.parent, "Filtros de Búsqueda")
+        # CANVAS CON SCROLLBAR VERTICAL
+        canvas_frame = tk.Frame(self.parent, bg=self.COLORS['white'])
+        canvas_frame.pack(fill="both", expand=True, padx=10, pady=5)
+
+        # Canvas y scrollbar vertical
+        self.canvas = tk.Canvas(canvas_frame, bg=self.COLORS['white'], highlightthickness=0)
+        scrollbar = ttk.Scrollbar(canvas_frame, orient="vertical", command=self.canvas.yview)
+        self.scrollable_frame = tk.Frame(self.canvas, bg=self.COLORS['white'])
+
+        self.scrollable_frame.bind(
+            "<Configure>",
+            lambda e: self.canvas.configure(scrollregion=self.canvas.bbox("all"))
+        )
+        
+        # Función para ajustar el ancho del scrollable_frame al canvas
+        def configure_scroll_region(event=None):
+            self.canvas.configure(scrollregion=self.canvas.bbox("all"))
+            # Ajustar ancho del scrollable_frame al ancho del canvas
+            canvas_width = self.canvas.winfo_width()
+            if canvas_width > 1:  # Asegurar que el canvas ya tiene dimensiones
+                self.canvas.itemconfig(self.canvas_window, width=canvas_width)
+
+        self.scrollable_frame.bind("<Configure>", configure_scroll_region)
+        self.canvas.bind("<Configure>", configure_scroll_region)
+
+        self.canvas_window = self.canvas.create_window((0, 0), window=self.scrollable_frame, anchor="nw")
+        self.canvas.configure(yscrollcommand=scrollbar.set)
+
+        self.canvas.pack(side="left", fill="both", expand=True)
+        scrollbar.pack(side="right", fill="y")
+
+        # Scroll con rueda del mouse
+        def _on_mousewheel(event):
+            self.canvas.yview_scroll(int(-1*(event.delta/120)), "units")
+        self.canvas.bind_all("<MouseWheel>", _on_mousewheel)
+
+        self.frame_principal_container, self.frame_principal = self.create_titled_frame(self.scrollable_frame, "Filtros de Búsqueda")
         self.frame_principal_container.config(bg=self.COLORS['white'])
         self.frame_principal.config(bg=self.COLORS['white'])
-        self.frame_principal_container.pack(fill="x", expand=False, padx=10, pady=5)
-        self.frame_principal_container.config(width=900)
+        self.frame_principal_container.pack(fill="x", expand=False, pady=5)
 
         # Frame para fechas con título personalizado
         self.frame_fechas_container, self.frame_fechas = self.create_titled_frame(self.frame_principal, "Selección de Fechas")
         self.frame_fechas_container.config(bg=self.COLORS['white'])
         self.frame_fechas.config(bg=self.COLORS['white'])
-        self.frame_fechas_container.pack(fill="x", expand=False, padx=5, pady=5)
-        self.frame_fechas_container.config(width=900)
+        self.frame_fechas_container.pack(fill="x", expand=False, pady=5)
 
-        # Frame para rango de fechas
+        # Frame para rango de fechas con márgenes simétricos
         self.frame_rango = ttk.Frame(self.frame_fechas, style='White.TFrame')
-        self.frame_rango.pack(fill="x", padx=5, pady=2)
+        self.frame_rango.pack(fill="x", expand=False, padx=5, pady=8)
 
-        ttk.Label(self.frame_rango, text="Fecha Inicial:", style='White.TLabel').grid(row=0, column=0, padx=5)
+        # Configurar grid IGUAL que los otros frames (8 columnas para consistencia)
+        self.frame_rango.grid_columnconfigure(0, weight=0, minsize=80)   # Label Fecha Inicial
+        self.frame_rango.grid_columnconfigure(1, weight=1, minsize=120)  # DateEntry Inicial
+        self.frame_rango.grid_columnconfigure(2, weight=0, minsize=80)   # Label Fecha Final  
+        self.frame_rango.grid_columnconfigure(3, weight=1, minsize=120)  # DateEntry Final
+        self.frame_rango.grid_columnconfigure(4, weight=0, minsize=100)  # Espaciador
+        self.frame_rango.grid_columnconfigure(5, weight=1, minsize=120)  # Espaciador
+        self.frame_rango.grid_columnconfigure(6, weight=0, minsize=80)   # Espaciador
+        self.frame_rango.grid_columnconfigure(7, weight=1, minsize=120)  # Espaciador
+
+        # Elementos con padding simétrico
+        ttk.Label(self.frame_rango, text="Fecha Inicial:", style='White.TLabel').grid(
+            row=0, column=0, padx=(15, 8), pady=5, sticky='ew'
+        )
+
         self.fecha_inicial = DateEntry(
             self.frame_rango,
             width=12,
             date_pattern='dd/mm/yyyy',
             state='normal'
         )
-        self.fecha_inicial.grid(row=0, column=1, padx=5)
+        self.fecha_inicial.grid(row=0, column=1, padx=8, pady=5, sticky='ew')
 
-        ttk.Label(self.frame_rango, text="Fecha Final:", style='White.TLabel').grid(row=0, column=2, padx=5)
+        ttk.Label(self.frame_rango, text="Fecha Final:", style='White.TLabel').grid(
+            row=0, column=2, padx=8, pady=5, sticky='ew'
+        )
+
         self.fecha_final = DateEntry(
             self.frame_rango,
             width=12,
             date_pattern='dd/mm/yyyy',
             state='normal'
         )
-        self.fecha_final.grid(row=0, column=3, padx=5)
+        self.fecha_final.grid(row=0, column=3, padx=(8, 15), pady=5, sticky='ew')
 
-        # Frame para combos
+        # Frame para combos con márgenes consistentes
         self.frame_combos = ttk.Frame(self.frame_principal, style='White.TFrame')
         self.frame_combos.pack(fill="x", expand=False, padx=5, pady=5)
-        self.frame_combos.config(width=900)
 
         # Primera fila de combos con título personalizado
         self.frame_combos1_container, self.frame_combos1 = self.create_titled_frame(self.frame_combos, "Selección de Ubicación")
         self.frame_combos1_container.config(bg=self.COLORS['white'])
         self.frame_combos1.config(bg=self.COLORS['white'])
         self.frame_combos1_container.pack(fill="x", expand=False, pady=5)
-        self.frame_combos1_container.config(width=900)
 
+        # Configurar grid para distribución geométrica uniforme con márgenes simétricos
+        self.frame_combos1.grid_columnconfigure(0, weight=0, minsize=80)   # Labels fijos
+        self.frame_combos1.grid_columnconfigure(1, weight=1, minsize=120)  # Combos expandibles
+        self.frame_combos1.grid_columnconfigure(2, weight=0, minsize=80)   
+        self.frame_combos1.grid_columnconfigure(3, weight=1, minsize=120)  
+        self.frame_combos1.grid_columnconfigure(4, weight=0, minsize=100)  # Label más ancho
+        self.frame_combos1.grid_columnconfigure(5, weight=1, minsize=120)  
+        self.frame_combos1.grid_columnconfigure(6, weight=0, minsize=80)   
+        self.frame_combos1.grid_columnconfigure(7, weight=1, minsize=120)  
+
+        # Aplicar padding simétrico a todos los elementos
         label_style = {'style': 'White.TLabel'}
-        ttk.Label(self.frame_combos1, text="Área:", **label_style).grid(row=0, column=0, padx=5, sticky='w')
+        padding_config = {'pady': 8}
+
+        ttk.Label(self.frame_combos1, text="Área:", **label_style).grid(
+            row=0, column=0, padx=(20, 8), sticky='w', **padding_config
+        )
         self.area_var = tk.StringVar()
-        self.combo_area = AutocompleteCombobox(self.frame_combos1, textvariable=self.area_var, state="normal", width=18, font=('Segoe UI', 9))
-        self.combo_area.grid(row=0, column=1, padx=5, sticky='w')
+        self.combo_area = AutocompleteCombobox(self.frame_combos1, textvariable=self.area_var, state="normal", font=('Segoe UI', 9))
+        self.combo_area.grid(row=0, column=1, padx=8, sticky='ew', **padding_config)
 
-        ttk.Label(self.frame_combos1, text="Distrito:", **label_style).grid(row=0, column=2, padx=5, sticky='w')
+        ttk.Label(self.frame_combos1, text="Distrito:", **label_style).grid(
+            row=0, column=2, padx=8, sticky='w', **padding_config
+        )
         self.distrito_var = tk.StringVar()
-        self.combo_distrito = AutocompleteCombobox(self.frame_combos1, textvariable=self.distrito_var, state="normal", width=18, font=('Segoe UI', 9))
-        self.combo_distrito.grid(row=0, column=3, padx=5, sticky='w')
+        self.combo_distrito = AutocompleteCombobox(self.frame_combos1, textvariable=self.distrito_var, state="normal", font=('Segoe UI', 9))
+        self.combo_distrito.grid(row=0, column=3, padx=8, sticky='ew', **padding_config)
 
-        ttk.Label(self.frame_combos1, text="Tipo de Servicio:", **label_style).grid(row=0, column=4, padx=5, sticky='w')
+        ttk.Label(self.frame_combos1, text="Tipo de Servicio:", **label_style).grid(
+            row=0, column=4, padx=8, sticky='w', **padding_config
+        )
         self.tipo_servicio_var = tk.StringVar()
-        self.combo_tipo_servicio = AutocompleteCombobox(self.frame_combos1, textvariable=self.tipo_servicio_var, state="normal", width=18, font=('Segoe UI', 9))
-        self.combo_tipo_servicio.grid(row=0, column=5, padx=5, sticky='w')
+        self.combo_tipo_servicio = AutocompleteCombobox(self.frame_combos1, textvariable=self.tipo_servicio_var, state="normal", font=('Segoe UI', 9))
+        self.combo_tipo_servicio.grid(row=0, column=5, padx=8, sticky='ew', **padding_config)
 
-        ttk.Label(self.frame_combos1, text="Servicio:", **label_style).grid(row=0, column=6, padx=5, sticky='w')
+        ttk.Label(self.frame_combos1, text="Servicio:", **label_style).grid(
+            row=0, column=6, padx=8, sticky='w', **padding_config
+        )
         self.servicio_var = tk.StringVar()
-        self.combo_servicio = AutocompleteCombobox(self.frame_combos1, textvariable=self.servicio_var, state="normal", width=18, font=('Segoe UI', 9))
-        self.combo_servicio.grid(row=0, column=7, padx=5, sticky='w')
+        self.combo_servicio = AutocompleteCombobox(self.frame_combos1, textvariable=self.servicio_var, state="normal", font=('Segoe UI', 9))
+        self.combo_servicio.grid(row=0, column=7, padx=(8, 20), sticky='ew', **padding_config)
 
         # Segunda fila de combos con título personalizado
         self.frame_combos2_container, self.frame_combos2 = self.create_titled_frame(self.frame_combos, "Selección de Insumos / Tipo Movimiento")
         self.frame_combos2_container.config(bg=self.COLORS['white'])
         self.frame_combos2.config(bg=self.COLORS['white'])
         self.frame_combos2_container.pack(fill="x", expand=False, pady=5)
-        self.frame_combos2_container.config(width=900)
 
-        ttk.Label(self.frame_combos2, text="Tipo\nInsumo:", **label_style).grid(row=0, column=0, padx=5, sticky='w')
+        # Configurar grid idéntico para simetría
+        self.frame_combos2.grid_columnconfigure(0, weight=0, minsize=80)   
+        self.frame_combos2.grid_columnconfigure(1, weight=1, minsize=120)  
+        self.frame_combos2.grid_columnconfigure(2, weight=0, minsize=80)   
+        self.frame_combos2.grid_columnconfigure(3, weight=1, minsize=120)  
+        self.frame_combos2.grid_columnconfigure(4, weight=0, minsize=100)  
+        self.frame_combos2.grid_columnconfigure(5, weight=1, minsize=120)  
+        self.frame_combos2.grid_columnconfigure(6, weight=0, minsize=80)   
+        self.frame_combos2.grid_columnconfigure(7, weight=1, minsize=120)  
+
+        ttk.Label(self.frame_combos2, text="Tipo\nInsumo:", **label_style).grid(
+            row=0, column=0, padx=(20, 8), sticky='w', **padding_config
+        )
         self.tipo_insumo_var = tk.StringVar()
-        self.combo_tipo_insumo = AutocompleteCombobox(self.frame_combos2, textvariable=self.tipo_insumo_var, state="normal", width=18, font=('Segoe UI', 9))
-        self.combo_tipo_insumo.grid(row=0, column=1, padx=5, sticky='w')
+        self.combo_tipo_insumo = AutocompleteCombobox(self.frame_combos2, textvariable=self.tipo_insumo_var, state="normal", font=('Segoe UI', 9))
+        self.combo_tipo_insumo.grid(row=0, column=1, padx=8, sticky='ew', **padding_config)
 
-        ttk.Label(self.frame_combos2, text="Insumo:", **label_style).grid(row=0, column=2, padx=5, sticky='w')
+        ttk.Label(self.frame_combos2, text="Insumo:", **label_style).grid(
+            row=0, column=2, padx=8, sticky='w', **padding_config
+        )
         self.insumo_var = tk.StringVar()
-        self.combo_insumo = AutocompleteCombobox(self.frame_combos2, textvariable=self.insumo_var, state="normal", width=18, font=('Segoe UI', 9))
-        self.combo_insumo.grid(row=0, column=3, padx=5, sticky='w')
+        self.combo_insumo = AutocompleteCombobox(self.frame_combos2, textvariable=self.insumo_var, state="normal", font=('Segoe UI', 9))
+        self.combo_insumo.grid(row=0, column=3, padx=8, sticky='ew', **padding_config)
 
-        ttk.Label(self.frame_combos2, text="Presentación:", **label_style).grid(row=0, column=4, padx=5, sticky='w')
+        ttk.Label(self.frame_combos2, text="Presentación:", **label_style).grid(
+            row=0, column=4, padx=8, sticky='w', **padding_config
+        )
         self.presentacion_var = tk.StringVar()
-        self.combo_presentacion = AutocompleteCombobox(self.frame_combos2, textvariable=self.presentacion_var, state="normal", width=18, font=('Segoe UI', 9))
-        self.combo_presentacion.grid(row=0, column=5, padx=5, sticky='w')
+        self.combo_presentacion = AutocompleteCombobox(self.frame_combos2, textvariable=self.presentacion_var, state="normal", font=('Segoe UI', 9))
+        self.combo_presentacion.grid(row=0, column=5, padx=8, sticky='ew', **padding_config)
 
-        ttk.Label(self.frame_combos2, text="Tipo\nMovimiento:", **label_style).grid(row=0, column=6, padx=5, sticky='w')
+        ttk.Label(self.frame_combos2, text="Tipo\nMovimiento:", **label_style).grid(
+            row=0, column=6, padx=8, sticky='w', **padding_config
+        )
         self.tipo_movimiento_var = tk.StringVar()
-        self.combo_tipo_movimiento = AutocompleteCombobox(self.frame_combos2, textvariable=self.tipo_movimiento_var, state="normal", width=18, font=('Segoe UI', 9))
-        self.combo_tipo_movimiento.grid(row=0, column=7, padx=5, sticky='w')
-
+        self.combo_tipo_movimiento = AutocompleteCombobox(self.frame_combos2, textvariable=self.tipo_movimiento_var, state="normal", font=('Segoe UI', 9))
+        self.combo_tipo_movimiento.grid(row=0, column=7, padx=(8, 20), sticky='ew', **padding_config)
+        
         # Frame para botones de búsqueda
-        self.frame_botones_busqueda = ttk.Frame(self.frame_principal)
+        self.frame_botones_busqueda = ttk.Frame(self.frame_principal, style='White.TFrame')
         self.frame_botones_busqueda.pack(fill="x", pady=5)
 
-        btn_style = 'Primary.TButton'
-        ttk.Button(self.frame_botones_busqueda, text="🔍 Buscar Movimientos", style=btn_style, command=self.buscar_movimientos).pack(side="left", padx=5)
-        ttk.Button(self.frame_botones_busqueda, text="🧹 Limpiar Filtros", style=btn_style, command=self.limpiar_filtros).pack(side="left", padx=5)
+        # Botones con iconos y sin relleno/bordes
+        self.btn_buscar = tk.Button(self.frame_botones_busqueda,
+            text="Buscar Movimientos",
+            image=self.icon_buscar,
+            compound='left',
+            command=self.buscar_movimientos,
+            font=('Segoe UI', 9, 'bold'),
+            bg=self.COLORS['white'],
+            fg=self.COLORS['text_dark'],
+            relief='flat',
+            borderwidth=0,
+            highlightthickness=0,
+            padx=15,
+            pady=6,
+            cursor='hand2')
+        self.btn_buscar.pack(side="left", padx=5)
 
+        self.btn_limpiar = tk.Button(self.frame_botones_busqueda,
+            text="Limpiar Filtros",
+            image=self.icon_limpiar,
+            compound='left',
+            command=self.limpiar_filtros,
+            font=('Segoe UI', 9, 'bold'),
+            bg=self.COLORS['white'],
+            fg=self.COLORS['text_dark'],
+            relief='flat',
+            borderwidth=0,
+            highlightthickness=0,
+            padx=15,
+            pady=6,
+            cursor='hand2')
+        self.btn_limpiar.pack(side="left", padx=5)
+        
         # Frame para el Treeview con título personalizado
         self.frame_treeview_container, self.frame_treeview = self.create_titled_frame(self.frame_principal, "Resultados")
         self.frame_treeview_container.pack(fill="x", expand=False, padx=5, pady=5)
