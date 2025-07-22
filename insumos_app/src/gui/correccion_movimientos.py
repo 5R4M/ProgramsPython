@@ -78,19 +78,19 @@ class CorreccionMovimientos:
             self.icon_buscar = None
             self.icon_limpiar = None
 
-    def create_titled_frame(self, parent, title):
+    def create_titled_frame(self, parent, title, content_padx=10, content_pady=10):
         container = tk.Frame(parent, bg=self.COLORS['white'], relief='solid', borderwidth=1)
 
-        header = tk.Frame(container, bg=self.COLORS['primary'], height=20)  # Reducido de 25 a 20
+        header = tk.Frame(container, bg=self.COLORS['primary'], height=20)
         header.pack(fill='x')
         header.pack_propagate(False)
 
-        label = tk.Label(header, text=title, font=('Segoe UI', 8, 'bold'),  # Reducido de 9 a 8
+        label = tk.Label(header, text=title, font=('Segoe UI', 8, 'bold'),
                         fg=self.COLORS['white'], bg=self.COLORS['primary'])
-        label.pack(side='left', padx=10, pady=2)  # Reducido pady de 3 a 2
+        label.pack(side='left', padx=10, pady=2)
 
         content = tk.Frame(container, bg=self.COLORS['white'])
-        content.pack(fill='both', expand=True, padx=10, pady=10)
+        content.pack(fill='both', expand=True, padx=content_padx, pady=content_pady)
 
         return container, content
 
@@ -195,8 +195,12 @@ class CorreccionMovimientos:
                         ('pressed', '#1A4F7A')])
 
     def setup_ui(self):
+        # --- Frame principal que contendrá todo ---
+        main_container = tk.Frame(self.parent, bg=self.COLORS['light'])  # <--- CAMBIO
+        main_container.pack(fill="both", expand=True)
+
         # --- Título principal ---
-        title_frame = tk.Frame(self.parent, bg=self.COLORS['primary'], height=70)
+        title_frame = tk.Frame(main_container, bg=self.COLORS['primary'], height=70)  # <--- CAMBIO
         title_frame.pack(fill='x', padx=0, pady=(10, 5))
         title_frame.pack_propagate(False)
 
@@ -216,10 +220,10 @@ class CorreccionMovimientos:
                 bg=self.COLORS['primary']).pack(anchor='w', pady=(2, 0))
 
         # Separador
-        ttk.Separator(self.parent, orient='horizontal').pack(fill='x', padx=10, pady=5)
+        ttk.Separator(main_container, orient='horizontal').pack(fill='x', padx=10, pady=5)  # <--- CAMBIO
 
         # CANVAS CON SCROLLBAR VERTICAL
-        canvas_frame = tk.Frame(self.parent, bg=self.COLORS['white'])
+        canvas_frame = tk.Frame(main_container, bg=self.COLORS['white'])  # <--- CAMBIO
         canvas_frame.pack(fill="both", expand=True, padx=10, pady=5)
 
         # Canvas y scrollbar vertical
@@ -231,7 +235,7 @@ class CorreccionMovimientos:
             "<Configure>",
             lambda e: self.canvas.configure(scrollregion=self.canvas.bbox("all"))
         )
-        
+
         # Función para ajustar el ancho del scrollable_frame al canvas
         def configure_scroll_region(event=None):
             self.canvas.configure(scrollregion=self.canvas.bbox("all"))
@@ -249,51 +253,63 @@ class CorreccionMovimientos:
         self.canvas.pack(side="left", fill="both", expand=True)
         scrollbar.pack(side="right", fill="y")
 
-        # Scroll con rueda del mouse
+        # Scroll con rueda del mouse - versión corregida
         def _on_mousewheel(event):
-            self.canvas.yview_scroll(int(-1*(event.delta/120)), "units")
-        self.canvas.bind_all("<MouseWheel>", _on_mousewheel)
+            try:
+                if self.canvas.winfo_exists():
+                    self.canvas.yview_scroll(int(-1*(event.delta/120)), "units")
+            except tk.TclError:
+                pass  # El canvas ya no existe, ignorar el evento
+
+        self._on_mousewheel = _on_mousewheel  # Guardar referencia
+        self.canvas.bind_all("<MouseWheel>", self._on_mousewheel)
 
         self.frame_principal_container, self.frame_principal = self.create_titled_frame(self.scrollable_frame, "Filtros de Búsqueda")
         self.frame_principal_container.config(bg=self.COLORS['white'])
         self.frame_principal.config(bg=self.COLORS['white'])
         self.frame_principal_container.pack(fill="x", expand=False, pady=5)
 
-        # Frame para fechas con título personalizado
-        self.frame_fechas_container, self.frame_fechas = self.create_titled_frame(self.frame_principal, "Selección de Fechas")
+        # Frame para fechas con título personalizado (menos padding)
+        self.frame_fechas_container, self.frame_fechas = self.create_titled_frame(
+            self.frame_principal, "Selección de Fechas", content_padx=5, content_pady=5
+        )
         self.frame_fechas_container.config(bg=self.COLORS['white'])
         self.frame_fechas.config(bg=self.COLORS['white'])
-        self.frame_fechas_container.pack(fill="x", expand=False, pady=5)
+        self.frame_fechas_container.pack(fill="x", expand=False, pady=5, padx=5)
 
         # Frame para rango de fechas con márgenes simétricos
         self.frame_rango = ttk.Frame(self.frame_fechas, style='White.TFrame')
         self.frame_rango.pack(fill="x", expand=False, padx=5, pady=8)
 
         # Configurar grid IGUAL que los otros frames (8 columnas para consistencia)
-        self.frame_rango.grid_columnconfigure(0, weight=0, minsize=80)   # Label Fecha Inicial
-        self.frame_rango.grid_columnconfigure(1, weight=1, minsize=120)  # DateEntry Inicial
-        self.frame_rango.grid_columnconfigure(2, weight=0, minsize=80)   # Label Fecha Final  
-        self.frame_rango.grid_columnconfigure(3, weight=1, minsize=120)  # DateEntry Final
-        self.frame_rango.grid_columnconfigure(4, weight=0, minsize=100)  # Espaciador
-        self.frame_rango.grid_columnconfigure(5, weight=1, minsize=120)  # Espaciador
-        self.frame_rango.grid_columnconfigure(6, weight=0, minsize=80)   # Espaciador
-        self.frame_rango.grid_columnconfigure(7, weight=1, minsize=120)  # Espaciador
+        self.frame_rango.grid_columnconfigure(0, weight=0, minsize=80)
+        self.frame_rango.grid_columnconfigure(1, weight=1, minsize=120)
+        self.frame_rango.grid_columnconfigure(2, weight=0, minsize=80)
+        self.frame_rango.grid_columnconfigure(3, weight=1, minsize=120)
+        self.frame_rango.grid_columnconfigure(4, weight=0, minsize=20)   # Espaciador reducido
+        self.frame_rango.grid_columnconfigure(5, weight=1, minsize=40)   # Espaciador reducido
+        self.frame_rango.grid_columnconfigure(6, weight=0, minsize=20)   # Espaciador reducido
+        self.frame_rango.grid_columnconfigure(7, weight=1, minsize=40)   # Espaciador reducido
 
-        # Elementos con padding simétrico
-        ttk.Label(self.frame_rango, text="Fecha Inicial:", style='White.TLabel').grid(
-            row=0, column=0, padx=(15, 8), pady=5, sticky='ew'
+        # Aplicar padding simétrico IGUAL que los combos
+        label_style = {'style': 'White.TLabel'}
+        padding_config = {'pady': 8}
+
+        # Elementos con padding simétrico IGUAL que los combos
+        ttk.Label(self.frame_rango, text="Fecha Inicial:", **label_style).grid(
+            row=0, column=0, padx=(10, 4), sticky='w', **padding_config
         )
-
+        
         self.fecha_inicial = DateEntry(
             self.frame_rango,
             width=12,
             date_pattern='dd/mm/yyyy',
             state='normal'
         )
-        self.fecha_inicial.grid(row=0, column=1, padx=8, pady=5, sticky='ew')
+        self.fecha_inicial.grid(row=0, column=1, padx=4, sticky='ew', **padding_config)
 
-        ttk.Label(self.frame_rango, text="Fecha Final:", style='White.TLabel').grid(
-            row=0, column=2, padx=8, pady=5, sticky='ew'
+        ttk.Label(self.frame_rango, text="Fecha Final:", **label_style).grid(
+            row=0, column=2, padx=4, sticky='w', **padding_config
         )
 
         self.fecha_final = DateEntry(
@@ -302,17 +318,33 @@ class CorreccionMovimientos:
             date_pattern='dd/mm/yyyy',
             state='normal'
         )
-        self.fecha_final.grid(row=0, column=3, padx=(8, 15), pady=5, sticky='ew')
+        self.fecha_final.grid(row=0, column=3, padx=4, sticky='ew', **padding_config)
+
+        # AGREGAR elementos invisibles para igualar ancho con otros frames
+        ttk.Label(self.frame_rango, text="", **label_style).grid(
+            row=0, column=4, padx=8, sticky='w', **padding_config
+        )
+        ttk.Label(self.frame_rango, text="", **label_style).grid(
+            row=0, column=5, padx=8, sticky='ew', **padding_config
+        )
+        ttk.Label(self.frame_rango, text="", **label_style).grid(
+            row=0, column=6, padx=8, sticky='w', **padding_config
+        )
+        ttk.Label(self.frame_rango, text="", **label_style).grid(
+            row=0, column=7, padx=(8, 20), sticky='ew', **padding_config
+        )
 
         # Frame para combos con márgenes consistentes
         self.frame_combos = ttk.Frame(self.frame_principal, style='White.TFrame')
         self.frame_combos.pack(fill="x", expand=False, padx=5, pady=5)
 
         # Primera fila de combos con título personalizado
-        self.frame_combos1_container, self.frame_combos1 = self.create_titled_frame(self.frame_combos, "Selección de Ubicación")
+        self.frame_combos1_container, self.frame_combos1 = self.create_titled_frame(
+            self.frame_combos, "Selección de Ubicación", content_padx=5, content_pady=5
+        )
         self.frame_combos1_container.config(bg=self.COLORS['white'])
         self.frame_combos1.config(bg=self.COLORS['white'])
-        self.frame_combos1_container.pack(fill="x", expand=False, pady=5)
+        self.frame_combos1_container.pack(fill="x", expand=False, padx=0, pady=5)
 
         # Configurar grid para distribución geométrica uniforme con márgenes simétricos
         self.frame_combos1.grid_columnconfigure(0, weight=0, minsize=80)   # Labels fijos
@@ -323,10 +355,6 @@ class CorreccionMovimientos:
         self.frame_combos1.grid_columnconfigure(5, weight=1, minsize=120)  
         self.frame_combos1.grid_columnconfigure(6, weight=0, minsize=80)   
         self.frame_combos1.grid_columnconfigure(7, weight=1, minsize=120)  
-
-        # Aplicar padding simétrico a todos los elementos
-        label_style = {'style': 'White.TLabel'}
-        padding_config = {'pady': 8}
 
         ttk.Label(self.frame_combos1, text="Área:", **label_style).grid(
             row=0, column=0, padx=(20, 8), sticky='w', **padding_config
@@ -357,10 +385,12 @@ class CorreccionMovimientos:
         self.combo_servicio.grid(row=0, column=7, padx=(8, 20), sticky='ew', **padding_config)
 
         # Segunda fila de combos con título personalizado
-        self.frame_combos2_container, self.frame_combos2 = self.create_titled_frame(self.frame_combos, "Selección de Insumos / Tipo Movimiento")
+        self.frame_combos2_container, self.frame_combos2 = self.create_titled_frame(
+            self.frame_combos, "Selección de Insumos / Tipo Movimiento", content_padx=5, content_pady=5
+        )
         self.frame_combos2_container.config(bg=self.COLORS['white'])
         self.frame_combos2.config(bg=self.COLORS['white'])
-        self.frame_combos2_container.pack(fill="x", expand=False, pady=5)
+        self.frame_combos2_container.pack(fill="x", expand=False, padx=0, pady=5)
 
         # Configurar grid idéntico para simetría
         self.frame_combos2.grid_columnconfigure(0, weight=0, minsize=80)   
@@ -399,7 +429,7 @@ class CorreccionMovimientos:
         self.tipo_movimiento_var = tk.StringVar()
         self.combo_tipo_movimiento = AutocompleteCombobox(self.frame_combos2, textvariable=self.tipo_movimiento_var, state="normal", font=('Segoe UI', 9))
         self.combo_tipo_movimiento.grid(row=0, column=7, padx=(8, 20), sticky='ew', **padding_config)
-        
+
         # Frame para botones de búsqueda
         self.frame_botones_busqueda = ttk.Frame(self.frame_principal, style='White.TFrame')
         self.frame_botones_busqueda.pack(fill="x", pady=5)
@@ -438,9 +468,10 @@ class CorreccionMovimientos:
         self.btn_limpiar.pack(side="left", padx=5)
         
         # Frame para el Treeview con título personalizado
-        self.frame_treeview_container, self.frame_treeview = self.create_titled_frame(self.frame_principal, "Resultados")
+        self.frame_treeview_container, self.frame_treeview = self.create_titled_frame(
+            self.frame_principal, "Resultados", content_padx=5, content_pady=5
+        )
         self.frame_treeview_container.pack(fill="x", expand=False, padx=5, pady=5)
-        self.frame_treeview_container.config(width=900)
 
         # Frame para Treeview compacto
         self.tree_frame = tk.Frame(self.frame_treeview, bg=self.COLORS['white'], relief='solid', borderwidth=1)
@@ -1135,6 +1166,12 @@ class CorreccionMovimientos:
 
     def cerrar_ventana(self):
         if messagebox.askyesno("Confirmar", "¿Está seguro que desea cerrar esta ventana?"):
+            # Desvincular el evento del mouse wheel antes de cerrar
+            try:
+                self.canvas.unbind_all("<MouseWheel>")
+            except:
+                pass
+            
             # Limpiar el frame principal
             for widget in self.parent.winfo_children():
                 widget.destroy()

@@ -362,8 +362,12 @@ class ReporteKardex:
                 pass
     
     def setup_ui(self):
+        # --- Frame principal que contendrá todo ---
+        main_container = tk.Frame(self.parent, bg=self.COLORS['light'])
+        main_container.pack(fill="both", expand=True)
+
         # --- Título principal ---
-        title_frame = tk.Frame(self.parent, bg=self.COLORS['primary'], height=70)
+        title_frame = tk.Frame(main_container, bg=self.COLORS['primary'], height=70)
         title_frame.pack(fill='x', padx=0, pady=(10, 5))
         title_frame.pack_propagate(False)
 
@@ -383,10 +387,10 @@ class ReporteKardex:
                 bg=self.COLORS['primary']).pack(anchor='w', pady=(2, 0))
 
         # Separador
-        ttk.Separator(self.parent, orient='horizontal').pack(fill='x', padx=10, pady=5)
+        ttk.Separator(main_container, orient='horizontal').pack(fill='x', padx=10, pady=5)
 
         # Frame principal con título personalizado
-        self.frame_principal_container, self.frame_principal = self.create_titled_frame(self.parent, "Filtros de Reporte")
+        self.frame_principal_container, self.frame_principal = self.create_titled_frame(main_container, "Filtros de Reporte")
         self.frame_principal_container.config(bg=self.COLORS['white'])
         self.frame_principal.config(bg=self.COLORS['white'])
         self.frame_principal_container.pack(fill="both", expand=True, padx=10, pady=5)
@@ -589,14 +593,6 @@ class ReporteKardex:
         self.pdf_frame = ttk.Frame(self.frame_principal, style='White.TFrame')
         self.pdf_frame.pack(fill="both", expand=True, padx=5, pady=5)
         self.pdf_viewer = None
-
-        # Frame para botones
-        self.frame_botones = ttk.Frame(self.frame_principal, style='White.TFrame')
-        self.frame_botones.pack(fill="x", pady=10)
-
-        btn_font = ('Segoe UI', 9, 'bold')
-        btn_bg = self.COLORS['white']
-        btn_fg = self.COLORS['text_dark']
 
         # Frame para botones
         self.frame_botones = ttk.Frame(self.frame_principal, style='White.TFrame')
@@ -1677,21 +1673,34 @@ class ReporteKardex:
 
     def cerrar_ventana(self):
         """
-        Cierra la ventana del reporte y limpia los recursos
+        Cierra la ventana del reporte, limpia recursos y muestra la pantalla de bienvenida.
         """
+        if not messagebox.askyesno("Confirmar", "¿Está seguro que desea cerrar esta ventana?"):
+            return  # Si el usuario cancela, no hace nada
+
         try:
             # Limpiar archivo temporal si existe
             if hasattr(self, 'temp_pdf_path') and os.path.exists(self.temp_pdf_path):
                 try:
                     os.remove(self.temp_pdf_path)
-                except:
+                except Exception:
                     pass
 
-            # Cerrar la ventana completamente
+            # Desvincular el evento del mouse wheel antes de cerrar (si existe self.canvas)
+            try:
+                if hasattr(self, "canvas"):
+                    self.canvas.unbind_all("<MouseWheel>")
+            except Exception:
+                pass
+
+            # Limpiar el frame principal
             if hasattr(self, 'parent') and self.parent:
-                # Obtener la ventana principal y cerrarla
-                ventana = self.parent.winfo_toplevel()
-                ventana.destroy()
+                for widget in self.parent.winfo_children():
+                    widget.destroy()
+
+            # Mostrar la pantalla de bienvenida si existe
+            if hasattr(self, "main_window") and self.main_window:
+                self.main_window.show_welcome_screen()
 
         except Exception as e:
             print(f"Error al cerrar ventana: {e}")
@@ -1702,7 +1711,7 @@ class ReporteKardex:
                     self.parent.quit()
                 else:
                     sys.exit()
-            except:
+            except Exception:
                 pass
     
     def filtrar_movimientos_por_nivel(self, movimientos):

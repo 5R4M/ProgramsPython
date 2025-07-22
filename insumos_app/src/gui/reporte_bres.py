@@ -55,6 +55,8 @@ class ReporteBres:
     def __init__(self, parent_frame, main_window=None):
         self.parent = parent_frame
         self.main_window = main_window
+        self.setup_styles()
+        self.cargar_iconos()
         self.movimientos_data = None
         
         # Crear estilos para los frames
@@ -71,6 +73,109 @@ class ReporteBres:
         
         self.setup_ui()
 
+    def setup_styles(self):
+        self.COLORS = {
+            'primary': '#2E86AB',
+            'secondary': '#A23B72',
+            'success': '#27AE60',
+            'warning': '#F39C12',
+            'danger': '#E74C3C',
+            'accent': '#8E44AD',
+            'light': '#F8F9FA',
+            'white': '#FFFFFF',
+            'text_dark': '#2C3E50',
+            'text_light': '#7F8C8D',
+            'border': '#BDC3C7'
+        }
+
+        style = ttk.Style()
+        style.theme_use('clam')
+        
+        style.configure('White.TFrame', background=self.COLORS['white'])
+        style.configure('White.TLabel',
+            background=self.COLORS['white'],
+            foreground=self.COLORS['text_dark'],
+            font=('Segoe UI', 9))
+        style.configure('White.TButton',
+            background=self.COLORS['white'],
+            foreground=self.COLORS['text_dark'],
+            font=('Segoe UI', 9),
+            relief='flat',
+            borderwidth=0)
+        style.map('White.TButton',
+            background=[('active', self.COLORS['light']),
+                        ('pressed', self.COLORS['light'])])
+        style.configure('Card.TLabelframe',
+            background=self.COLORS['white'],
+            relief='solid',
+            borderwidth=1,
+            labeloutside=False)
+        style.configure('Card.TLabelframe.Label',
+            background=self.COLORS['primary'],
+            foreground=self.COLORS['white'],
+            font=('Segoe UI', 9, 'bold'),
+            padding=(8, 3))
+        style.configure('Primary.TButton',
+            font=('Segoe UI', 9, 'bold'),
+            padding=(12, 6),
+            relief='flat',
+            borderwidth=0,
+            background=self.COLORS['primary'],
+            foreground=self.COLORS['white'])
+        style.map('Primary.TButton',
+            background=[('active', '#1F5F8B'),
+                        ('pressed', '#1A4F7A')])
+        
+        style = ttk.Style()
+        style.theme_use('clam')
+        style.configure(
+            'White.TRadiobutton',
+            background=self.COLORS['white'],
+            foreground=self.COLORS['text_dark'],
+            font=('Segoe UI', 9)
+        )
+        style.configure(
+            'White.TCombobox',
+            fieldbackground=self.COLORS['white'],
+            background=self.COLORS['white'],
+            foreground=self.COLORS['text_dark']
+        )
+    
+    def create_titled_frame(self, parent, title):
+        container = tk.Frame(parent, bg=self.COLORS['white'], relief='solid', borderwidth=1)
+
+        header = tk.Frame(container, bg=self.COLORS['primary'], height=20)
+        header.pack(fill='x')
+        header.pack_propagate(False)
+
+        label = tk.Label(header, text=title, font=('Segoe UI', 8, 'bold'),
+                        fg=self.COLORS['white'], bg=self.COLORS['primary'])
+        label.pack(side='left', padx=10, pady=2)
+
+        content = tk.Frame(container, bg=self.COLORS['white'])
+        content.pack(fill='both', expand=True, padx=10, pady=10)
+
+        return container, content
+    
+    def cargar_iconos(self):
+        try:
+            base_dir = os.path.dirname(os.path.dirname(__file__))  # Sube un nivel: de gui/ a src/
+            icons_path = os.path.join(base_dir, "utils", "icons")
+            
+            # Ajusta la ruta según tu proyecto
+            self.icon_preview = tk.PhotoImage(file=os.path.join(icons_path, "vista_previa.png")).subsample(2, 2)
+            self.icon_print = tk.PhotoImage(file=os.path.join(icons_path, "imprimir.png")).subsample(2, 2)
+            self.icon_pdf = tk.PhotoImage(file=os.path.join(icons_path, "pdf.png")).subsample(2, 2)
+            self.icon_excel = tk.PhotoImage(file=os.path.join(icons_path, "excel.png")).subsample(2, 2)
+            self.icon_close = tk.PhotoImage(file=os.path.join(icons_path, "cerrar.png")).subsample(2, 2)
+        except Exception as e:
+            print(f"Error cargando iconos: {e}")
+            self.icon_preview = None
+            self.icon_print = None
+            self.icon_pdf = None
+            self.icon_excel = None
+            self.icon_close = None
+    
     def procesar_datos_bres(self, movimientos_raw, fecha_ini, fecha_fin):
         """
         Procesa los datos para generar el reporte BRES con cantidades individuales por insumo.
@@ -468,182 +573,251 @@ class ReporteBres:
 
     
     def setup_ui(self):
-        
-        # Agregar título principal
-        title_frame = ttk.Frame(self.parent)
-        title_frame.pack(fill='x', padx=10, pady=(10, 5))
+        # --- Frame principal que contendrá todo ---
+        main_container = tk.Frame(self.parent, bg=self.COLORS['light'])
+        main_container.pack(fill="both", expand=True)
 
-        ttk.Label(title_frame, text="Reporte Balance Requisición y Envío de Suministros",
-                font=('Segoe UI', 16, 'bold')).pack(anchor='w')
+        # --- Título principal ---
+        title_frame = tk.Frame(main_container, bg=self.COLORS['primary'], height=70)
+        title_frame.pack(fill='x', padx=0, pady=(10, 5))
+        title_frame.pack_propagate(False)
 
-        ttk.Label(title_frame, text="Consulte datos de los movimientos de los insumos",
-                font=('Segoe UI', 10)).pack(anchor='w', pady=(2, 0))
+        title_inner = tk.Frame(title_frame, bg=self.COLORS['primary'])
+        title_inner.pack(fill='both', expand=True, padx=15, pady=8)
+
+        tk.Label(title_inner,
+                text="Reporte BRES",
+                font=('Segoe UI', 12, 'bold'),
+                fg=self.COLORS['white'],
+                bg=self.COLORS['primary']).pack(anchor='w')
+
+        tk.Label(title_inner,
+                text="Balance, Requisición y Envío de Suministros",
+                font=('Segoe UI', 8),
+                fg=self.COLORS['white'],
+                bg=self.COLORS['primary']).pack(anchor='w', pady=(2, 0))
 
         # Separador
-        ttk.Separator(self.parent, orient='horizontal').pack(fill='x', padx=10, pady=5)
-        
-        # Frame principal - USAR PACK PARA TODO
-        self.frame_principal = ttk.LabelFrame(self.parent, text="Filtros de Reporte BRES")
-        self.frame_principal.pack(fill="both", expand=True, padx=10, pady=5)
+        ttk.Separator(main_container, orient='horizontal').pack(fill='x', padx=10, pady=5)
 
-        # Frame para fechas
-        self.frame_fechas = ttk.LabelFrame(self.frame_principal, text="Selección de Fechas/Corte Logístico")
-        self.frame_fechas.pack(fill="x", padx=5, pady=5)
-        
+        # --- Canvas con scroll vertical para el contenido principal ---
+        canvas_frame = tk.Frame(main_container, bg=self.COLORS['white'])
+        canvas_frame.pack(fill="both", expand=True, padx=10, pady=5)
+
+        # Canvas y scrollbar vertical
+        self.canvas = tk.Canvas(canvas_frame, bg=self.COLORS['white'], highlightthickness=0)
+        scrollbar = ttk.Scrollbar(canvas_frame, orient="vertical", command=self.canvas.yview)
+        self.scrollable_frame = tk.Frame(self.canvas, bg=self.COLORS['white'])
+
+        self.scrollable_frame.bind(
+            "<Configure>",
+            lambda e: self.canvas.configure(scrollregion=self.canvas.bbox("all"))
+        )
+
+        # Ajustar el ancho del scrollable_frame al canvas
+        def configure_scroll_region(event=None):
+            self.canvas.configure(scrollregion=self.canvas.bbox("all"))
+            canvas_width = self.canvas.winfo_width()
+            if canvas_width > 1:
+                self.canvas.itemconfig(self.canvas_window, width=canvas_width)
+
+        self.scrollable_frame.bind("<Configure>", configure_scroll_region)
+        self.canvas.bind("<Configure>", configure_scroll_region)
+
+        self.canvas_window = self.canvas.create_window((0, 0), window=self.scrollable_frame, anchor="nw")
+        self.canvas.configure(yscrollcommand=scrollbar.set)
+
+        self.canvas.pack(side="left", fill="both", expand=True)
+        scrollbar.pack(side="right", fill="y")
+
+        # Scroll con rueda del mouse
+        def _on_mousewheel(event):
+            try:
+                if self.canvas.winfo_exists():
+                    self.canvas.yview_scroll(int(-1*(event.delta/120)), "units")
+            except tk.TclError:
+                pass
+
+        self._on_mousewheel = _on_mousewheel
+        self.canvas.bind_all("<MouseWheel>", self._on_mousewheel)
+
+        # --- Frame principal tipo tarjeta ---
+        self.frame_principal_container, self.frame_principal = self.create_titled_frame(self.scrollable_frame, "Filtros de Reporte BRES")
+        self.frame_principal_container.config(bg=self.COLORS['white'])
+        self.frame_principal.config(bg=self.COLORS['white'])
+        self.frame_principal_container.pack(fill="both", expand=True, padx=10, pady=5)
+
+        # --- Frame de fechas tipo tarjeta ---
+        self.frame_fechas_container, self.frame_fechas = self.create_titled_frame(self.frame_principal, "Selección de Fechas/Corte Logístico")
+        self.frame_fechas_container.config(bg=self.COLORS['white'])
+        self.frame_fechas.config(bg=self.COLORS['white'])
+        self.frame_fechas_container.pack(fill="x", padx=5, pady=5)
+
         # Modo de selección de fechas
         self.modo_fecha_var = tk.StringVar(value="rango")
-
+        
         # Frame para rango de fechas
-        self.frame_rango = ttk.Frame(self.frame_fechas)
+        self.frame_rango = tk.Frame(self.frame_fechas, bg=self.COLORS['white'])
         self.frame_rango.pack(fill="x", padx=5, pady=2)
 
-        # Radiobutton y controles para rango de fechas
+        self.frame_rango.grid_columnconfigure((0,1,2,3,4), weight=1)  # Todas las columnas se expanden
+
         self.radio_rango = ttk.Radiobutton(
             self.frame_rango,
             text="Rango de Fechas:",
             variable=self.modo_fecha_var,
             value="rango",
-            command=self.actualizar_visibilidad_fechas
+            command=self.actualizar_visibilidad_fechas,
+            style='White.TRadiobutton'
         )
-        self.radio_rango.grid(row=0, column=0, padx=5, sticky='w')
+        self.radio_rango.grid(row=0, column=0, padx=5, sticky='ew')
 
-        ttk.Label(self.frame_rango, text="Fecha Inicial:").grid(row=0, column=1, padx=5)
+        ttk.Label(self.frame_rango, text="Fecha Inicial:", background="white").grid(row=0, column=1, padx=5, sticky='ew')
         self.fecha_inicial = DateEntry(
             self.frame_rango,
             width=12,
             date_pattern='dd/mm/yyyy',
             state='normal'
         )
-        self.fecha_inicial.grid(row=0, column=2, padx=5)
+        self.fecha_inicial.grid(row=0, column=2, padx=5, sticky='ew')
 
-        ttk.Label(self.frame_rango, text="Fecha Final:").grid(row=0, column=3, padx=5)
+        ttk.Label(self.frame_rango, text="Fecha Final:", background="white").grid(row=0, column=3, padx=5, sticky='ew')
         self.fecha_final = DateEntry(
             self.frame_rango,
             width=12,
             date_pattern='dd/mm/yyyy',
             state='normal'
         )
-        self.fecha_final.grid(row=0, column=4, padx=5)
+        self.fecha_final.grid(row=0, column=4, padx=5, sticky='ew')
 
         # Frame para corte logístico
-        self.frame_corte = ttk.Frame(self.frame_fechas)
+        self.frame_corte = tk.Frame(self.frame_fechas, bg=self.COLORS['white'])
         self.frame_corte.pack(fill="x", padx=5, pady=2)
 
-        # Radiobutton y controles para corte logístico
+        for i in range(8):
+            self.frame_corte.grid_columnconfigure(i, weight=1)
+
         self.radio_corte = ttk.Radiobutton(
             self.frame_corte,
             text="Corte Logístico:",
             variable=self.modo_fecha_var,
             value="corte",
-            command=self.actualizar_visibilidad_fechas
+            command=self.actualizar_visibilidad_fechas,
+            style='White.TRadiobutton'
         )
-        self.radio_corte.grid(row=0, column=0, padx=5, sticky='w')
+        self.radio_corte.grid(row=0, column=0, padx=5, sticky='ew')
 
-        # Año
-        ttk.Label(self.frame_corte, text="Año:").grid(row=0, column=1, padx=5)
+        ttk.Label(self.frame_corte, text="Año:", background="white").grid(row=0, column=1, padx=5, sticky='ew')
         self.anio_var = tk.StringVar()
         anios = [str(a) for a in range(datetime.now().year - 5, datetime.now().year + 2)]
         self.combo_anio = ttk.Combobox(
             self.frame_corte,
             textvariable=self.anio_var,
             values=anios,
-            width=8
+            width=8,
+            style='White.TCombobox'
         )
-        self.combo_anio.grid(row=0, column=2, padx=5)
+        self.combo_anio.grid(row=0, column=2, padx=5, sticky='ew')
         self.combo_anio.set(str(datetime.now().year))
 
-        # Mes inicio
-        ttk.Label(self.frame_corte, text="Mes Inicio:").grid(row=0, column=3, padx=5)
+        ttk.Label(self.frame_corte, text="Mes Inicio:", background="white").grid(row=0, column=3, padx=5, sticky='ew')
         self.mes_inicio_var = tk.StringVar()
         meses = [datetime(2024, m, 1).strftime("%B").capitalize() for m in range(1, 13)]
         self.combo_mes_inicio = ttk.Combobox(
             self.frame_corte,
             textvariable=self.mes_inicio_var,
             values=meses,
-            width=12
+            width=12,
+            style='White.TCombobox'
         )
-        self.combo_mes_inicio.grid(row=0, column=4, padx=5)
+        self.combo_mes_inicio.grid(row=0, column=4, padx=5, sticky='ew')
 
-        # Mes final
-        ttk.Label(self.frame_corte, text="Mes Final:").grid(row=0, column=5, padx=5)
+        ttk.Label(self.frame_corte, text="Mes Final:", background="white").grid(row=0, column=5, padx=5, sticky='ew')
         self.mes_final_var = tk.StringVar()
         self.combo_mes_final = ttk.Combobox(
             self.frame_corte,
             textvariable=self.mes_final_var,
             values=meses,
-            width=12
+            width=12,
+            style='White.TCombobox'
         )
-        self.combo_mes_final.grid(row=0, column=6, padx=5)
+        self.combo_mes_final.grid(row=0, column=6, padx=5, sticky='ew')
 
-        # Eventos para actualizar fechas
         self.combo_anio.bind('<<ComboboxSelected>>', self.actualizar_fechas_por_corte)
         self.combo_mes_inicio.bind('<<ComboboxSelected>>', self.actualizar_fechas_por_corte)
         self.combo_mes_final.bind('<<ComboboxSelected>>', self.actualizar_fechas_por_corte)
-        
-        # Frame para combos
-        self.frame_combos = ttk.Frame(self.frame_principal)
-        self.frame_combos.pack(fill="x", padx=5, pady=5)
 
-        # Inicializar visibilidad
         self.actualizar_visibilidad_fechas()
 
         # Primera fila de combos - Ubicación
-        self.frame_ubicacion = ttk.LabelFrame(self.frame_combos, text="Ubicación")
-        self.frame_ubicacion.pack(fill="x", padx=5, pady=5)
-        
-        self.frame_ubicacion_content = ttk.Frame(self.frame_ubicacion)
+        self.frame_ubicacion_container, self.frame_ubicacion = self.create_titled_frame(self.frame_principal, "Seleccione Ubicación")
+        self.frame_ubicacion_container.config(bg=self.COLORS['white'])
+        self.frame_ubicacion.config(bg=self.COLORS['white'])
+        self.frame_ubicacion_container.pack(fill="x", padx=5, pady=5)
+
+        self.frame_ubicacion_content = tk.Frame(self.frame_ubicacion, bg=self.COLORS['white'])
         self.frame_ubicacion_content.pack(fill="x", padx=5, pady=5)
-        
-        ttk.Label(self.frame_ubicacion_content, text="Área:").grid(row=0, column=0, padx=5, sticky='w')
+
+        for i in range(8):
+            self.frame_ubicacion_content.grid_columnconfigure(i, weight=1)
+
+        ttk.Label(self.frame_ubicacion_content, text="Área:", background="white").grid(row=0, column=0, padx=5, sticky='ew')
         self.area_var = tk.StringVar()
         self.combo_area = AutocompleteCombobox(self.frame_ubicacion_content, textvariable=self.area_var, state="normal", width=20)
-        self.combo_area.grid(row=0, column=1, padx=5, sticky='w')
-        
-        ttk.Label(self.frame_ubicacion_content, text="Distrito:").grid(row=0, column=2, padx=5, sticky='w')
+        self.combo_area.grid(row=0, column=1, padx=5, sticky='ew')
+
+        ttk.Label(self.frame_ubicacion_content, text="Distrito:", background="white").grid(row=0, column=2, padx=5, sticky='ew')
         self.distrito_var = tk.StringVar()
         self.combo_distrito = AutocompleteCombobox(self.frame_ubicacion_content, textvariable=self.distrito_var, state="normal", width=20)
-        self.combo_distrito.grid(row=0, column=3, padx=5, sticky='w')
-        
-        ttk.Label(self.frame_ubicacion_content, text="Tipo de Servicio:").grid(row=0, column=4, padx=5, sticky='w')
+        self.combo_distrito.grid(row=0, column=3, padx=5, sticky='ew')
+
+        ttk.Label(self.frame_ubicacion_content, text="Tipo de Servicio:", background="white").grid(row=0, column=4, padx=5, sticky='ew')
         self.tipo_servicio_var = tk.StringVar()
         self.combo_tipo_servicio = AutocompleteCombobox(self.frame_ubicacion_content, textvariable=self.tipo_servicio_var, state="normal", width=20)
-        self.combo_tipo_servicio.grid(row=0, column=5, padx=5, sticky='w')
-        
-        ttk.Label(self.frame_ubicacion_content, text="Servicio:").grid(row=0, column=6, padx=5, sticky='w')
+        self.combo_tipo_servicio.grid(row=0, column=5, padx=5, sticky='ew')
+
+        ttk.Label(self.frame_ubicacion_content, text="Servicio:", background="white").grid(row=0, column=6, padx=5, sticky='ew')
         self.servicio_var = tk.StringVar()
         self.combo_servicio = AutocompleteCombobox(self.frame_ubicacion_content, textvariable=self.servicio_var, state="normal", width=20)
-        self.combo_servicio.grid(row=0, column=7, padx=5, sticky='w')
+        self.combo_servicio.grid(row=0, column=7, padx=5, sticky='ew')
 
         # Segunda fila de combos - Insumo
-        self.frame_insumo = ttk.LabelFrame(self.frame_combos, text="Insumo")
-        self.frame_insumo.pack(fill="x", padx=5, pady=5)
-        
-        self.frame_insumo_content = ttk.Frame(self.frame_insumo)
+        self.frame_insumo_container, self.frame_insumo = self.create_titled_frame(self.frame_principal, "Seleccione Insumo")
+        self.frame_insumo_container.config(bg=self.COLORS['white'])
+        self.frame_insumo.config(bg=self.COLORS['white'])
+        self.frame_insumo_container.pack(fill="x", padx=5, pady=5)
+
+        self.frame_insumo_content = tk.Frame(self.frame_insumo, bg=self.COLORS['white'])
         self.frame_insumo_content.pack(fill="x", padx=5, pady=5)
-        
-        ttk.Label(self.frame_insumo_content, text="Tipo de Insumo:").grid(row=0, column=0, padx=5, sticky='w')
+
+        for i in range(6):
+            self.frame_insumo_content.grid_columnconfigure(i, weight=1)
+
+        ttk.Label(self.frame_insumo_content, text="Tipo de Insumo:", background="white").grid(row=0, column=0, padx=5, sticky='ew')
         self.tipo_insumo_var = tk.StringVar()
         self.combo_tipo_insumo = AutocompleteCombobox(self.frame_insumo_content, textvariable=self.tipo_insumo_var, state="normal", width=20)
-        self.combo_tipo_insumo.grid(row=0, column=1, padx=5, sticky='w')
-        
-        ttk.Label(self.frame_insumo_content, text="Insumo:").grid(row=0, column=2, padx=5, sticky='w')
+        self.combo_tipo_insumo.grid(row=0, column=1, padx=5, sticky='ew')
+
+        ttk.Label(self.frame_insumo_content, text="Insumo:", background="white").grid(row=0, column=2, padx=5, sticky='ew')
         self.insumo_var = tk.StringVar()
         self.combo_insumo = AutocompleteCombobox(self.frame_insumo_content, textvariable=self.insumo_var, state="normal", width=20)
-        self.combo_insumo.grid(row=0, column=3, padx=5, sticky='w')
-        
-        ttk.Label(self.frame_insumo_content, text="Presentación:").grid(row=0, column=4, padx=5, sticky='w')
+        self.combo_insumo.grid(row=0, column=3, padx=5, sticky='ew')
+
+        ttk.Label(self.frame_insumo_content, text="Presentación:", background="white").grid(row=0, column=4, padx=5, sticky='ew')
         self.presentacion_var = tk.StringVar()
         self.combo_presentacion = AutocompleteCombobox(self.frame_insumo_content, textvariable=self.presentacion_var, state="normal", width=20)
-        self.combo_presentacion.grid(row=0, column=5, padx=5, sticky='w')
+        self.combo_presentacion.grid(row=0, column=5, padx=5, sticky='ew')
 
         # Tercera fila - Nivel Máximo
-        self.frame_nivel = ttk.LabelFrame(self.frame_combos, text="Configuración")
-        self.frame_nivel.pack(fill="x", padx=5, pady=5)
-        
-        self.frame_nivel_content = ttk.Frame(self.frame_nivel)
+        self.frame_nivel_container, self.frame_nivel = self.create_titled_frame(self.frame_principal, "Seleccione Nivel Máximo")
+        self.frame_nivel_container.config(bg=self.COLORS['white'])
+        self.frame_nivel.config(bg=self.COLORS['white'])
+        self.frame_nivel_container.pack(fill="x", padx=5, pady=10)
+
+        self.frame_nivel_content = tk.Frame(self.frame_nivel, bg=self.COLORS['white'])
         self.frame_nivel_content.pack(fill="x", padx=5, pady=5)
-        
-        ttk.Label(self.frame_nivel_content, text="Nivel Máximo:").grid(row=0, column=0, padx=5, sticky='w')
+
+        ttk.Label(self.frame_nivel_content, text="Nivel Máximo:", background="white").grid(row=0, column=0, padx=5, sticky='w')
         self.nivel_maximo_var = tk.StringVar()
         niveles = [str(i) for i in range(1, 13)]  # 1 al 12
         self.combo_nivel_maximo = ttk.Combobox(
@@ -656,23 +830,121 @@ class ReporteBres:
         self.combo_nivel_maximo.grid(row=0, column=1, padx=5, sticky='w')
         self.combo_nivel_maximo.set("6")  # Valor por defecto
 
-        # Frame para el visor PDF (SOLO pack aquí y en sus hijos)
-        self.pdf_frame = ttk.Frame(self.frame_principal)
-        self.pdf_frame.pack(fill="both", expand=True, padx=5, pady=5)
-        self.pdf_viewer = None
-
-        # Frame para botones
-        self.frame_botones = ttk.Frame(self.frame_principal)
+        # --- Frame para botones (igual que en Kardex) ---
+        self.frame_botones = tk.Frame(self.frame_principal, bg=self.COLORS['white'])
         self.frame_botones.pack(fill="x", pady=10)
 
-        botones_grid = ttk.Frame(self.frame_botones)
+        botones_grid = tk.Frame(self.frame_botones, bg=self.COLORS['white'])
         botones_grid.pack(fill="x")
+        
+        btn_font = ("Segoe UI", 9, "bold")
+        btn_fg = self.COLORS['text_dark']  # Color primario para texto
+        btn_bg = self.COLORS['white']    # Fondo blanco
 
-        ttk.Button(botones_grid, text="Generar Reporte", command=self.generar_vista_previa).grid(row=0, column=0, padx=5)
-        ttk.Button(botones_grid, text="Imprimir", command=self.imprimir_pdf).grid(row=0, column=1, padx=5)
-        ttk.Button(botones_grid, text="Exportar a PDF", command=self.exportar_pdf).grid(row=0, column=2, padx=5)
-        ttk.Button(botones_grid, text="Exportar a Excel", command=self.generar_excel_reporte).grid(row=0, column=3, padx=5)
-        ttk.Button(botones_grid, text="Cerrar", command=self.cerrar_ventana).grid(row=0, column=4, padx=5)
+        # Botón Generar Reporte
+        btn_report = tk.Button(
+            botones_grid,
+            text="Generar Reporte",
+            image=self.icon_preview if self.icon_preview else "",
+            compound="left" if self.icon_preview else None,
+            command=self.generar_vista_previa,
+            font=btn_font,
+            fg=btn_fg,
+            bg=btn_bg,
+            relief="flat",
+            borderwidth=0,
+            highlightthickness=0,
+            activebackground=btn_bg,
+            activeforeground=btn_fg,
+            padx=5, pady=6,
+            cursor="hand2"
+        )
+        btn_report.grid(row=0, column=0, padx=5)
+
+        # Botón Imprimir
+        btn_print = tk.Button(
+            botones_grid,
+            text="Imprimir",
+            image=self.icon_print if self.icon_print else "",
+            compound="left" if self.icon_print else None,
+            command=self.imprimir_pdf,
+            font=btn_font,
+            fg=btn_fg,
+            bg=btn_bg,
+            relief="flat",
+            borderwidth=0,
+            highlightthickness=0,
+            activebackground=btn_bg,
+            activeforeground=btn_fg,
+            padx=5, pady=6,
+            cursor="hand2"
+        )
+        btn_print.grid(row=0, column=1, padx=5)
+
+        # Botón Exportar a PDF
+        btn_pdf = tk.Button(
+            botones_grid,
+            text="Exportar a PDF",
+            image=self.icon_pdf if self.icon_pdf else "",
+            compound="left" if self.icon_pdf else None,
+            command=self.exportar_pdf,
+            font=btn_font,
+            fg=btn_fg,
+            bg=btn_bg,
+            relief="flat",
+            borderwidth=0,
+            highlightthickness=0,
+            activebackground=btn_bg,
+            activeforeground=btn_fg,
+            padx=5, pady=6,
+            cursor="hand2"
+        )
+        btn_pdf.grid(row=0, column=2, padx=5)
+
+        # Botón Exportar a Excel
+        btn_excel = tk.Button(
+            botones_grid,
+            text="Exportar a Excel",
+            image=self.icon_excel if self.icon_excel else "",
+            compound="left" if self.icon_excel else None,
+            command=self.generar_excel_reporte,
+            font=btn_font,
+            fg=btn_fg,
+            bg=btn_bg,
+            relief="flat",
+            borderwidth=0,
+            highlightthickness=0,
+            activebackground=btn_bg,
+            activeforeground=btn_fg,
+            padx=5, pady=6,
+            cursor="hand2"
+        )
+        btn_excel.grid(row=0, column=3, padx=5)
+
+        # Botón Cerrar
+        btn_close = tk.Button(
+            botones_grid,
+            text="Cerrar",
+            image=self.icon_close if self.icon_close else "",
+            compound="left" if self.icon_close else None,
+            command=self.cerrar_ventana,
+            font=btn_font,
+            fg=btn_fg,
+            bg=btn_bg,
+            relief="flat",
+            borderwidth=0,
+            highlightthickness=0,
+            activebackground=btn_bg,
+            activeforeground=btn_fg,
+            padx=5, pady=6,
+            cursor="hand2"
+        )
+        btn_close.grid(row=0, column=4, padx=5)
+
+        # --- Frame para el visor PDF ---
+        self.pdf_frame = tk.Frame(self.frame_principal, bg=self.COLORS['white'])
+        self.pdf_frame.pack(fill="both", expand=True, padx=5, pady=5)
+        self.pdf_viewer = None 
 
         # Vincular eventos de cambio
         self.combo_area.bind('<<ComboboxSelected>>', self.cargar_distritos_por_area)
@@ -696,16 +968,16 @@ class ReporteBres:
             self.combo_anio.config(state="disabled")
             self.combo_mes_inicio.config(state="disabled")
             self.combo_mes_final.config(state="disabled")
-            self.frame_rango.configure(style='Enabled.TFrame')
-            self.frame_corte.configure(style='Disabled.TFrame')
+            self.frame_rango.configure(bg='white')
+            self.frame_corte.configure(bg='#f0f0f0')
         else:
             self.fecha_inicial.config(state="disabled")
             self.fecha_final.config(state="disabled")
             self.combo_anio.config(state="readonly")
             self.combo_mes_inicio.config(state="readonly")
             self.combo_mes_final.config(state="readonly")
-            self.frame_rango.configure(style='Disabled.TFrame')
-            self.frame_corte.configure(style='Enabled.TFrame')
+            self.frame_rango.configure(bg='white')
+            self.frame_corte.configure(bg='#f0f0f0')
         self.frame_fechas.update()
     
     def calcular_rango_corte_logistico(self, anio, mes_inicio, mes_final):
@@ -1275,23 +1547,47 @@ class ReporteBres:
             messagebox.showerror("Error", f"Error al generar Excel: {str(e)}")
 
     def cerrar_ventana(self):
+        """
+        Cierra la ventana del reporte, limpia recursos y muestra la pantalla de bienvenida.
+        """
+        if not messagebox.askyesno("Confirmar", "¿Está seguro que desea cerrar esta ventana?"):
+            return  # Si el usuario cancela, no hace nada
+
         try:
+            # Limpiar archivo temporal si existe
             if hasattr(self, 'temp_pdf_path') and os.path.exists(self.temp_pdf_path):
                 try:
                     os.remove(self.temp_pdf_path)
-                except:
+                except Exception:
                     pass
 
-            if self.main_window:
-                self.main_window.show_main_menu()
+            # Desvincular el evento del mouse wheel antes de cerrar (si existe self.canvas)
+            try:
+                if hasattr(self, "canvas"):
+                    self.canvas.unbind_all("<MouseWheel>")
+            except Exception:
+                pass
+
+            # Limpiar el frame principal
+            if hasattr(self, 'parent') and self.parent:
+                for widget in self.parent.winfo_children():
+                    widget.destroy()
+
+            # Mostrar la pantalla de bienvenida si existe
+            if hasattr(self, "main_window") and self.main_window:
+                self.main_window.show_welcome_screen()
 
         except Exception as e:
             print(f"Error al cerrar ventana: {e}")
-            if self.main_window:
-                try:
-                    self.main_window.show_main_menu()
-                except:
-                    pass
+            # Forzar cierre si hay error
+            try:
+                import sys
+                if hasattr(self, 'parent') and self.parent:
+                    self.parent.quit()
+                else:
+                    sys.exit()
+            except Exception:
+                pass
     
     def filtrar_movimientos_por_nivel(self, movimientos):
         """

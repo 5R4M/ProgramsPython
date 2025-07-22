@@ -447,6 +447,16 @@ class MainWindow:
         self.clear_content_frame()
         self.reset_window_size()
 
+        # Forzar fondo blanco en el frame principal
+        try:
+            self.main_content_frame.configure(style='Card.TFrame')
+        except:
+            pass
+        try:
+            self.main_content_frame.configure(bg=self.COLORS['white'])
+        except:
+            pass
+        
         # Frame principal de bienvenida
         welcome_frame = tk.Frame(self.main_content_frame, bg=self.COLORS['white'])
         welcome_frame.pack(fill="both", expand=True, padx=40, pady=40)

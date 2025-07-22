@@ -2243,9 +2243,19 @@ class IngresoInsumos:
         
     def cerrar_ventana(self):
         if messagebox.askyesno("Confirmar", "¿Está seguro que desea cerrar esta ventana?"):
+            # Desvincular el evento del mouse wheel antes de cerrar (si existe self.canvas)
+            try:
+                if hasattr(self, "canvas"):
+                    self.canvas.unbind_all("<MouseWheel>")
+            except Exception:
+                pass
+
+            # Limpiar el frame principal
             for widget in self.parent.winfo_children():
                 widget.destroy()
-            self.main_window.show_welcome_screen()
+            # Mostrar la pantalla de bienvenida si existe
+            if hasattr(self, "main_window") and self.main_window:
+                self.main_window.show_welcome_screen()
 
     # 7. Métodos auxiliares
     
