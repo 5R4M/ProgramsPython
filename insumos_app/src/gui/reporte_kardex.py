@@ -589,14 +589,15 @@ class ReporteKardex:
         self.combo_presentacion = AutocompleteCombobox(self.frame_insumo_content, textvariable=self.presentacion_var, state="normal", font=('Segoe UI', 9))
         self.combo_presentacion.grid(row=0, column=5, padx=5, sticky='ew')
 
-        # Frame para el visor PDF
-        self.pdf_frame = ttk.Frame(self.frame_principal, style='White.TFrame')
-        self.pdf_frame.pack(fill="both", expand=True, padx=5, pady=5)
+        # --- Frame para el visor PDF (ALTURA FIJA) ---
+        self.pdf_frame = tk.Frame(self.frame_principal, bg=self.COLORS['white'], height=350)
+        self.pdf_frame.pack(fill="x", padx=5, pady=5)
+        self.pdf_frame.pack_propagate(False)  # Para que respete la altura fija
         self.pdf_viewer = None
 
-        # Frame para botones
-        self.frame_botones = ttk.Frame(self.frame_principal, style='White.TFrame')
-        self.frame_botones.pack(fill="x", pady=10)
+        # --- Frame para botones (fuera del frame principal, pegado abajo) ---
+        self.frame_botones = ttk.Frame(main_container, style='White.TFrame')
+        self.frame_botones.pack(fill="x", side="bottom", pady=(20, 10))
 
         btn_font = ('Segoe UI', 9, 'bold')
         btn_bg = self.COLORS['white']
@@ -987,11 +988,26 @@ class ReporteKardex:
                 display_page()
                 page_label.config(text=f"Página {self.current_page + 1} de {self.total_pages}")
 
-            # Botones de navegación
-            ttk.Button(control_frame, text="<<", command=lambda: change_page(-1)).pack(side="left", padx=5)
-            page_label = ttk.Label(control_frame, text=f"Página 1 de {self.total_pages}")
+            btn_nav_prev = tk.Button(
+                control_frame, text="<<", command=lambda: change_page(-1),
+                bg=self.COLORS['white'], fg=self.COLORS['text_dark'],
+                font=('Segoe UI', 9, 'bold'), relief='flat', borderwidth=0, cursor='hand2'
+            )
+            btn_nav_prev.pack(side="left", padx=5)
+
+            page_label = tk.Label(
+                control_frame, text=f"Página 1 de {self.total_pages}",
+                bg=self.COLORS['white'], fg=self.COLORS['text_dark'],
+                font=('Segoe UI', 9, 'bold')
+            )
             page_label.pack(side="left", padx=10)
-            ttk.Button(control_frame, text=">>", command=lambda: change_page(1)).pack(side="left", padx=5)
+
+            btn_nav_next = tk.Button(
+                control_frame, text=">>", command=lambda: change_page(1),
+                bg=self.COLORS['white'], fg=self.COLORS['text_dark'],
+                font=('Segoe UI', 9, 'bold'), relief='flat', borderwidth=0, cursor='hand2'
+            )
+            btn_nav_next.pack(side="left", padx=5)
 
             # Función para mostrar la página actual
             def display_page():

@@ -600,49 +600,8 @@ class ReporteBres:
         # Separador
         ttk.Separator(main_container, orient='horizontal').pack(fill='x', padx=10, pady=5)
 
-        # --- Canvas con scroll vertical para el contenido principal ---
-        canvas_frame = tk.Frame(main_container, bg=self.COLORS['white'])
-        canvas_frame.pack(fill="both", expand=True, padx=10, pady=5)
-
-        # Canvas y scrollbar vertical
-        self.canvas = tk.Canvas(canvas_frame, bg=self.COLORS['white'], highlightthickness=0)
-        scrollbar = ttk.Scrollbar(canvas_frame, orient="vertical", command=self.canvas.yview)
-        self.scrollable_frame = tk.Frame(self.canvas, bg=self.COLORS['white'])
-
-        self.scrollable_frame.bind(
-            "<Configure>",
-            lambda e: self.canvas.configure(scrollregion=self.canvas.bbox("all"))
-        )
-
-        # Ajustar el ancho del scrollable_frame al canvas
-        def configure_scroll_region(event=None):
-            self.canvas.configure(scrollregion=self.canvas.bbox("all"))
-            canvas_width = self.canvas.winfo_width()
-            if canvas_width > 1:
-                self.canvas.itemconfig(self.canvas_window, width=canvas_width)
-
-        self.scrollable_frame.bind("<Configure>", configure_scroll_region)
-        self.canvas.bind("<Configure>", configure_scroll_region)
-
-        self.canvas_window = self.canvas.create_window((0, 0), window=self.scrollable_frame, anchor="nw")
-        self.canvas.configure(yscrollcommand=scrollbar.set)
-
-        self.canvas.pack(side="left", fill="both", expand=True)
-        scrollbar.pack(side="right", fill="y")
-
-        # Scroll con rueda del mouse
-        def _on_mousewheel(event):
-            try:
-                if self.canvas.winfo_exists():
-                    self.canvas.yview_scroll(int(-1*(event.delta/120)), "units")
-            except tk.TclError:
-                pass
-
-        self._on_mousewheel = _on_mousewheel
-        self.canvas.bind_all("<MouseWheel>", self._on_mousewheel)
-
         # --- Frame principal tipo tarjeta ---
-        self.frame_principal_container, self.frame_principal = self.create_titled_frame(self.scrollable_frame, "Filtros de Reporte BRES")
+        self.frame_principal_container, self.frame_principal = self.create_titled_frame(main_container, "Filtros de Reporte BRES")
         self.frame_principal_container.config(bg=self.COLORS['white'])
         self.frame_principal.config(bg=self.COLORS['white'])
         self.frame_principal_container.pack(fill="both", expand=True, padx=10, pady=5)
@@ -812,7 +771,7 @@ class ReporteBres:
         self.frame_nivel_container, self.frame_nivel = self.create_titled_frame(self.frame_principal, "Seleccione Nivel Máximo")
         self.frame_nivel_container.config(bg=self.COLORS['white'])
         self.frame_nivel.config(bg=self.COLORS['white'])
-        self.frame_nivel_container.pack(fill="x", padx=5, pady=10)
+        self.frame_nivel_container.pack(fill="x", padx=5, pady=(10, 30))
 
         self.frame_nivel_content = tk.Frame(self.frame_nivel, bg=self.COLORS['white'])
         self.frame_nivel_content.pack(fill="x", padx=5, pady=5)
@@ -830,9 +789,15 @@ class ReporteBres:
         self.combo_nivel_maximo.grid(row=0, column=1, padx=5, sticky='w')
         self.combo_nivel_maximo.set("6")  # Valor por defecto
 
+        # --- Frame para el visor PDF (ALTURA FIJA) ---
+        self.pdf_frame = tk.Frame(self.frame_principal, bg=self.COLORS['white'], height=200)
+        self.pdf_frame.pack(fill="x", padx=5, pady=5)
+        self.pdf_frame.pack_propagate(False)  # Para que respete la altura fija
+        self.pdf_viewer = None
+       
         # --- Frame para botones (igual que en Kardex) ---
-        self.frame_botones = tk.Frame(self.frame_principal, bg=self.COLORS['white'])
-        self.frame_botones.pack(fill="x", pady=10)
+        self.frame_botones = tk.Frame(main_container, bg=self.COLORS['white'])
+        self.frame_botones.pack(fill="x", side="bottom", pady=(20, 10))
 
         botones_grid = tk.Frame(self.frame_botones, bg=self.COLORS['white'])
         botones_grid.pack(fill="x")
@@ -940,11 +905,6 @@ class ReporteBres:
             cursor="hand2"
         )
         btn_close.grid(row=0, column=4, padx=5)
-
-        # --- Frame para el visor PDF ---
-        self.pdf_frame = tk.Frame(self.frame_principal, bg=self.COLORS['white'])
-        self.pdf_frame.pack(fill="both", expand=True, padx=5, pady=5)
-        self.pdf_viewer = None 
 
         # Vincular eventos de cambio
         self.combo_area.bind('<<ComboboxSelected>>', self.cargar_distritos_por_area)
@@ -1161,37 +1121,40 @@ class ReporteBres:
             for widget in self.pdf_frame.winfo_children():
                 widget.destroy()
 
-            # Crear un canvas con scrollbars dentro del pdf_frame
-            canvas_frame = ttk.Frame(self.pdf_frame)
+            # --- Frame contenedor principal ---
+            contenedor = tk.Frame(self.pdf_frame, bg=self.COLORS['white'])
+            contenedor.pack(fill="both", expand=True)
+
+            # --- Frame del visor PDF (canvas + scrollbars) ---
+            canvas_frame = tk.Frame(contenedor, bg=self.COLORS['white'])
             canvas_frame.pack(fill="both", expand=True)
 
-            # Scrollbars
             h_scrollbar = ttk.Scrollbar(canvas_frame, orient="horizontal")
             h_scrollbar.pack(side="bottom", fill="x")
 
             v_scrollbar = ttk.Scrollbar(canvas_frame, orient="vertical")
             v_scrollbar.pack(side="right", fill="y")
 
-            # Canvas
-            canvas = tk.Canvas(canvas_frame,
-                            xscrollcommand=h_scrollbar.set,
-                            yscrollcommand=v_scrollbar.set)
+            canvas = tk.Canvas(
+                canvas_frame,
+                xscrollcommand=h_scrollbar.set,
+                yscrollcommand=v_scrollbar.set,
+                bg=self.COLORS['white'],
+                highlightthickness=0
+            )
             canvas.pack(side="left", fill="both", expand=True)
 
-            # Configurar scrollbars
             h_scrollbar.config(command=canvas.xview)
             v_scrollbar.config(command=canvas.yview)
 
             # Abrir el PDF con PyMuPDF
             doc = fitz.open(self.temp_pdf_path)
-
-            # Variables para controlar la página actual
             self.current_page = 0
             self.total_pages = len(doc)
 
-            # Frame para controles de navegación
-            control_frame = ttk.Frame(self.pdf_frame)
-            control_frame.pack(fill="x", pady=5)
+            # --- Frame para controles de navegación (abajo, fondo blanco) ---
+            control_frame = tk.Frame(contenedor, bg=self.COLORS['white'])
+            control_frame.pack(fill="x", side="bottom", pady=5)
 
             # Función para cambiar de página
             def change_page(delta):
@@ -1199,42 +1162,51 @@ class ReporteBres:
                 display_page()
                 page_label.config(text=f"Página {self.current_page + 1} de {self.total_pages}")
 
-            # Botones de navegación
-            ttk.Button(control_frame, text="<<", command=lambda: change_page(-1)).pack(side="left", padx=5)
-            page_label = ttk.Label(control_frame, text=f"Página 1 de {self.total_pages}")
-            page_label.pack(side="left", padx=10)
-            ttk.Button(control_frame, text=">>", command=lambda: change_page(1)).pack(side="left", padx=5)
+            # Botón anterior
+            btn_nav_prev = tk.Button(
+                control_frame, text="◀", command=lambda: change_page(-1),
+                bg=self.COLORS['white'], fg=self.COLORS['text_dark'],
+                font=('Segoe UI', 10, 'bold'), relief='flat', borderwidth=0, cursor='hand2',
+                activebackground=self.COLORS['white'], activeforeground=self.COLORS['text_dark']
+            )
+            btn_nav_prev.pack(side="left", padx=(10, 2), pady=2)
+
+            # Etiqueta de página
+            page_label = tk.Label(
+                control_frame, text=f"Página 1 de {self.total_pages}",
+                bg=self.COLORS['white'], fg=self.COLORS['text_dark'],
+                font=('Segoe UI', 10, 'bold')
+            )
+            page_label.pack(side="left", padx=2, pady=2)
+
+            # Botón siguiente
+            btn_nav_next = tk.Button(
+                control_frame, text="▶", command=lambda: change_page(1),
+                bg=self.COLORS['white'], fg=self.COLORS['text_dark'],
+                font=('Segoe UI', 10, 'bold'), relief='flat', borderwidth=0, cursor='hand2',
+                activebackground=self.COLORS['white'], activeforeground=self.COLORS['text_dark']
+            )
+            btn_nav_next.pack(side="left", padx=2, pady=2)
 
             # Función para mostrar la página actual
             def display_page():
-                # Limpiar canvas
                 canvas.delete("all")
-
-                # Obtener la página actual
                 page = doc.load_page(self.current_page)
-
-                # Renderizar a imagen
                 pix = page.get_pixmap(matrix=fitz.Matrix(1.2, 1.2))
-
-                # Convertir a formato PIL
                 img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
-
-                # Convertir a formato Tkinter
                 tk_img = ImageTk.PhotoImage(image=img)
-
-                # Guardar referencia
                 canvas.image = tk_img
-
-                # Mostrar en canvas
                 canvas.create_image(0, 0, anchor="nw", image=tk_img)
-
-                # Configurar región de desplazamiento
                 canvas.config(scrollregion=canvas.bbox("all"))
 
             # Mostrar la primera página
             display_page()
 
-            # **MENSAJE ELIMINADO - Ya no aparece el messagebox de éxito**
+            # Scroll con mouse
+            def on_mousewheel(event):
+                if canvas.winfo_exists():
+                    canvas.yview_scroll(int(-1*(event.delta/120)), "units")
+            canvas.bind("<MouseWheel>", on_mousewheel)
 
         except Exception as e:
             import traceback
