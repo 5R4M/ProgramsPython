@@ -880,7 +880,7 @@ class ReporteKardex:
                 messagebox.showerror("Error", "Debe seleccionar un insumo")
                 return
 
-            # Obtener datos - MODIFICACIÓN AQUÍ
+            # Obtener datos
             movimientos_raw = obtener_movimientos_kardex(
                 fecha_ini.strftime('%Y-%m-%d'),
                 fecha_fin.strftime('%Y-%m-%d'),
@@ -890,159 +890,161 @@ class ReporteKardex:
                 self.combo_tipo_insumo.get() if self.combo_tipo_insumo.get().strip() else None,
                 self.combo_insumo.get() if self.combo_insumo.get().strip() else None,
                 self.combo_presentacion.get() if self.combo_presentacion.get().strip() else None,
-                self.combo_area.get() if self.combo_area.get().strip() else None  # NUEVO PARÁMETRO
+                self.combo_area.get() if self.combo_area.get().strip() else None
             )
 
             if not movimientos_raw:
                 messagebox.showinfo("Info", "No hay datos para mostrar")
                 return
 
-            # Filtrar movimientos por nivel jerárquico - NUEVA LÍNEA
             movimientos_filtrados = self.filtrar_movimientos_por_nivel(movimientos_raw)
-
-            # VALIDAR SI HAY DATOS DESPUÉS DEL FILTRADO
             if not movimientos_filtrados:
                 messagebox.showwarning(
                     "Sin datos", 
-                    "No hay movimientos para mostrar con los filtros seleccionados.\n\n"
-                    "Verifique que:\n"
-                    "• Existan movimientos en el rango de fechas seleccionado\n"
-                    "• Los movimientos estén guardados en el nivel jerárquico seleccionado\n"
-                    "• Los filtros de insumo sean correctos"
-                )
-                return  # No generar el reporte si no hay datos
-
-            # Ordenar movimientos y calcular saldo - USAR MOVIMIENTOS FILTRADOS
-            movimientos_ordenados = self.ordenar_movimientos(movimientos_filtrados)
-            self.movimientos_data = self.calcular_saldo_acumulado(movimientos_ordenados)
-
-            # VALIDAR NUEVAMENTE DESPUÉS DEL PROCESAMIENTO
-            if not self.movimientos_data:
-                messagebox.showwarning(
-                    "Sin datos", 
-                    "No se pudieron procesar los datos para el reporte.\n"
-                    "Verifique los filtros seleccionados."
+                    "No hay movimientos para mostrar con los filtros seleccionados."
                 )
                 return
 
-            # Resto del código permanece igual...
-            import tempfile
-            import os
+            movimientos_ordenados = self.ordenar_movimientos(movimientos_filtrados)
+            self.movimientos_data = self.calcular_saldo_acumulado(movimientos_ordenados)
+            if not self.movimientos_data:
+                messagebox.showwarning(
+                    "Sin datos", 
+                    "No se pudieron procesar los datos para el reporte."
+                )
+                return
 
-            # Crear archivo temporal
-            temp_dir = tempfile.gettempdir()
-            self.temp_pdf_path = os.path.join(temp_dir, "vista_previa_kardex.pdf")
-
-            # Generar el PDF en el archivo temporal
-            self.generar_pdf(self.temp_pdf_path, es_vista_previa=True)
-
-            # Resto del código para mostrar el PDF...
-            import fitz  # PyMuPDF
+            # --- Generar PDF temporal ---
+            import tempfile, os, fitz
             from PIL import Image, ImageTk
 
-            # Limpiar el frame PDF si existe
-            if hasattr(self, 'pdf_frame'):
-                for widget in self.pdf_frame.winfo_children():
-                    widget.destroy()
+            temp_dir = tempfile.gettempdir()
+            self.temp_pdf_path = os.path.join(temp_dir, "vista_previa_kardex.pdf")
+            self.generar_pdf(self.temp_pdf_path, es_vista_previa=True)
 
-            # Asegurarse de que el frame PDF existe
-            if not hasattr(self, 'pdf_frame'):
-                self.pdf_frame = ttk.Frame(self.frame_principal)
-                self.pdf_frame.pack(fill="both", expand=True, padx=5, pady=5)
+            # --- Limpiar visor PDF ---
+            for widget in self.pdf_frame.winfo_children():
+                widget.destroy()
 
-            # Crear un canvas con scrollbars dentro del pdf_frame
-            canvas_frame = ttk.Frame(self.pdf_frame)
-            canvas_frame.pack(fill="both", expand=True)
+            # --- Contenedor principal para visor y controles ---
+            contenedor = tk.Frame(self.pdf_frame, bg=self.COLORS['white'])
+            contenedor.pack(fill="both", expand=True)
+
+            # --- Frame para controles de navegación (abajo, fondo blanco) ---
+            control_frame = tk.Frame(contenedor, bg=self.COLORS['white'])
+            control_frame.pack(fill="x", side="bottom", pady=5)
+
+            # --- Frame del visor PDF (canvas + scrollbars) ---
+            canvas_frame = tk.Frame(contenedor, bg=self.COLORS['white'])
+            canvas_frame.pack(side="top", fill="both", expand=True)
 
             # Scrollbars
+            v_scrollbar = ttk.Scrollbar(canvas_frame, orient="vertical")
+            v_scrollbar.pack(side="right", fill="y")
             h_scrollbar = ttk.Scrollbar(canvas_frame, orient="horizontal")
             h_scrollbar.pack(side="bottom", fill="x")
 
-            v_scrollbar = ttk.Scrollbar(canvas_frame, orient="vertical")
-            v_scrollbar.pack(side="right", fill="y")
-
             # Canvas
-            canvas = tk.Canvas(canvas_frame,
-                            xscrollcommand=h_scrollbar.set,
-                            yscrollcommand=v_scrollbar.set)
-            canvas.pack(side="left", fill="both", expand=True)
+            self.canvas = tk.Canvas(
+                canvas_frame,
+                bg=self.COLORS['white'],
+                yscrollcommand=v_scrollbar.set,
+                xscrollcommand=h_scrollbar.set
+            )
+            self.canvas.pack(side="left", fill="both", expand=True)
+            v_scrollbar.config(command=self.canvas.yview)
+            h_scrollbar.config(command=self.canvas.xview)
 
-            # Configurar scrollbars
-            h_scrollbar.config(command=canvas.xview)
-            v_scrollbar.config(command=canvas.yview)
-
-            # Abrir el PDF con PyMuPDF
-            doc = fitz.open(self.temp_pdf_path)
-
-            # Variables para controlar la página actual
+            # --- Abrir PDF y preparar navegación ---
+            self.pdf_document = fitz.open(self.temp_pdf_path)
             self.current_page = 0
-            self.total_pages = len(doc)
+            self.total_pages = len(self.pdf_document)
 
-            # Frame para controles de navegación
-            control_frame = ttk.Frame(self.pdf_frame)
-            control_frame.pack(fill="x", pady=5)
+            # --- Frame de navegación alineado a la izquierda ---
+            nav_frame = tk.Frame(control_frame, bg=self.COLORS['white'])
+            nav_frame.pack(side="left", padx=0)
 
-            # Función para cambiar de página
-            def change_page(delta):
-                self.current_page = max(0, min(self.current_page + delta, self.total_pages - 1))
-                display_page()
-                page_label.config(text=f"Página {self.current_page + 1} de {self.total_pages}")
-
-            btn_nav_prev = tk.Button(
-                control_frame, text="<<", command=lambda: change_page(-1),
-                bg=self.COLORS['white'], fg=self.COLORS['text_dark'],
-                font=('Segoe UI', 9, 'bold'), relief='flat', borderwidth=0, cursor='hand2'
-            )
-            btn_nav_prev.pack(side="left", padx=5)
-
-            page_label = tk.Label(
-                control_frame, text=f"Página 1 de {self.total_pages}",
-                bg=self.COLORS['white'], fg=self.COLORS['text_dark'],
-                font=('Segoe UI', 9, 'bold')
-            )
-            page_label.pack(side="left", padx=10)
-
-            btn_nav_next = tk.Button(
-                control_frame, text=">>", command=lambda: change_page(1),
-                bg=self.COLORS['white'], fg=self.COLORS['text_dark'],
-                font=('Segoe UI', 9, 'bold'), relief='flat', borderwidth=0, cursor='hand2'
-            )
-            btn_nav_next.pack(side="left", padx=5)
-
-            # Función para mostrar la página actual
-            def display_page():
-                # Limpiar canvas
-                canvas.delete("all")
-
-                # Obtener la página actual
-                page = doc.load_page(self.current_page)
-
-                # Renderizar a imagen
-                pix = page.get_pixmap(matrix=fitz.Matrix(1.2, 1.2))  # Escala 1.2 para mejor calidad
-
-                # Convertir a formato PIL
+            # --- Función para mostrar página ---
+            def mostrar_pagina():
+                self.canvas.delete("all")
+                page = self.pdf_document.load_page(self.current_page)
+                pix = page.get_pixmap(matrix=fitz.Matrix(1.2, 1.2))
                 img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
-
-                # Convertir a formato Tkinter
                 tk_img = ImageTk.PhotoImage(image=img)
+                self.canvas.image = tk_img
+                self.canvas.create_image(0, 0, anchor="nw", image=tk_img)
+                self.canvas.config(scrollregion=self.canvas.bbox("all"))
+                self.lbl_pagina.config(text=f"Página {self.current_page + 1} de {self.total_pages}")
 
-                # Guardar referencia para evitar que sea eliminada por el recolector de basura
-                canvas.image = tk_img
+            # --- Función para cambiar de página ---
+            def change_page(delta):
+                nueva_pagina = self.current_page + delta
+                if 0 <= nueva_pagina < self.total_pages:
+                    self.current_page = nueva_pagina
+                    mostrar_pagina()
+                # Deshabilitar botones si corresponde
+                self.btn_anterior.config(state="normal" if self.current_page > 0 else "disabled")
+                self.btn_siguiente.config(state="normal" if self.current_page < self.total_pages - 1 else "disabled")
 
-                # Mostrar en canvas
-                canvas.create_image(0, 0, anchor="nw", image=tk_img)
+            # --- Botón página anterior (ESTILO BRES) ---
+            self.btn_anterior = tk.Button(
+                nav_frame,
+                text="◀",
+                command=lambda: change_page(-1),
+                bg=self.COLORS['white'],
+                fg=self.COLORS['text_dark'],
+                font=('Segoe UI', 10, 'bold'),
+                relief="flat",
+                borderwidth=0,
+                cursor="hand2",
+                activebackground=self.COLORS['white'],
+                activeforeground=self.COLORS['text_dark']
+            )
+            self.btn_anterior.pack(side="left", padx=(10, 2), pady=2)
 
-                # Configurar región de desplazamiento
-                canvas.config(scrollregion=canvas.bbox("all"))
+            # --- Label de información de página (ESTILO BRES) ---
+            self.lbl_pagina = tk.Label(
+                nav_frame,
+                text=f"Página {self.current_page + 1} de {self.total_pages}",
+                bg=self.COLORS['white'],
+                fg=self.COLORS['text_dark'],
+                font=('Segoe UI', 10, 'bold')
+            )
+            self.lbl_pagina.pack(side="left", padx=2, pady=2)
 
-            # Mostrar la primera página
-            display_page()
+            # --- Botón página siguiente (ESTILO BRES) ---
+            self.btn_siguiente = tk.Button(
+                nav_frame,
+                text="▶",
+                command=lambda: change_page(1),
+                bg=self.COLORS['white'],
+                fg=self.COLORS['text_dark'],
+                font=('Segoe UI', 10, 'bold'),
+                relief="flat",
+                borderwidth=0,
+                cursor="hand2",
+                activebackground=self.COLORS['white'],
+                activeforeground=self.COLORS['text_dark']
+            )
+            self.btn_siguiente.pack(side="left", padx=2, pady=2)
+
+            # --- Mostrar la primera página y actualizar botones ---
+            mostrar_pagina()
+            self.btn_anterior.config(state="disabled")
+            if self.total_pages <= 1:
+                self.btn_siguiente.config(state="disabled")
+            else:
+                self.btn_siguiente.config(state="normal")
+
+            # --- Scroll con mouse wheel ---
+            def on_mousewheel(event):
+                if self.canvas.winfo_exists():
+                    self.canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
+            self.canvas.bind("<MouseWheel>", on_mousewheel)
 
         except Exception as e:
-            # Capturar y mostrar cualquier error que ocurra
             import traceback
-            error_detallado = traceback.format_exc()
-            print(f"Error detallado:\n{error_detallado}")  # Para debug
+            print(traceback.format_exc())
             messagebox.showerror(
                 "Error",
                 f"Error al generar vista previa:\n{str(e)}\n\nPor favor, verifique los datos e intente nuevamente."

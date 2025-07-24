@@ -92,6 +92,7 @@ class ReporteBres:
         style.theme_use('clam')
         
         style.configure('White.TFrame', background=self.COLORS['white'])
+        
         style.configure('White.TLabel',
             background=self.COLORS['white'],
             foreground=self.COLORS['text_dark'],
@@ -140,6 +141,11 @@ class ReporteBres:
             background=self.COLORS['white'],
             foreground=self.COLORS['text_dark']
         )
+        style = ttk.Style()
+        style.configure('White.TCombobox', fieldbackground='white', background='white')
+        style.configure('White.TLabel', background='white')
+        style.configure('White.TRadiobutton', background='white')
+        
     
     def create_titled_frame(self, parent, title):
         container = tk.Frame(parent, bg=self.COLORS['white'], relief='solid', borderwidth=1)
@@ -612,14 +618,13 @@ class ReporteBres:
         self.frame_fechas.config(bg=self.COLORS['white'])
         self.frame_fechas_container.pack(fill="x", padx=5, pady=5)
 
-        # Modo de selección de fechas
         self.modo_fecha_var = tk.StringVar(value="rango")
-        
-        # Frame para rango de fechas
+
+        # --- Frame para rango de fechas ---
         self.frame_rango = tk.Frame(self.frame_fechas, bg=self.COLORS['white'])
         self.frame_rango.pack(fill="x", padx=5, pady=2)
-
-        self.frame_rango.grid_columnconfigure((0,1,2,3,4), weight=1)  # Todas las columnas se expanden
+        for i in range(5):
+            self.frame_rango.grid_columnconfigure(i, weight=1)
 
         self.radio_rango = ttk.Radiobutton(
             self.frame_rango,
@@ -629,31 +634,30 @@ class ReporteBres:
             command=self.actualizar_visibilidad_fechas,
             style='White.TRadiobutton'
         )
-        self.radio_rango.grid(row=0, column=0, padx=5, sticky='ew')
+        self.radio_rango.grid(row=0, column=0, padx=5, sticky='w')
 
-        ttk.Label(self.frame_rango, text="Fecha Inicial:", background="white").grid(row=0, column=1, padx=5, sticky='ew')
+        ttk.Label(self.frame_rango, text="Fecha Inicial:", style='White.TLabel').grid(row=0, column=1, padx=5, sticky='e')
         self.fecha_inicial = DateEntry(
             self.frame_rango,
-            width=12,
+            width=16,
             date_pattern='dd/mm/yyyy',
             state='normal'
         )
         self.fecha_inicial.grid(row=0, column=2, padx=5, sticky='ew')
 
-        ttk.Label(self.frame_rango, text="Fecha Final:", background="white").grid(row=0, column=3, padx=5, sticky='ew')
+        ttk.Label(self.frame_rango, text="Fecha Final:", style='White.TLabel').grid(row=0, column=3, padx=5, sticky='e')
         self.fecha_final = DateEntry(
             self.frame_rango,
-            width=12,
+            width=16,
             date_pattern='dd/mm/yyyy',
             state='normal'
         )
         self.fecha_final.grid(row=0, column=4, padx=5, sticky='ew')
 
-        # Frame para corte logístico
-        self.frame_corte = tk.Frame(self.frame_fechas, bg=self.COLORS['white'])
+        # --- Frame para corte logístico ---
+        self.frame_corte = tk.Frame(self.frame_fechas, bg=self.COLORS['white'], highlightthickness=0, bd=0)
         self.frame_corte.pack(fill="x", padx=5, pady=2)
-
-        for i in range(8):
+        for i in range(7):
             self.frame_corte.grid_columnconfigure(i, weight=1)
 
         self.radio_corte = ttk.Radiobutton(
@@ -664,40 +668,40 @@ class ReporteBres:
             command=self.actualizar_visibilidad_fechas,
             style='White.TRadiobutton'
         )
-        self.radio_corte.grid(row=0, column=0, padx=5, sticky='ew')
+        self.radio_corte.grid(row=0, column=0, padx=5, sticky='w')
 
-        ttk.Label(self.frame_corte, text="Año:", background="white").grid(row=0, column=1, padx=5, sticky='ew')
+        ttk.Label(self.frame_corte, text="Año:", style='White.TLabel').grid(row=0, column=1, padx=5, sticky='e')
         self.anio_var = tk.StringVar()
         anios = [str(a) for a in range(datetime.now().year - 5, datetime.now().year + 2)]
         self.combo_anio = ttk.Combobox(
             self.frame_corte,
             textvariable=self.anio_var,
             values=anios,
-            width=8,
+            width=16,  # MISMO ANCHO QUE EN KARDEX
             style='White.TCombobox'
         )
         self.combo_anio.grid(row=0, column=2, padx=5, sticky='ew')
         self.combo_anio.set(str(datetime.now().year))
 
-        ttk.Label(self.frame_corte, text="Mes Inicio:", background="white").grid(row=0, column=3, padx=5, sticky='ew')
+        ttk.Label(self.frame_corte, text="Mes Inicio:", style='White.TLabel').grid(row=0, column=3, padx=5, sticky='e')
         self.mes_inicio_var = tk.StringVar()
         meses = [datetime(2024, m, 1).strftime("%B").capitalize() for m in range(1, 13)]
         self.combo_mes_inicio = ttk.Combobox(
             self.frame_corte,
             textvariable=self.mes_inicio_var,
             values=meses,
-            width=12,
+            width=16,  # MISMO ANCHO QUE EN KARDEX
             style='White.TCombobox'
         )
         self.combo_mes_inicio.grid(row=0, column=4, padx=5, sticky='ew')
 
-        ttk.Label(self.frame_corte, text="Mes Final:", background="white").grid(row=0, column=5, padx=5, sticky='ew')
+        ttk.Label(self.frame_corte, text="Mes Final:", style='White.TLabel').grid(row=0, column=5, padx=5, sticky='e')
         self.mes_final_var = tk.StringVar()
         self.combo_mes_final = ttk.Combobox(
             self.frame_corte,
             textvariable=self.mes_final_var,
             values=meses,
-            width=12,
+            width=16,  # MISMO ANCHO QUE EN KARDEX
             style='White.TCombobox'
         )
         self.combo_mes_final.grid(row=0, column=6, padx=5, sticky='ew')
@@ -790,11 +794,11 @@ class ReporteBres:
         self.combo_nivel_maximo.set("6")  # Valor por defecto
 
         # --- Frame para el visor PDF (ALTURA FIJA) ---
-        self.pdf_frame = tk.Frame(self.frame_principal, bg=self.COLORS['white'], height=200)
+        self.pdf_frame = tk.Frame(self.frame_principal, bg=self.COLORS['white'], height=230)
         self.pdf_frame.pack(fill="x", padx=5, pady=5)
         self.pdf_frame.pack_propagate(False)  # Para que respete la altura fija
         self.pdf_viewer = None
-       
+    
         # --- Frame para botones (igual que en Kardex) ---
         self.frame_botones = tk.Frame(main_container, bg=self.COLORS['white'])
         self.frame_botones.pack(fill="x", side="bottom", pady=(20, 10))
@@ -1121,13 +1125,16 @@ class ReporteBres:
             for widget in self.pdf_frame.winfo_children():
                 widget.destroy()
 
-            # --- Frame contenedor principal ---
             contenedor = tk.Frame(self.pdf_frame, bg=self.COLORS['white'])
             contenedor.pack(fill="both", expand=True)
 
+            # --- Frame para controles de navegación (abajo, fondo blanco) ---
+            control_frame = tk.Frame(contenedor, bg=self.COLORS['white'])
+            control_frame.pack(fill="x", side="bottom", pady=5)
+
             # --- Frame del visor PDF (canvas + scrollbars) ---
             canvas_frame = tk.Frame(contenedor, bg=self.COLORS['white'])
-            canvas_frame.pack(fill="both", expand=True)
+            canvas_frame.pack(side="top", fill="both", expand=True)
 
             h_scrollbar = ttk.Scrollbar(canvas_frame, orient="horizontal")
             h_scrollbar.pack(side="bottom", fill="x")
@@ -1151,10 +1158,6 @@ class ReporteBres:
             doc = fitz.open(self.temp_pdf_path)
             self.current_page = 0
             self.total_pages = len(doc)
-
-            # --- Frame para controles de navegación (abajo, fondo blanco) ---
-            control_frame = tk.Frame(contenedor, bg=self.COLORS['white'])
-            control_frame.pack(fill="x", side="bottom", pady=5)
 
             # Función para cambiar de página
             def change_page(delta):
