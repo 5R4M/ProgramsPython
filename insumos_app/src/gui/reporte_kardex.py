@@ -404,17 +404,12 @@ class ReporteKardex:
         # Modo de selección de fechas
         self.modo_fecha_var = tk.StringVar(value="rango")
 
-        # Frame para rango de fechas
-        self.frame_rango = tk.Frame(self.frame_fechas, bg=self.COLORS['white'])
-        self.frame_rango.pack(fill="x", padx=5, pady=2)
+        # Rango de fechas (fila 0)
+        self.frame_fechas.grid_columnconfigure(2, weight=1)
+        self.frame_fechas.grid_columnconfigure(4, weight=1)
 
-        # Configurar grid para distribución uniforme en rango
-        self.frame_rango.grid_columnconfigure(2, weight=1)
-        self.frame_rango.grid_columnconfigure(4, weight=1)
-
-        # Radiobutton y controles para rango de fechas
         self.radio_rango = tk.Radiobutton(
-            self.frame_rango,
+            self.frame_fechas,
             text="Rango de Fechas:",
             variable=self.modo_fecha_var,
             value="rango",
@@ -426,42 +421,35 @@ class ReporteKardex:
         )
         self.radio_rango.grid(row=0, column=0, padx=5, sticky='w')
 
-        tk.Label(self.frame_rango, text="Fecha Inicial:", 
+        tk.Label(self.frame_fechas, text="Fecha Inicial:", 
                 bg=self.COLORS['white'], fg=self.COLORS['text_dark'], 
                 font=('Segoe UI', 9)).grid(row=0, column=1, padx=5, sticky='w')
 
         self.fecha_inicial = DateEntry(
-            self.frame_rango,
+            self.frame_fechas,
             width=12,
             date_pattern='dd/mm/yyyy',
             state='normal'
         )
         self.fecha_inicial.grid(row=0, column=2, padx=5, sticky='ew')
 
-        tk.Label(self.frame_rango, text="Fecha Final:", 
+        tk.Label(self.frame_fechas, text="Fecha Final:", 
                 bg=self.COLORS['white'], fg=self.COLORS['text_dark'], 
                 font=('Segoe UI', 9)).grid(row=0, column=3, padx=5, sticky='w')
 
         self.fecha_final = DateEntry(
-            self.frame_rango,
+            self.frame_fechas,
             width=12,
             date_pattern='dd/mm/yyyy',
             state='normal'
         )
         self.fecha_final.grid(row=0, column=4, padx=5, sticky='ew')
 
-        # Frame para corte logístico
-        self.frame_corte = tk.Frame(self.frame_fechas, bg=self.COLORS['white'])
-        self.frame_corte.pack(fill="x", padx=5, pady=2)
+        # Corte logístico (fila 1)
+        self.frame_fechas.grid_columnconfigure(6, weight=1)
 
-        # Configurar grid para distribución uniforme en corte
-        self.frame_corte.grid_columnconfigure(2, weight=1)
-        self.frame_corte.grid_columnconfigure(4, weight=1)
-        self.frame_corte.grid_columnconfigure(6, weight=1)
-
-        # Radiobutton y controles para corte logístico
         self.radio_corte = tk.Radiobutton(
-            self.frame_corte,
+            self.frame_fechas,
             text="Corte Logístico:",
             variable=self.modo_fecha_var,
             value="corte",
@@ -471,52 +459,49 @@ class ReporteKardex:
             font=('Segoe UI', 9),
             selectcolor=self.COLORS['white']
         )
-        self.radio_corte.grid(row=0, column=0, padx=5, sticky='w')
+        self.radio_corte.grid(row=1, column=0, padx=5, sticky='w')
 
-        # Año
-        tk.Label(self.frame_corte, text="Año:", 
+        tk.Label(self.frame_fechas, text="Año:", 
                 bg=self.COLORS['white'], fg=self.COLORS['text_dark'], 
-                font=('Segoe UI', 9)).grid(row=0, column=1, padx=5, sticky='w')
+                font=('Segoe UI', 9)).grid(row=1, column=1, padx=5, sticky='w')
 
         self.anio_var = tk.StringVar()
         anios = [str(a) for a in range(datetime.now().year - 5, datetime.now().year + 2)]
         self.combo_anio = ttk.Combobox(
-            self.frame_corte,
+            self.frame_fechas,
             textvariable=self.anio_var,
             values=anios,
             width=8
         )
-        self.combo_anio.grid(row=0, column=2, padx=5, sticky='ew')
+        self.combo_anio.grid(row=1, column=2, padx=5, sticky='ew')
         self.combo_anio.set(str(datetime.now().year))
 
-        # Mes inicio
-        tk.Label(self.frame_corte, text="Mes Inicio:", 
+        tk.Label(self.frame_fechas, text="Mes Inicio:", 
                 bg=self.COLORS['white'], fg=self.COLORS['text_dark'], 
-                font=('Segoe UI', 9)).grid(row=0, column=3, padx=5, sticky='w')
+                font=('Segoe UI', 9)).grid(row=1, column=3, padx=5, sticky='w')
 
         self.mes_inicio_var = tk.StringVar()
         meses = [datetime(2024, m, 1).strftime("%B").capitalize() for m in range(1, 13)]
         self.combo_mes_inicio = ttk.Combobox(
-            self.frame_corte,
+            self.frame_fechas,
             textvariable=self.mes_inicio_var,
             values=meses,
             width=12
         )
-        self.combo_mes_inicio.grid(row=0, column=4, padx=5, sticky='ew')
+        self.combo_mes_inicio.grid(row=1, column=4, padx=5, sticky='ew')
 
-        # Mes final
-        tk.Label(self.frame_corte, text="Mes Final:", 
+        tk.Label(self.frame_fechas, text="Mes Final:", 
                 bg=self.COLORS['white'], fg=self.COLORS['text_dark'], 
-                font=('Segoe UI', 9)).grid(row=0, column=5, padx=5, sticky='w')
+                font=('Segoe UI', 9)).grid(row=1, column=5, padx=5, sticky='w')
 
         self.mes_final_var = tk.StringVar()
         self.combo_mes_final = ttk.Combobox(
-            self.frame_corte,
+            self.frame_fechas,
             textvariable=self.mes_final_var,
             values=meses,
             width=12
         )
-        self.combo_mes_final.grid(row=0, column=6, padx=5, sticky='ew')
+        self.combo_mes_final.grid(row=1, column=6, padx=5, sticky='ew')
 
         # Eventos para actualizar fechas
         self.combo_anio.bind('<<ComboboxSelected>>', self.actualizar_fechas_por_corte)
@@ -689,9 +674,6 @@ class ReporteKardex:
             self.combo_mes_inicio.config(state="disabled")
             self.combo_mes_final.config(state="disabled")
 
-            # Cambiar colores de fondo para indicar estado
-            self.frame_rango.config(bg=self.COLORS['white'])
-            self.frame_corte.config(bg=self.COLORS['light'])
         else:
             # Deshabilitar DateEntry
             self.fecha_inicial.config(state="disabled")
@@ -701,10 +683,6 @@ class ReporteKardex:
             self.combo_anio.config(state="readonly")
             self.combo_mes_inicio.config(state="readonly")
             self.combo_mes_final.config(state="readonly")
-
-            # Cambiar colores de fondo para indicar estado
-            self.frame_rango.config(bg=self.COLORS['light'])
-            self.frame_corte.config(bg=self.COLORS['white'])
 
         # Forzar actualización visual
         self.frame_fechas.update()

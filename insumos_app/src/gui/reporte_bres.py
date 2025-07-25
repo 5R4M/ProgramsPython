@@ -655,10 +655,13 @@ class ReporteBres:
         self.fecha_final.grid(row=0, column=4, padx=5, sticky='ew')
 
         # --- Frame para corte logístico ---
-        self.frame_corte = tk.Frame(self.frame_fechas, bg=self.COLORS['white'], highlightthickness=0, bd=0)
+        self.frame_corte = tk.Frame(self.frame_fechas, bg=self.COLORS['white'])
         self.frame_corte.pack(fill="x", padx=5, pady=2)
-        for i in range(7):
-            self.frame_corte.grid_columnconfigure(i, weight=1)
+
+        # Igual que en Kardex
+        self.frame_corte.grid_columnconfigure(2, weight=1)
+        self.frame_corte.grid_columnconfigure(4, weight=1)
+        self.frame_corte.grid_columnconfigure(6, weight=1)
 
         self.radio_corte = ttk.Radiobutton(
             self.frame_corte,
@@ -670,39 +673,36 @@ class ReporteBres:
         )
         self.radio_corte.grid(row=0, column=0, padx=5, sticky='w')
 
-        ttk.Label(self.frame_corte, text="Año:", style='White.TLabel').grid(row=0, column=1, padx=5, sticky='e')
+        ttk.Label(self.frame_corte, text="Año:", style='White.TLabel').grid(row=0, column=1, padx=5, sticky='w')
         self.anio_var = tk.StringVar()
         anios = [str(a) for a in range(datetime.now().year - 5, datetime.now().year + 2)]
         self.combo_anio = ttk.Combobox(
             self.frame_corte,
             textvariable=self.anio_var,
             values=anios,
-            width=16,  # MISMO ANCHO QUE EN KARDEX
-            style='White.TCombobox'
+            width=8  # Igual que en Kardex
         )
         self.combo_anio.grid(row=0, column=2, padx=5, sticky='ew')
         self.combo_anio.set(str(datetime.now().year))
 
-        ttk.Label(self.frame_corte, text="Mes Inicio:", style='White.TLabel').grid(row=0, column=3, padx=5, sticky='e')
+        ttk.Label(self.frame_corte, text="Mes Inicio:", style='White.TLabel').grid(row=0, column=3, padx=5, sticky='w')
         self.mes_inicio_var = tk.StringVar()
         meses = [datetime(2024, m, 1).strftime("%B").capitalize() for m in range(1, 13)]
         self.combo_mes_inicio = ttk.Combobox(
             self.frame_corte,
             textvariable=self.mes_inicio_var,
             values=meses,
-            width=16,  # MISMO ANCHO QUE EN KARDEX
-            style='White.TCombobox'
+            width=12  # Igual que en Kardex
         )
         self.combo_mes_inicio.grid(row=0, column=4, padx=5, sticky='ew')
 
-        ttk.Label(self.frame_corte, text="Mes Final:", style='White.TLabel').grid(row=0, column=5, padx=5, sticky='e')
+        ttk.Label(self.frame_corte, text="Mes Final:", style='White.TLabel').grid(row=0, column=5, padx=5, sticky='w')
         self.mes_final_var = tk.StringVar()
         self.combo_mes_final = ttk.Combobox(
             self.frame_corte,
             textvariable=self.mes_final_var,
             values=meses,
-            width=16,  # MISMO ANCHO QUE EN KARDEX
-            style='White.TCombobox'
+            width=12  # Igual que en Kardex
         )
         self.combo_mes_final.grid(row=0, column=6, padx=5, sticky='ew')
 
@@ -932,16 +932,14 @@ class ReporteBres:
             self.combo_anio.config(state="disabled")
             self.combo_mes_inicio.config(state="disabled")
             self.combo_mes_final.config(state="disabled")
-            self.frame_rango.configure(bg='white')
-            self.frame_corte.configure(bg='#f0f0f0')
+
         else:
             self.fecha_inicial.config(state="disabled")
             self.fecha_final.config(state="disabled")
             self.combo_anio.config(state="readonly")
             self.combo_mes_inicio.config(state="readonly")
             self.combo_mes_final.config(state="readonly")
-            self.frame_rango.configure(bg='white')
-            self.frame_corte.configure(bg='#f0f0f0')
+
         self.frame_fechas.update()
     
     def calcular_rango_corte_logistico(self, anio, mes_inicio, mes_final):
