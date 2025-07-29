@@ -386,9 +386,6 @@ class ReporteKardex:
                 fg=self.COLORS['white'],
                 bg=self.COLORS['primary']).pack(anchor='w', pady=(2, 0))
 
-        # Separador
-        ttk.Separator(main_container, orient='horizontal').pack(fill='x', padx=10, pady=5)
-
         # Frame principal con título personalizado
         self.frame_principal_container, self.frame_principal = self.create_titled_frame(main_container, "Filtros de Reporte")
         self.frame_principal_container.config(bg=self.COLORS['white'])

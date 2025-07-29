@@ -603,9 +603,6 @@ class ReporteBres:
                 fg=self.COLORS['white'],
                 bg=self.COLORS['primary']).pack(anchor='w', pady=(2, 0))
 
-        # Separador
-        ttk.Separator(main_container, orient='horizontal').pack(fill='x', padx=10, pady=5)
-
         # --- Frame principal tipo tarjeta ---
         self.frame_principal_container, self.frame_principal = self.create_titled_frame(main_container, "Filtros de Reporte BRES")
         self.frame_principal_container.config(bg=self.COLORS['white'])
@@ -799,116 +796,73 @@ class ReporteBres:
         self.pdf_frame.pack_propagate(False)  # Para que respete la altura fija
         self.pdf_viewer = None
     
-        # --- Frame para botones (igual que en Kardex) ---
-        self.frame_botones = tk.Frame(main_container, bg=self.COLORS['white'])
+        # --- Frame para botones (fuera del frame principal, pegado abajo) ---
+        self.frame_botones = ttk.Frame(main_container, style='White.TFrame')
         self.frame_botones.pack(fill="x", side="bottom", pady=(20, 10))
 
-        botones_grid = tk.Frame(self.frame_botones, bg=self.COLORS['white'])
-        botones_grid.pack(fill="x")
-        
-        btn_font = ("Segoe UI", 9, "bold")
-        btn_fg = self.COLORS['text_dark']  # Color primario para texto
-        btn_bg = self.COLORS['white']    # Fondo blanco
+        btn_font = ('Segoe UI', 9, 'bold')
+        btn_bg = self.COLORS['white']
+        btn_fg = self.COLORS['text_dark']
 
         # Botón Generar Reporte
-        btn_report = tk.Button(
-            botones_grid,
-            text="Generar Reporte",
-            image=self.icon_preview if self.icon_preview else "",
-            compound="left" if self.icon_preview else None,
-            command=self.generar_vista_previa,
-            font=btn_font,
-            fg=btn_fg,
-            bg=btn_bg,
-            relief="flat",
-            borderwidth=0,
-            highlightthickness=0,
-            activebackground=btn_bg,
-            activeforeground=btn_fg,
-            padx=5, pady=6,
-            cursor="hand2"
-        )
-        btn_report.grid(row=0, column=0, padx=5)
+        btn_report = tk.Button(self.frame_botones, 
+                            text="Generar Reporte", 
+                            command=self.generar_vista_previa,
+                            font=btn_font, bg=btn_bg, fg=btn_fg, 
+                            relief='flat', borderwidth=0,
+                            highlightthickness=0, padx=15, pady=6, 
+                            cursor='hand2',
+                            image=self.icon_preview if self.icon_preview else "",
+                            compound='left' if self.icon_preview else None)
+        btn_report.pack(side="left", padx=5)
 
         # Botón Imprimir
-        btn_print = tk.Button(
-            botones_grid,
-            text="Imprimir",
-            image=self.icon_print if self.icon_print else "",
-            compound="left" if self.icon_print else None,
-            command=self.imprimir_pdf,
-            font=btn_font,
-            fg=btn_fg,
-            bg=btn_bg,
-            relief="flat",
-            borderwidth=0,
-            highlightthickness=0,
-            activebackground=btn_bg,
-            activeforeground=btn_fg,
-            padx=5, pady=6,
-            cursor="hand2"
-        )
-        btn_print.grid(row=0, column=1, padx=5)
+        btn_print = tk.Button(self.frame_botones, 
+                            text="Imprimir", 
+                            command=self.imprimir_pdf,
+                            font=btn_font, bg=btn_bg, fg=btn_fg, 
+                            relief='flat', borderwidth=0,
+                            highlightthickness=0, padx=15, pady=6, 
+                            cursor='hand2',
+                            image=self.icon_print if self.icon_print else "",
+                            compound='left' if self.icon_print else None)
+        btn_print.pack(side="left", padx=5)
 
         # Botón Exportar a PDF
-        btn_pdf = tk.Button(
-            botones_grid,
-            text="Exportar a PDF",
-            image=self.icon_pdf if self.icon_pdf else "",
-            compound="left" if self.icon_pdf else None,
-            command=self.exportar_pdf,
-            font=btn_font,
-            fg=btn_fg,
-            bg=btn_bg,
-            relief="flat",
-            borderwidth=0,
-            highlightthickness=0,
-            activebackground=btn_bg,
-            activeforeground=btn_fg,
-            padx=5, pady=6,
-            cursor="hand2"
-        )
-        btn_pdf.grid(row=0, column=2, padx=5)
+        btn_pdf = tk.Button(self.frame_botones, 
+                        text="Exportar a PDF", 
+                        command=self.exportar_pdf,
+                        font=btn_font, bg=btn_bg, fg=btn_fg, 
+                        relief='flat', borderwidth=0,
+                        highlightthickness=0, padx=15, pady=6, 
+                        cursor='hand2',
+                        image=self.icon_pdf if self.icon_pdf else "",
+                        compound='left' if self.icon_pdf else None)
+        btn_pdf.pack(side="left", padx=5)
 
         # Botón Exportar a Excel
-        btn_excel = tk.Button(
-            botones_grid,
-            text="Exportar a Excel",
-            image=self.icon_excel if self.icon_excel else "",
-            compound="left" if self.icon_excel else None,
-            command=self.generar_excel_reporte,
-            font=btn_font,
-            fg=btn_fg,
-            bg=btn_bg,
-            relief="flat",
-            borderwidth=0,
-            highlightthickness=0,
-            activebackground=btn_bg,
-            activeforeground=btn_fg,
-            padx=5, pady=6,
-            cursor="hand2"
-        )
-        btn_excel.grid(row=0, column=3, padx=5)
+        btn_excel = tk.Button(self.frame_botones, 
+                            text="Exportar a Excel", 
+                            command=self.generar_excel_reporte,
+                            font=btn_font, bg=btn_bg, fg=btn_fg, 
+                            relief='flat', borderwidth=0,
+                            highlightthickness=0, padx=15, pady=6, 
+                            cursor='hand2',
+                            image=self.icon_excel if self.icon_excel else "",
+                            compound='left' if self.icon_excel else None)
+        btn_excel.pack(side="left", padx=5)
 
-        # Botón Cerrar
-        btn_close = tk.Button(
-            botones_grid,
-            text="Cerrar",
-            image=self.icon_close if self.icon_close else "",
-            compound="left" if self.icon_close else None,
-            command=self.cerrar_ventana,
-            font=btn_font,
-            fg=btn_fg,
-            bg=btn_bg,
-            relief="flat",
-            borderwidth=0,
-            highlightthickness=0,
-            activebackground=btn_bg,
-            activeforeground=btn_fg,
-            padx=5, pady=6,
-            cursor="hand2"
-        )
-        btn_close.grid(row=0, column=4, padx=5)
+        # Botón Cerrar - AHORA CON SIDE="RIGHT" PARA QUE VAYA AL MARGEN DERECHO
+        btn_close = tk.Button(self.frame_botones, 
+                            text="Cerrar", 
+                            command=self.cerrar_ventana,
+                            font=btn_font, bg=btn_bg, fg=btn_fg, 
+                            relief='flat', borderwidth=0,
+                            highlightthickness=0, padx=15, pady=6, 
+                            cursor='hand2',
+                            image=self.icon_close if self.icon_close else "",
+                            compound='left' if self.icon_close else None)
+        btn_close.pack(side="right", padx=5)  # <-- CAMBIO AQUÍ: side="right"
 
         # Vincular eventos de cambio
         self.combo_area.bind('<<ComboboxSelected>>', self.cargar_distritos_por_area)

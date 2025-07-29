@@ -219,9 +219,6 @@ class CorreccionMovimientos:
                 fg=self.COLORS['white'],
                 bg=self.COLORS['primary']).pack(anchor='w', pady=(2, 0))
 
-        # Separador
-        ttk.Separator(main_container, orient='horizontal').pack(fill='x', padx=10, pady=5)  # <--- CAMBIO
-
         # CANVAS CON SCROLLBAR VERTICAL
         canvas_frame = tk.Frame(main_container, bg=self.COLORS['white'])  # <--- CAMBIO
         canvas_frame.pack(fill="both", expand=True, padx=10, pady=5)
