@@ -13,9 +13,17 @@ from src.database.db_manager import verificar_credenciales
 from src.gui.main_window import MainWindow
 from src.database.db_manager import verificar_credenciales, crear_tabla_usuarios
 
+def resource_path(relative_path):
+    try:
+        base_path = sys._MEIPASS
+    except Exception:
+        # base_path = os.path.abspath(".")
+        # Mejor usar la ruta del archivo actual para desarrollo
+        base_path = os.path.abspath(".")
+    return os.path.join(base_path, relative_path)
+
 class LoginWindow:
     def __init__(self):
-        crear_tabla_usuarios()
         
         self.root = tk.Tk()
         self.root.title("Sistema de Gestión de Insumos")
@@ -37,14 +45,11 @@ class LoginWindow:
         self.show_password = False
         
         self.setup_ui()
-
+    
     def load_icons(self):
         """Carga los iconos para la ventana de login"""
         self.icons = {}
-        icon_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'utils', 'icons')
-        
-        if not os.path.exists(icon_path):
-            os.makedirs(icon_path)
+        icon_path = resource_path(os.path.join('utils', 'icons'))
         
         icon_files = {
             'user': 'user.png',
@@ -313,5 +318,6 @@ class LoginWindow:
         self.root.mainloop()
 
 if __name__ == "__main__":
+    crear_tabla_usuarios()  # Asegurarse de que la tabla de usuarios exista
     login = LoginWindow()
     login.run()

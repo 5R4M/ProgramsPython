@@ -23,6 +23,15 @@ from src.database.db_manager import (
     obtener_tipos_movimiento
 )
 
+def resource_path(relative_path):
+    """Obtiene la ruta absoluta al recurso, funciona en dev y en PyInstaller."""
+    try:
+        base_path = sys._MEIPASS  # PyInstaller crea esta carpeta temporal
+    except Exception:
+        base_path = os.path.abspath(".")
+
+    return os.path.join(base_path, relative_path)
+
 class CorreccionMovimientos:
     # Definir las columnas como atributo de la clase
     COLUMNAS = [
@@ -61,9 +70,8 @@ class CorreccionMovimientos:
 
     def cargar_iconos(self):
         try:
-            base_dir = os.path.dirname(os.path.dirname(__file__))  # Sube un nivel: de gui/ a src/
-            icons_path = os.path.join(base_dir, "utils", "icons")
-            
+            icons_path = resource_path(os.path.join('utils', 'icons'))
+
             # Ajusta la ruta según tu proyecto
             self.icon_editar = tk.PhotoImage(file=os.path.join(icons_path, "editar.png")).subsample(2, 2)
             self.icon_eliminar = tk.PhotoImage(file=os.path.join(icons_path, "eliminar.png")).subsample(2, 2)

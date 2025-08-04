@@ -1,9 +1,22 @@
 import sqlite3
 import os
 
-# Ruta donde se creará la base de datos
-DB_PATH = os.path.join(os.path.dirname(__file__), '../../data/insumos.db')
-DB_PATH = os.path.abspath(DB_PATH)
+import sys
+
+def get_db_path():
+    if getattr(sys, 'frozen', False):
+        # Ejecutable PyInstaller: carpeta persistente en usuario
+        base_path = os.path.expanduser('~')
+        data_dir = os.path.join(base_path, 'InsumosAppData')
+        os.makedirs(data_dir, exist_ok=True)
+        return os.path.join(data_dir, 'insumos.db')
+    else:
+        # Desarrollo: carpeta data relativa al script
+        data_dir = os.path.abspath('data')
+        os.makedirs(data_dir, exist_ok=True)
+        return os.path.join(data_dir, 'insumos.db')
+
+DB_PATH = get_db_path()
 
 def asegurar_directorio():
     """Asegura que el directorio para la base de datos exista"""

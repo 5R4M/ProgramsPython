@@ -30,6 +30,15 @@ from src.database.db_manager import (
     guardar_movimiento
 )
 
+def resource_path(relative_path):
+    try:
+        base_path = sys._MEIPASS
+    except Exception:
+        # base_path = os.path.abspath(".")
+        # Mejor usar la ruta del archivo actual para desarrollo
+        base_path = os.path.abspath(".")
+    return os.path.join(base_path, relative_path)
+
 class IngresoInsumos:
     def __init__(self, parent_frame, main_window):
         
@@ -178,8 +187,7 @@ class IngresoInsumos:
         """Cargar iconos PNG"""
         try:
             # __file__ está en .../src/gui/archivo.py
-            base_dir = os.path.dirname(os.path.dirname(__file__))  # Sube un nivel: de gui/ a src/
-            icons_path = os.path.join(base_dir, "utils", "icons")
+            icons_path = resource_path(os.path.join('utils', 'icons'))
             
             self.icon_area = tk.PhotoImage(file=os.path.join(icons_path, "area.png")).subsample(3, 3)
             self.icon_distrito = tk.PhotoImage(file=os.path.join(icons_path, "distrito.png")).subsample(3, 3)
@@ -1948,43 +1956,106 @@ class IngresoInsumos:
         botones_container = tk.Frame(frame_botones, bg=self.COLORS['light'])
         botones_container.pack(anchor="center")
         
-        def guardar_cambios():
+        def validar_campos():
+            # Validar fecha registro
+            if not fecha_edit.get_date():
+                messagebox.showerror("Error", "La fecha de registro es obligatoria")
+                return False
+
+            # Validar referencia
+            if not referencia_entry.get().strip():
+                messagebox.showerror("Error", "La referencia es obligatoria")
+                return False
+
+            # Validar tipo movimiento
+            if not edit_tipo_movimiento_var.get().strip():
+                messagebox.showerror("Error", "El tipo de movimiento es obligatorio")
+                return False
+
+            # Validar insumo
+            if not edit_insumo_var.get().strip():
+                messagebox.showerror("Error", "El insumo es obligatorio")
+                return False
+
+            # Validar presentación
+            if not edit_presentacion_var.get().strip():
+                messagebox.showerror("Error", "La presentación es obligatoria")
+                return False
+
+            # Validar servicio según nivel de bodega
+            nivel = edit_nivel_bodega_var.get()
+            
+            if nivel == "area":
+                # Solo área es obligatorio, distrito, tipo_servicio y servicio pueden estar vacíos
+                pass
+            elif nivel == "distrito":
+                if not edit_distrito_var.get().strip():
+                    messagebox.showerror("Error", "El distrito es obligatorio para nivel Distrito")
+                    return False
+            elif nivel == "servicio":
+                if not edit_distrito_var.get().strip():
+                    messagebox.showerror("Error", "El distrito es obligatorio para nivel Servicio")
+                    return False
+                if not edit_tipo_servicio_var.get().strip():
+                    messagebox.showerror("Error", "El tipo de servicio es obligatorio para nivel Servicio")
+                    return False
+                if not edit_servicio_var.get().strip():
+                    messagebox.showerror("Error", "El servicio es obligatorio para nivel Servicio")
+                    return False
+
+            # Validar lote según checkbox
+            if not edit_sin_lote_var.get():
+                if not lote_entry.get().strip():
+                    messagebox.showerror("Error", "El campo Lote es obligatorio si no está marcado 'Sin lote'")
+                    return False
+
+            # Validar fecha vencimiento según checkbox
+            if not edit_sin_fecha_venc.get():
+                if not fecha_venc_edit.get_date():
+                    messagebox.showerror("Error", "El campo Fecha de Vencimiento es obligatorio si no está marcado 'Sin fecha vencimiento'")
+                    return False
+
+            # Validar cantidad numérica
             try:
-                lote_val = "N/A" if edit_sin_lote_var.get() else lote_entry.get().upper()
-                nuevos_valores = (
-                    fecha_edit.get_date().strftime('%d/%m/%Y'),
-                    referencia_entry.get().upper(),
-                    edit_tipo_movimiento_var.get(),
-                    edit_insumo_var.get(),
-                    edit_presentacion_var.get(),
-                    edit_servicio_var.get(),
-                    lote_val,
-                    "N/A" if edit_sin_fecha_venc.get() else fecha_venc_edit.get_date().strftime('%d/%m/%Y'),
-                    cantidad_entry.get(),
-                    edit_salida_distrito_var.get(),
-                    edit_salida_servicio_var.get(),
-                    observaciones_entry.get().upper(),
-                    edit_tipo_insumo_var.get(),
-                    edit_area_var.get(),
-                    edit_distrito_var.get(),
-                    edit_tipo_servicio_var.get()
-                )
+                cantidad = float(cantidad_entry.get().strip())
+                if cantidad <= 0:
+                    messagebox.showerror("Error", "La cantidad debe ser un número positivo")
+                    return False
+            except ValueError:
+                messagebox.showerror("Error", "La cantidad debe ser un número válido")
+                return False
 
-                if not all(nuevos_valores[:8]):
-                    messagebox.showerror("Error", "Todos los campos son requeridos excepto observaciones")
-                    return
+            return True
 
-                try:
-                    float(nuevos_valores[8])
-                except ValueError:
-                    messagebox.showerror("Error", "La cantidad debe ser un número válido")
-                    return
+        def guardar_cambios():
+            if not validar_campos():
+                return
 
-                self.tree.item(selected_item, values=nuevos_valores)
-                editar_ventana.destroy()
-                messagebox.showinfo("Éxito", "Movimiento actualizado correctamente")
-            except Exception as e:
-                messagebox.showerror("Error", f"Error al actualizar movimiento: {str(e)}")
+            lote_val = "N/A" if edit_sin_lote_var.get() else lote_entry.get().upper().strip()
+            fecha_venc_val = "N/A" if edit_sin_fecha_venc.get() else fecha_venc_edit.get_date().strftime('%d/%m/%Y')
+
+            nuevos_valores = (
+                fecha_edit.get_date().strftime('%d/%m/%Y'),
+                referencia_entry.get().upper().strip(),
+                edit_tipo_movimiento_var.get().strip(),
+                edit_insumo_var.get().strip(),
+                edit_presentacion_var.get().strip(),
+                edit_servicio_var.get().strip(),
+                lote_val,
+                fecha_venc_val,
+                cantidad_entry.get().strip(),
+                edit_salida_distrito_var.get().strip(),
+                edit_salida_servicio_var.get().strip(),
+                observaciones_entry.get().upper().strip(),
+                edit_tipo_insumo_var.get().strip(),
+                edit_area_var.get().strip(),
+                edit_distrito_var.get().strip(),
+                edit_tipo_servicio_var.get().strip()
+            )
+
+            self.tree.item(selected_item, values=nuevos_valores)
+            editar_ventana.destroy()
+            messagebox.showinfo("Éxito", "Movimiento actualizado correctamente")
 
         # Botones con estilo
         btn_guardar = tk.Button(botones_container, 

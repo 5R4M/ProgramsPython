@@ -1,8 +1,19 @@
+import os
+import sys
 import tkinter as tk
 from tkinter import ttk, messagebox, simpledialog
 from src.database.db_manager import (
     obtener_usuarios, crear_usuario, actualizar_usuario, cambiar_password_usuario, eliminar_usuario, existe_usuario
 )
+
+def resource_path(relative_path):
+    """Obtiene la ruta absoluta al recurso, funciona en dev y en PyInstaller."""
+    try:
+        base_path = sys._MEIPASS  # PyInstaller crea esta carpeta temporal
+    except Exception:
+        base_path = os.path.abspath(".")
+
+    return os.path.join(base_path, relative_path)
 
 class GestionUsuarios:
     def __init__(self, parent_frame, main_window=None):

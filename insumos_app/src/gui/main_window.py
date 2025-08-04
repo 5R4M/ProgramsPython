@@ -22,6 +22,15 @@ from src.gui.reporte_demanda_real import ReporteDemandaReal
 from src.gui.reporte_bres import ReporteBres
 from src.gui.importar_exportar_manager import ImportarExportarManager, crear_gestor_importar_exportar
 
+def resource_path(relative_path):
+    """Obtiene la ruta absoluta al recurso, funciona en dev y en PyInstaller."""
+    try:
+        base_path = sys._MEIPASS  # PyInstaller crea esta carpeta temporal
+    except Exception:
+        base_path = os.path.abspath(".")
+
+    return os.path.join(base_path, relative_path)
+
 class MainWindow:
     def __init__(self, usuario):
         self.usuario = usuario
@@ -207,7 +216,7 @@ class MainWindow:
     def load_icons(self):
         """Carga los iconos para los botones del menú"""
         self.icons = {}
-        icon_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'utils', 'icons')
+        icon_path = resource_path(os.path.join('utils', 'icons'))
 
         # Crear directorio de iconos si no existe
         if not os.path.exists(icon_path):
@@ -358,7 +367,6 @@ class MainWindow:
                 ("Gestión de Insumos", self.load_gestion_insumos, 'insumos'),
                 ("Gestión de Servicios", self.load_gestion_servicios, 'servicios'),
                 ("Gestión de Movimientos", self.load_gestion_movimientos, 'movimientos'),
-                ("Importar/Exportar", self.load_importar_exportar, 'import_export'),
             ])
 
         if rol in ("usuario", "admin", "super_admin"):
@@ -366,8 +374,9 @@ class MainWindow:
                 ("Ingreso de Insumos", self.load_ingreso_insumos, 'ingreso'),
                 ("Reporte Kardex", self.load_reporte_kardex, 'kardex'),
                 ("Reporte Demanda Real", self.load_reporte_demanda_real, 'demanda'),
-                ("Correcciones", self.load_correccion_movimientos, 'correcciones'),
                 ("Reporte BRES", self.load_reporte_bres, 'bres'),
+                ("Correcciones", self.load_correccion_movimientos, 'correcciones'),
+                ("Importar/Exportar", self.load_importar_exportar, 'import_export'),
             ])
 
         # Crear botones

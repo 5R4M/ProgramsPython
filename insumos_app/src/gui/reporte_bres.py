@@ -36,6 +36,15 @@ from src.database.db_manager import (
     obtener_movimientos_bres
 )
 
+def resource_path(relative_path):
+    try:
+        base_path = sys._MEIPASS
+    except Exception:
+        # base_path = os.path.abspath(".")
+        # Mejor usar la ruta del archivo actual para desarrollo
+        base_path = os.path.abspath(".")
+    return os.path.join(base_path, relative_path)
+
 class ReporteBres:
     # Definir las columnas como atributo de la clase
     COLUMNAS = [
@@ -165,8 +174,7 @@ class ReporteBres:
     
     def cargar_iconos(self):
         try:
-            base_dir = os.path.dirname(os.path.dirname(__file__))  # Sube un nivel: de gui/ a src/
-            icons_path = os.path.join(base_dir, "utils", "icons")
+            icons_path = resource_path(os.path.join('utils', 'icons'))
             
             # Ajusta la ruta según tu proyecto
             self.icon_preview = tk.PhotoImage(file=os.path.join(icons_path, "vista_previa.png")).subsample(2, 2)
@@ -1419,45 +1427,160 @@ class ReporteBres:
                 messagebox.showerror("Error", "Primero debe generar el reporte")
                 return
 
-            # Generar nombre de archivo
+            import os
+            filas_por_hoja = 1000
+            total_movimientos = len(self.movimientos_data)
+
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             file_name = f"Reporte_BRES_{timestamp}.xlsx"
-
-            # Ruta a la carpeta Descargas
             downloads_path = os.path.expanduser("~/Downloads")
             full_path = os.path.join(downloads_path, file_name)
 
-            # Crear DataFrame
-            df = pd.DataFrame(self.movimientos_data)
-            df.columns = self.COLUMNAS
-
-            # Crear archivo Excel
             with pd.ExcelWriter(full_path, engine='xlsxwriter') as writer:
-                df.to_excel(writer, sheet_name='Reporte BRES', index=False)
-                
-                # Obtener workbook y worksheet
                 workbook = writer.book
-                worksheet = writer.sheets['Reporte BRES']
-                
-                # Formato para encabezados
-                header_format = workbook.add_format({
-                    'bold': True,
-                    'text_wrap': True,
-                    'valign': 'top',
-                    'fg_color': '#D7E4BC',
-                    'border': 1
-                })
-                
-                # Aplicar formato a encabezados
-                for col_num, value in enumerate(df.columns.values):
-                    worksheet.write(0, col_num, value, header_format)
-                
-                # Ajustar anchos de columna
-                worksheet.set_column('A:N', 15)
 
-            messagebox.showinfo("Éxito", f"Excel guardado en:\n{full_path}")
+                columnas = [
+                    'codigo_insumo', 'nombre_insumo', 'saldo_anterior', 'entradas_nivel_superior',
+                    'entregado_usuario', 'no_entregado', 'demanda', 'reajustes',
+                    'saldo_mes_siguiente', 'existencia_fisica', 'promedio_mensual',
+                    'meses_existencia', 'cantidad_maxima', 'cantidad_solicitar'
+                ]
+                encabezados = [
+                    'Código', 'Descripción\ndel Insumo', 'Saldo\nAnterior', 'Entradas\nNivel\nSuperior',
+                    'Entregado\na Usuario', 'No\nEntregado', 'Demanda', 'Reajustes\n(+) (-)',
+                    'Saldo Mes\nSiguiente', 'Existencia\nFísica', 'Promedio\nMensual\nDemanda Real',
+                    'Meses\nExistencia\nDisponible', 'Cantidad\nMáxima', 'Cantidad a\nSolicitar'
+                ]
+                col_widths = [10, 30, 10, 12, 12, 10, 10, 12, 12, 12, 18, 18, 12, 12]
 
-            # Preguntar si desea abrir el Excel
+                for hoja_num in range(0, total_movimientos, filas_por_hoja):
+                    nombre_hoja = f"BRES_{hoja_num // filas_por_hoja + 1}"
+                    fin_hoja = min(hoja_num + filas_por_hoja, total_movimientos)
+                    datos_hoja = self.movimientos_data[hoja_num:fin_hoja]
+
+                    df = pd.DataFrame(datos_hoja)[columnas]
+                    df.columns = encabezados
+
+                    fila_inicio = 8
+
+                    df.to_excel(writer, sheet_name=nombre_hoja, startrow=fila_inicio, index=False, header=False)
+
+                    worksheet = writer.sheets[nombre_hoja]
+
+                    title_format = workbook.add_format({
+                        'bold': True,
+                        'align': 'center',
+                        'valign': 'vcenter',
+                        'font_size': 12,
+                        'font_name': 'Segoe UI'
+                    })
+                    subtitle_format = workbook.add_format({
+                        'bold': True,
+                        'align': 'center',
+                        'valign': 'vcenter',
+                        'font_size': 10,
+                        'font_name': 'Segoe UI'
+                    })
+                    header_format = workbook.add_format({
+                        'bold': True,
+                        'align': 'center',
+                        'valign': 'vcenter',
+                        'font_size': 9,
+                        'bg_color': '#ADD8E6',
+                        'font_color': 'black',
+                        'border': 1,
+                        'text_wrap': True,
+                        'font_name': 'Segoe UI'
+                    })
+                    filtro_format = workbook.add_format({
+                        'bold': True,
+                        'align': 'center',
+                        'valign': 'vcenter',
+                        'font_size': 9,
+                        'text_wrap': True,
+                        'font_name': 'Segoe UI',
+                        'fg_color': 'white',
+                    })
+                    cell_format_center = workbook.add_format({
+                        'align': 'center',
+                        'valign': 'vcenter',
+                        'font_size': 9,
+                        'border': 1,
+                        'font_name': 'Segoe UI'
+                    })
+                    cell_format_wrap = workbook.add_format({
+                        'align': 'left',
+                        'valign': 'vcenter',
+                        'text_wrap': True,
+                        'font_size': 9,
+                        'border': 1,
+                        'font_name': 'Segoe UI'
+                    })
+                    cell_format_number = workbook.add_format({
+                        'num_format': '#,##0.00',
+                        'align': 'right',
+                        'valign': 'vcenter',
+                        'font_size': 9,
+                        'border': 1,
+                        'font_name': 'Segoe UI'
+                    })
+
+                    # Altura filas títulos y subtítulos (moderada)
+                    worksheet.set_row(0, 30)
+                    worksheet.set_row(1, 25)
+                    worksheet.set_row(2, 25)
+                    worksheet.set_row(3, 20)
+
+                    # Altura fila encabezados de tabla aumentada para mejor visibilidad
+                    worksheet.set_row(fila_inicio - 1, 50)
+
+                    # Altura fila filtros
+                    worksheet.set_row(5, 25)
+
+                    worksheet.merge_range(0, 0, 0, len(encabezados) - 1,
+                                        "DIRECCIÓN DEPARTAMENTAL DE REDES INTEGRADAS DE SERVICIOS DE SALUD DE GUATEMALA,",
+                                        title_format)
+                    worksheet.merge_range(1, 0, 1, len(encabezados) - 1,
+                                        "ÁREA NOR ORIENTE",
+                                        subtitle_format)
+                    worksheet.merge_range(2, 0, 2, len(encabezados) - 1,
+                                        "BALANCE, REQUISICIÓN Y ENVÍO DE SUMINISTROS",
+                                        subtitle_format)
+                    worksheet.merge_range(3, 0, 3, len(encabezados) - 1,
+                                        f"Generado el: {datetime.now().strftime('%d/%m/%Y %H:%M:%S')}",
+                                        subtitle_format)
+
+                    worksheet.merge_range(5, 0, 5, 1, f"Área: {self.combo_area.get()}", filtro_format)
+                    worksheet.merge_range(5, 2, 5, 3, f"Distrito: {self.combo_distrito.get()}", filtro_format)
+                    worksheet.merge_range(5, 4, 5, 5, f"Tipo de Servicio: {self.combo_tipo_servicio.get()}", filtro_format)
+                    worksheet.merge_range(5, 6, 5, 7, f"Servicio: {self.combo_servicio.get()}", filtro_format)
+                    worksheet.merge_range(5, 8, 5, 9, f"Tipo de Insumo: {self.combo_tipo_insumo.get()}", filtro_format)
+                    worksheet.merge_range(5, 10, 5, 13, f"Nivel Máximo: {self.combo_nivel_maximo.get()}", filtro_format)
+
+                    for col_num, header in enumerate(encabezados):
+                        worksheet.write(fila_inicio - 1, col_num, header, header_format)
+                        worksheet.set_column(col_num, col_num, col_widths[col_num])
+
+                    for row_offset, row_data in enumerate(df.values):
+                        for col_num, cell_value in enumerate(row_data):
+                            if encabezados[col_num] == 'Descripción\ndel Insumo':
+                                worksheet.write(fila_inicio + row_offset, col_num, cell_value, cell_format_wrap)
+                            elif encabezados[col_num] != 'Reajustes\n(+) (-)' and col_num > 2:
+                                try:
+                                    val = float(cell_value)
+                                    worksheet.write_number(fila_inicio + row_offset, col_num, val, cell_format_number)
+                                except:
+                                    worksheet.write(fila_inicio + row_offset, col_num, cell_value, cell_format_center)
+                            else:
+                                worksheet.write(fila_inicio + row_offset, col_num, cell_value, cell_format_center)
+
+                    worksheet.set_landscape()
+                    worksheet.set_paper(5)
+                    worksheet.fit_to_pages(1, 1)
+                    worksheet.center_horizontally()
+
+            messagebox.showinfo("Éxito", f"Reporte guardado en:\n{full_path}")
+
             if messagebox.askyesno("Excel Generado", "¿Desea abrir el archivo?"):
                 import sys
                 try:
@@ -1470,8 +1593,11 @@ class ReporteBres:
                 except Exception as e:
                     messagebox.showerror("Error", f"No se pudo abrir el Excel: {str(e)}")
 
+            return full_path
+
         except Exception as e:
             messagebox.showerror("Error", f"Error al generar Excel: {str(e)}")
+            return None
 
     def cerrar_ventana(self):
         """

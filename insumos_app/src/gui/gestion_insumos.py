@@ -32,6 +32,14 @@ from src.database import (
     crear_base_datos
 )
 
+def resource_path(relative_path):
+    """Obtiene la ruta absoluta al recurso, funciona en dev y en PyInstaller."""
+    try:
+        base_path = sys._MEIPASS  # PyInstaller crea esta carpeta temporal
+    except Exception:
+        base_path = os.path.abspath(".")
+
+    return os.path.join(base_path, relative_path)
 
 class GestionInsumos:
 

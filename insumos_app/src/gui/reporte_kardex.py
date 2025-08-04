@@ -31,6 +31,15 @@ from src.database.db_manager import (
     obtener_movimientos_kardex
 )
 
+def resource_path(relative_path):
+    """Obtiene la ruta absoluta al recurso, funciona en dev y en PyInstaller."""
+    try:
+        base_path = sys._MEIPASS  # PyInstaller crea esta carpeta temporal
+    except Exception:
+        base_path = os.path.abspath(".")
+
+    return os.path.join(base_path, relative_path)
+
 class ReporteKardex:
     # Definir las columnas como atributo de la clase
     COLUMNAS = [
@@ -148,8 +157,7 @@ class ReporteKardex:
     
     def cargar_iconos(self):
         try:
-            base_dir = os.path.dirname(os.path.dirname(__file__))  # Sube un nivel: de gui/ a src/
-            icons_path = os.path.join(base_dir, "utils", "icons")
+            icons_path = resource_path(os.path.join('utils', 'icons'))
             
             # Ajusta la ruta según tu proyecto
             self.icon_preview = tk.PhotoImage(file=os.path.join(icons_path, "vista_previa.png")).subsample(2, 2)
