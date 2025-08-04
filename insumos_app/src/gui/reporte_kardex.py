@@ -32,12 +32,12 @@ from src.database.db_manager import (
 )
 
 def resource_path(relative_path):
-    """Obtiene la ruta absoluta al recurso, funciona en dev y en PyInstaller."""
     try:
-        base_path = sys._MEIPASS  # PyInstaller crea esta carpeta temporal
-    except Exception:
-        base_path = os.path.abspath(".")
-
+        # Cuando se ejecuta con PyInstaller
+        base_path = sys._MEIPASS
+    except AttributeError:
+        # En desarrollo, base_path es la carpeta donde está este archivo
+        base_path = os.path.abspath(os.path.dirname(__file__))
     return os.path.join(base_path, relative_path)
 
 class ReporteKardex:
