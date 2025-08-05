@@ -51,11 +51,10 @@ from src.database.db_manager import (
 
 def resource_path(relative_path):
     try:
-        # Cuando se ejecuta con PyInstaller
         base_path = sys._MEIPASS
     except AttributeError:
-        # En desarrollo, base_path es la carpeta donde está este archivo
-        base_path = os.path.abspath(os.path.dirname(__file__))
+        # En desarrollo, base_path es la raíz del proyecto (subir un nivel desde gui)
+        base_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
     return os.path.join(base_path, relative_path)
 
 class ReporteDemandaReal:

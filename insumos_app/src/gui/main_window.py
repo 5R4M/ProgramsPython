@@ -23,12 +23,11 @@ from src.gui.reporte_bres import ReporteBres
 from src.gui.importar_exportar_manager import ImportarExportarManager, crear_gestor_importar_exportar
 
 def resource_path(relative_path):
-    """Obtiene la ruta absoluta al recurso, funciona en dev y en PyInstaller."""
     try:
-        base_path = sys._MEIPASS  # PyInstaller crea esta carpeta temporal
-    except Exception:
-        base_path = os.path.abspath(".")
-
+        base_path = sys._MEIPASS
+    except AttributeError:
+        # En desarrollo, base_path es la raíz del proyecto (subir un nivel desde gui)
+        base_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
     return os.path.join(base_path, relative_path)
 
 class MainWindow:

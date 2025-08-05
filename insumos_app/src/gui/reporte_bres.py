@@ -38,11 +38,10 @@ from src.database.db_manager import (
 
 def resource_path(relative_path):
     try:
-        # Cuando se ejecuta con PyInstaller
         base_path = sys._MEIPASS
     except AttributeError:
-        # En desarrollo, base_path es la carpeta donde está este archivo
-        base_path = os.path.abspath(os.path.dirname(__file__))
+        # En desarrollo, base_path es la raíz del proyecto (subir un nivel desde gui)
+        base_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
     return os.path.join(base_path, relative_path)
 
 class ReporteBres:
@@ -193,80 +192,13 @@ class ReporteBres:
     def procesar_datos_bres(self, movimientos_raw, fecha_ini, fecha_fin):
         """
         Procesa los datos para generar el reporte BRES con cantidades individuales por insumo.
-        Filtra por nivel jerárquico seleccionado con lógica flexible.
+        Los movimientos ya vienen filtrados por nivel desde la consulta SQL.
         """
-        # Determinar filtros seleccionados
-        area_seleccionada = self.combo_area.get().strip() if self.combo_area.get() else None
-        distrito_seleccionado = self.combo_distrito.get().strip() if self.combo_distrito.get() else None
-        tipo_servicio_seleccionado = self.combo_tipo_servicio.get().strip() if self.combo_tipo_servicio.get() else None
-        servicio_seleccionado = self.combo_servicio.get().strip() if self.combo_servicio.get() else None
-
         insumos_dict = {}
         movimientos_individuales = {}
 
+        # Procesar TODOS los movimientos recibidos (ya están filtrados por la consulta SQL)
         for mov in movimientos_raw:
-            # Obtener los valores del movimiento y normalizar
-            mov_area = mov.get('area_nombre')
-            mov_distrito = mov.get('distrito_nombre') 
-            mov_tipo_servicio = mov.get('tipo_servicio_descripcion')
-            mov_servicio = mov.get('servicio_nombre')
-            
-            # Normalizar valores None y 'None' string
-            if mov_tipo_servicio in [None, 'None', 'null', '']:
-                mov_tipo_servicio = None
-            if mov_servicio in [None, 'None', 'null', '']:
-                mov_servicio = None
-            if mov_distrito in [None, 'None', 'null', '']:
-                mov_distrito = None
-            if mov_area in [None, 'None', 'null', '']:
-                mov_area = None
-
-            # **FILTRADO POR NIVEL SELECCIONADO CON LÓGICA FLEXIBLE**
-            incluir_movimiento = False
-            
-            if servicio_seleccionado:
-                # Nivel SERVICIO: debe coincidir área, distrito y servicio
-                # El tipo de servicio puede ser flexible si no está bien asociado
-                if (mov_area == area_seleccionada and 
-                    mov_distrito == distrito_seleccionado and
-                    mov_servicio == servicio_seleccionado):
-                    incluir_movimiento = True
-                    
-            elif tipo_servicio_seleccionado:
-                # Nivel TIPO SERVICIO: debe coincidir área, distrito y tipo servicio
-                # Y NO debe tener servicio específico
-                if (mov_area == area_seleccionada and 
-                    mov_distrito == distrito_seleccionado and
-                    mov_tipo_servicio == tipo_servicio_seleccionado and
-                    mov_servicio is None):
-                    incluir_movimiento = True
-                    
-            elif distrito_seleccionado:
-                # Nivel DISTRITO: debe coincidir área y distrito
-                # Y NO debe tener tipo servicio ni servicio específicos
-                if (mov_area == area_seleccionada and 
-                    mov_distrito == distrito_seleccionado and
-                    mov_tipo_servicio is None and
-                    mov_servicio is None):
-                    incluir_movimiento = True
-                    
-            elif area_seleccionada:
-                # Nivel ÁREA: debe coincidir área
-                # Y NO debe tener distrito, tipo servicio ni servicio específicos
-                if (mov_area == area_seleccionada and 
-                    mov_distrito is None and
-                    mov_tipo_servicio is None and
-                    mov_servicio is None):
-                    incluir_movimiento = True
-                    
-            else:
-                # Sin filtros: incluir todos los movimientos
-                incluir_movimiento = True
-
-            # Si no cumple el filtro, saltar este movimiento
-            if not incluir_movimiento:
-                continue
-
             # Usar el ID del insumo como código único
             codigo_insumo = str(mov.get('codigo_insumo', ''))
             nombre_insumo = mov.get('nombre_insumo', '')
@@ -289,6 +221,7 @@ class ReporteBres:
                     'entrada_nivel_superior': 0,
                     'entregado_usuario': 0,
                     'no_entregado': 0,
+                    'salida_nivel_inferior': 0,  # AGREGADO
                     'reajuste_positivo': 0,
                     'reajuste_negativo': 0,
                 }
@@ -302,6 +235,8 @@ class ReporteBres:
                 insumos_dict[codigo_insumo]['entregado_usuario'] += cantidad
             elif tipo_movimiento == 'NO ENTREGADO':
                 insumos_dict[codigo_insumo]['no_entregado'] += cantidad
+            elif tipo_movimiento == 'SALIDA NIVEL INFERIOR':  # AGREGADO
+                insumos_dict[codigo_insumo]['salida_nivel_inferior'] += cantidad
             elif tipo_movimiento == 'REAJUSTE POSITIVO':
                 insumos_dict[codigo_insumo]['reajuste_positivo'] += cantidad
             elif tipo_movimiento == 'REAJUSTE NEGATIVO':
@@ -336,11 +271,12 @@ class ReporteBres:
             # Calcular reajustes netos
             reajustes_netos = datos['reajuste_positivo'] - datos['reajuste_negativo']
             
-            # **CÁLCULO CORRECTO DEL SALDO MES SIGUIENTE**
+            # **CÁLCULO CORRECTO DEL SALDO MES SIGUIENTE - INCLUYENDO SALIDA NIVEL INFERIOR**
             saldo_mes_siguiente = (
                 datos['saldo_anterior'] +
                 datos['entrada_nivel_superior'] -
-                datos['entregado_usuario'] +
+                datos['entregado_usuario'] -
+                datos['salida_nivel_inferior'] +  # AGREGADO: restar salida nivel inferior
                 reajustes_netos
             )
             
@@ -1051,16 +987,16 @@ class ReporteBres:
 
             # Obtener datos usando la función específica para BRES
             movimientos_raw = obtener_movimientos_bres(
-                fecha_ini.strftime('%Y-%m-%d'),
-                fecha_fin.strftime('%Y-%m-%d'),
-                area_nombre=self.combo_area.get() if self.combo_area.get() else None,
-                distrito_nombre=self.combo_distrito.get() if self.combo_distrito.get() else None,
-                tipo_servicio_desc=self.combo_tipo_servicio.get() if self.combo_tipo_servicio.get() else None,
-                servicio_nombre=self.combo_servicio.get() if self.combo_servicio.get() else None,
-                tipo_insumo_desc=self.combo_tipo_insumo.get() if self.combo_tipo_insumo.get() else None,
-                insumo_nombre=self.combo_insumo.get() if self.combo_insumo.get() else None,
-                presentacion_nombre=self.combo_presentacion.get() if self.combo_presentacion.get() else None
-            )
+            fecha_ini.strftime('%Y-%m-%d'),
+            fecha_fin.strftime('%Y-%m-%d'),
+            area_nombre=self.combo_area.get().strip() or None,
+            distrito_nombre=self.combo_distrito.get().strip() or None,
+            tipo_servicio_desc=self.combo_tipo_servicio.get().strip() or None,
+            servicio_nombre=self.combo_servicio.get().strip() or None,
+            tipo_insumo_desc=self.combo_tipo_insumo.get().strip() or None,
+            insumo_nombre=self.combo_insumo.get().strip() or None,
+            presentacion_nombre=self.combo_presentacion.get().strip() or None
+        )
 
             if not movimientos_raw:
                 messagebox.showinfo("Info", "No hay datos para mostrar")
@@ -1643,64 +1579,52 @@ class ReporteBres:
                 pass
     
     def filtrar_movimientos_por_nivel(self, movimientos):
-        """
-        Filtra los movimientos según el nivel jerárquico seleccionado
-        """
         if not movimientos:
             return []
 
-        # Obtener valores seleccionados
         area_seleccionada = self.combo_area.get().strip()
         distrito_seleccionado = self.combo_distrito.get().strip()
         tipo_servicio_seleccionado = self.combo_tipo_servicio.get().strip()
         servicio_seleccionado = self.combo_servicio.get().strip()
 
-        def es_null_o_vacio(valor):
-            return valor is None or valor == '' or valor == 'None'
-
         movimientos_filtrados = []
-        
+
         for mov in movimientos:
             area_mov = mov.get('area_nombre')
             distrito_mov = mov.get('distrito_nombre')
             tipo_servicio_mov = mov.get('tipo_servicio_desc')
             servicio_mov = mov.get('servicio_nombre')
-            
+
             incluir = False
-            
-            # Determinar el nivel de filtrado según las selecciones
+
             if servicio_seleccionado:
-                # Filtro hasta servicio - debe coincidir exactamente
-                if (area_mov == area_seleccionada and 
+                if (area_mov == area_seleccionada and
                     distrito_mov == distrito_seleccionado and
                     tipo_servicio_mov == tipo_servicio_seleccionado and
                     servicio_mov == servicio_seleccionado):
                     incluir = True
+
             elif tipo_servicio_seleccionado:
-                # Filtro hasta tipo de servicio
-                if (area_mov == area_seleccionada and 
+                if (area_mov == area_seleccionada and
                     distrito_mov == distrito_seleccionado and
-                    tipo_servicio_mov == tipo_servicio_seleccionado and
-                    es_null_o_vacio(servicio_mov)):
+                    tipo_servicio_mov == tipo_servicio_seleccionado):
                     incluir = True
+
             elif distrito_seleccionado:
-                # Filtro hasta distrito
-                if (area_mov == area_seleccionada and 
-                    distrito_mov == distrito_seleccionado and
-                    es_null_o_vacio(tipo_servicio_mov) and
-                    es_null_o_vacio(servicio_mov)):
+                if (area_mov == area_seleccionada and
+                    distrito_mov == distrito_seleccionado):
                     incluir = True
+
             elif area_seleccionada:
-                # Filtro solo por área
-                if (area_mov == area_seleccionada and 
-                    es_null_o_vacio(distrito_mov) and
-                    es_null_o_vacio(tipo_servicio_mov) and
-                    es_null_o_vacio(servicio_mov)):
+                if area_mov == area_seleccionada:
                     incluir = True
-            
+
+            else:
+                incluir = True
+
             if incluir:
                 movimientos_filtrados.append(mov)
-        
+
         return movimientos_filtrados
     
     def destroy(self):

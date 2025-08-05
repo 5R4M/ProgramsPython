@@ -32,11 +32,10 @@ from src.database.db_manager import (
 
 def resource_path(relative_path):
     try:
-        # Cuando se ejecuta con PyInstaller
         base_path = sys._MEIPASS
     except AttributeError:
-        # En desarrollo, base_path es la carpeta donde está este archivo
-        base_path = os.path.abspath(os.path.dirname(__file__))
+        # En desarrollo, base_path es la raíz del proyecto (subir un nivel desde gui)
+        base_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
     return os.path.join(base_path, relative_path)
 
 class IngresoInsumos:
@@ -44,6 +43,9 @@ class IngresoInsumos:
         
         self.parent = parent_frame
         self.main_window = main_window
+        
+        self.manual_widths = {}
+        self.auto_resize_enabled = True
 
         # Variables para los combobox
         self.distrito_var = tk.StringVar()
@@ -907,9 +909,9 @@ class IngresoInsumos:
 
         for col in columns:
             self.tree.heading(col, text=encabezados[col], anchor='center')
-            self.tree.column(col, 
-                            width=anchos_columnas[col], 
-                            minwidth=80, 
+            self.tree.column(col,
+                            width=anchos_columnas[col],
+                            minwidth=80,
                             anchor=justificacion[col])
 
         # **POSICIONAR TREEVIEW Y SCROLLBARS CON GRID**
@@ -925,16 +927,6 @@ class IngresoInsumos:
 
         # **CONFIGURAR SCROLLBARS EN EL TREEVIEW**
         self.tree.configure(yscrollcommand=scrollbar_y.set, xscrollcommand=scrollbar_x.set)
-
-        # Función para ajustar columnas automáticamente
-        def on_treeview_configure(event):
-            if event.widget == self.tree:
-                width = event.width
-                col_width = max(100, width // len(columns) - 5)
-                for col in columns:
-                    self.tree.column(col, width=col_width, minwidth=80)
-
-        self.tree.bind('<Configure>', on_treeview_configure)
 
         # **SCROLL CON MOUSE WHEEL PARA EL TREEVIEW**
         def on_treeview_mousewheel(event):
@@ -1374,6 +1366,8 @@ class IngresoInsumos:
                 tipo_servicio       # 15 - NUEVO
             ))
 
+            self.ajustar_ancho_columnas_automatico()
+            
             self.limpiar_campos()
 
         except ValueError:
@@ -2054,6 +2048,7 @@ class IngresoInsumos:
             )
 
             self.tree.item(selected_item, values=nuevos_valores)
+            self.ajustar_ancho_columnas_automatico()
             editar_ventana.destroy()
             messagebox.showinfo("Éxito", "Movimiento actualizado correctamente")
 
@@ -2229,17 +2224,60 @@ class IngresoInsumos:
             messagebox.showinfo("Éxito",
                                 f"Se guardaron {movimientos_guardados} movimientos correctamente")
             self.tree.delete(*self.tree.get_children())
+            
+        self.limpiar_campos_completo()
     
     # 6. Métodos de utilidad
     
     def limpiar_campos(self):
+        """Limpia los campos del formulario sin afectar la fecha de registro seleccionada por el usuario"""        
+        # **LIMPIAR SOLO LOS CAMPOS DE MOVIMIENTO ESPECÍFICO**
+        self.tipo_movimiento_var.set('')
+        self.salida_distrito_var.set('')
+        self.salida_tipo_servicio_var.set('')
+        self.salida_servicio_var.set('')
+
+        # Limpiar entries de datos específicos del movimiento
+        self.lote_entry.delete(0, 'end')
+        self.referencia_entry.delete(0, 'end')
+        self.cantidad_entry.delete(0, 'end')
+        self.observaciones_entry.delete(0, 'end')
+
+        # **MANTENER LA FECHA DE REGISTRO QUE SELECCIONÓ EL USUARIO**
+        # self.fecha_reg.set_date(datetime.now())  # NO RESETEAR
+        
+        # Resetear fecha de vencimiento a la fecha actual
+        self.fecha_venc.set_date(datetime.now())
+        
+        # Resetear checkboxes
+        self.sin_lote_var.set(False)
+        self.lote_entry.config(state='normal')
+        
+        self.sin_fecha_venc.set(False)
+        self.fecha_venc.configure(state='normal')
+
+        # **NO ACTUALIZAR ESTADOS DE COMBOBOXES - MANTENER CONFIGURACIÓN ACTUAL**
+        # self.actualizar_estado_comboboxes()  # NO EJECUTAR
+
+        # Ocultar frame de salida nivel inferior si está visible
+        if self.frame_salida_nivel_inferior.winfo_ismapped():
+            self.frame_salida_nivel_inferior.pack_forget()
+      
+    def limpiar_campos_completo(self):
+        """Limpia TODOS los campos y selecciones - usado después de guardar movimientos"""
+        
+        # Limpiar configuración de servicios
         self.area_var.set('')
         self.distrito_var.set('')
         self.tipo_servicio_var.set('')
         self.servicio_var.set('')
+        
+        # Limpiar gestión de insumos
         self.tipo_insumo_var.set('')
         self.insumo_var.set('')
         self.presentacion_var.set('')
+        
+        # Limpiar registro de movimiento
         self.tipo_movimiento_var.set('')
         self.salida_distrito_var.set('')
         self.salida_tipo_servicio_var.set('')
@@ -2258,20 +2296,77 @@ class IngresoInsumos:
         # Resetear nivel de bodega a "area"
         self.nivel_bodega_var.set("area")
         
-        # Resetear Sin lote
+        # Resetear checkboxes
         self.sin_lote_var.set(False)
         self.lote_entry.config(state='normal')
         
         self.sin_fecha_venc.set(False)
         self.fecha_venc.configure(state='normal')
 
-        # Actualizar estados de los combobox
+        # Actualizar estados de los comboboxes
         self.actualizar_estado_comboboxes()
 
         # Ocultar frame de salida nivel inferior si está visible
         if self.frame_salida_nivel_inferior.winfo_ismapped():
             self.frame_salida_nivel_inferior.pack_forget()
-    
+        
+        # Limpiar listas de comboboxes
+        self.distrito_cb.config(completevalues=[])
+        self.tipo_servicio_cb.config(completevalues=[])
+        self.servicio_cb.config(completevalues=[])
+        self.insumo_cb.config(completevalues=[])
+        self.presentacion_cb.config(completevalues=[])
+      
+    def ajustar_ancho_columnas_automatico(self):
+        import tkinter.font as tkFont
+        font = tkFont.Font(family="Segoe UI", size=9)
+
+        max_widths = {}
+        for col in self.tree['columns']:
+            header_text = str(self.tree.heading(col)['text'])
+            header_width = font.measure(header_text) + 30
+            max_widths[col] = max(80, header_width)
+
+        for item in self.tree.get_children():
+            values = self.tree.item(item)['values']
+            for i, col in enumerate(self.tree['columns']):
+                if i < len(values) and values[i] is not None:
+                    cell_text = str(values[i])
+                    cell_width = font.measure(cell_text) + 25
+                    max_widths[col] = max(max_widths.get(col, 80), cell_width)
+
+        limites_configuracion = {
+            'fecha_registro': {'min': 100, 'max': 140},
+            'referencia': {'min': 80, 'max': 150},
+            'tipo_movimiento': {'min': 120, 'max': 200},
+            'insumo': {'min': 200, 'max': 600},
+            'presentacion': {'min': 100, 'max': 180},
+            'servicio': {'min': 120, 'max': 280},
+            'lote': {'min': 60, 'max': 120},
+            'fecha_vencimiento': {'min': 100, 'max': 140},
+            'cantidad': {'min': 70, 'max': 100},
+            'salida_distrito': {'min': 100, 'max': 200},
+            'salida_servicio': {'min': 120, 'max': 250},
+            'observaciones': {'min': 150, 'max': 400},
+            'tipo_insumo': {'min': 100, 'max': 180},
+            'area': {'min': 80, 'max': 160},
+            'distrito': {'min': 100, 'max': 180},
+            'tipo_servicio': {'min': 120, 'max': 200}
+        }
+
+        for col in max_widths:
+            ancho_calculado = max_widths[col]
+            config = limites_configuracion.get(col, {'min': 80, 'max': 200})
+            if col == 'insumo':
+                ancho_final = max(config['min'], min(ancho_calculado, config['max']))
+                if ancho_calculado > config['max']:
+                    ancho_final = min(ancho_calculado, 800)
+            else:
+                ancho_final = max(config['min'], min(ancho_calculado, config['max']))
+            self.tree.column(col, width=ancho_final, minwidth=config['min'])
+
+        self.tree.update_idletasks()
+                            
     def ajustar_tamano_ventana(self, mostrar_salida):
         """Ajusta el tamaño de la ventana cuando se muestra/oculta el frame de salida"""
         if mostrar_salida:

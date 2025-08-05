@@ -1624,7 +1624,19 @@ def obtener_demanda_por_meses(codigo_insumo, fecha_inicio, fecha_fin, distrito=N
 def obtener_movimientos_bres(fecha_inicio, fecha_fin, area_nombre=None, distrito_nombre=None, tipo_servicio_desc=None,
                                servicio_nombre=None, tipo_insumo_desc=None, insumo_nombre=None,
                                presentacion_nombre=None):
-    query = """
+    """
+    Obtiene movimientos BRES filtrados por nivel exacto según cómo se guardan los datos
+    """
+    
+    try:
+        conn = conectar_db()
+        if not conn:
+            return []
+            
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+        
+        query = """
         SELECT
             m.fecha_registro AS fecha,
             m.referencia,
@@ -1639,64 +1651,78 @@ def obtener_movimientos_bres(fecha_inicio, fecha_fin, area_nombre=None, distrito
             i.id AS codigo_insumo,
             COALESCE(p.nombre, '') AS presentacion,
             a.nombre AS area_nombre,
-            d2.nombre AS distrito_nombre,
-            ts.descripcion AS tipo_servicio_desc,
+            d.nombre AS distrito_nombre,
+            ts.descripcion AS tipo_servicio_descripcion,
             s.nombre AS servicio_nombre
         FROM movimiento m
         JOIN tipo_movimiento tm ON m.tipo_movimiento_id = tm.id
-        LEFT JOIN servicio s ON m.servicio_id = s.id
-        LEFT JOIN tipo_servicio ts ON s.id_tipo_servicio = ts.id
-        LEFT JOIN distrito d2 ON ts.id_distrito = d2.id
-        LEFT JOIN area a ON d2.id_area = a.id
-        LEFT JOIN distrito d_salida ON m.salida_distrito_id = d_salida.id
-        LEFT JOIN servicio s_salida ON m.salida_servicio_id = s_salida.id
         LEFT JOIN insumo i ON m.insumo_id = i.id
         LEFT JOIN tipo_insumo ti ON i.id_tipo_insumo = ti.id
-        LEFT JOIN insumo_presentacion ip ON i.id = ip.insumo_id
-        LEFT JOIN presentacion p ON ip.presentacion_id = p.id
+        LEFT JOIN presentacion p ON m.presentacion_id = p.id
+        LEFT JOIN distrito d_salida ON m.salida_distrito_id = d_salida.id
+        LEFT JOIN servicio s_salida ON m.salida_servicio_id = s_salida.id
+        
+        LEFT JOIN area a ON m.area_id = a.id
+        LEFT JOIN distrito d ON m.distrito_id = d.id
+        LEFT JOIN servicio s ON m.servicio_id = s.id
+        LEFT JOIN tipo_servicio ts ON s.id_tipo_servicio = ts.id
+        
         WHERE m.fecha_registro BETWEEN ? AND ?
-        AND tm.descripcion IN ('ENTREGADO', 'NO ENTREGADO', 'INVENTARIO INICIAL', 
+        AND tm.descripcion IN ('ENTREGADO', 'NO ENTREGADO', 'INVENTARIO INICIAL',
                             'ENTRADA NIVEL SUPERIOR', 'SALIDA NIVEL INFERIOR',
                             'REAJUSTE POSITIVO', 'REAJUSTE NEGATIVO')
-    """
+        """
+        
+        params = [fecha_inicio, fecha_fin]
+        
+        # Determinar el nivel más específico seleccionado
+        if servicio_nombre:
+            # NIVEL SERVICIO: movimientos con servicio_id específico
+            query += " AND s.nombre = ?"
+            params.append(servicio_nombre)
+            
+        elif tipo_servicio_desc:
+            # NIVEL TIPO SERVICIO: movimientos con tipo de servicio específico
+            query += " AND ts.descripcion = ?"
+            params.append(tipo_servicio_desc)
+            
+        elif distrito_nombre:
+            # NIVEL DISTRITO: movimientos ingresados en distrito (tienen distrito_id pero NO servicio_id)
+            query += " AND d.nombre = ? AND m.servicio_id IS NULL"
+            params.append(distrito_nombre)
+            
+        elif area_nombre:
+            # NIVEL ÁREA: movimientos ingresados en área (tienen area_id pero NO distrito_id)
+            query += " AND a.nombre = ? AND m.distrito_id IS NULL"
+            params.append(area_nombre)
 
-    params = [fecha_inicio, fecha_fin]
+        # Filtros adicionales opcionales
+        if tipo_insumo_desc:
+            query += " AND ti.descripcion = ?"
+            params.append(tipo_insumo_desc)
 
-    if area_nombre and area_nombre.strip():
-        query += " AND a.nombre = ?"
-        params.append(area_nombre)
+        if insumo_nombre:
+            query += " AND i.nombre = ?"
+            params.append(insumo_nombre)
 
-    if distrito_nombre and distrito_nombre.strip():
-        query += " AND d2.nombre = ?"
-        params.append(distrito_nombre)
+        if presentacion_nombre:
+            query += " AND p.nombre = ?"
+            params.append(presentacion_nombre)
 
-    if tipo_servicio_desc and tipo_servicio_desc.strip():
-        query += " AND ts.descripcion = ?"
-        params.append(tipo_servicio_desc)
+        query += " ORDER BY m.fecha_registro"
+        
+        cursor.execute(query, params)
+        rows = cursor.fetchall()
+        
+        movimientos = [dict(row) for row in rows]
+            
+        return movimientos
 
-    if servicio_nombre and servicio_nombre.strip():
-        query += " AND s.nombre = ?"
-        params.append(servicio_nombre)
-
-    if insumo_nombre and insumo_nombre.strip():
-        query += " AND i.nombre = ?"
-        params.append(insumo_nombre)
-
-    if tipo_insumo_desc and tipo_insumo_desc.strip():
-        query += " AND ti.descripcion = ?"
-        params.append(tipo_insumo_desc)
-
-    if presentacion_nombre and presentacion_nombre.strip():
-        query += " AND p.nombre = ?"
-        params.append(presentacion_nombre)
-
-    query += " ORDER BY m.fecha_registro"
-
-    conn = sqlite3.connect(DB_PATH)
-    conn.row_factory = sqlite3.Row
-    cursor = conn.cursor()
-    cursor.execute(query, params)
-    rows = cursor.fetchall()
-    conn.close()
-
-    return [dict(row) for row in rows]
+    except Exception as e:
+        print(f"Error en obtener_movimientos_bres: {e}")
+        import traceback
+        traceback.print_exc()
+        return []
+    finally:
+        if conn:
+            conn.close()
