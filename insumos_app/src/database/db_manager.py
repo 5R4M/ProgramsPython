@@ -1726,3 +1726,103 @@ def obtener_movimientos_bres(fecha_inicio, fecha_fin, area_nombre=None, distrito
     finally:
         if conn:
             conn.close()
+
+def obtener_movimientos_balance(fecha_inicio, fecha_fin, area_nombre=None, distrito_nombre=None, tipo_servicio_desc=None,
+                               servicio_nombre=None, tipo_insumo_desc=None, insumo_nombre=None,
+                               presentacion_nombre=None):
+    """
+    Obtiene movimientos del balance filtrados por nivel exacto según cómo se guardan los datos
+    """
+    
+    try:
+        conn = conectar_db()
+        if not conn:
+            return []
+            
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+        
+        query = """
+        SELECT
+            m.fecha_registro AS fecha,
+            m.referencia,
+            tm.descripcion AS tipo_movimiento,
+            m.cantidad,
+            m.lote,
+            m.fecha_vencimiento,
+            m.observaciones,
+            d_salida.nombre AS distrito_destino,
+            s_salida.nombre AS servicio_destino,
+            i.nombre AS nombre_insumo,
+            i.id AS codigo_insumo,
+            COALESCE(p.nombre, '') AS presentacion,
+            a.nombre AS area_nombre,
+            d.nombre AS distrito_nombre,
+            ts.descripcion AS tipo_servicio_descripcion,
+            s.nombre AS servicio_nombre
+        FROM movimiento m
+        JOIN tipo_movimiento tm ON m.tipo_movimiento_id = tm.id
+        LEFT JOIN insumo i ON m.insumo_id = i.id
+        LEFT JOIN tipo_insumo ti ON i.id_tipo_insumo = ti.id
+        LEFT JOIN presentacion p ON m.presentacion_id = p.id
+        LEFT JOIN distrito d_salida ON m.salida_distrito_id = d_salida.id
+        LEFT JOIN servicio s_salida ON m.salida_servicio_id = s_salida.id
+        
+        LEFT JOIN area a ON m.area_id = a.id
+        LEFT JOIN distrito d ON m.distrito_id = d.id
+        LEFT JOIN servicio s ON m.servicio_id = s.id
+        LEFT JOIN tipo_servicio ts ON s.id_tipo_servicio = ts.id
+        
+        WHERE m.fecha_registro BETWEEN ? AND ?
+        AND tm.descripcion IN ('INVENTARIO INICIAL', 'REAJUSTE POSITIVO', 'REAJUSTE NEGATIVO', 'ENTRADA NIVEL SUPERIOR', 'SALIDA NIVEL INFERIOR')
+        """
+        
+        params = [fecha_inicio, fecha_fin]
+        
+        # Determinar el nivel más específico seleccionado
+        if servicio_nombre:
+            query += " AND s.nombre = ?"
+            params.append(servicio_nombre)
+            
+        elif tipo_servicio_desc:
+            query += " AND ts.descripcion = ?"
+            params.append(tipo_servicio_desc)
+            
+        elif distrito_nombre:
+            query += " AND d.nombre = ? AND m.servicio_id IS NULL"
+            params.append(distrito_nombre)
+            
+        elif area_nombre:
+            query += " AND a.nombre = ? AND m.distrito_id IS NULL"
+            params.append(area_nombre)
+
+        # Filtros adicionales opcionales
+        if tipo_insumo_desc:
+            query += " AND ti.descripcion = ?"
+            params.append(tipo_insumo_desc)
+
+        if insumo_nombre:
+            query += " AND i.nombre = ?"
+            params.append(insumo_nombre)
+
+        if presentacion_nombre:
+            query += " AND p.nombre = ?"
+            params.append(presentacion_nombre)
+
+        query += " ORDER BY m.fecha_registro"
+        
+        cursor.execute(query, params)
+        rows = cursor.fetchall()
+        
+        movimientos = [dict(row) for row in rows]
+            
+        return movimientos
+
+    except Exception as e:
+        print(f"Error en obtener_movimientos_balance: {e}")
+        import traceback
+        traceback.print_exc()
+        return []
+    finally:
+        if conn:
+            conn.close()
