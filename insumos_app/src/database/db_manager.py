@@ -1229,25 +1229,25 @@ def buscar_movimientos_por_filtros(
 
         params = [fecha_ini, fecha_fin]
 
-        # Filtro por área (directa o a través de distrito)
-        if area:
-            query += " AND (a2.nombre = ? OR a.nombre = ?)"
-            params.append(area)
-            params.append(area)
-
-        if distrito:
-            query += " AND (d2.nombre = ? OR d.nombre = ? OR d_salida.nombre = ?)"
-            params.append(distrito)
-            params.append(distrito)
-            params.append(distrito)
-
-        if tipo_servicio:
-            query += " AND ts.descripcion = ?"
-            params.append(tipo_servicio)
+        # Filtrado estricto por nivel seleccionado
         if servicio:
-            query += " AND (s.nombre = ? OR s_salida.nombre = ?)"
+            # Nivel servicio: solo movimientos con servicio específico
+            query += " AND s.nombre = ?"
             params.append(servicio)
-            params.append(servicio)
+        elif tipo_servicio:
+            # Nivel tipo servicio: movimientos con tipo servicio específico y sin servicio asignado
+            query += " AND ts.descripcion = ? AND m.servicio_id IS NULL"
+            params.append(tipo_servicio)
+        elif distrito:
+            # Nivel distrito: movimientos con distrito asignado y sin tipo servicio ni servicio
+            query += " AND d2.nombre = ? AND ts.descripcion IS NULL AND m.servicio_id IS NULL"
+            params.append(distrito)
+        elif area:
+            # Nivel área: movimientos con área asignada y sin distrito ni tipo servicio ni servicio
+            query += " AND a2.nombre = ? AND d2.nombre IS NULL AND ts.descripcion IS NULL AND m.servicio_id IS NULL"
+            params.append(area)
+
+        # Filtros adicionales opcionales
         if tipo_insumo:
             query += " AND ti.descripcion = ?"
             params.append(tipo_insumo)

@@ -26,13 +26,11 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(
 from src.database.db_manager import (
     conectar_db,
     obtener_areas,
-    obtener_distritos,
     obtener_tipos_servicio_por_distrito,
     obtener_servicios_por_tipo,
     obtener_tipos_insumo,
     obtener_insumos_por_tipo,
     obtener_presentaciones,
-    obtener_movimientos_kardex,
     obtener_movimientos_bres
 )
 
@@ -1091,7 +1089,7 @@ class ReporteBres:
             def display_page():
                 canvas.delete("all")
                 page = doc.load_page(self.current_page)
-                pix = page.get_pixmap(matrix=fitz.Matrix(1.2, 1.2))
+                pix = page.get_pixmap(matrix=fitz.Matrix(1.5, 1.5))
                 img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
                 tk_img = ImageTk.PhotoImage(image=img)
                 canvas.image = tk_img
@@ -1289,7 +1287,7 @@ class ReporteBres:
             for mov in self.movimientos_data:
                 row = [
                     mov.get('codigo_insumo', ''),
-                    mov.get('nombre_insumo', ''),
+                    self.dividir_texto_en_lineas(mov.get('nombre_insumo', ''), 30),
                     mov.get('saldo_anterior', ''),
                     mov.get('entradas_nivel_superior', ''),
                     mov.get('entregado_usuario', ''),
@@ -1308,7 +1306,7 @@ class ReporteBres:
             # Crear tabla con anchos ajustados (SIN PRESENTACIÓN)
             colWidths = [
                 0.7*inch,   # Código
-                2.2*inch,   # Descripción del Insumo (más ancho sin presentación)
+                3.0*inch,   # Descripción del Insumo (más ancho sin presentación)
                 0.8*inch,   # Saldo Anterior
                 0.8*inch,   # Entradas Nivel Superior
                 0.8*inch,   # Entregado a Usuario
@@ -1329,21 +1327,22 @@ class ReporteBres:
             table_style = [
                 ('BACKGROUND', (0,0), (-1,0), colors.lightblue),
                 ('TEXTCOLOR', (0,0), (-1,0), colors.black),
+                # **CENTRADO HORIZONTAL Y VERTICAL PARA TODA LA TABLA**
                 ('ALIGN', (0,0), (-1,-1), 'CENTER'),
+                ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
                 ('FONTNAME', (0,0), (-1,0), 'Helvetica-Bold'),
                 ('FONTSIZE', (0,0), (-1,0), 7),
                 ('FONTSIZE', (0,1), (-1,-1), 7),
                 ('GRID', (0,0), (-1,-1), 0.25, colors.grey),
-                ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
                 ('ROWBACKGROUNDS', (0,0), (-1,0), [colors.lightblue]),
-                # **ALTURA AUMENTADA PARA ENCABEZADOS**
-                ('TOPPADDING', (0,0), (-1,0), 8),      # Aumentado de 6 a 8
-                ('BOTTOMPADDING', (0,0), (-1,0), 8),   # Aumentado de 6 a 8
-                ('TOPPADDING', (0,1), (-1,-1), 3),     # Aumentado de 2 a 3
-                ('BOTTOMPADDING', (0,1), (-1,-1), 3),  # Aumentado de 2 a 3
-                ('LEFTPADDING', (0,0), (-1,-1), 2),
-                ('RIGHTPADDING', (0,0), (-1,-1), 2),
-                ('WORDWRAP', (0,0), (-1,-1), True),    # Aplicar a toda la tabla
+                # **PADDING AUMENTADO PARA MEJOR APARIENCIA**
+                ('TOPPADDING', (0,0), (-1,0), 8),      # Encabezados
+                ('BOTTOMPADDING', (0,0), (-1,0), 8),   # Encabezados
+                ('TOPPADDING', (0,1), (-1,-1), 6),     # Celdas de datos
+                ('BOTTOMPADDING', (0,1), (-1,-1), 6),  # Celdas de datos
+                ('LEFTPADDING', (0,0), (-1,-1), 4),    # Todas las celdas
+                ('RIGHTPADDING', (0,0), (-1,-1), 4),   # Todas las celdas
+                ('WORDWRAP', (0,0), (-1,-1), True),    # Permitir salto de línea
             ]
 
             table.setStyle(TableStyle(table_style))
@@ -1446,7 +1445,7 @@ class ReporteBres:
                     })
                     cell_format_wrap = workbook.add_format({
                         'align': 'left',
-                        'valign': 'vcenter',
+                        'valign': 'top',
                         'text_wrap': True,
                         'font_size': 9,
                         'border': 1,
@@ -1468,7 +1467,7 @@ class ReporteBres:
                     worksheet.set_row(3, 20)
 
                     # Altura fila encabezados de tabla aumentada para mejor visibilidad
-                    worksheet.set_row(fila_inicio - 1, 50)
+                    worksheet.set_row(fila_inicio - 1, 60)
 
                     # Altura fila filtros
                     worksheet.set_row(5, 25)
@@ -1535,6 +1534,42 @@ class ReporteBres:
             messagebox.showerror("Error", f"Error al generar Excel: {str(e)}")
             return None
 
+    def dividir_texto_en_lineas(self, texto, max_caracteres_por_linea=30):
+        """Divide el texto en múltiples líneas para mejor ajuste"""
+        if not texto:
+            return ""
+        
+        texto = str(texto).strip()
+        palabras = texto.split()
+        lineas = []
+        linea_actual = ""
+        
+        for palabra in palabras:
+            if len(palabra) > max_caracteres_por_linea:
+                if linea_actual:
+                    lineas.append(linea_actual.strip())
+                    linea_actual = ""
+                lineas.append(palabra[:max_caracteres_por_linea-3] + "...")
+                continue
+                
+            if len(linea_actual + " " + palabra) > max_caracteres_por_linea:
+                if linea_actual:
+                    lineas.append(linea_actual.strip())
+                    linea_actual = palabra
+                else:
+                    lineas.append(palabra)
+            else:
+                linea_actual += " " + palabra if linea_actual else palabra
+        
+        if linea_actual:
+            lineas.append(linea_actual.strip())
+        
+        # Limitar a máximo 3 líneas
+        if len(lineas) > 3:
+            lineas = lineas[:2] + [lineas[2][:max_caracteres_por_linea-3] + "..."]
+        
+        return "\n".join(lineas)
+        
     def cerrar_ventana(self):
         """
         Cierra la ventana del reporte, limpia recursos y muestra la pantalla de bienvenida.

@@ -42,11 +42,7 @@ from src.database.db_manager import (
     obtener_tipos_insumo,
     obtener_insumos_por_tipo,
     obtener_presentaciones,
-    obtener_movimientos_kardex,
-    obtener_id_area,
-    obtener_id_distrito,
-    obtener_id_tipo_servicio,
-    obtener_id_tipo_insumo
+    obtener_movimientos_kardex
 )
 
 def resource_path(relative_path):
@@ -782,9 +778,7 @@ class ReporteDemandaReal:
                 'valign': 'vcenter',
                 'font_size': 9,
                 'text_wrap': True,
-                'font_name': 'Arial',
-                'border': 1,
-                'border_color': '#D3D3D3'
+                'font_name': 'Arial'
             })
 
             header_format = workbook.add_format({
@@ -802,20 +796,22 @@ class ReporteDemandaReal:
 
             data_format = workbook.add_format({
                 'align': 'center',
-                'valign': 'vcenter',
+                'valign': 'vcenter',  # Cambié de 'top' a 'vcenter' para centrado vertical
                 'font_size': 8,
                 'font_name': 'Arial',
                 'border': 1,
                 'border_color': 'black'
             })
 
+            # NUEVO: Formato específico para texto de medicamentos centrado
             text_format = workbook.add_format({
-                'align': 'left',
-                'valign': 'vcenter',
+                'align': 'center',      # Centrado horizontal
+                'valign': 'vcenter',    # Centrado vertical
                 'font_size': 8,
                 'font_name': 'Arial',
                 'border': 1,
-                'border_color': 'black'
+                'border_color': 'black',
+                'text_wrap': True       # Habilitar ajuste automático de texto
             })
 
             # TÍTULOS PRINCIPALES - ABARCAN HASTA LA ÚLTIMA COLUMNA
@@ -907,7 +903,7 @@ class ReporteDemandaReal:
             # DATOS DE LA TABLA - Empezar en fila 10 (sin línea en blanco)
             fila_actual = 9  # Directamente después de los encabezados
 
-            # **PROCESAR DATOS DE INSUMOS CON NUMERACIÓN SECUENCIAL**
+            # **PROCESAR DATOS DE INSUMOS CON NUMERACIÓN SECUENCIAL Y DIVISIÓN DE TEXTO**
             for insumo_key, valores in self.datos.items():
                 # **EXTRAER NÚMERO SECUENCIAL DEL INICIO DE LA CLAVE**
                 if ' - ' in insumo_key:
@@ -919,6 +915,9 @@ class ReporteDemandaReal:
                     codigo = ''
                     nombre_presentacion = insumo_key
 
+                # **APLICAR DIVISIÓN DE TEXTO AL NOMBRE DEL MEDICAMENTO**
+                nombre_dividido = self.dividir_texto_en_lineas(nombre_presentacion, max_caracteres_por_linea=40)
+
                 # Calcular totales
                 total_entregado = valores.get('Total_Entregado', 0)
                 total_no_entregado = valores.get('Total_No_Entregado', 0)
@@ -929,7 +928,7 @@ class ReporteDemandaReal:
                 # FILA ENTREGADO
                 # Combinar celdas verticalmente para código y nombre
                 worksheet.merge_range(fila_actual, 0, fila_actual+1, 0, codigo, data_format)  # **Código secuencial**
-                worksheet.merge_range(fila_actual, 1, fila_actual+1, 1, nombre_presentacion, text_format)  # Nombre
+                worksheet.merge_range(fila_actual, 1, fila_actual+1, 1, nombre_dividido, text_format)  # **Nombre con texto dividido**
 
                 # Movimiento "Entregado"
                 worksheet.write(fila_actual, 2, 'Entregado', data_format)
@@ -962,9 +961,9 @@ class ReporteDemandaReal:
 
                 fila_actual += 2  # Avanzar 2 filas para el siguiente insumo
 
-            # CONFIGURACIÓN DE COLUMNAS
+            # CONFIGURACIÓN DE COLUMNAS - AUMENTAR ANCHO DE COLUMNA B Y AJUSTAR ALTURA DE FILAS
             worksheet.set_column('A:A', 8)   # Código
-            worksheet.set_column('B:B', 25)  # Medicamento
+            worksheet.set_column('B:B', 35)  # Medicamento - AUMENTÉ DE 25 A 35 PARA MÁS ESPACIO
             worksheet.set_column('C:C', 12)  # Movimientos
             
             # Días (columnas más estrechas)
@@ -984,6 +983,16 @@ class ReporteDemandaReal:
             worksheet.set_column(f'{col_demanda_letra}:{col_demanda_letra}', 8)
             worksheet.set_column(f'{col_existencia_letra}:{col_existencia_letra}', 8)
             worksheet.set_column(f'{col_reajuste_letra}:{col_reajuste_letra}', 10)
+
+            # **AJUSTAR ALTURA UNIFORME DE LAS FILAS DE DATOS - CORREGIDO**
+            fila_inicio_datos = 9   # Empezamos en fila 9 (índice base-0), que es fila 10 en Excel
+            fila_fin_datos = fila_actual - 1  # Última fila con datos
+
+            altura_fila_uniforme = 25  # Altura en píxeles
+
+            # Aplicar altura uniforme a todas las filas de datos
+            for fila in range(fila_inicio_datos, fila_fin_datos + 1):
+                worksheet.set_row(fila, altura_fila_uniforme)
 
             # CONFIGURACIÓN DE PÁGINA - TAMAÑO LEGAL
             worksheet.set_landscape()
@@ -1175,6 +1184,16 @@ class ReporteDemandaReal:
             fontSize=9
         )
 
+        # NUEVO: Estilo para texto de celdas con división de líneas - CENTRADO
+        cell_text_style = ParagraphStyle(
+            'CellTextStyle',
+            parent=estilos['Normal'],
+            fontSize=6,
+            leading=7,  # Espaciado entre líneas
+            alignment=1,  # Alineación centrada horizontalmente
+            fontName='Helvetica'
+        )
+
         # Títulos principales
         elementos.append(Paragraph(
             "DIRECCIÓN DEPARTAMENTAL DE REDES INTEGRADAS DE SERVICIOS DE SALUD DE GUATEMALA,",
@@ -1237,7 +1256,7 @@ class ReporteDemandaReal:
 
         data = [encabezado1, encabezado2]
 
-        # **AGREGAR DATOS CON NUMERACIÓN SECUENCIAL**
+        # **AGREGAR DATOS CON NUMERACIÓN SECUENCIAL Y DIVISIÓN DE TEXTO**
         contador = 1
         for (codigo_original, nombre_pres), valores in insumos.items():
             # Calcular totales de entregado y no entregado
@@ -1255,10 +1274,16 @@ class ReporteDemandaReal:
                         total_entregado - 
                         valores['reajuste_negativo'])
 
+            # **APLICAR DIVISIÓN DE TEXTO AL NOMBRE DEL MEDICAMENTO**
+            nombre_dividido = self.dividir_texto_en_lineas(nombre_pres, max_caracteres_por_linea=35)
+            
+            # Crear Paragraph para el nombre del medicamento con división de líneas
+            nombre_paragraph = Paragraph(nombre_dividido, cell_text_style)
+
             # Fila Entregado - **USAR CONTADOR SECUENCIAL**
             fila_entregado = [
                 str(contador),       # **NÚMERO SECUENCIAL EN LUGAR DEL CÓDIGO ORIGINAL**
-                nombre_pres,         # Medicamento
+                nombre_paragraph,    # **USAR PARAGRAPH CON TEXTO DIVIDIDO**
                 'Entregado'
             ]
             for d in dias:
@@ -1295,8 +1320,8 @@ class ReporteDemandaReal:
             data.append(fila_no_entregado)
             contador += 1  # **INCREMENTAR CONTADOR**
 
-        # Anchos de columna
-        col_widths = [0.5*inch, 1.5*inch, 0.8*inch] + [0.3*inch] * len(dias) + [0.5*inch, 0.5*inch, 0.5*inch, 0.5*inch, 0.7*inch]
+        # Anchos de columna - **AUMENTAR ANCHO DE LA COLUMNA DE MEDICAMENTO**
+        col_widths = [0.4*inch, 2.8*inch, 0.7*inch] + [0.25*inch] * len(dias) + [0.5*inch, 0.5*inch, 0.5*inch, 0.5*inch, 0.7*inch]
 
         tabla = Table(data, repeatRows=2, colWidths=col_widths)
 
@@ -1317,6 +1342,9 @@ class ReporteDemandaReal:
             ('FONTSIZE', (0,0), (-1,-1), 6),
             ('GRID', (0,0), (-1,-1), 0.25, colors.black),
             ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
+            # **ALINEACIÓN ESPECIAL PARA LA COLUMNA DE MEDICAMENTOS - CENTRADO**
+            ('ALIGN', (1,2), (1,-1), 'CENTER'),  # Columna medicamento centrada horizontalmente
+            ('VALIGN', (1,2), (1,-1), 'MIDDLE'), # Columna medicamento centrada verticalmente
         ]
 
         # SPAN dinámico para las celdas vacías de cada insumo
@@ -1626,6 +1654,42 @@ class ReporteDemandaReal:
 
         except Exception as e:
             messagebox.showerror("Error", f"Error al mostrar vista previa PDF: {str(e)}")
+    
+    def dividir_texto_en_lineas(self, texto, max_caracteres_por_linea=30):
+        """Divide el texto en múltiples líneas para mejor ajuste"""
+        if not texto:
+            return ""
+        
+        texto = str(texto).strip()
+        palabras = texto.split()
+        lineas = []
+        linea_actual = ""
+        
+        for palabra in palabras:
+            if len(palabra) > max_caracteres_por_linea:
+                if linea_actual:
+                    lineas.append(linea_actual.strip())
+                    linea_actual = ""
+                lineas.append(palabra[:max_caracteres_por_linea-3] + "...")
+                continue
+                
+            if len(linea_actual + " " + palabra) > max_caracteres_por_linea:
+                if linea_actual:
+                    lineas.append(linea_actual.strip())
+                    linea_actual = palabra
+                else:
+                    lineas.append(palabra)
+            else:
+                linea_actual += " " + palabra if linea_actual else palabra
+        
+        if linea_actual:
+            lineas.append(linea_actual.strip())
+        
+        # Limitar a máximo 3 líneas
+        if len(lineas) > 3:
+            lineas = lineas[:2] + [lineas[2][:max_caracteres_por_linea-3] + "..."]
+        
+        return "\n".join(lineas)
     
     def cerrar_ventana(self):
         """

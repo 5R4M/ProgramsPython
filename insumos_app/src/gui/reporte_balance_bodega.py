@@ -865,7 +865,7 @@ class ReporteBalanceBodega:
             def display_page():
                 canvas.delete("all")
                 page = doc.load_page(self.current_page)
-                pix = page.get_pixmap(matrix=fitz.Matrix(1.2, 1.2))
+                pix = page.get_pixmap(matrix=fitz.Matrix(1.5, 1.5))
                 img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
                 tk_img = ImageTk.PhotoImage(image=img)
                 canvas.image = tk_img
@@ -1054,7 +1054,7 @@ class ReporteBalanceBodega:
             for mov in self.movimientos_data:
                 row = [
                     mov.get('codigo_insumo', ''),
-                    mov.get('nombre_insumo', ''),
+                    self.dividir_texto_en_lineas(mov.get('nombre_insumo', ''), 30),
                     mov.get('saldo_anterior', ''),
                     mov.get('entrada_nivel_superior', ''),
                     mov.get('salida_nivel_inferior', ''),
@@ -1066,7 +1066,7 @@ class ReporteBalanceBodega:
             # Anchos ajustados para menos columnas
             colWidths = [
                 0.7*inch,   # Código
-                2.5*inch,   # Descripción del Insumo (más ancho)
+                3.0*inch,   # Descripción del Insumo (más ancho)
                 1.0*inch,   # Saldo Anterior
                 1.0*inch,   # Entradas Nivel Superior
                 1.0*inch,   # Salida Nivel Inferior
@@ -1080,16 +1080,22 @@ class ReporteBalanceBodega:
             table_style = [
                 ('BACKGROUND', (0,0), (-1,0), colors.lightblue),
                 ('TEXTCOLOR', (0,0), (-1,0), colors.black),
+                # **CENTRADO HORIZONTAL Y VERTICAL PARA TODA LA TABLA**
                 ('ALIGN', (0,0), (-1,-1), 'CENTER'),
+                ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
                 ('FONTNAME', (0,0), (-1,0), 'Helvetica-Bold'),
-                ('FONTSIZE', (0,0), (-1,0), 8),  # Tamaño un poco más pequeño para caber mejor
+                ('FONTSIZE', (0,0), (-1,0), 7),
                 ('FONTSIZE', (0,1), (-1,-1), 7),
                 ('GRID', (0,0), (-1,-1), 0.25, colors.grey),
-                ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
-                ('ROWBACKGROUNDS', (0,1), (-1,-1), [colors.whitesmoke, colors.lightgrey]),
-                ('LEFTPADDING', (0,0), (-1,-1), 4),
-                ('RIGHTPADDING', (0,0), (-1,-1), 4),
-                ('WORDWRAP', (0,0), (-1,0), True),  # Permitir ajuste de texto en encabezados
+                ('ROWBACKGROUNDS', (0,0), (-1,0), [colors.lightblue]),
+                # **PADDING AUMENTADO PARA MEJOR APARIENCIA**
+                ('TOPPADDING', (0,0), (-1,0), 8),      # Encabezados
+                ('BOTTOMPADDING', (0,0), (-1,0), 8),   # Encabezados
+                ('TOPPADDING', (0,1), (-1,-1), 6),     # Celdas de datos
+                ('BOTTOMPADDING', (0,1), (-1,-1), 6),  # Celdas de datos
+                ('LEFTPADDING', (0,0), (-1,-1), 4),    # Todas las celdas
+                ('RIGHTPADDING', (0,0), (-1,-1), 4),   # Todas las celdas
+                ('WORDWRAP', (0,0), (-1,-1), True),    # Permitir salto de línea
             ]
 
             table.setStyle(TableStyle(table_style))
@@ -1129,7 +1135,7 @@ class ReporteBalanceBodega:
                     'Código', 'Descripción\ndel Insumo', 'Saldo\nAnterior', 'Entradas\nNivel\nSuperior',
                     'Salida\nNivel\nInferior', 'Reajustes\n(+) (-)', 'Saldo Mes\nSiguiente'
                 ]
-                col_widths = [10, 30, 10, 12, 12, 12, 12]
+                col_widths = [10, 35, 10, 12, 12, 12, 12]
 
                 for hoja_num in range(0, total_movimientos, filas_por_hoja):
                     nombre_hoja = f"BRES_{hoja_num // filas_por_hoja + 1}"
@@ -1193,7 +1199,7 @@ class ReporteBalanceBodega:
                     })
                     cell_format_wrap = workbook.add_format({
                         'align': 'left',
-                        'valign': 'vcenter',
+                        'valign': 'top',
                         'text_wrap': True,
                         'font_size': 9,
                         'border': 1,
@@ -1280,6 +1286,42 @@ class ReporteBalanceBodega:
         except Exception as e:
             messagebox.showerror("Error", f"Error al generar Excel: {str(e)}")
             return None
+
+    def dividir_texto_en_lineas(self, texto, max_caracteres_por_linea=30):
+        """Divide el texto en múltiples líneas para mejor ajuste"""
+        if not texto:
+            return ""
+        
+        texto = str(texto).strip()
+        palabras = texto.split()
+        lineas = []
+        linea_actual = ""
+        
+        for palabra in palabras:
+            if len(palabra) > max_caracteres_por_linea:
+                if linea_actual:
+                    lineas.append(linea_actual.strip())
+                    linea_actual = ""
+                lineas.append(palabra[:max_caracteres_por_linea-3] + "...")
+                continue
+                
+            if len(linea_actual + " " + palabra) > max_caracteres_por_linea:
+                if linea_actual:
+                    lineas.append(linea_actual.strip())
+                    linea_actual = palabra
+                else:
+                    lineas.append(palabra)
+            else:
+                linea_actual += " " + palabra if linea_actual else palabra
+        
+        if linea_actual:
+            lineas.append(linea_actual.strip())
+        
+        # Limitar a máximo 3 líneas
+        if len(lineas) > 3:
+            lineas = lineas[:2] + [lineas[2][:max_caracteres_por_linea-3] + "..."]
+        
+        return "\n".join(lineas)
 
     def cerrar_ventana(self):
         """
