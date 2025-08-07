@@ -1552,108 +1552,355 @@ class ReporteDemandaReal:
             h_scrollbar.pack(side="bottom", fill="x")
 
             # Canvas
-            self.canvas = tk.Canvas(
+            canvas = tk.Canvas(
                 canvas_frame,
                 bg=self.COLORS['white'],
                 yscrollcommand=v_scrollbar.set,
                 xscrollcommand=h_scrollbar.set,
                 highlightthickness=0
             )
-            self.canvas.pack(side="left", fill="both", expand=True)
-            v_scrollbar.config(command=self.canvas.yview)
-            h_scrollbar.config(command=self.canvas.xview)
+            canvas.pack(side="left", fill="both", expand=True)
+            v_scrollbar.config(command=canvas.yview)
+            h_scrollbar.config(command=canvas.xview)
 
-            # --- Abrir PDF y preparar navegación ---
-            self.pdf_document = fitz.open(self.temp_pdf_path)
+            # Abrir PDF y preparar navegación
+            doc = fitz.open(self.temp_pdf_path)
             self.current_page = 0
-            self.total_pages = len(self.pdf_document)
+            self.total_pages = len(doc)
+            self.zoom_level = 1.5
 
-            # --- Frame de navegación alineado a la izquierda (ESTILO REPORTEBRES) ---
-            nav_frame = tk.Frame(control_frame, bg=self.COLORS['white'])
-            nav_frame.pack(side="left", padx=0)
-
-            # --- Función para mostrar página ---
-            def mostrar_pagina():
-                self.canvas.delete("all")
-                page = self.pdf_document.load_page(self.current_page)
-                pix = page.get_pixmap(matrix=fitz.Matrix(1.2, 1.2))
+            def display_page():
+                canvas.delete("all")
+                page = doc.load_page(self.current_page)
+                pix = page.get_pixmap(matrix=fitz.Matrix(self.zoom_level, self.zoom_level))
                 img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
                 tk_img = ImageTk.PhotoImage(image=img)
-                self.canvas.image = tk_img
-                self.canvas.create_image(0, 0, anchor="nw", image=tk_img)
-                self.canvas.config(scrollregion=self.canvas.bbox("all"))
-                self.lbl_pagina.config(text=f"Página {self.current_page + 1} de {self.total_pages}")
+                canvas.image = tk_img
 
-            # --- Función para cambiar de página ---
+                canvas_width = canvas.winfo_width()
+                canvas_height = canvas.winfo_height()
+                x = max((canvas_width - pix.width) // 2, 0)
+                y = max((canvas_height - pix.height) // 2, 0)
+
+                canvas.create_image(x, y, anchor="nw", image=tk_img)
+                canvas.config(scrollregion=canvas.bbox("all"))
+                page_label.config(text=f"Página {self.current_page + 1} de {self.total_pages}")
+                zoom_label.config(text=f"Zoom: {int(self.zoom_level * 100)}%")
+
             def change_page(delta):
-                nueva_pagina = self.current_page + delta
-                if 0 <= nueva_pagina < self.total_pages:
-                    self.current_page = nueva_pagina
-                    mostrar_pagina()
-                # Deshabilitar botones si corresponde
-                self.btn_anterior.config(state="normal" if self.current_page > 0 else "disabled")
-                self.btn_siguiente.config(state="normal" if self.current_page < self.total_pages - 1 else "disabled")
+                self.current_page = max(0, min(self.current_page + delta, self.total_pages - 1))
+                display_page()
+                btn_anterior.config(state="normal" if self.current_page > 0 else "disabled")
+                btn_siguiente.config(state="normal" if self.current_page < self.total_pages - 1 else "disabled")
 
-            # --- Botón página anterior (EXACTAMENTE IGUAL QUE REPORTEBRES) ---
-            self.btn_anterior = tk.Button(
-                nav_frame,
-                text="◀",
-                command=lambda: change_page(-1),
-                bg=self.COLORS['white'],
-                fg=self.COLORS['text_dark'],
-                font=('Segoe UI', 10, 'bold'),
-                relief='flat',
-                borderwidth=0,
-                cursor='hand2',
-                activebackground=self.COLORS['white'],
-                activeforeground=self.COLORS['text_dark'],
-                highlightthickness=0
+            def change_zoom(delta):
+                self.zoom_level = max(0.5, min(self.zoom_level + delta, 3.0))
+                display_page()
+                zoom_label.config(text=f"Zoom: {int(self.zoom_level * 100)}%")
+
+            def fit_to_width():
+                try:
+                    canvas_width = canvas.winfo_width()
+                    if canvas_width > 100:
+                        page = doc.load_page(self.current_page)
+                        zoom = (canvas_width - 20) / page.rect.width
+                        self.zoom_level = max(0.5, min(zoom, 3.0))
+                        display_page()
+                        zoom_label.config(text=f"Zoom: {int(self.zoom_level * 100)}%")
+                except Exception as e:
+                    print(f"Error en fit_to_width: {e}")
+
+            def fit_to_page():
+                try:
+                    canvas_width = canvas.winfo_width()
+                    canvas_height = canvas.winfo_height()
+                    if canvas_width > 100 and canvas_height > 100:
+                        page = doc.load_page(self.current_page)
+                        zoom_x = (canvas_width - 20) / page.rect.width
+                        zoom_y = (canvas_height - 20) / page.rect.height
+                        zoom = min(zoom_x, zoom_y)
+                        self.zoom_level = max(0.5, min(zoom, 3.0))
+                        display_page()
+                        zoom_label.config(text=f"Zoom: {int(self.zoom_level * 100)}%")
+                except Exception as e:
+                    print(f"Error en fit_to_page: {e}")
+
+            def maximizar_reporte():
+                try:
+                    ventana_max = tk.Toplevel(self.parent)
+                    ventana_max.title("Reporte Demanda Real - Vista Maximizada")
+                    ventana_max.configure(bg=self.COLORS['white'])
+                    ventana_max.state('zoomed')
+                    ventana_max.resizable(True, True)
+
+                    main_frame = tk.Frame(ventana_max, bg=self.COLORS['white'])
+                    main_frame.pack(fill="both", expand=True)
+
+                    control_top_frame = tk.Frame(main_frame, bg=self.COLORS['white'])
+                    control_top_frame.pack(fill="x", pady=5)
+
+                    btn_cerrar_max = tk.Button(
+                        control_top_frame, text="✕ Cerrar Vista Maximizada",
+                        command=ventana_max.destroy,
+                        bg=self.COLORS['danger'], fg='white',
+                        font=('Segoe UI', 10, 'bold'), relief='flat', borderwidth=0, cursor='hand2',
+                        pady=8, padx=15
+                    )
+                    btn_cerrar_max.pack(side="right", padx=10)
+
+                    btn_abrir_externo = tk.Button(
+                        control_top_frame, text="📄 Abrir en App Externa",
+                        command=self.abrir_pdf_externo,
+                        bg=self.COLORS['primary'], fg='white',
+                        font=('Segoe UI', 10, 'bold'), relief='flat', borderwidth=0, cursor='hand2',
+                        pady=8, padx=15
+                    )
+                    btn_abrir_externo.pack(side="right", padx=5)
+
+                    canvas_max_frame = tk.Frame(main_frame, bg=self.COLORS['white'])
+                    canvas_max_frame.pack(side="top", fill="both", expand=True, padx=5)
+
+                    h_scroll_max = ttk.Scrollbar(canvas_max_frame, orient="horizontal")
+                    h_scroll_max.pack(side="bottom", fill="x")
+
+                    v_scroll_max = ttk.Scrollbar(canvas_max_frame, orient="vertical")
+                    v_scroll_max.pack(side="right", fill="y")
+
+                    canvas_max = tk.Canvas(
+                        canvas_max_frame,
+                        xscrollcommand=h_scroll_max.set,
+                        yscrollcommand=v_scroll_max.set,
+                        bg=self.COLORS['white'],
+                        highlightthickness=0
+                    )
+                    canvas_max.pack(side="left", fill="both", expand=True)
+
+                    h_scroll_max.config(command=canvas_max.xview)
+                    v_scroll_max.config(command=canvas_max.yview)
+
+                    control_max_frame = tk.Frame(main_frame, bg=self.COLORS['white'])
+                    control_max_frame.pack(fill="x", side="bottom", pady=5)
+
+                    current_page_max = [0]
+                    zoom_level_max = [1.0]
+
+                    def display_page_max():
+                        canvas_max.delete("all")
+                        page = doc.load_page(current_page_max[0])
+                        pix = page.get_pixmap(matrix=fitz.Matrix(zoom_level_max[0], zoom_level_max[0]))
+                        img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
+                        tk_img = ImageTk.PhotoImage(image=img)
+                        canvas_max.image = tk_img
+
+                        canvas_width = canvas_max.winfo_width()
+                        canvas_height = canvas_max.winfo_height()
+                        x = max((canvas_width - pix.width) // 2, 0)
+                        y = max((canvas_height - pix.height) // 2, 0)
+
+                        canvas_max.create_image(x, y, anchor="nw", image=tk_img)
+                        canvas_max.config(scrollregion=canvas_max.bbox("all"))
+
+                    def change_page_max(delta):
+                        current_page_max[0] = max(0, min(current_page_max[0] + delta, self.total_pages - 1))
+                        display_page_max()
+                        page_label_max.config(text=f"Página {current_page_max[0] + 1} de {self.total_pages}")
+
+                    def change_zoom_max(delta):
+                        zoom_level_max[0] = max(0.5, min(zoom_level_max[0] + delta, 4.0))
+                        display_page_max()
+                        zoom_label_max.config(text=f"Zoom: {int(zoom_level_max[0] * 100)}%")
+
+                    def fit_to_page_max():
+                        try:
+                            canvas_width = canvas_max.winfo_width()
+                            canvas_height = canvas_max.winfo_height()
+                            if canvas_width > 100 and canvas_height > 100:
+                                page = doc.load_page(current_page_max[0])
+                                zoom_x = (canvas_width - 20) / page.rect.width
+                                zoom_y = (canvas_height - 20) / page.rect.height
+                                zoom = min(zoom_x, zoom_y)
+                                zoom_level_max[0] = max(0.5, min(zoom, 4.0))
+                                display_page_max()
+                                zoom_label_max.config(text=f"Zoom: {int(zoom_level_max[0] * 100)}%")
+                        except Exception as e:
+                            print(f"Error en fit_to_page_max: {e}")
+
+                    btn_prev_max = tk.Button(
+                        control_max_frame, text="◀◀ Anterior", command=lambda: change_page_max(-1),
+                        bg=self.COLORS['white'], fg=self.COLORS['text_dark'],
+                        font=('Segoe UI', 11, 'bold'), relief='flat', borderwidth=1, cursor='hand2',
+                        pady=5, padx=15
+                    )
+                    btn_prev_max.pack(side="left", padx=5)
+
+                    page_label_max = tk.Label(
+                        control_max_frame, text=f"Página 1 de {self.total_pages}",
+                        bg=self.COLORS['white'], fg=self.COLORS['text_dark'],
+                        font=('Segoe UI', 11, 'bold')
+                    )
+                    page_label_max.pack(side="left", padx=10)
+
+                    btn_next_max = tk.Button(
+                        control_max_frame, text="Siguiente ▶▶", command=lambda: change_page_max(1),
+                        bg=self.COLORS['white'], fg=self.COLORS['text_dark'],
+                        font=('Segoe UI', 11, 'bold'), relief='flat', borderwidth=1, cursor='hand2',
+                        pady=5, padx=15
+                    )
+                    btn_next_max.pack(side="left", padx=5)
+
+                    btn_zoom_out_max = tk.Button(
+                        control_max_frame, text="🔍− Alejar", command=lambda: change_zoom_max(-0.25),
+                        bg=self.COLORS['white'], fg=self.COLORS['text_dark'],
+                        font=('Segoe UI', 10, 'bold'), relief='flat', borderwidth=1, cursor='hand2',
+                        pady=5, padx=10
+                    )
+                    btn_zoom_out_max.pack(side="left", padx=5)
+
+                    zoom_label_max = tk.Label(
+                        control_max_frame, text=f"Zoom: {int(zoom_level_max[0] * 100)}%",
+                        bg=self.COLORS['white'], fg=self.COLORS['text_dark'],
+                        font=('Segoe UI', 10, 'bold')
+                    )
+                    zoom_label_max.pack(side="left", padx=5)
+
+                    btn_zoom_in_max = tk.Button(
+                        control_max_frame, text="🔍+ Acercar", command=lambda: change_zoom_max(0.25),
+                        bg=self.COLORS['white'], fg=self.COLORS['text_dark'],
+                        font=('Segoe UI', 10, 'bold'), relief='flat', borderwidth=1, cursor='hand2',
+                        pady=5, padx=10
+                    )
+                    btn_zoom_in_max.pack(side="left", padx=5)
+
+                    ventana_max.bind("<Configure>", lambda e: fit_to_page_max())
+
+                    display_page_max()
+
+                    canvas_max.bind("<MouseWheel>", lambda e: canvas_max.yview_scroll(int(-1*(e.delta/120)), "units"))
+
+                    ventana_max.focus_force()
+                    ventana_max.grab_set()
+
+                except Exception as e:
+                    messagebox.showerror("Error", f"Error al maximizar reporte: {str(e)}")
+
+            # Controles normales
+
+            btn_anterior = tk.Button(
+                control_frame, text="◀", command=lambda: change_page(-1),
+                bg=self.COLORS['white'], fg=self.COLORS['text_dark'],
+                font=('Segoe UI', 10, 'bold'), relief='flat', borderwidth=0, cursor='hand2',
+                activebackground=self.COLORS['white'], activeforeground=self.COLORS['text_dark']
             )
-            self.btn_anterior.pack(side="left", padx=(10, 2), pady=2)
+            btn_anterior.pack(side="left", padx=(10, 2), pady=2)
 
-            # --- Label de información de página (EXACTAMENTE IGUAL QUE REPORTEBRES) ---
-            self.lbl_pagina = tk.Label(
-                nav_frame,
-                text=f"Página {self.current_page + 1} de {self.total_pages}",
-                bg=self.COLORS['white'],
-                fg=self.COLORS['text_dark'],
+            page_label = tk.Label(
+                control_frame, text=f"Página 1 de {self.total_pages}",
+                bg=self.COLORS['white'], fg=self.COLORS['text_dark'],
                 font=('Segoe UI', 10, 'bold')
             )
-            self.lbl_pagina.pack(side="left", padx=2, pady=2)
+            page_label.pack(side="left", padx=2, pady=2)
 
-            # --- Botón página siguiente (EXACTAMENTE IGUAL QUE REPORTEBRES) ---
-            self.btn_siguiente = tk.Button(
-                nav_frame,
-                text="▶",
-                command=lambda: change_page(1),
-                bg=self.COLORS['white'],
-                fg=self.COLORS['text_dark'],
-                font=('Segoe UI', 10, 'bold'),
-                relief='flat',
-                borderwidth=0,
-                cursor='hand2',
-                activebackground=self.COLORS['white'],
-                activeforeground=self.COLORS['text_dark'],
-                highlightthickness=0
+            btn_siguiente = tk.Button(
+                control_frame, text="▶", command=lambda: change_page(1),
+                bg=self.COLORS['white'], fg=self.COLORS['text_dark'],
+                font=('Segoe UI', 10, 'bold'), relief='flat', borderwidth=0, cursor='hand2',
+                activebackground=self.COLORS['white'], activeforeground=self.COLORS['text_dark']
             )
-            self.btn_siguiente.pack(side="left", padx=2, pady=2)
+            btn_siguiente.pack(side="left", padx=2, pady=2)
 
-            # --- Mostrar la primera página y actualizar botones ---
-            mostrar_pagina()
-            self.btn_anterior.config(state="disabled")
-            if self.total_pages <= 1:
-                self.btn_siguiente.config(state="disabled")
-            else:
-                self.btn_siguiente.config(state="normal")
+            separator = tk.Label(
+                control_frame, text="|",
+                bg=self.COLORS['white'], fg=self.COLORS['text_dark'],
+                font=('Segoe UI', 12, 'bold')
+            )
+            separator.pack(side="left", padx=5, pady=2)
 
-            # --- Scroll con mouse wheel ---
+            btn_zoom_out = tk.Button(
+                control_frame, text="🔍−", command=lambda: change_zoom(-0.25),
+                bg=self.COLORS['white'], fg=self.COLORS['text_dark'],
+                font=('Segoe UI', 9, 'bold'), relief='flat', borderwidth=0, cursor='hand2'
+            )
+            btn_zoom_out.pack(side="left", padx=2, pady=2)
+
+            zoom_label = tk.Label(
+                control_frame, text=f"Zoom: {int(self.zoom_level * 100)}%",
+                bg=self.COLORS['white'], fg=self.COLORS['text_dark'],
+                font=('Segoe UI', 9, 'bold')
+            )
+            zoom_label.pack(side="left", padx=2, pady=2)
+
+            btn_zoom_in = tk.Button(
+                control_frame, text="🔍+", command=lambda: change_zoom(0.25),
+                bg=self.COLORS['white'], fg=self.COLORS['text_dark'],
+                font=('Segoe UI', 9, 'bold'), relief='flat', borderwidth=0, cursor='hand2'
+            )
+            btn_zoom_in.pack(side="left", padx=2, pady=2)
+
+            separator2 = tk.Label(
+                control_frame, text="|",
+                bg=self.COLORS['white'], fg=self.COLORS['text_dark'],
+                font=('Segoe UI', 12, 'bold')
+            )
+            separator2.pack(side="left", padx=5, pady=2)
+
+            btn_fit_width = tk.Button(
+                control_frame, text="↔ Ajustar Ancho", command=fit_to_width,
+                bg=self.COLORS['white'], fg=self.COLORS['text_dark'],
+                font=('Segoe UI', 9, 'bold'), relief='flat', borderwidth=0, cursor='hand2'
+            )
+            btn_fit_width.pack(side="left", padx=2, pady=2)
+
+            btn_fit_page = tk.Button(
+                control_frame, text="⛶ Ajustar Página", command=fit_to_page,
+                bg=self.COLORS['white'], fg=self.COLORS['text_dark'],
+                font=('Segoe UI', 9, 'bold'), relief='flat', borderwidth=0, cursor='hand2'
+            )
+            btn_fit_page.pack(side="left", padx=2, pady=2)
+
+            btn_maximizar = tk.Button(
+                control_frame, text="🔳 Maximizar", command=maximizar_reporte,
+                bg=self.COLORS['primary'], fg='white',
+                font=('Segoe UI', 10, 'bold'), relief='flat', borderwidth=0, cursor='hand2',
+                pady=4, padx=12
+            )
+            btn_maximizar.pack(side="left", padx=5, pady=2)
+
+            # Inicializar estado botones
+            btn_anterior.config(state="disabled")
+            btn_siguiente.config(state="normal" if self.total_pages > 1 else "disabled")
+
+            display_page()
+
             def on_mousewheel(event):
-                if self.canvas.winfo_exists():
-                    self.canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
-            self.canvas.bind("<MouseWheel>", on_mousewheel)
+                if canvas.winfo_exists():
+                    canvas.yview_scroll(int(-1*(event.delta/120)), "units")
+            canvas.bind("<MouseWheel>", on_mousewheel)
 
         except Exception as e:
+            import traceback
+            error_detallado = traceback.format_exc()
+            print(f"Error detallado:\n{error_detallado}")
             messagebox.showerror("Error", f"Error al mostrar vista previa PDF: {str(e)}")
+    
+    def abrir_pdf_externo(self):
+        """Abre el PDF en una aplicación externa del sistema"""
+        try:
+            if not hasattr(self, 'temp_pdf_path') or not os.path.exists(self.temp_pdf_path):
+                messagebox.showerror("Error", "No hay un PDF generado para abrir.")
+                return
+                
+            import sys
+            import subprocess
+            
+            if sys.platform.startswith('win'):
+                os.startfile(self.temp_pdf_path)
+            elif sys.platform.startswith('darwin'):  # macOS
+                subprocess.run(['open', self.temp_pdf_path], check=True)
+            else:  # Linux
+                subprocess.run(['xdg-open', self.temp_pdf_path], check=True)
+                
+        except Exception as e:
+            messagebox.showerror("Error", f"No se pudo abrir el PDF: {str(e)}")
     
     def dividir_texto_en_lineas(self, texto, max_caracteres_por_linea=30):
         """Divide el texto en múltiples líneas para mejor ajuste"""

@@ -1624,18 +1624,14 @@ def obtener_demanda_por_meses(codigo_insumo, fecha_inicio, fecha_fin, distrito=N
 def obtener_movimientos_bres(fecha_inicio, fecha_fin, area_nombre=None, distrito_nombre=None, tipo_servicio_desc=None,
                                servicio_nombre=None, tipo_insumo_desc=None, insumo_nombre=None,
                                presentacion_nombre=None):
-    """
-    Obtiene movimientos BRES filtrados por nivel exacto según cómo se guardan los datos
-    """
-    
+    conn = conectar_db()
+    if not conn:
+        return []
+
     try:
-        conn = conectar_db()
-        if not conn:
-            return []
-            
         conn.row_factory = sqlite3.Row
         cursor = conn.cursor()
-        
+
         query = """
         SELECT
             m.fecha_registro AS fecha,
@@ -1661,40 +1657,62 @@ def obtener_movimientos_bres(fecha_inicio, fecha_fin, area_nombre=None, distrito
         LEFT JOIN presentacion p ON m.presentacion_id = p.id
         LEFT JOIN distrito d_salida ON m.salida_distrito_id = d_salida.id
         LEFT JOIN servicio s_salida ON m.salida_servicio_id = s_salida.id
-        
+
         LEFT JOIN area a ON m.area_id = a.id
         LEFT JOIN distrito d ON m.distrito_id = d.id
         LEFT JOIN servicio s ON m.servicio_id = s.id
         LEFT JOIN tipo_servicio ts ON s.id_tipo_servicio = ts.id
-        
+
         WHERE m.fecha_registro BETWEEN ? AND ?
-        AND tm.descripcion IN ('ENTREGADO', 'NO ENTREGADO', 'INVENTARIO INICIAL',
-                            'ENTRADA NIVEL SUPERIOR', 'SALIDA NIVEL INFERIOR',
-                            'REAJUSTE POSITIVO', 'REAJUSTE NEGATIVO')
         """
-        
+
         params = [fecha_inicio, fecha_fin]
-        
-        # Determinar el nivel más específico seleccionado
+
+        # **LÓGICA DE FILTRADO MEJORADA PARA CONSOLIDACIÓN**
         if servicio_nombre:
-            # NIVEL SERVICIO: movimientos con servicio_id específico
+            # Nivel SERVICIO: solo movimientos del servicio específico
             query += " AND s.nombre = ?"
             params.append(servicio_nombre)
-            
+
         elif tipo_servicio_desc:
-            # NIVEL TIPO SERVICIO: movimientos con tipo de servicio específico
+            # Nivel TIPO SERVICIO: todos los servicios del tipo
             query += " AND ts.descripcion = ?"
             params.append(tipo_servicio_desc)
-            
+
         elif distrito_nombre:
-            # NIVEL DISTRITO: movimientos ingresados en distrito (tienen distrito_id pero NO servicio_id)
-            query += " AND d.nombre = ? AND m.servicio_id IS NULL"
-            params.append(distrito_nombre)
-            
+            # Nivel DISTRITO: incluir movimientos del distrito Y de todos sus servicios
+            query += """ AND (
+                d.nombre = ? OR 
+                s.id IN (
+                    SELECT serv.id 
+                    FROM servicio serv 
+                    INNER JOIN tipo_servicio ts_inner ON serv.id_tipo_servicio = ts_inner.id 
+                    INNER JOIN distrito d_inner ON ts_inner.id_distrito = d_inner.id 
+                    WHERE d_inner.nombre = ?
+                )
+            )"""
+            params.extend([distrito_nombre, distrito_nombre])
+
         elif area_nombre:
-            # NIVEL ÁREA: movimientos ingresados en área (tienen area_id pero NO distrito_id)
-            query += " AND a.nombre = ? AND m.distrito_id IS NULL"
-            params.append(area_nombre)
+            # Nivel ÁREA: incluir movimientos del área Y de todos sus distritos Y servicios
+            query += """ AND (
+                a.nombre = ? OR 
+                d.id IN (
+                    SELECT dist.id 
+                    FROM distrito dist 
+                    INNER JOIN area a_inner ON dist.id_area = a_inner.id 
+                    WHERE a_inner.nombre = ?
+                ) OR
+                s.id IN (
+                    SELECT serv.id 
+                    FROM servicio serv 
+                    INNER JOIN tipo_servicio ts_inner ON serv.id_tipo_servicio = ts_inner.id 
+                    INNER JOIN distrito d_inner ON ts_inner.id_distrito = d_inner.id 
+                    INNER JOIN area a_inner ON d_inner.id_area = a_inner.id 
+                    WHERE a_inner.nombre = ?
+                )
+            )"""
+            params.extend([area_nombre, area_nombre, area_nombre])
 
         # Filtros adicionales opcionales
         if tipo_insumo_desc:
@@ -1710,12 +1728,12 @@ def obtener_movimientos_bres(fecha_inicio, fecha_fin, area_nombre=None, distrito
             params.append(presentacion_nombre)
 
         query += " ORDER BY m.fecha_registro"
-        
+
         cursor.execute(query, params)
         rows = cursor.fetchall()
-        
+
         movimientos = [dict(row) for row in rows]
-            
+
         return movimientos
 
     except Exception as e:

@@ -188,128 +188,235 @@ class ReporteBres:
             self.icon_close = None
     
     def procesar_datos_bres(self, movimientos_raw, fecha_ini, fecha_fin):
-        """
-        Procesa los datos para generar el reporte BRES con cantidades individuales por insumo.
-        Los movimientos ya vienen filtrados por nivel desde la consulta SQL.
-        """
-        insumos_dict = {}
-        movimientos_individuales = {}
+        datos_agrupados = {}
 
-        # Procesar TODOS los movimientos recibidos (ya están filtrados por la consulta SQL)
+        nivel_area = self.combo_area.get().strip()
+        nivel_distrito = self.combo_distrito.get().strip()
+        nivel_tipo_servicio = self.combo_tipo_servicio.get().strip()
+        nivel_servicio = self.combo_servicio.get().strip()
+
         for mov in movimientos_raw:
-            # Usar el ID del insumo como código único
-            codigo_insumo = str(mov.get('codigo_insumo', ''))
-            nombre_insumo = mov.get('nombre_insumo', '')
+            codigo = str(mov.get('codigo_insumo', ''))
+            nombre = mov.get('nombre_insumo', '')
+            area = mov.get('area_nombre', '')
+            distrito = mov.get('distrito_nombre', '')
+            tipo_servicio = mov.get('tipo_servicio_descripcion', '')
+            servicio = mov.get('servicio_nombre', '')
             tipo_movimiento = mov.get('tipo_movimiento', '').upper()
-
-            # Obtener cantidad
             cantidad = 0
-            if mov.get('cantidad') is not None:
-                try:
-                    cantidad = float(mov['cantidad'])
-                except (ValueError, TypeError):
-                    cantidad = 0
+            try:
+                cantidad = float(mov.get('cantidad', 0))
+            except:
+                cantidad = 0
 
-            # Inicializar diccionario del insumo si no existe
-            if codigo_insumo not in insumos_dict:
-                insumos_dict[codigo_insumo] = {
-                    'codigo_insumo': codigo_insumo,
-                    'nombre_insumo': nombre_insumo,
-                    'saldo_anterior': 0,
-                    'entrada_nivel_superior': 0,
-                    'entregado_usuario': 0,
-                    'no_entregado': 0,
-                    'salida_nivel_inferior': 0,  # AGREGADO
-                    'reajuste_positivo': 0,
-                    'reajuste_negativo': 0,
+            if codigo not in datos_agrupados:
+                datos_agrupados[codigo] = {
+                    'nombre_insumo': nombre,
+                    'saldo_anterior_area': 0,
+                    'saldo_anterior_distritos': 0,
+                    'saldo_anterior_servicios': 0,
+                    'entradas_nivel_superior_area': 0,
+                    'entradas_nivel_superior_distritos': 0,
+                    'entradas_nivel_superior_servicios': 0,
+                    'salidas_nivel_inferior_area': 0,
+                    'salidas_nivel_inferior_distritos': 0,
+                    'entregado_distritos': 0,
+                    'entregado_servicios': 0,
+                    'no_entregado_distritos': 0,
+                    'no_entregado_servicios': 0,
+                    'reajustes_area': 0,
+                    'reajustes_distritos': 0,
+                    'reajustes_servicios': 0,
                 }
 
-            # SUMAR cantidades por tipo de movimiento para cada insumo individual
+            # **NUEVA LÓGICA DE CLASIFICACIÓN MEJORADA**
+            # Determinar el nivel del movimiento
+            es_nivel_area = (area and not distrito and not tipo_servicio and not servicio)
+            es_nivel_distrito = (distrito and not tipo_servicio and not servicio)
+            es_nivel_servicio = (servicio)
+
+            # Acumular saldo anterior (inventario inicial)
             if tipo_movimiento == 'INVENTARIO INICIAL':
-                insumos_dict[codigo_insumo]['saldo_anterior'] += cantidad
+                if es_nivel_area:
+                    datos_agrupados[codigo]['saldo_anterior_area'] += cantidad
+                elif es_nivel_distrito:
+                    datos_agrupados[codigo]['saldo_anterior_distritos'] += cantidad
+                elif es_nivel_servicio:
+                    datos_agrupados[codigo]['saldo_anterior_servicios'] += cantidad
+
+            # Acumular entradas nivel superior
             elif tipo_movimiento == 'ENTRADA NIVEL SUPERIOR':
-                insumos_dict[codigo_insumo]['entrada_nivel_superior'] += cantidad
+                if es_nivel_area:
+                    datos_agrupados[codigo]['entradas_nivel_superior_area'] += cantidad
+                elif es_nivel_distrito:
+                    datos_agrupados[codigo]['entradas_nivel_superior_distritos'] += cantidad
+                elif es_nivel_servicio:
+                    datos_agrupados[codigo]['entradas_nivel_superior_servicios'] += cantidad
+
+            # Acumular salidas nivel inferior
+            elif tipo_movimiento == 'SALIDA NIVEL INFERIOR':
+                if es_nivel_area:
+                    datos_agrupados[codigo]['salidas_nivel_inferior_area'] += cantidad
+                elif es_nivel_distrito:
+                    datos_agrupados[codigo]['salidas_nivel_inferior_distritos'] += cantidad
+
+            # Acumular entregados
             elif tipo_movimiento == 'ENTREGADO':
-                insumos_dict[codigo_insumo]['entregado_usuario'] += cantidad
+                if es_nivel_distrito:
+                    datos_agrupados[codigo]['entregado_distritos'] += cantidad
+                elif es_nivel_servicio:
+                    datos_agrupados[codigo]['entregado_servicios'] += cantidad
+
+            # Acumular no entregados
             elif tipo_movimiento == 'NO ENTREGADO':
-                insumos_dict[codigo_insumo]['no_entregado'] += cantidad
-            elif tipo_movimiento == 'SALIDA NIVEL INFERIOR':  # AGREGADO
-                insumos_dict[codigo_insumo]['salida_nivel_inferior'] += cantidad
+                if es_nivel_distrito:
+                    datos_agrupados[codigo]['no_entregado_distritos'] += cantidad
+                elif es_nivel_servicio:
+                    datos_agrupados[codigo]['no_entregado_servicios'] += cantidad
+
+            # Acumular reajustes positivos
             elif tipo_movimiento == 'REAJUSTE POSITIVO':
-                insumos_dict[codigo_insumo]['reajuste_positivo'] += cantidad
+                if es_nivel_area:
+                    datos_agrupados[codigo]['reajustes_area'] += cantidad
+                elif es_nivel_distrito:
+                    datos_agrupados[codigo]['reajustes_distritos'] += cantidad
+                elif es_nivel_servicio:
+                    datos_agrupados[codigo]['reajustes_servicios'] += cantidad
+
+            # Acumular reajustes negativos
             elif tipo_movimiento == 'REAJUSTE NEGATIVO':
-                insumos_dict[codigo_insumo]['reajuste_negativo'] += cantidad
+                if es_nivel_area:
+                    datos_agrupados[codigo]['reajustes_area'] -= cantidad
+                elif es_nivel_distrito:
+                    datos_agrupados[codigo]['reajustes_distritos'] -= cantidad
+                elif es_nivel_servicio:
+                    datos_agrupados[codigo]['reajustes_servicios'] -= cantidad
 
-            # Guardar movimientos individuales para referencia
-            if codigo_insumo not in movimientos_individuales:
-                movimientos_individuales[codigo_insumo] = {}
-            if tipo_movimiento not in movimientos_individuales[codigo_insumo]:
-                movimientos_individuales[codigo_insumo][tipo_movimiento] = []
-            movimientos_individuales[codigo_insumo][tipo_movimiento].append({
-                'cantidad': cantidad,
-                'fecha': mov.get('fecha'),
-                'referencia': mov.get('referencia'),
-                'lote': mov.get('lote'),
-                'fecha_vencimiento': mov.get('fecha_vencimiento'),
-                'observaciones': mov.get('observaciones'),
-            })
-
-        # Solo usar saldo mes anterior si NO hay inventario inicial
-        for codigo, datos in insumos_dict.items():
-            if datos['saldo_anterior'] == 0:
-                datos['saldo_anterior'] = self.obtener_saldo_mes_anterior(codigo, fecha_ini)
-
-        # Calcular datos finales y preparar lista para reporte
+        # **NUEVA LÓGICA DE CONSOLIDACIÓN SEGÚN EL NIVEL SELECCIONADO**
         datos_procesados = []
 
-        for codigo, datos in insumos_dict.items():
-            # Calcular demanda
-            demanda = datos['entregado_usuario'] + datos['no_entregado']
+        for codigo, datos in datos_agrupados.items():
             
-            # Calcular reajustes netos
-            reajustes_netos = datos['reajuste_positivo'] - datos['reajuste_negativo']
-            
-            # **CÁLCULO CORRECTO DEL SALDO MES SIGUIENTE - INCLUYENDO SALIDA NIVEL INFERIOR**
+            # **NIVEL SERVICIO ESPECÍFICO**: Solo datos del servicio
+            if nivel_servicio:
+                saldo_anterior_total = datos['saldo_anterior_servicios']
+                entradas_nivel_superior_total = datos['entradas_nivel_superior_servicios']
+                entregado_total = datos['entregado_servicios']
+                no_entregado_total = datos['no_entregado_servicios']
+                reajustes_total = datos['reajustes_servicios']
+
+            # **NIVEL TIPO SERVICIO**: Datos de todos los servicios del tipo
+            elif nivel_tipo_servicio:
+                saldo_anterior_total = datos['saldo_anterior_servicios']
+                entradas_nivel_superior_total = datos['entradas_nivel_superior_servicios']
+                entregado_total = datos['entregado_servicios']
+                no_entregado_total = datos['no_entregado_servicios']
+                reajustes_total = datos['reajustes_servicios']
+
+            # **NIVEL DISTRITO**: Consolidar distrito + todos sus servicios
+            elif nivel_distrito:
+                # Saldo anterior: distrito + servicios
+                saldo_anterior_total = (datos['saldo_anterior_distritos'] + 
+                                    datos['saldo_anterior_servicios'])
+                
+                # Entradas nivel superior: (distrito + servicios) - salidas nivel inferior
+                entradas_nivel_superior_total = (
+                    datos['entradas_nivel_superior_distritos'] + 
+                    datos['entradas_nivel_superior_servicios'] -
+                    datos['salidas_nivel_inferior_distritos']
+                )
+                
+                # Entregado: distrito + servicios
+                entregado_total = (datos['entregado_distritos'] + 
+                                datos['entregado_servicios'])
+                
+                # No entregado: distrito + servicios
+                no_entregado_total = (datos['no_entregado_distritos'] + 
+                                    datos['no_entregado_servicios'])
+                
+                # Reajustes: distrito + servicios
+                reajustes_total = (datos['reajustes_distritos'] + 
+                                datos['reajustes_servicios'])
+
+            # **NIVEL ÁREA**: Consolidar área + todos sus distritos + todos los servicios
+            elif nivel_area:
+                # Saldo anterior: área + distritos + servicios
+                saldo_anterior_total = (datos['saldo_anterior_area'] + 
+                                    datos['saldo_anterior_distritos'] + 
+                                    datos['saldo_anterior_servicios'])
+                
+                # Entradas nivel superior: (área + distritos) - salidas nivel inferior
+                entradas_nivel_superior_total = (
+                    datos['entradas_nivel_superior_area'] + 
+                    datos['entradas_nivel_superior_distritos'] -
+                    datos['salidas_nivel_inferior_area']
+                )
+                
+                # Entregado: distritos + servicios (área no entrega directamente)
+                entregado_total = (datos['entregado_distritos'] + 
+                                datos['entregado_servicios'])
+                
+                # No entregado: distritos + servicios
+                no_entregado_total = (datos['no_entregado_distritos'] + 
+                                    datos['no_entregado_servicios'])
+                
+                # Reajustes: área + distritos + servicios
+                reajustes_total = (datos['reajustes_area'] + 
+                                datos['reajustes_distritos'] + 
+                                datos['reajustes_servicios'])
+
+            # **SIN FILTRO**: Consolidar todo
+            else:
+                saldo_anterior_total = (datos['saldo_anterior_area'] + 
+                                    datos['saldo_anterior_distritos'] + 
+                                    datos['saldo_anterior_servicios'])
+                entradas_nivel_superior_total = (datos['entradas_nivel_superior_area'] + 
+                                                datos['entradas_nivel_superior_distritos'] + 
+                                                datos['entradas_nivel_superior_servicios'] -
+                                                datos['salidas_nivel_inferior_area'] -
+                                                datos['salidas_nivel_inferior_distritos'])
+                entregado_total = (datos['entregado_distritos'] + 
+                                datos['entregado_servicios'])
+                no_entregado_total = (datos['no_entregado_distritos'] + 
+                                    datos['no_entregado_servicios'])
+                reajustes_total = (datos['reajustes_area'] + 
+                                datos['reajustes_distritos'] + 
+                                datos['reajustes_servicios'])
+
+            # Calcular saldo mes siguiente
             saldo_mes_siguiente = (
-                datos['saldo_anterior'] +
-                datos['entrada_nivel_superior'] -
-                datos['entregado_usuario'] -
-                datos['salida_nivel_inferior'] +  # AGREGADO: restar salida nivel inferior
-                reajustes_netos
+                saldo_anterior_total +
+                entradas_nivel_superior_total -
+                entregado_total +
+                reajustes_total
             )
-            
-            # **EXISTENCIA FÍSICA EN BODEGA = SALDO MES SIGUIENTE**
-            existencia_fisica = saldo_mes_siguiente
-            
-            # **PROMEDIO MENSUAL DE DEMANDA REAL (3 MESES)**
+
+            # Calcular demanda total
+            demanda_total = entregado_total + no_entregado_total
+
+            # Calcular métricas adicionales
             promedio_mensual = self.calcular_promedio_demanda_real(codigo, fecha_ini, fecha_fin)
-            
-            # **MESES DE EXISTENCIA DISPONIBLE**
-            meses_existencia = existencia_fisica / promedio_mensual if promedio_mensual > 0 else 0
-            
-            # **CANTIDAD MÁXIMA**
+            meses_existencia = saldo_mes_siguiente / promedio_mensual if promedio_mensual > 0 else 0
             nivel_maximo = float(self.nivel_maximo_var.get()) if self.nivel_maximo_var.get() else 6
             cantidad_maxima = promedio_mensual * nivel_maximo
-            
-            # **CANTIDAD A SOLICITAR** (permitir valores negativos)
-            cantidad_solicitar = cantidad_maxima - existencia_fisica
+            cantidad_solicitar = cantidad_maxima - saldo_mes_siguiente
 
             datos_procesados.append({
                 'codigo_insumo': codigo,
                 'nombre_insumo': datos['nombre_insumo'],
-                'saldo_anterior': self.formato_float(datos['saldo_anterior']),
-                'entradas_nivel_superior': self.formato_float(datos['entrada_nivel_superior']),
-                'entregado_usuario': self.formato_float(datos['entregado_usuario']),
-                'no_entregado': self.formato_float(datos['no_entregado']),
-                'demanda': self.formato_float(demanda),
-                'reajustes': f"+{self.formato_float(datos['reajuste_positivo'])} -{self.formato_float(datos['reajuste_negativo'])}" if datos['reajuste_positivo'] > 0 or datos['reajuste_negativo'] > 0 else "0.00",
+                'saldo_anterior': self.formato_float(saldo_anterior_total),
+                'entradas_nivel_superior': self.formato_float(entradas_nivel_superior_total),
+                'entregado_usuario': self.formato_float(entregado_total),
+                'no_entregado': self.formato_float(no_entregado_total),
+                'demanda': self.formato_float(demanda_total),
+                'reajustes': f"{'+' if reajustes_total >= 0 else ''}{self.formato_float(reajustes_total)}",
                 'saldo_mes_siguiente': self.formato_float(saldo_mes_siguiente),
-                'existencia_fisica': self.formato_float(existencia_fisica),
+                'existencia_fisica': self.formato_float(saldo_mes_siguiente),
                 'promedio_mensual': self.formato_float(promedio_mensual),
                 'meses_existencia': self.formato_float(meses_existencia),
                 'cantidad_maxima': self.formato_float(cantidad_maxima),
                 'cantidad_solicitar': self.formato_float(cantidad_solicitar),
-                'movimientos_individuales': movimientos_individuales.get(codigo, {})
+                'movimientos_individuales': {}
             })
 
         return datos_procesados
@@ -371,7 +478,7 @@ class ReporteBres:
     def obtener_demanda_mes(self, codigo_insumo, fecha_inicio, fecha_fin):
         """
         Obtiene la demanda total de un insumo en un período específico
-        aplicando filtro de nivel seleccionado con lógica flexible
+        aplicando filtro de nivel seleccionado con lógica de consolidación
         """
         try:
             conn = conectar_db()
@@ -390,7 +497,6 @@ class ReporteBres:
             SELECT SUM(m.cantidad) as total_demanda
             FROM movimiento m
             INNER JOIN tipo_movimiento tm ON m.tipo_movimiento_id = tm.id
-            -- JOINs directos con los IDs guardados en el movimiento
             LEFT JOIN area a_directa ON m.area_id = a_directa.id
             LEFT JOIN distrito d_directa ON m.distrito_id = d_directa.id
             LEFT JOIN servicio s_directa ON m.servicio_id = s_directa.id
@@ -402,26 +508,56 @@ class ReporteBres:
             
             params = [int(codigo_insumo), fecha_inicio.strftime('%Y-%m-%d'), fecha_fin.strftime('%Y-%m-%d')]
             
-            # **APLICAR FILTRO DE NIVEL SELECCIONADO CON LÓGICA FLEXIBLE**
+            # **LÓGICA DE FILTRADO SEGÚN NIVEL SELECCIONADO**
             if servicio_seleccionado:
-                # Nivel SERVICIO: filtrar por área, distrito y servicio
+                # Nivel SERVICIO: solo el servicio específico
                 query += " AND a_directa.nombre = ? AND d_directa.nombre = ? AND s_directa.nombre = ?"
                 params.extend([area_seleccionada, distrito_seleccionado, servicio_seleccionado])
                 
             elif tipo_servicio_seleccionado:
-                # Nivel TIPO SERVICIO: filtrar por área, distrito y tipo servicio (sin servicio específico)
-                query += " AND a_directa.nombre = ? AND d_directa.nombre = ? AND ts_directa.descripcion = ? AND s_directa.nombre IS NULL"
+                # Nivel TIPO SERVICIO: todos los servicios del tipo dentro del distrito
+                query += " AND a_directa.nombre = ? AND d_directa.nombre = ? AND ts_directa.descripcion = ?"
                 params.extend([area_seleccionada, distrito_seleccionado, tipo_servicio_seleccionado])
                 
             elif distrito_seleccionado:
-                # Nivel DISTRITO: filtrar por área y distrito (sin tipo servicio ni servicio)
-                query += " AND a_directa.nombre = ? AND d_directa.nombre = ? AND ts_directa.descripcion IS NULL AND s_directa.nombre IS NULL"
-                params.extend([area_seleccionada, distrito_seleccionado])
+                # Nivel DISTRITO: distrito + todos sus servicios
+                query += """
+                AND a_directa.nombre = ? 
+                AND (
+                    (d_directa.nombre = ? AND s_directa.nombre IS NULL) OR  -- Movimientos del distrito
+                    (s_directa.id IN (  -- Movimientos de servicios dentro del distrito
+                        SELECT s.id 
+                        FROM servicio s 
+                        INNER JOIN tipo_servicio ts ON s.id_tipo_servicio = ts.id 
+                        INNER JOIN distrito d ON ts.id_distrito = d.id 
+                        WHERE d.nombre = ?
+                    ))
+                )
+                """
+                params.extend([area_seleccionada, distrito_seleccionado, distrito_seleccionado])
                 
             elif area_seleccionada:
-                # Nivel ÁREA: filtrar solo por área (sin distrito, tipo servicio ni servicio)
-                query += " AND a_directa.nombre = ? AND d_directa.nombre IS NULL AND ts_directa.descripcion IS NULL AND s_directa.nombre IS NULL"
-                params.append(area_seleccionada)
+                # Nivel ÁREA: área + todos sus distritos + todos los servicios del área
+                query += """
+                AND (
+                    (a_directa.nombre = ? AND d_directa.nombre IS NULL) OR  -- Movimientos del área
+                    (d_directa.id IN (  -- Movimientos de distritos dentro del área
+                        SELECT d.id 
+                        FROM distrito d 
+                        INNER JOIN area a ON d.id_area = a.id 
+                        WHERE a.nombre = ?
+                    ) AND s_directa.nombre IS NULL) OR
+                    (s_directa.id IN (  -- Movimientos de servicios dentro del área
+                        SELECT s.id 
+                        FROM servicio s 
+                        INNER JOIN tipo_servicio ts ON s.id_tipo_servicio = ts.id 
+                        INNER JOIN distrito d ON ts.id_distrito = d.id 
+                        INNER JOIN area a ON d.id_area = a.id 
+                        WHERE a.nombre = ?
+                    ))
+                )
+                """
+                params.extend([area_seleccionada, area_seleccionada, area_seleccionada])
             
             cursor.execute(query, params)
             resultado = cursor.fetchone()
@@ -431,6 +567,8 @@ class ReporteBres:
             
         except Exception as e:
             print(f"Error obteniendo demanda del mes: {e}")
+            import traceback
+            traceback.print_exc()
             return 0.0
         finally:
             if conn:
@@ -985,16 +1123,16 @@ class ReporteBres:
 
             # Obtener datos usando la función específica para BRES
             movimientos_raw = obtener_movimientos_bres(
-            fecha_ini.strftime('%Y-%m-%d'),
-            fecha_fin.strftime('%Y-%m-%d'),
-            area_nombre=self.combo_area.get().strip() or None,
-            distrito_nombre=self.combo_distrito.get().strip() or None,
-            tipo_servicio_desc=self.combo_tipo_servicio.get().strip() or None,
-            servicio_nombre=self.combo_servicio.get().strip() or None,
-            tipo_insumo_desc=self.combo_tipo_insumo.get().strip() or None,
-            insumo_nombre=self.combo_insumo.get().strip() or None,
-            presentacion_nombre=self.combo_presentacion.get().strip() or None
-        )
+                fecha_ini.strftime('%Y-%m-%d'),
+                fecha_fin.strftime('%Y-%m-%d'),
+                area_nombre=self.combo_area.get().strip() or None,
+                distrito_nombre=self.combo_distrito.get().strip() or None,
+                tipo_servicio_desc=self.combo_tipo_servicio.get().strip() or None,
+                servicio_nombre=self.combo_servicio.get().strip() or None,
+                tipo_insumo_desc=self.combo_tipo_insumo.get().strip() or None,
+                insumo_nombre=self.combo_insumo.get().strip() or None,
+                presentacion_nombre=self.combo_presentacion.get().strip() or None
+            )
 
             if not movimientos_raw:
                 messagebox.showinfo("Info", "No hay datos para mostrar")
@@ -1052,14 +1190,241 @@ class ReporteBres:
             doc = fitz.open(self.temp_pdf_path)
             self.current_page = 0
             self.total_pages = len(doc)
+            self.zoom_level = 1.5  # Zoom inicial
 
-            # Función para cambiar de página
+            # --- Función para mostrar página centrada ---
+            def display_page():
+                canvas.delete("all")
+                page = doc.load_page(self.current_page)
+                pix = page.get_pixmap(matrix=fitz.Matrix(self.zoom_level, self.zoom_level))
+                img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
+                tk_img = ImageTk.PhotoImage(image=img)
+                canvas.image = tk_img
+
+                # Calcular posición para centrar la imagen en el canvas
+                canvas_width = canvas.winfo_width()
+                canvas_height = canvas.winfo_height()
+                x = max((canvas_width - pix.width) // 2, 0)
+                y = max((canvas_height - pix.height) // 2, 0)
+
+                canvas.create_image(x, y, anchor="nw", image=tk_img)
+                canvas.config(scrollregion=canvas.bbox("all"))
+
+            # --- Función para cambiar página ---
             def change_page(delta):
                 self.current_page = max(0, min(self.current_page + delta, self.total_pages - 1))
                 display_page()
                 page_label.config(text=f"Página {self.current_page + 1} de {self.total_pages}")
 
-            # Botón anterior
+            # --- Función para cambiar zoom ---
+            def change_zoom(delta):
+                self.zoom_level = max(0.5, min(self.zoom_level + delta, 3.0))
+                display_page()
+                zoom_label.config(text=f"Zoom: {int(self.zoom_level * 100)}%")
+
+            # --- Ajustar al ancho ---
+            def fit_to_width():
+                try:
+                    canvas_width = canvas.winfo_width()
+                    if canvas_width > 100:
+                        page = doc.load_page(self.current_page)
+                        zoom = (canvas_width - 20) / page.rect.width
+                        self.zoom_level = max(0.5, min(zoom, 3.0))
+                        display_page()
+                        zoom_label.config(text=f"Zoom: {int(self.zoom_level * 100)}%")
+                except Exception as e:
+                    print(f"Error en fit_to_width: {e}")
+
+            # --- Ajustar a página completa ---
+            def fit_to_page():
+                try:
+                    canvas_width = canvas.winfo_width()
+                    canvas_height = canvas.winfo_height()
+                    if canvas_width > 100 and canvas_height > 100:
+                        page = doc.load_page(self.current_page)
+                        zoom_x = (canvas_width - 20) / page.rect.width
+                        zoom_y = (canvas_height - 20) / page.rect.height
+                        zoom = min(zoom_x, zoom_y)
+                        self.zoom_level = max(0.5, min(zoom, 3.0))
+                        display_page()
+                        zoom_label.config(text=f"Zoom: {int(self.zoom_level * 100)}%")
+                except Exception as e:
+                    print(f"Error en fit_to_page: {e}")
+
+            # --- Función para maximizar reporte con ajuste y centrado ---
+            def maximizar_reporte():
+                try:
+                    ventana_max = tk.Toplevel(self.parent)
+                    ventana_max.title("Reporte BRES - Vista Maximizada")
+                    ventana_max.configure(bg=self.COLORS['white'])
+                    ventana_max.state('zoomed')  # Maximizar ventana (Windows)
+                    ventana_max.resizable(True, True)
+
+                    main_frame = tk.Frame(ventana_max, bg=self.COLORS['white'])
+                    main_frame.pack(fill="both", expand=True)
+
+                    # Frame controles superiores
+                    control_top_frame = tk.Frame(main_frame, bg=self.COLORS['white'])
+                    control_top_frame.pack(fill="x", pady=5)
+
+                    btn_cerrar_max = tk.Button(
+                        control_top_frame, text="✕ Cerrar Vista Maximizada",
+                        command=ventana_max.destroy,
+                        bg=self.COLORS['danger'], fg='white',
+                        font=('Segoe UI', 10, 'bold'), relief='flat', borderwidth=0, cursor='hand2',
+                        pady=8, padx=15
+                    )
+                    btn_cerrar_max.pack(side="right", padx=10)
+
+                    btn_abrir_externo = tk.Button(
+                        control_top_frame, text="📄 Abrir en App Externa",
+                        command=self.abrir_pdf_externo,
+                        bg=self.COLORS['primary'], fg='white',
+                        font=('Segoe UI', 10, 'bold'), relief='flat', borderwidth=0, cursor='hand2',
+                        pady=8, padx=15
+                    )
+                    btn_abrir_externo.pack(side="right", padx=5)
+
+                    # Frame canvas maximizado
+                    canvas_max_frame = tk.Frame(main_frame, bg=self.COLORS['white'])
+                    canvas_max_frame.pack(side="top", fill="both", expand=True, padx=5)
+
+                    h_scroll_max = ttk.Scrollbar(canvas_max_frame, orient="horizontal")
+                    h_scroll_max.pack(side="bottom", fill="x")
+
+                    v_scroll_max = ttk.Scrollbar(canvas_max_frame, orient="vertical")
+                    v_scroll_max.pack(side="right", fill="y")
+
+                    canvas_max = tk.Canvas(
+                        canvas_max_frame,
+                        xscrollcommand=h_scroll_max.set,
+                        yscrollcommand=v_scroll_max.set,
+                        bg=self.COLORS['white'],
+                        highlightthickness=0
+                    )
+                    canvas_max.pack(side="left", fill="both", expand=True)
+
+                    h_scroll_max.config(command=canvas_max.xview)
+                    v_scroll_max.config(command=canvas_max.yview)
+
+                    control_max_frame = tk.Frame(main_frame, bg=self.COLORS['white'])
+                    control_max_frame.pack(fill="x", side="bottom", pady=5)
+
+                    current_page_max = [0]
+                    zoom_level_max = [1.0]  # Inicial, se ajustará
+
+                    def display_page_max():
+                        canvas_max.delete("all")
+                        page = doc.load_page(current_page_max[0])
+                        pix = page.get_pixmap(matrix=fitz.Matrix(zoom_level_max[0], zoom_level_max[0]))
+                        img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
+                        tk_img = ImageTk.PhotoImage(image=img)
+                        canvas_max.image = tk_img
+
+                        # Centrar imagen en canvas maximizado
+                        canvas_width = canvas_max.winfo_width()
+                        canvas_height = canvas_max.winfo_height()
+                        x = max((canvas_width - pix.width) // 2, 0)
+                        y = max((canvas_height - pix.height) // 2, 0)
+
+                        canvas_max.create_image(x, y, anchor="nw", image=tk_img)
+                        canvas_max.config(scrollregion=canvas_max.bbox("all"))
+
+                    def change_page_max(delta):
+                        current_page_max[0] = max(0, min(current_page_max[0] + delta, self.total_pages - 1))
+                        display_page_max()
+                        page_label_max.config(text=f"Página {current_page_max[0] + 1} de {self.total_pages}")
+
+                    def change_zoom_max(delta):
+                        zoom_level_max[0] = max(0.5, min(zoom_level_max[0] + delta, 4.0))
+                        display_page_max()
+                        zoom_label_max.config(text=f"Zoom: {int(zoom_level_max[0] * 100)}%")
+
+                    def fit_to_page_max():
+                        try:
+                            canvas_width = canvas_max.winfo_width()
+                            canvas_height = canvas_max.winfo_height()
+                            if canvas_width > 100 and canvas_height > 100:
+                                page = doc.load_page(current_page_max[0])
+                                zoom_x = (canvas_width - 20) / page.rect.width
+                                zoom_y = (canvas_height - 20) / page.rect.height
+                                zoom = min(zoom_x, zoom_y)
+                                zoom_level_max[0] = max(0.5, min(zoom, 4.0))
+                                display_page_max()
+                                zoom_label_max.config(text=f"Zoom: {int(zoom_level_max[0] * 100)}%")
+                        except Exception as e:
+                            print(f"Error en fit_to_page_max: {e}")
+
+                    # Botones navegación maximizada
+                    btn_prev_max = tk.Button(
+                        control_max_frame, text="◀◀ Anterior", command=lambda: change_page_max(-1),
+                        bg=self.COLORS['white'], fg=self.COLORS['text_dark'],
+                        font=('Segoe UI', 11, 'bold'), relief='flat', borderwidth=1, cursor='hand2',
+                        pady=5, padx=15
+                    )
+                    btn_prev_max.pack(side="left", padx=5)
+
+                    page_label_max = tk.Label(
+                        control_max_frame, text=f"Página 1 de {self.total_pages}",
+                        bg=self.COLORS['white'], fg=self.COLORS['text_dark'],
+                        font=('Segoe UI', 11, 'bold')
+                    )
+                    page_label_max.pack(side="left", padx=10)
+
+                    btn_next_max = tk.Button(
+                        control_max_frame, text="Siguiente ▶▶", command=lambda: change_page_max(1),
+                        bg=self.COLORS['white'], fg=self.COLORS['text_dark'],
+                        font=('Segoe UI', 11, 'bold'), relief='flat', borderwidth=1, cursor='hand2',
+                        pady=5, padx=15
+                    )
+                    btn_next_max.pack(side="left", padx=5)
+
+                    # Botones zoom maximizada
+                    btn_zoom_out_max = tk.Button(
+                        control_max_frame, text="🔍− Alejar", command=lambda: change_zoom_max(-0.25),
+                        bg=self.COLORS['white'], fg=self.COLORS['text_dark'],
+                        font=('Segoe UI', 10, 'bold'), relief='flat', borderwidth=1, cursor='hand2',
+                        pady=5, padx=10
+                    )
+                    btn_zoom_out_max.pack(side="left", padx=5)
+
+                    zoom_label_max = tk.Label(
+                        control_max_frame, text=f"Zoom: {int(zoom_level_max[0] * 100)}%",
+                        bg=self.COLORS['white'], fg=self.COLORS['text_dark'],
+                        font=('Segoe UI', 10, 'bold')
+                    )
+                    zoom_label_max.pack(side="left", padx=5)
+
+                    btn_zoom_in_max = tk.Button(
+                        control_max_frame, text="🔍+ Acercar", command=lambda: change_zoom_max(0.25),
+                        bg=self.COLORS['white'], fg=self.COLORS['text_dark'],
+                        font=('Segoe UI', 10, 'bold'), relief='flat', borderwidth=1, cursor='hand2',
+                        pady=5, padx=10
+                    )
+                    btn_zoom_in_max.pack(side="left", padx=5)
+
+                    # Mostrar primera página y ajustar a ventana
+                    def on_resize(event=None):
+                        fit_to_page_max()
+
+                    ventana_max.bind("<Configure>", on_resize)
+
+                    display_page_max()
+
+                    # Scroll con mouse maximizado
+                    def on_mousewheel_max(event):
+                        if canvas_max.winfo_exists():
+                            canvas_max.yview_scroll(int(-1*(event.delta/120)), "units")
+                    canvas_max.bind("<MouseWheel>", on_mousewheel_max)
+
+                    ventana_max.focus_force()
+                    ventana_max.grab_set()
+
+                except Exception as e:
+                    messagebox.showerror("Error", f"Error al maximizar reporte: {str(e)}")
+
+            # --- Botones y controles en visor normal ---
+
             btn_nav_prev = tk.Button(
                 control_frame, text="◀", command=lambda: change_page(-1),
                 bg=self.COLORS['white'], fg=self.COLORS['text_dark'],
@@ -1068,7 +1433,6 @@ class ReporteBres:
             )
             btn_nav_prev.pack(side="left", padx=(10, 2), pady=2)
 
-            # Etiqueta de página
             page_label = tk.Label(
                 control_frame, text=f"Página 1 de {self.total_pages}",
                 bg=self.COLORS['white'], fg=self.COLORS['text_dark'],
@@ -1076,7 +1440,6 @@ class ReporteBres:
             )
             page_label.pack(side="left", padx=2, pady=2)
 
-            # Botón siguiente
             btn_nav_next = tk.Button(
                 control_frame, text="▶", command=lambda: change_page(1),
                 bg=self.COLORS['white'], fg=self.COLORS['text_dark'],
@@ -1085,18 +1448,64 @@ class ReporteBres:
             )
             btn_nav_next.pack(side="left", padx=2, pady=2)
 
-            # Función para mostrar la página actual
-            def display_page():
-                canvas.delete("all")
-                page = doc.load_page(self.current_page)
-                pix = page.get_pixmap(matrix=fitz.Matrix(1.5, 1.5))
-                img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
-                tk_img = ImageTk.PhotoImage(image=img)
-                canvas.image = tk_img
-                canvas.create_image(0, 0, anchor="nw", image=tk_img)
-                canvas.config(scrollregion=canvas.bbox("all"))
+            separator = tk.Label(
+                control_frame, text="|",
+                bg=self.COLORS['white'], fg=self.COLORS['text_dark'],
+                font=('Segoe UI', 12, 'bold')
+            )
+            separator.pack(side="left", padx=5, pady=2)
 
-            # Mostrar la primera página
+            btn_zoom_out = tk.Button(
+                control_frame, text="🔍−", command=lambda: change_zoom(-0.25),
+                bg=self.COLORS['white'], fg=self.COLORS['text_dark'],
+                font=('Segoe UI', 9, 'bold'), relief='flat', borderwidth=0, cursor='hand2'
+            )
+            btn_zoom_out.pack(side="left", padx=2, pady=2)
+
+            zoom_label = tk.Label(
+                control_frame, text=f"Zoom: {int(self.zoom_level * 100)}%",
+                bg=self.COLORS['white'], fg=self.COLORS['text_dark'],
+                font=('Segoe UI', 9, 'bold')
+            )
+            zoom_label.pack(side="left", padx=2, pady=2)
+
+            btn_zoom_in = tk.Button(
+                control_frame, text="🔍+", command=lambda: change_zoom(0.25),
+                bg=self.COLORS['white'], fg=self.COLORS['text_dark'],
+                font=('Segoe UI', 9, 'bold'), relief='flat', borderwidth=0, cursor='hand2'
+            )
+            btn_zoom_in.pack(side="left", padx=2, pady=2)
+
+            separator2 = tk.Label(
+                control_frame, text="|",
+                bg=self.COLORS['white'], fg=self.COLORS['text_dark'],
+                font=('Segoe UI', 12, 'bold')
+            )
+            separator2.pack(side="left", padx=5, pady=2)
+
+            btn_fit_width = tk.Button(
+                control_frame, text="↔ Ajustar Ancho", command=fit_to_width,
+                bg=self.COLORS['white'], fg=self.COLORS['text_dark'],
+                font=('Segoe UI', 9, 'bold'), relief='flat', borderwidth=0, cursor='hand2'
+            )
+            btn_fit_width.pack(side="left", padx=2, pady=2)
+
+            btn_fit_page = tk.Button(
+                control_frame, text="⛶ Ajustar Página", command=fit_to_page,
+                bg=self.COLORS['white'], fg=self.COLORS['text_dark'],
+                font=('Segoe UI', 9, 'bold'), relief='flat', borderwidth=0, cursor='hand2'
+            )
+            btn_fit_page.pack(side="left", padx=2, pady=2)
+
+            btn_maximizar = tk.Button(
+                control_frame, text="🔳 Maximizar", command=maximizar_reporte,
+                bg=self.COLORS['primary'], fg='white',
+                font=('Segoe UI', 10, 'bold'), relief='flat', borderwidth=0, cursor='hand2',
+                pady=4, padx=12
+            )
+            btn_maximizar.pack(side="left", padx=5, pady=2)
+
+            # Mostrar primera página
             display_page()
 
             # Scroll con mouse
@@ -1110,6 +1519,26 @@ class ReporteBres:
             error_detallado = traceback.format_exc()
             print(f"Error detallado:\n{error_detallado}")
             messagebox.showerror("Error", f"Error al generar reporte:\n{str(e)}")
+        
+    def abrir_pdf_externo(self):
+        """Abre el PDF en una aplicación externa del sistema"""
+        try:
+            if not hasattr(self, 'temp_pdf_path') or not os.path.exists(self.temp_pdf_path):
+                messagebox.showerror("Error", "No hay un PDF generado para abrir.")
+                return
+                
+            import sys
+            import subprocess
+            
+            if sys.platform.startswith('win'):
+                os.startfile(self.temp_pdf_path)
+            elif sys.platform.startswith('darwin'):  # macOS
+                subprocess.run(['open', self.temp_pdf_path], check=True)
+            else:  # Linux
+                subprocess.run(['xdg-open', self.temp_pdf_path], check=True)
+                
+        except Exception as e:
+            messagebox.showerror("Error", f"No se pudo abrir el PDF: {str(e)}")
             
     def mostrar_pdf(self, pdf_path):
         """Muestra el PDF generado en una nueva ventana"""
