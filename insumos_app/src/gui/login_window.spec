@@ -5,7 +5,7 @@ a = Analysis(
     ['login_window.py'],
     pathex=[],
     binaries=[],
-    datas=[('..\\utils', 'utils'), ('..\\database', 'database'), ('..\\..\\data', 'data')],
+    datas=[('..\\utils', 'utils'), ('..\\database', 'database')],
     hiddenimports=[],
     hookspath=[],
     hooksconfig={},
@@ -32,6 +32,7 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
+    icon=['icono.ico'],
 )
 coll = COLLECT(
     exe,

@@ -1,32 +1,42 @@
-import sqlite3
+import mysql.connector
 import os
-
 import sys
 
-def get_db_path():
-    if getattr(sys, 'frozen', False):
-        # Carpeta de datos del usuario en Windows
-        base_dir = os.path.join(os.environ['APPDATA'], "InsumosApp")
-    else:
-        base_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', 'data'))
-    os.makedirs(base_dir, exist_ok=True)
-    return os.path.join(base_dir, 'insumos.db')
+def get_db_config():
+    # Configuración de conexión a MySQL
+    # Cambia estos valores según tu entorno
+    return {
+        'host': 'localhost',
+        'user': 'root',
+        'password': '0.5735',
+        'database': 'insumos'
+    }
 
-DB_PATH = get_db_path()
-
-def asegurar_directorio():
-    """Asegura que el directorio para la base de datos exista"""
+def asegurar_base_datos():
+    """Asegura que la base de datos exista, si no, la crea"""
+    config = get_db_config()
     try:
-        os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
+        # Conexión sin especificar base de datos para crearla si no existe
+        conn = mysql.connector.connect(
+            host=config['host'],
+            user=config['user'],
+            password=config['password']
+        )
+        cursor = conn.cursor()
+        cursor.execute(f"CREATE DATABASE IF NOT EXISTS {config['database']} CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;")
+        conn.commit()
+        cursor.close()
+        conn.close()
         return True
-    except Exception as e:
-        print(f"Error al crear el directorio: {e}")
+    except mysql.connector.Error as e:
+        print(f"Error al crear la base de datos: {e}")
         return False
 
 def verificar_tablas():
     """Verifica que todas las tablas necesarias existan"""
+    config = get_db_config()
     try:
-        conn = sqlite3.connect(DB_PATH)
+        conn = mysql.connector.connect(**config)
         cursor = conn.cursor()
 
         tablas_requeridas = [
@@ -39,19 +49,19 @@ def verificar_tablas():
             'insumo',
             'insumo_presentacion',
             'tipo_movimiento',
-            'movimiento'
+            'movimiento',
+            'usuarios'
         ]
 
         for tabla in tablas_requeridas:
             cursor.execute(f"""
-                SELECT name FROM sqlite_master
-                WHERE type='table' AND name='{tabla}'
+                SHOW TABLES LIKE '{tabla}';
             """)
             if not cursor.fetchone():
                 return False
         return True
 
-    except sqlite3.Error as e:
+    except mysql.connector.Error as e:
         print(f"Error al verificar tablas: {e}")
         return False
     finally:
@@ -59,158 +69,165 @@ def verificar_tablas():
             conn.close()
 
 def crear_base_datos():
-    """Crea la base de datos y sus tablas"""
-    if not asegurar_directorio():
-        raise Exception("No se pudo crear el directorio para la base de datos")
+    """Crea las tablas en la base de datos MySQL"""
+    if not asegurar_base_datos():
+        raise Exception("No se pudo crear la base de datos")
 
+    config = get_db_config()
     try:
-        conn = sqlite3.connect(DB_PATH)
+        conn = mysql.connector.connect(**config)
         cursor = conn.cursor()
-
-        # Habilitar las foreign keys
-        cursor.execute("PRAGMA foreign_keys = ON;")
 
         # Tabla ÁREA
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS area (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                nombre TEXT NOT NULL UNIQUE
-            );
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                nombre VARCHAR(255) NOT NULL UNIQUE
+            ) ENGINE=InnoDB;
         """)
 
         # Tabla DISTRITO
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS distrito (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                nombre TEXT NOT NULL UNIQUE,
-                id_area INTEGER NOT NULL,
-                FOREIGN KEY (id_area) REFERENCES area(id),
-                UNIQUE(id_area, nombre)
-            );
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                nombre VARCHAR(255) NOT NULL,
+                id_area INT NOT NULL,
+                UNIQUE KEY unique_area_nombre (id_area, nombre),
+                FOREIGN KEY (id_area) REFERENCES area(id) ON DELETE CASCADE
+            ) ENGINE=InnoDB;
         """)
 
         # Tabla TIPO_SERVICIO
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS tipo_servicio (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                id_distrito INTEGER NOT NULL,
-                descripcion TEXT NOT NULL,
-                FOREIGN KEY (id_distrito) REFERENCES distrito(id),
-                UNIQUE(id_distrito, descripcion)
-            );
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                id_distrito INT NOT NULL,
+                descripcion VARCHAR(255) NOT NULL,
+                UNIQUE KEY unique_distrito_descripcion (id_distrito, descripcion),
+                FOREIGN KEY (id_distrito) REFERENCES distrito(id) ON DELETE CASCADE
+            ) ENGINE=InnoDB;
         """)
 
         # Tabla SERVICIO
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS servicio (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                id_tipo_servicio INTEGER NOT NULL,
-                nombre TEXT NOT NULL,
-                FOREIGN KEY (id_tipo_servicio) REFERENCES tipo_servicio(id),
-                UNIQUE(id_tipo_servicio, nombre)
-            );
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                id_tipo_servicio INT NOT NULL,
+                nombre VARCHAR(255) NOT NULL,
+                UNIQUE KEY unique_tipo_servicio_nombre (id_tipo_servicio, nombre),
+                FOREIGN KEY (id_tipo_servicio) REFERENCES tipo_servicio(id) ON DELETE CASCADE
+            ) ENGINE=InnoDB;
         """)
 
         # Tabla TIPO_INSUMO
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS tipo_insumo (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                descripcion TEXT NOT NULL UNIQUE
-            );
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                descripcion VARCHAR(255) NOT NULL UNIQUE
+            ) ENGINE=InnoDB;
         """)
 
         # Tabla PRESENTACION
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS presentacion (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                nombre TEXT NOT NULL UNIQUE
-            );
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                nombre VARCHAR(255) NOT NULL UNIQUE
+            ) ENGINE=InnoDB;
         """)
 
         # Tabla INSUMO
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS insumo (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                nombre TEXT NOT NULL,
-                lote TEXT,
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                nombre VARCHAR(255) NOT NULL,
+                lote VARCHAR(255),
                 fecha_vencimiento DATE,
-                id_tipo_insumo INTEGER NOT NULL,
-                FOREIGN KEY (id_tipo_insumo) REFERENCES tipo_insumo(id)
-            );
+                id_tipo_insumo INT NOT NULL,
+                FOREIGN KEY (id_tipo_insumo) REFERENCES tipo_insumo(id) ON DELETE CASCADE
+            ) ENGINE=InnoDB;
         """)
 
         # Tabla INSUMO_PRESENTACION
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS insumo_presentacion (
-                insumo_id INTEGER NOT NULL,
-                presentacion_id INTEGER NOT NULL,
+                insumo_id INT NOT NULL,
+                presentacion_id INT NOT NULL,
                 PRIMARY KEY (insumo_id, presentacion_id),
-                FOREIGN KEY (insumo_id) REFERENCES insumo(id),
-                FOREIGN KEY (presentacion_id) REFERENCES presentacion(id)
-            );
+                FOREIGN KEY (insumo_id) REFERENCES insumo(id) ON DELETE CASCADE,
+                FOREIGN KEY (presentacion_id) REFERENCES presentacion(id) ON DELETE CASCADE
+            ) ENGINE=InnoDB;
         """)
 
         # Tabla TIPO_MOVIMIENTO
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS tipo_movimiento (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                descripcion TEXT NOT NULL UNIQUE
-            );
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                descripcion VARCHAR(255) NOT NULL UNIQUE
+            ) ENGINE=InnoDB;
         """)
 
-        # Tabla MOVIMIENTO (con area_id, distrito_id y presentacion_id)
+        # Tabla MOVIMIENTO
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS movimiento (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                id INT AUTO_INCREMENT PRIMARY KEY,
                 fecha_registro DATE NOT NULL,
-                referencia TEXT NOT NULL,
-                tipo_movimiento_id INTEGER NOT NULL,
-                area_id INTEGER,
-                distrito_id INTEGER,
-                servicio_id INTEGER,
-                insumo_id INTEGER NOT NULL,
-                presentacion_id INTEGER,
-                lote TEXT,
+                referencia VARCHAR(255) NOT NULL,
+                tipo_movimiento_id INT NOT NULL,
+                area_id INT,
+                distrito_id INT,
+                servicio_id INT,
+                insumo_id INT NOT NULL,
+                presentacion_id INT,
+                lote VARCHAR(255),
                 fecha_vencimiento DATE,
-                cantidad REAL NOT NULL,
+                cantidad DECIMAL(10,2) NOT NULL,
                 observaciones TEXT,
-                salida_distrito_id INTEGER,
-                salida_servicio_id INTEGER,
-                FOREIGN KEY (tipo_movimiento_id) REFERENCES tipo_movimiento(id),
-                FOREIGN KEY (area_id) REFERENCES area(id),
-                FOREIGN KEY (distrito_id) REFERENCES distrito(id),
-                FOREIGN KEY (servicio_id) REFERENCES servicio(id),
-                FOREIGN KEY (insumo_id) REFERENCES insumo(id),
-                FOREIGN KEY (presentacion_id) REFERENCES presentacion(id),
-                FOREIGN KEY (salida_distrito_id) REFERENCES distrito(id),
-                FOREIGN KEY (salida_servicio_id) REFERENCES servicio(id)
-            );
+                salida_distrito_id INT,
+                salida_servicio_id INT,
+                FOREIGN KEY (tipo_movimiento_id) REFERENCES tipo_movimiento(id) ON DELETE CASCADE,
+                FOREIGN KEY (area_id) REFERENCES area(id) ON DELETE SET NULL,
+                FOREIGN KEY (distrito_id) REFERENCES distrito(id) ON DELETE SET NULL,
+                FOREIGN KEY (servicio_id) REFERENCES servicio(id) ON DELETE SET NULL,
+                FOREIGN KEY (insumo_id) REFERENCES insumo(id) ON DELETE CASCADE,
+                FOREIGN KEY (presentacion_id) REFERENCES presentacion(id) ON DELETE SET NULL,
+                FOREIGN KEY (salida_distrito_id) REFERENCES distrito(id) ON DELETE SET NULL,
+                FOREIGN KEY (salida_servicio_id) REFERENCES servicio(id) ON DELETE SET NULL
+            ) ENGINE=InnoDB;
         """)
-        
+
         # Tabla USUARIOS
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS usuarios (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                username TEXT UNIQUE NOT NULL,
-                password TEXT NOT NULL,
-                nombre_completo TEXT,
-                rol TEXT CHECK(rol IN ('admin', 'usuario', 'super_admin')) NOT NULL,
-                activo BOOLEAN DEFAULT 1,
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                username VARCHAR(255) UNIQUE NOT NULL,
+                password VARCHAR(255) NOT NULL,
+                nombre_completo VARCHAR(255),
+                rol ENUM('admin', 'usuario', 'super_admin') NOT NULL,
+                activo BOOLEAN DEFAULT TRUE,
                 fecha_creacion DATETIME DEFAULT CURRENT_TIMESTAMP
-            );
+            ) ENGINE=InnoDB;
         """)
 
-        # Crear índices para mejorar rendimiento
-        cursor.execute("CREATE INDEX IF NOT EXISTS idx_mov_area ON movimiento(area_id);")
-        cursor.execute("CREATE INDEX IF NOT EXISTS idx_mov_distrito ON movimiento(distrito_id);")
-        cursor.execute("CREATE INDEX IF NOT EXISTS idx_mov_servicio ON movimiento(servicio_id);")
-        cursor.execute("CREATE INDEX IF NOT EXISTS idx_mov_fecha ON movimiento(fecha_registro);")
+        # Crear índices para mejorar rendimiento (sin IF NOT EXISTS)
+        for index_sql in [
+            "CREATE INDEX idx_mov_area ON movimiento(area_id);",
+            "CREATE INDEX idx_mov_distrito ON movimiento(distrito_id);",
+            "CREATE INDEX idx_mov_servicio ON movimiento(servicio_id);",
+            "CREATE INDEX idx_mov_fecha ON movimiento(fecha_registro);"
+        ]:
+            try:
+                cursor.execute(index_sql)
+            except mysql.connector.Error as err:
+                if err.errno == 1061:  # Código error índice duplicado
+                    pass  # Ignorar si ya existe
+                else:
+                    raise
 
         conn.commit()
-        print(f"Base de datos creada correctamente en: {DB_PATH}")
+        print("Base de datos MySQL creada correctamente.")
         return True
 
-    except sqlite3.Error as e:
+    except mysql.connector.Error as e:
         print(f"Error al crear la base de datos: {e}")
         return False
     finally:
@@ -219,13 +236,11 @@ def crear_base_datos():
 
 # Exportar las funciones necesarias
 __all__ = [
-    'DB_PATH',
     'crear_base_datos',
     'verificar_tablas',
-    'asegurar_directorio'
+    'asegurar_base_datos'
 ]
 
-# Si se ejecuta directamente, crear la base de datos
 if __name__ == "__main__":
     if crear_base_datos():
         print("Base de datos creada con éxito")

@@ -7,12 +7,14 @@ import os
 from PIL import Image, ImageTk
 from ttkthemes import ThemedStyle
 
+from src.database.db_manager import conectar_db
+
 # Agregar el directorio raíz del proyecto al PATH de Python
 project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.append(project_root)
 
 # Importar las funciones de la base de datos
-from src.database import DB_PATH, crear_base_datos, verificar_tablas
+from src.database import crear_base_datos, verificar_tablas
 from src.gui.ingreso_insumos import IngresoInsumos
 from src.gui.gestion_insumos import GestionInsumos
 from src.gui.gestion_servicios import GestionServicios
@@ -21,6 +23,7 @@ from src.gui.reporte_kardex import ReporteKardex
 from src.gui.reporte_demanda_real import ReporteDemandaReal
 from src.gui.reporte_bres import ReporteBres
 from src.gui.reporte_balance_bodega import ReporteBalanceBodega
+from src.gui.configurar_servidor import ConfigurarServidor
 from src.gui.importar_exportar_manager import ImportarExportarManager, crear_gestor_importar_exportar
 
 def resource_path(relative_path):
@@ -228,6 +231,7 @@ class MainWindow:
             'insumos': 'insumo.png',
             'servicios': 'servicio.png',
             'movimientos': 'movimiento.png',
+            'configurar_servidor': 'configurar_servidor.png',
             'import_export': 'importar-exportar.png',
             'ingreso': 'ingreso.png',
             'kardex': 'kardex.png',
@@ -335,7 +339,7 @@ class MainWindow:
 
         # **MENÚ DE NAVEGACIÓN**
         nav_frame = tk.Frame(self.sidebar, bg=self.COLORS['primary'])
-        nav_frame.pack(fill="both", expand=True, padx=0, pady=20)
+        nav_frame.pack(fill="both", expand=True, padx=0, pady=10)
 
         # Crear botones según rol
         self.create_navigation_menu(nav_frame)
@@ -368,6 +372,7 @@ class MainWindow:
                 ("Gestión de Insumos", self.load_gestion_insumos, 'insumos'),
                 ("Gestión de Servicios", self.load_gestion_servicios, 'servicios'),
                 ("Gestión de Movimientos", self.load_gestion_movimientos, 'movimientos'),
+                ("Configurar Servidor", self.load_configurar_servidor, 'configurar_servidor'),
             ])
 
         if rol in ("usuario", "admin", "super_admin"):
@@ -394,8 +399,8 @@ class MainWindow:
                     fg=self.COLORS['white'],
                     relief='flat',
                     borderwidth=0,
-                    padx=20,
-                    pady=12,
+                    padx=15,
+                    pady=6,
                     anchor='w',
                     cursor='hand2',
                     command=command)
@@ -404,7 +409,7 @@ class MainWindow:
         if self.icons.get(icon_key):
             btn.config(image=self.icons[icon_key], compound='left')
 
-        btn.pack(fill="x", padx=20, pady=2)
+        btn.pack(fill="x", padx=10, pady=1)
 
         # Efectos hover mejorados
         def on_enter(e):
@@ -435,9 +440,14 @@ class MainWindow:
         nombre_usuario = self.usuario.get('nombre_completo', self.usuario.get('username', 'Usuario'))
         rol_usuario = self.usuario.get('rol', '')
 
+        # Obtener nombre del servidor desde la configuración de conexión
+        from src.database.db_manager import get_config
+        config = get_config()
+        nombre_servidor = config.get('host', 'Servidor desconocido')
+
         self.user_label = ttk.Label(
             self.status_bar,
-            text=f"👤 Usuario: {nombre_usuario} ({rol_usuario})",
+            text=f"👤 Usuario: {nombre_usuario} ({rol_usuario})    🖥️ Servidor: {nombre_servidor}",
             style='StatusBar.TLabel'
         )
         self.user_label.pack(side="left")
@@ -604,18 +614,16 @@ class MainWindow:
         self.center_window(self.ANCHO_VENTANA, self.ALTO_VENTANA)
 
     def initialize_database(self):
-        """Inicializa la base de datos y verifica su estructura"""
+        """Inicializa la base de datos y verifica su estructura en MySQL"""
         try:
-            if not os.path.exists(DB_PATH):
-                print("La base de datos no existe. Creándola...")
-                if not crear_base_datos():
-                    raise Exception("No se pudo crear la base de datos")
-                print("Base de datos creada correctamente")
+            # Crear base de datos y tablas si no existen
+            if not crear_base_datos():
+                raise Exception("No se pudo crear la base de datos")
 
+            # Verificar que las tablas existan
             if not verificar_tablas():
+                # En MySQL no hay archivo local que eliminar, solo recrear tablas
                 print("La estructura de la base de datos es incorrecta. Recreándola...")
-                if os.path.exists(DB_PATH):
-                    os.remove(DB_PATH)
                 if not crear_base_datos():
                     raise Exception("No se pudo recrear la base de datos")
                 print("Base de datos recreada correctamente")
@@ -628,12 +636,15 @@ class MainWindow:
             return False
 
     def verify_database_connection(self):
-        """Verifica la conexión a la base de datos"""
+        """Verifica la conexión a la base de datos MySQL"""
         try:
-            conn = sqlite3.connect(DB_PATH)
+            conn = conectar_db()  # Usa tu función que conecta a MySQL
+            if not conn:
+                return False
             cursor = conn.cursor()
             cursor.execute("SELECT 1")
             cursor.fetchone()
+            cursor.close()
             conn.close()
             return True
         except Exception as e:
@@ -700,6 +711,14 @@ class MainWindow:
         self.clear_content_frame()
         self.reset_window_size()
         self.pantalla_actual = GestionMovimientos(self.main_content_frame, self)
+        
+    def load_configurar_servidor(self):
+        if not self.verify_database_connection():
+            messagebox.showerror("Error", "No se puede conectar a la base de datos")
+            return
+        self.clear_content_frame()
+        self.reset_window_size()
+        self.pantalla_actual = ConfigurarServidor(self.main_content_frame, self)
 
     def load_reporte_kardex(self):
         try:

@@ -27,7 +27,6 @@ from src.database.db_manager import (
 )
 
 from src.database import (
-    DB_PATH,
     verificar_tablas,
     crear_base_datos
 )
@@ -139,15 +138,15 @@ class GestionInsumos:
     
     def verificar_base_datos(self):
         try:
-            if not os.path.exists(DB_PATH):
-                if not crear_base_datos():
-                    raise Exception("No se pudo crear la base de datos")
-                print("Base de datos creada correctamente")
+            # Crear base de datos y tablas si no existen
+            if not crear_base_datos():
+                raise Exception("No se pudo crear la base de datos")
+            print("Base de datos creada o verificada correctamente")
 
+            # Verificar que las tablas existan
             if not verificar_tablas():
                 print("La estructura de la base de datos es incorrecta. Recreándola...")
-                if os.path.exists(DB_PATH):
-                    os.remove(DB_PATH)
+                # En MySQL no hay archivo local que eliminar, solo recrear tablas
                 if not crear_base_datos():
                     raise Exception("No se pudo recrear la base de datos")
                 print("Base de datos recreada correctamente")
