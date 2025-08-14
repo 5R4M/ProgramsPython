@@ -1,3 +1,4 @@
+import ctypes
 import os
 import sys
 import tkinter as tk
@@ -5,8 +6,61 @@ from tkinter import ttk, messagebox, simpledialog, filedialog
 import subprocess
 import configparser
 import socket
-import pymysql
+import mysql
 import threading
+
+def crear_script_bat(bind_address, port, max_connections, ruta_bat):
+    contenido = f"""@echo off
+setlocal enabledelayedexpansion
+
+set CONFIG_FILE="C:\\ProgramData\\MySQL\\MySQL Server 8.0\\my.ini"
+set BACKUP_FILE=%CONFIG_FILE%.backup
+
+copy %CONFIG_FILE% %BACKUP_FILE%
+
+powershell -Command "((Get-Content -LiteralPath \\"%CONFIG_FILE%\\") -replace 'bind-address=.*', 'bind-address = {bind_address}') | Set-Content -LiteralPath \\"%CONFIG_FILE%\\""
+powershell -Command "((Get-Content -LiteralPath \\"%CONFIG_FILE%\\") -replace 'port=.*', 'port = {port}') | Set-Content -LiteralPath \\"%CONFIG_FILE%\\""
+powershell -Command "((Get-Content -LiteralPath \\"%CONFIG_FILE%\\") -replace 'max_connections=.*', 'max_connections = {max_connections}') | Set-Content -LiteralPath \\"%CONFIG_FILE%\\""
+
+echo Configuración actualizada.
+
+echo Reiniciando servicio MySQL...
+net stop MySQL80
+net start MySQL80
+
+echo Servicio MySQL reiniciado.
+pause
+"""
+    with open(ruta_bat, 'w', encoding='utf-8') as f:
+        f.write(contenido)
+
+def ejecutar_bat_con_elevacion(ruta_bat):
+    ret = ctypes.windll.shell32.ShellExecuteW(None, "runas", ruta_bat, None, None, 1)
+    if ret <= 32:
+        print(f"Error al ejecutar el script con elevación, código: {ret}")
+        return False
+    return True
+
+def es_admin():
+    try:
+        return ctypes.windll.shell32.IsUserAnAdmin()
+    except:
+        return False
+
+def ejecutar_como_admin():
+    if es_admin():
+        return True  # Ya es admin
+
+    executable = sys.executable
+    params = ' '.join([f'"{arg}"' for arg in sys.argv])
+
+    ret = ctypes.windll.shell32.ShellExecuteW(None, "runas", executable, params, None, 1)
+
+    if ret <= 32:
+        print(f"Error al pedir elevación, código: {ret}")
+        return False
+    else:
+        return True
 
 def resource_path(relative_path):
     """Obtiene la ruta absoluta al recurso, funciona en dev y en PyInstaller."""
@@ -117,10 +171,14 @@ class ConfigurarServidor:
         btn_config_frame = ttk.Frame(config_frame)
         btn_config_frame.pack(fill="x", padx=10, pady=10)
 
-        ttk.Button(btn_config_frame, text="Probar Conexión", command=self.probar_conexion).pack(side="left", padx=5)
-        ttk.Button(btn_config_frame, text="Aplicar Configuración", command=self.aplicar_configuracion).pack(side="left", padx=5)
-        ttk.Button(btn_config_frame, text="Reiniciar MySQL", command=self.reiniciar_mysql).pack(side="left", padx=5)
-        ttk.Button(btn_config_frame, text="Guardar Config", command=self.guardar_configuracion).pack(side="left", padx=5)
+        self.test_btn = ttk.Button(btn_config_frame, text="Probar Conexión", command=self.probar_conexion)
+        self.test_btn.pack(side="left", padx=5)
+        self.apply_btn = ttk.Button(btn_config_frame, text="Aplicar Configuración", command=self.aplicar_configuracion)
+        self.apply_btn.pack(side="left", padx=5)
+        self.restart_btn = ttk.Button(btn_config_frame, text="Reiniciar MySQL", command=self.reiniciar_mysql)
+        self.restart_btn.pack(side="left", padx=5)
+        self.save_btn = ttk.Button(btn_config_frame, text="Guardar Config", command=self.guardar_configuracion)
+        self.save_btn.pack(side="left", padx=5)
 
     def setup_users_tab(self):
         """Gestión de usuarios remotos"""
@@ -218,36 +276,52 @@ class ConfigurarServidor:
         """Prueba la conexión al servidor MySQL"""
         def test_connection():
             try:
-                host = self.host_var.get()
-                port = int(self.puerto_var.get())
-                user = self.admin_user_var.get()
+                host = self.host_var.get().strip()
+                port = int(self.puerto_var.get().strip())
+                user = self.admin_user_var.get().strip()
                 password = self.admin_pass_var.get()
 
-                self.info_text.insert(tk.END, f"Probando conexión a {host}:{port} como {user}...\n")
-                
-                connection = pymysql.connect(
+                # Validar que contraseña no esté vacía
+                if not password:
+                    self.info_text.insert(tk.END, "❌ Error: Debe ingresar la contraseña del usuario root\n")
+                    messagebox.showerror("Error", "Debe ingresar la contraseña del usuario root")
+                    self.test_btn.config(state='normal')
+                    return
+
+                self.info_text.insert(tk.END, f"Intentando conectar a MySQL en {host}:{port} con usuario {user}\n")
+
+                connection = mysql.connector.connect(
                     host=host,
                     port=port,
                     user=user,
                     password=password,
-                    connect_timeout=10
+                    connection_timeout=10
                 )
-                
-                with connection.cursor() as cursor:
-                    cursor.execute("SELECT VERSION()")
-                    version = cursor.fetchone()[0]
-                
+
+                cursor = connection.cursor()
+                cursor.execute("SELECT VERSION()")
+                version = cursor.fetchone()[0]
+                cursor.close()
                 connection.close()
-                
+
                 self.info_text.insert(tk.END, f"✅ Conexión exitosa! Versión MySQL: {version}\n")
                 messagebox.showinfo("Éxito", f"Conexión exitosa!\nVersión MySQL: {version}")
-                
-            except Exception as e:
-                error_msg = f"❌ Error de conexión: {str(e)}\n"
-                self.info_text.insert(tk.END, error_msg)
-                messagebox.showerror("Error de Conexión", str(e))
 
-        # Ejecutar en hilo separado para no bloquear la UI
+            except mysql.connector.Error as e:
+                error_code = e.errno
+                error_msg = e.msg
+                self.info_text.insert(tk.END, f"❌ Error de conexión: {error_code} - {error_msg}\n")
+                messagebox.showerror("Error de Conexión", f"{error_code} - {error_msg}")
+
+            except Exception as e:
+                self.info_text.insert(tk.END, f"❌ Error inesperado: {str(e)}\n")
+                messagebox.showerror("Error", f"Error inesperado: {str(e)}")
+
+            finally:
+                self.test_btn.config(state='normal')
+
+        # Deshabilitar botón mientras prueba
+        self.test_btn.config(state='disabled')
         threading.Thread(target=test_connection, daemon=True).start()
 
     def aplicar_configuracion(self):
@@ -261,108 +335,71 @@ class ConfigurarServidor:
             max_connections = self.max_connections_var.get()
             timeout = self.timeout_var.get()
 
-            connection = pymysql.connect(
+            connection = mysql.connector.connect(
                 host=host,
                 port=port,
                 user=user,
                 password=password
             )
 
-            with connection.cursor() as cursor:
-                # Configurar variables de sistema
-                queries = [
-                    f"SET GLOBAL max_connections = {max_connections}",
-                    f"SET GLOBAL wait_timeout = {timeout}",
-                    f"SET GLOBAL interactive_timeout = {timeout}"
-                ]
-                
-                for query in queries:
-                    cursor.execute(query)
-                    self.info_text.insert(tk.END, f"Ejecutado: {query}\n")
+            cursor = connection.cursor()
+            
+            # Configurar variables de sistema
+            queries = [
+                f"SET GLOBAL max_connections = {max_connections}",
+                f"SET GLOBAL wait_timeout = {timeout}",
+                f"SET GLOBAL interactive_timeout = {timeout}"
+            ]
+            
+            for query in queries:
+                cursor.execute(query)
+                self.info_text.insert(tk.END, f"Ejecutado: {query}\n")
 
+            cursor.close()
             connection.close()
             
             # Mensaje sobre my.cnf
             msg = f"""Configuración aplicada parcialmente.
 
-Para aplicar completamente la configuración de red, debe:
+    Para aplicar completamente la configuración de red, debe:
 
-1. Editar el archivo my.cnf (o my.ini en Windows)
-2. Agregar/modificar estas líneas en [mysqld]:
-   bind-address = {bind_address}
-   port = {port}
-   max_connections = {max_connections}
+    1. Editar el archivo my.cnf (o my.ini en Windows)
+    2. Agregar/modificar estas líneas en [mysqld]:
+    bind-address = {bind_address}
+    port = {port}
+    max_connections = {max_connections}
 
-3. Reiniciar el servicio MySQL
+    3. Reiniciar el servicio MySQL
 
-¿Desea que intente localizar y editar el archivo de configuración automáticamente?"""
+    ¿Desea que intente localizar y editar el archivo de configuración automáticamente?"""
             
             if messagebox.askyesno("Configuración", msg):
                 self.editar_archivo_configuracion(bind_address, port, max_connections)
             
             messagebox.showinfo("Éxito", "Variables de configuración aplicadas")
             
+        except mysql.connector.Error as e:
+            messagebox.showerror("Error", f"No se pudo aplicar la configuración: {e.msg}")
         except Exception as e:
             messagebox.showerror("Error", f"No se pudo aplicar la configuración: {str(e)}")
 
     def editar_archivo_configuracion(self, bind_address, port, max_connections):
-        """Intenta editar el archivo de configuración MySQL"""
-        # Posibles ubicaciones del archivo de configuración
-        possible_paths = [
-            "/etc/mysql/my.cnf",
-            "/etc/my.cnf",
-            "/usr/local/etc/my.cnf",
-            "C:\\ProgramData\\MySQL\\MySQL Server 8.0\\my.ini",
-            "C:\\Program Files\\MySQL\\MySQL Server 8.0\\my.ini",
-            "C:\\xampp\\mysql\\bin\\my.ini"
-        ]
         
-        config_file = None
-        for path in possible_paths:
-            if os.path.exists(path):
-                config_file = path
-                break
+        import platform
         
-        if not config_file:
-            # Permitir selección manual
-            config_file = filedialog.askopenfilename(
-                title="Seleccionar archivo de configuración MySQL",
-                filetypes=[("Archivos de configuración", "*.cnf *.ini"), ("Todos", "*.*")]
-            )
-        
-        if config_file and os.path.exists(config_file):
-            try:
-                # Hacer backup
-                backup_file = config_file + ".backup"
-                with open(config_file, 'r') as f:
-                    with open(backup_file, 'w') as b:
-                        b.write(f.read())
-                
-                # Leer configuración actual
-                config = configparser.ConfigParser(allow_no_value=True)
-                config.read(config_file)
-                
-                # Asegurar que existe la sección [mysqld]
-                if 'mysqld' not in config:
-                    config.add_section('mysqld')
-                
-                # Actualizar configuración
-                config['mysqld']['bind-address'] = bind_address
-                config['mysqld']['port'] = str(port)
-                config['mysqld']['max_connections'] = str(max_connections)
-                
-                # Escribir configuración actualizada
-                with open(config_file, 'w') as f:
-                    config.write(f)
-                
-                self.info_text.insert(tk.END, f"Archivo de configuración actualizado: {config_file}\n")
-                self.info_text.insert(tk.END, f"Backup creado: {backup_file}\n")
-                messagebox.showinfo("Éxito", f"Archivo de configuración actualizado:\n{config_file}\n\nBackup: {backup_file}\n\nReinicie MySQL para aplicar cambios.")
-                
-            except Exception as e:
-                messagebox.showerror("Error", f"No se pudo editar el archivo de configuración: {str(e)}")
+        if platform.system() != "Windows":
+            messagebox.showerror("Error", "Esta función solo está implementada para Windows.")
+            return
+
+        ruta_bat = os.path.join(os.path.abspath(os.path.dirname(__file__)), "modificar_mysql.bat")
+        crear_script_bat(bind_address, port, max_connections, ruta_bat)
+
+        messagebox.showinfo("Permisos", "Se solicitarán permisos de administrador para modificar el archivo my.ini.")
+
+        if ejecutar_bat_con_elevacion(ruta_bat):
+            messagebox.showinfo("Éxito", "Archivo de configuración modificado correctamente.\nRecuerde reiniciar MySQL para aplicar cambios.")
         else:
-            messagebox.showwarning("Advertencia", "No se encontró el archivo de configuración MySQL")
+            messagebox.showerror("Error", "No se pudo ejecutar el script con permisos de administrador.")
 
     def reiniciar_mysql(self):
         """Reinicia el servicio MySQL"""
@@ -425,30 +462,34 @@ Para aplicar completamente la configuración de red, debe:
             username, password, host, privilegios = dialog.result
             
             try:
-                connection = pymysql.connect(
+                connection = mysql.connector.connect(
                     host=self.host_var.get(),
                     port=int(self.puerto_var.get()),
                     user=self.admin_user_var.get(),
                     password=self.admin_pass_var.get()
                 )
                 
-                with connection.cursor() as cursor:
-                    # Crear usuario
-                    cursor.execute(f"CREATE USER '{username}'@'{host}' IDENTIFIED BY '{password}'")
-                    
-                    # Otorgar privilegios
-                    if privilegios == "ALL":
-                        cursor.execute(f"GRANT ALL PRIVILEGES ON *.* TO '{username}'@'{host}' WITH GRANT OPTION")
-                    else:
-                        cursor.execute(f"GRANT {privilegios} ON *.* TO '{username}'@'{host}'")
-                    
-                    cursor.execute("FLUSH PRIVILEGES")
+                cursor = connection.cursor()
                 
+                # Crear usuario
+                cursor.execute(f"CREATE USER '{username}'@'{host}' IDENTIFIED BY '{password}'")
+                
+                # Otorgar privilegios
+                if privilegios == "ALL":
+                    cursor.execute(f"GRANT ALL PRIVILEGES ON *.* TO '{username}'@'{host}' WITH GRANT OPTION")
+                else:
+                    cursor.execute(f"GRANT {privilegios} ON *.* TO '{username}'@'{host}'")
+                
+                cursor.execute("FLUSH PRIVILEGES")
+                
+                cursor.close()
                 connection.close()
                 
                 messagebox.showinfo("Éxito", f"Usuario '{username}@{host}' creado correctamente")
                 self.cargar_usuarios_remotos()
                 
+            except mysql.connector.Error as e:
+                messagebox.showerror("Error", f"No se pudo crear el usuario: {e.msg}")
             except Exception as e:
                 messagebox.showerror("Error", f"No se pudo crear el usuario: {str(e)}")
 
@@ -459,7 +500,7 @@ Para aplicar completamente la configuración de red, debe:
             for row in self.users_tree.get_children():
                 self.users_tree.delete(row)
             
-            connection = pymysql.connect(
+            connection = mysql.connector.connect(
                 host=self.host_var.get(),
                 port=int(self.puerto_var.get()),
                 user=self.admin_user_var.get(),
@@ -467,25 +508,31 @@ Para aplicar completamente la configuración de red, debe:
                 database="mysql"
             )
             
-            with connection.cursor() as cursor:
-                # Obtener usuarios remotos (no localhost)
-                cursor.execute("""
-                    SELECT User, Host, 
-                           IF(Select_priv='Y' AND Insert_priv='Y' AND Update_priv='Y' AND Delete_priv='Y', 'FULL', 'LIMITED') as Privilegios,
-                           IF(account_locked='N', 'Sí', 'No') as Activo
-                    FROM user 
-                    WHERE Host != 'localhost' AND Host != '127.0.0.1'
-                    ORDER BY User, Host
-                """)
-                
-                usuarios = cursor.fetchall()
-                
-                for usuario in usuarios:
-                    self.users_tree.insert("", "end", values=usuario)
+            cursor = connection.cursor()
             
+            # Obtener usuarios remotos (no localhost)
+            cursor.execute("""
+                SELECT User, Host, 
+                    IF(Select_priv='Y' AND Insert_priv='Y' AND Update_priv='Y' AND Delete_priv='Y', 'FULL', 'LIMITED') as Privilegios,
+                    IF(account_locked='N', 'Sí', 'No') as Activo
+                FROM user 
+                WHERE Host != 'localhost' AND Host != '127.0.0.1'
+                ORDER BY User, Host
+            """)
+            
+            usuarios = cursor.fetchall()
+            
+            for usuario in usuarios:
+                self.users_tree.insert("", "end", values=usuario)
+            
+            cursor.close()
             connection.close()
+            
             self.info_text.insert(tk.END, f"Lista de usuarios actualizada: {len(usuarios)} usuarios remotos\n")
             
+        except mysql.connector.Error as e:
+            error_msg = f"Error al cargar usuarios: {e.msg}"
+            self.info_text.insert(tk.END, f"❌ {error_msg}\n")
         except Exception as e:
             error_msg = f"Error al cargar usuarios: {str(e)}"
             self.info_text.insert(tk.END, f"❌ {error_msg}\n")
@@ -498,46 +545,51 @@ Para aplicar completamente la configuración de red, debe:
                 self.info_text.delete(1.0, tk.END)
                 
                 # Probar conexión
-                connection = pymysql.connect(
+                connection = mysql.connector.connect(
                     host=self.host_var.get(),
                     port=int(self.puerto_var.get()),
                     user=self.admin_user_var.get(),
                     password=self.admin_pass_var.get()
                 )
                 
-                with connection.cursor() as cursor:
-                    # Información básica
-                    cursor.execute("SELECT VERSION()")
-                    version = cursor.fetchone()[0]
-                    self.info_text.insert(tk.END, f"🔄 Estado del Servidor MySQL\n")
-                    self.info_text.insert(tk.END, f"✅ Servidor ACTIVO\n")
-                    self.info_text.insert(tk.END, f"📊 Versión: {version}\n\n")
-                    
-                    # Variables importantes
-                    variables = [
-                        'max_connections', 'port', 'bind_address', 
-                        'wait_timeout', 'interactive_timeout'
-                    ]
-                    
-                    self.info_text.insert(tk.END, "🔧 Configuración Actual:\n")
-                    for var in variables:
-                        cursor.execute(f"SHOW VARIABLES LIKE '{var}'")
-                        result = cursor.fetchone()
-                        if result:
-                            self.info_text.insert(tk.END, f"  • {var}: {result[1]}\n")
-                    
-                    # Estadísticas de conexiones
-                    self.info_text.insert(tk.END, "\n📈 Estadísticas de Conexión:\n")
-                    status_vars = ['Threads_connected', 'Connections', 'Max_used_connections']
-                    for var in status_vars:
-                        cursor.execute(f"SHOW STATUS LIKE '{var}'")
-                        result = cursor.fetchone()
-                        if result:
-                            self.info_text.insert(tk.END, f"  • {var}: {result[1]}\n")
+                cursor = connection.cursor()
                 
+                # Información básica
+                cursor.execute("SELECT VERSION()")
+                version = cursor.fetchone()[0]
+                self.info_text.insert(tk.END, f"🔄 Estado del Servidor MySQL\n")
+                self.info_text.insert(tk.END, f"✅ Servidor ACTIVO\n")
+                self.info_text.insert(tk.END, f"📊 Versión: {version}\n\n")
+                
+                # Variables importantes
+                variables = [
+                    'max_connections', 'port', 'bind_address', 
+                    'wait_timeout', 'interactive_timeout'
+                ]
+                
+                self.info_text.insert(tk.END, "🔧 Configuración Actual:\n")
+                for var in variables:
+                    cursor.execute(f"SHOW VARIABLES LIKE '{var}'")
+                    result = cursor.fetchone()
+                    if result:
+                        self.info_text.insert(tk.END, f"  • {var}: {result[1]}\n")
+                
+                # Estadísticas de conexiones
+                self.info_text.insert(tk.END, "\n📈 Estadísticas de Conexión:\n")
+                status_vars = ['Threads_connected', 'Connections', 'Max_used_connections']
+                for var in status_vars:
+                    cursor.execute(f"SHOW STATUS LIKE '{var}'")
+                    result = cursor.fetchone()
+                    if result:
+                        self.info_text.insert(tk.END, f"  • {var}: {result[1]}\n")
+                
+                cursor.close()
                 connection.close()
                 self.status_label.config(text="✅ MySQL Server ACTIVO", foreground="green")
                 
+            except mysql.connector.Error as e:
+                self.info_text.insert(tk.END, f"❌ Error: {e.msg}\n")
+                self.status_label.config(text="❌ MySQL Server NO DISPONIBLE", foreground="red")
             except Exception as e:
                 self.info_text.insert(tk.END, f"❌ Error: {str(e)}\n")
                 self.status_label.config(text="❌ MySQL Server NO DISPONIBLE", foreground="red")
@@ -547,33 +599,36 @@ Para aplicar completamente la configuración de red, debe:
     def ver_conexiones_activas(self):
         """Muestra las conexiones activas al servidor"""
         try:
-            connection = pymysql.connect(
+            connection = mysql.connector.connect(
                 host=self.host_var.get(),
                 port=int(self.puerto_var.get()),
                 user=self.admin_user_var.get(),
                 password=self.admin_pass_var.get()
             )
             
-            with connection.cursor() as cursor:
-                cursor.execute("SHOW PROCESSLIST")
-                procesos = cursor.fetchall()
-                
-                self.info_text.insert(tk.END, f"\n🔗 Conexiones Activas ({len(procesos)}):\n")
-                self.info_text.insert(tk.END, "-" * 80 + "\n")
-                self.info_text.insert(tk.END, f"{'ID':<8}{'Usuario':<15}{'Host':<25}{'DB':<15}{'Estado':<15}\n")
-                self.info_text.insert(tk.END, "-" * 80 + "\n")
-                
-                for proceso in procesos:
-                    id_proc = proceso[0] or 0
-                    user = proceso[1] or "N/A"
-                    host = proceso[2] or "N/A"
-                    db = proceso[3] or "N/A"
-                    state = proceso[4] or "N/A"
-                    
-                    self.info_text.insert(tk.END, f"{id_proc:<8}{user:<15}{host:<25}{db:<15}{state:<15}\n")
+            cursor = connection.cursor()
+            cursor.execute("SHOW PROCESSLIST")
+            procesos = cursor.fetchall()
             
+            self.info_text.insert(tk.END, f"\n🔗 Conexiones Activas ({len(procesos)}):\n")
+            self.info_text.insert(tk.END, "-" * 80 + "\n")
+            self.info_text.insert(tk.END, f"{'ID':<8}{'Usuario':<15}{'Host':<25}{'DB':<15}{'Estado':<15}\n")
+            self.info_text.insert(tk.END, "-" * 80 + "\n")
+            
+            for proceso in procesos:
+                id_proc = proceso[0] or 0
+                user = proceso[1] or "N/A"
+                host = proceso[2] or "N/A"
+                db = proceso[3] or "N/A"
+                state = proceso[4] or "N/A"
+                
+                self.info_text.insert(tk.END, f"{id_proc:<8}{user:<15}{host:<25}{db:<15}{state:<15}\n")
+            
+            cursor.close()
             connection.close()
             
+        except mysql.connector.Error as e:
+            self.info_text.insert(tk.END, f"❌ Error al obtener conexiones: {e.msg}\n")
         except Exception as e:
             self.info_text.insert(tk.END, f"❌ Error al obtener conexiones: {str(e)}\n")
 
@@ -598,38 +653,42 @@ Para aplicar completamente la configuración de red, debe:
         """Muestra el log de errores de MySQL"""
         def show_log():
             try:
-                connection = pymysql.connect(
+                connection = mysql.connector.connect(
                     host=self.host_var.get(),
                     port=int(self.puerto_var.get()),
                     user=self.admin_user_var.get(),
                     password=self.admin_pass_var.get()
                 )
                 
-                with connection.cursor() as cursor:
-                    # Obtener la ubicación del log de errores
-                    cursor.execute("SHOW VARIABLES LIKE 'log_error'")
-                    result = cursor.fetchone()
-                    
-                    if result and result[1]:
-                        log_path = result[1]
-                        self.info_text.insert(tk.END, f"\n📋 Log de Errores: {log_path}\n")
-                        self.info_text.insert(tk.END, "-" * 80 + "\n")
-                        
-                        try:
-                            # Intentar leer las últimas líneas del log
-                            with open(log_path, 'r', encoding='utf-8', errors='ignore') as f:
-                                lines = f.readlines()
-                                # Mostrar las últimas 20 líneas
-                                for line in lines[-20:]:
-                                    self.info_text.insert(tk.END, line)
-                        except Exception as e:
-                            self.info_text.insert(tk.END, f"No se puede leer el archivo: {str(e)}\n")
-                            self.info_text.insert(tk.END, f"Archivo ubicado en: {log_path}\n")
-                    else:
-                        self.info_text.insert(tk.END, "\n📋 Log de errores no configurado o no disponible\n")
+                cursor = connection.cursor()
                 
+                # Obtener la ubicación del log de errores
+                cursor.execute("SHOW VARIABLES LIKE 'log_error'")
+                result = cursor.fetchone()
+                
+                if result and result[1]:
+                    log_path = result[1]
+                    self.info_text.insert(tk.END, f"\n📋 Log de Errores: {log_path}\n")
+                    self.info_text.insert(tk.END, "-" * 80 + "\n")
+                    
+                    try:
+                        # Intentar leer las últimas líneas del log
+                        with open(log_path, 'r', encoding='utf-8', errors='ignore') as f:
+                            lines = f.readlines()
+                            # Mostrar las últimas 20 líneas
+                            for line in lines[-20:]:
+                                self.info_text.insert(tk.END, line)
+                    except Exception as e:
+                        self.info_text.insert(tk.END, f"No se puede leer el archivo: {str(e)}\n")
+                        self.info_text.insert(tk.END, f"Archivo ubicado en: {log_path}\n")
+                else:
+                    self.info_text.insert(tk.END, "\n📋 Log de errores no configurado o no disponible\n")
+                
+                cursor.close()
                 connection.close()
                 
+            except mysql.connector.Error as e:
+                self.info_text.insert(tk.END, f"❌ Error al acceder al log: {e.msg}\n")
             except Exception as e:
                 self.info_text.insert(tk.END, f"❌ Error al acceder al log: {str(e)}\n")
 
@@ -650,30 +709,34 @@ Para aplicar completamente la configuración de red, debe:
             nuevos_privilegios = dialog.result
             
             try:
-                connection = pymysql.connect(
+                connection = mysql.connector.connect(
                     host=self.host_var.get(),
                     port=int(self.puerto_var.get()),
                     user=self.admin_user_var.get(),
                     password=self.admin_pass_var.get()
                 )
                 
-                with connection.cursor() as cursor:
-                    # Revocar privilegios existentes
-                    cursor.execute(f"REVOKE ALL PRIVILEGES ON *.* FROM '{usuario}'@'{host}'")
-                    
-                    # Otorgar nuevos privilegios
-                    if nuevos_privilegios == "ALL":
-                        cursor.execute(f"GRANT ALL PRIVILEGES ON *.* TO '{usuario}'@'{host}' WITH GRANT OPTION")
-                    else:
-                        cursor.execute(f"GRANT {nuevos_privilegios} ON *.* TO '{usuario}'@'{host}'")
-                    
-                    cursor.execute("FLUSH PRIVILEGES")
+                cursor = connection.cursor()
                 
+                # Revocar privilegios existentes
+                cursor.execute(f"REVOKE ALL PRIVILEGES ON *.* FROM '{usuario}'@'{host}'")
+                
+                # Otorgar nuevos privilegios
+                if nuevos_privilegios == "ALL":
+                    cursor.execute(f"GRANT ALL PRIVILEGES ON *.* TO '{usuario}'@'{host}' WITH GRANT OPTION")
+                else:
+                    cursor.execute(f"GRANT {nuevos_privilegios} ON *.* TO '{usuario}'@'{host}'")
+                
+                cursor.execute("FLUSH PRIVILEGES")
+                
+                cursor.close()
                 connection.close()
                 
                 messagebox.showinfo("Éxito", f"Privilegios actualizados para {usuario}@{host}")
                 self.cargar_usuarios_remotos()
                 
+            except mysql.connector.Error as e:
+                messagebox.showerror("Error", f"No se pudieron modificar los privilegios: {e.msg}")
             except Exception as e:
                 messagebox.showerror("Error", f"No se pudieron modificar los privilegios: {str(e)}")
 
@@ -689,24 +752,28 @@ Para aplicar completamente la configuración de red, debe:
         
         if messagebox.askyesno("Confirmar", f"¿Eliminar el usuario '{usuario}@{host}'?"):
             try:
-                connection = pymysql.connect(
+                connection = mysql.connector.connect(
                     host=self.host_var.get(),
                     port=int(self.puerto_var.get()),
                     user=self.admin_user_var.get(),
                     password=self.admin_pass_var.get()
                 )
                 
-                with connection.cursor() as cursor:
-                    cursor.execute(f"DROP USER '{usuario}'@'{host}'")
-                    cursor.execute("FLUSH PRIVILEGES")
+                cursor = connection.cursor()
+                cursor.execute(f"DROP USER '{usuario}'@'{host}'")
+                cursor.execute("FLUSH PRIVILEGES")
                 
+                cursor.close()
                 connection.close()
                 
                 messagebox.showinfo("Éxito", f"Usuario {usuario}@{host} eliminado correctamente")
                 self.cargar_usuarios_remotos()
                 
+            except mysql.connector.Error as e:
+                messagebox.showerror("Error", f"No se pudo eliminar el usuario: {e.msg}")
             except Exception as e:
                 messagebox.showerror("Error", f"No se pudo eliminar el usuario: {str(e)}")
+
 
     def guardar_configuracion(self):
         """Guarda la configuración actual en un archivo"""
@@ -715,6 +782,7 @@ Para aplicar completamente la configuración de red, debe:
             'host': self.host_var.get(),
             'port': self.puerto_var.get(),
             'admin_user': self.admin_user_var.get(),
+            'admin_pass': self.admin_pass_var.get(),  # <-- Aquí agregas la contraseña
             'bind_address': self.bind_address_var.get(),
             'max_connections': self.max_connections_var.get(),
             'timeout': self.timeout_var.get()
@@ -739,10 +807,11 @@ Para aplicar completamente la configuración de red, debe:
                     self.host_var.set(mysql_config.get('host', 'localhost'))
                     self.puerto_var.set(mysql_config.get('port', '3306'))
                     self.admin_user_var.set(mysql_config.get('admin_user', 'root'))
+                    self.admin_pass_var.set(mysql_config.get('admin_pass', ''))
                     self.bind_address_var.set(mysql_config.get('bind_address', '0.0.0.0'))
                     self.max_connections_var.set(mysql_config.get('max_connections', '100'))
                     self.timeout_var.set(mysql_config.get('timeout', '28800'))
-                    
+                            
             except Exception as e:
                 pass  # Si no se puede cargar, usar valores por defecto
 

@@ -1,3 +1,4 @@
+import configparser
 import mysql.connector
 from mysql.connector import Error
 import os
@@ -17,60 +18,77 @@ def resource_path(relative_path):
     return os.path.join(base_path, relative_path)
 
 def get_config():
-    """Configuración de conexión a MySQL"""
-    if getattr(sys, 'frozen', False):
-        # Para aplicación compilada, usar archivo de configuración
-        config_path = os.path.join(os.environ.get('APPDATA', '.'), "InsumosApp", "mysql_config.txt")
-        if os.path.exists(config_path):
-            config = {}
-            with open(config_path, 'r') as f:
-                for line in f:
-                    key, value = line.strip().split('=', 1)
-                    config[key] = value
-            return config
-    
-    # Configuración por defecto para desarrollo
-    return {
-        'host': 'localhost',
-        'database': 'insumos',
-        'user': 'root',
-        'password': '0.5735',
-        'port': 3306,
-        'charset': 'utf8mb4',
-        'collation': 'utf8mb4_unicode_ci'
-    }
+    config = configparser.ConfigParser()
+    config.read('mysql_config.ini')
+    if 'MySQL' in config:
+        return {
+            'host': config['MySQL'].get('host', 'localhost'),
+            'port': int(config['MySQL'].get('port', 3306)),
+            'user': config['MySQL'].get('admin_user', 'root'),
+            'password': config['MySQL'].get('admin_pass', ''),
+            'database': config['MySQL'].get('database', 'insumos'),
+            'charset': 'utf8mb4',
+            'autocommit': False,
+            'use_unicode': True
+        }
+    else:
+        raise Exception("No se encontró la configuración MySQL")
 
 def crear_base_datos_si_no_existe():
     """Crea la base de datos si no existe"""
     config = get_config()
     database_name = config['database']
     
+    conn = None
+    cursor = None
+    
     try:
-        # Conectar sin especificar base de datos
-        temp_config = config.copy()
-        del temp_config['database']
+        # Configuración para conectar sin especificar base de datos
+        temp_config = {
+            'host': config['host'],
+            'user': config['user'],
+            'password': config['password'],
+            'port': config['port'],
+            'charset': 'utf8mb4',
+            'use_unicode': True,
+            'autocommit': True
+        }
+        
+        print(f"Intentando conectar a MySQL en {temp_config['host']}:{temp_config['port']} con usuario {temp_config['user']}")
         
         conn = mysql.connector.connect(**temp_config)
         cursor = conn.cursor()
         
         # Crear base de datos si no existe
         cursor.execute(f"CREATE DATABASE IF NOT EXISTS {database_name} CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci")
-        conn.commit()
         
         print(f"Base de datos '{database_name}' verificada/creada exitosamente.")
         
     except Error as e:
         print(f"Error al crear/verificar base de datos: {e}")
+        # Proporcionar más información sobre el error
+        if "Access denied" in str(e):
+            print("SOLUCIÓN: Verifique que:")
+            print("1. MySQL esté ejecutándose")
+            print("2. El usuario y contraseña sean correctos")
+            print("3. El usuario tenga permisos para crear bases de datos")
+        raise e
     finally:
-        if conn:
+        if cursor:
             cursor.close()
+        if conn:
             conn.close()
 
 def conectar_db():
     """Conecta a la base de datos MySQL"""
+    conn = None
     try:
+        # Primero crear la base de datos si no existe
         crear_base_datos_si_no_existe()
+        
+        # Ahora conectar con la base de datos
         config = get_config()
+        print(f"Conectando a base de datos {config['database']} en {config['host']}")
         
         conn = mysql.connector.connect(**config)
         
@@ -80,8 +98,16 @@ def conectar_db():
         return conn
     except Error as e:
         print(f"Error al conectar a la base de datos: {e}")
+        if "Access denied" in str(e):
+            print("\n=== DIAGNÓSTICO DE CONEXIÓN ===")
+            print("El error indica problemas de autenticación.")
+            print("Posibles soluciones:")
+            print("1. Verificar que MySQL esté ejecutándose")
+            print("2. Configurar credenciales correctas en la aplicación")
+            print("3. Verificar permisos del usuario en MySQL")
+            print("=====================================\n")
         return None
-
+    
 def crear_tablas_si_no_existen(conn):
     """Crea todas las tablas necesarias si no existen"""
     try:
@@ -1222,16 +1248,30 @@ def obtener_movimientos_kardex(fecha_inicio, fecha_fin, distrito_nombre=None, ti
 # -------------------- OPERACIÓN USUARIOS --------------------
 
 def crear_tabla_usuarios():
-    """Crea la tabla de usuarios si no existe"""
-    # Ya se crea en crear_tablas_si_no_existen()
-    # Crear super usuario si no existe
-    crear_super_usuario_si_no_existe()
-    return True
+    """Crea la tabla de usuarios si no existe y crea el super usuario"""
+    try:
+        # Primero verificar conexión
+        conn = conectar_db()
+        if conn:
+            conn.close()
+            print("Conexión a base de datos exitosa")
+            # Crear super usuario
+            crear_super_usuario_si_no_existe()
+            return True
+        else:
+            print("ERROR: No se pudo conectar a MySQL para crear tablas")
+            return False
+    except Exception as e:
+        print(f"Error en crear_tabla_usuarios: {e}")
+        raise e  # Re-lanzar para que se maneje en login.py
 
 def crear_super_usuario_si_no_existe():
     """Crea el super usuario si no existe"""
     import hashlib
-
+    
+    conn = None
+    cursor = None
+    
     # Credenciales del super usuario
     super_user = {
         'username': 'admin',
@@ -1242,7 +1282,10 @@ def crear_super_usuario_si_no_existe():
 
     try:
         conn = conectar_db()
-        # Verificar si existe
+        if not conn:
+            print("No se pudo conectar a la base de datos para crear super usuario")
+            return
+            
         cursor = conn.cursor(dictionary=True)
         cursor.execute('SELECT id FROM usuarios WHERE username = %s', (super_user['username'],))
         if not cursor.fetchone():
@@ -1257,11 +1300,18 @@ def crear_super_usuario_si_no_existe():
                 super_user['rol']
             ))
             conn.commit()
+            print("Super usuario creado exitosamente (usuario: admin, contraseña: admin123)")
+        else:
+            print("Super usuario ya existe")
+            
     except Exception as e:
         print(f"Error creando super usuario: {e}")
-    finally:
         if conn:
+            conn.rollback()
+    finally:
+        if cursor:
             cursor.close()
+        if conn:
             conn.close()
             
 def existe_usuario(username):
@@ -1281,10 +1331,17 @@ def existe_usuario(username):
             conn.close()
 
 def verificar_credenciales(username, password):
+    """Verifica las credenciales del usuario"""
     import hashlib
-
+    
+    conn = None
+    cursor = None
+    
     try:
         conn = conectar_db()
+        if not conn:
+            raise Exception("No se pudo establecer conexión con la base de datos MySQL. Verifique la configuración.")
+            
         cursor = conn.cursor(dictionary=True)
 
         # Hash de la contraseña ingresada
@@ -1299,7 +1356,7 @@ def verificar_credenciales(username, password):
 
         usuario = cursor.fetchone()
 
-        if usuario and usuario['activo']:  # Verificar que esté activo
+        if usuario and usuario['activo']:
             return {
                 'id': usuario['id'],
                 'username': usuario['username'],
@@ -1313,8 +1370,9 @@ def verificar_credenciales(username, password):
         print(f"Error al verificar credenciales: {e}")
         return None
     finally:
-        if conn:
+        if cursor:
             cursor.close()
+        if conn:
             conn.close()
 
 def obtener_usuarios():
@@ -1714,7 +1772,7 @@ def obtener_movimientos_demanda_real(fecha_inicio, fecha_fin, distrito_nombre=No
 
         return movimientos
 
-    except mysql.connector.Error as e:
+    except Error as e:
         print(f"Error al obtener movimientos demanda real: {e}")
         return []
     finally:
@@ -1786,7 +1844,7 @@ def obtener_movimientos_historicos(codigo_insumo, fecha_inicio, fecha_fin, distr
         
         return movimientos
         
-    except mysql.connector.Error as e:
+    except Error as e:
         print(f"Error al obtener movimientos históricos: {e}")
         return []
     finally:
@@ -1851,7 +1909,7 @@ def obtener_demanda_por_meses(codigo_insumo, fecha_inicio, fecha_fin, distrito=N
         
         return demanda_mensual
         
-    except mysql.connector.Error as e:
+    except Error as e:
         print(f"Error al obtener demanda por meses: {e}")
         return []
     finally:

@@ -1,12 +1,11 @@
+import ctypes
 import tkinter as tk
-from tkinter import ttk, messagebox
-from ttkthemes import ThemedStyle
+from tkinter import messagebox
+import mysql
 import sys
 import os
 from PIL import Image, ImageTk
-import pymysql
 import configparser
-import socket
 import threading
 
 # Agregar el directorio raíz del proyecto al PATH de Python
@@ -16,6 +15,111 @@ sys.path.append(project_root)
 from src.database.db_manager import verificar_credenciales
 from src.gui.main_window import MainWindow
 from src.database.db_manager import verificar_credenciales, crear_tabla_usuarios
+
+def crear_script_bat(bind_address, port, max_connections, ruta_bat):
+        contenido = f"""@echo off
+setlocal enabledelayedexpansion
+
+set CONFIG_FILE="C:\\ProgramData\\MySQL\\MySQL Server 8.0\\my.ini"
+set BACKUP_FILE=%CONFIG_FILE%.backup
+
+copy %CONFIG_FILE% %BACKUP_FILE%
+
+powershell -Command "((Get-Content -LiteralPath \\"%CONFIG_FILE%\\") -replace 'bind-address=.*', 'bind-address = {bind_address}') | Set-Content -LiteralPath \\"%CONFIG_FILE%\\""
+powershell -Command "((Get-Content -LiteralPath \\"%CONFIG_FILE%\\") -replace 'port=.*', 'port = {port}') | Set-Content -LiteralPath \\"%CONFIG_FILE%\\""
+powershell -Command "((Get-Content -LiteralPath \\"%CONFIG_FILE%\\") -replace 'max_connections=.*', 'max_connections = {max_connections}') | Set-Content -LiteralPath \\"%CONFIG_FILE%\\""
+
+echo Configuración actualizada.
+
+echo Reiniciando servicio MySQL...
+net stop MySQL80
+net start MySQL80
+
+echo Servicio MySQL reiniciado.
+pause
+"""
+        with open(ruta_bat, 'w', encoding='utf-8') as f:
+            f.write(contenido)
+
+def ejecutar_bat_con_elevacion(ruta_bat):
+    import ctypes
+    ret = ctypes.windll.shell32.ShellExecuteW(None, "runas", ruta_bat, None, None, 1)
+    if ret <= 32:
+        print(f"Error al ejecutar el script con elevación, código: {ret}")
+        return False
+    return True
+
+def es_admin():
+    try:
+        return ctypes.windll.shell32.IsUserAnAdmin()
+    except:
+        return False
+
+def ejecutar_como_admin():
+    if es_admin():
+        return True  # Ya es admin
+
+    executable = sys.executable
+    params = ' '.join([f'"{arg}"' for arg in sys.argv])
+
+    ret = ctypes.windll.shell32.ShellExecuteW(None, "runas", executable, params, None, 1)
+
+    if ret <= 32:
+        print(f"Error al pedir elevación, código: {ret}")
+        return False
+    else:
+        return True
+
+def debug_mysql_connection():
+    """Función de debug para probar la conexión MySQL directamente"""
+    try:
+        print("=== DEBUG: Probando conexión MySQL ===")
+        
+        # Importar aquí para evitar errores si no está disponible
+        import mysql.connector
+        
+        # Cargar configuración
+        import configparser
+        config = configparser.ConfigParser()
+        config_file = "mysql_config.ini"
+        
+        if os.path.exists(config_file):
+            config.read(config_file)
+            if 'MySQL' in config:
+                mysql_config = config['MySQL']
+                host = mysql_config.get('host', 'localhost')
+                port = int(mysql_config.get('port', '3306'))
+                user = mysql_config.get('admin_user', 'root')
+                password = mysql_config.get('admin_pass', '')
+                
+                print(f"Intentando conectar a: {user}@{host}:{port}")
+                
+                connection = mysql.connector.connect(
+                    host=host,
+                    port=port,
+                    user=user,
+                    password=password,
+                    connection_timeout=10
+                )
+                
+                cursor = connection.cursor()
+                cursor.execute("SELECT VERSION()")
+                version = cursor.fetchone()[0]
+                print(f"Conexión exitosa - MySQL {version}")
+                cursor.close()
+                connection.close()
+                
+                return True
+            else:
+                print("No hay configuración MySQL en el archivo")
+        else:
+            print("No existe archivo de configuración MySQL")
+            
+    except Exception as e:
+        print(f"Error en debug de conexión: {e}")
+        return False
+    
+    return False
 
 def resource_path(relative_path):
     try:
@@ -29,7 +133,8 @@ class ConfiguracionMySQL:
     def __init__(self, parent):
         self.parent = parent
         self.config_file = "mysql_config.ini"
-        self.result = None
+        self.max_connections_var = tk.StringVar(value="100")
+        self.timeout_var = tk.StringVar(value="28800")
         
         # Crear ventana de configuración
         self.config_window = tk.Toplevel(parent)
@@ -45,6 +150,47 @@ class ConfiguracionMySQL:
         
         self.setup_ui()
         self.cargar_configuracion()
+        
+    def aplicar_configuracion_red(self):
+        try:
+            import platform
+            if platform.system() != "Windows":
+                messagebox.showerror("Error", "Esta función solo está implementada para Windows.")
+                return
+
+            bind_address = '0.0.0.0'  # O tomar de UI
+            port = int(self.puerto_var.get())
+            max_connections = 100  # O tomar de UI
+
+            # Crear y ejecutar el .bat con elevación
+            ruta_bat = os.path.join(os.path.abspath(os.path.dirname(__file__)), "modificar_mysql.bat")
+            crear_script_bat(bind_address, port, max_connections, ruta_bat)
+
+            messagebox.showinfo("Permisos", "Se solicitarán permisos de administrador para modificar el archivo my.ini.")
+
+            if ejecutar_bat_con_elevacion(ruta_bat):
+                messagebox.showinfo("Éxito", "Archivo de configuración modificado correctamente.\nRecuerde reiniciar MySQL para aplicar cambios.")
+            else:
+                messagebox.showerror("Error", "No se pudo ejecutar el script con permisos de administrador.")
+
+        except Exception as e:
+            messagebox.showerror("Error", f"No se pudo aplicar la configuración: {str(e)}")
+
+    def editar_y_ejecutar_bat(self, bind_address, port, max_connections):
+        import platform
+        if platform.system() != "Windows":
+            messagebox.showerror("Error", "Esta función solo está implementada para Windows.")
+            return
+
+        ruta_bat = os.path.join(os.path.abspath(os.path.dirname(__file__)), "modificar_mysql.bat")
+        self.crear_script_bat(bind_address, port, max_connections, ruta_bat)
+
+        messagebox.showinfo("Permisos", "Se solicitarán permisos de administrador para modificar el archivo my.ini.")
+
+        if self.ejecutar_bat_con_elevacion(ruta_bat):
+            messagebox.showinfo("Éxito", "Archivo de configuración modificado correctamente.\nRecuerde reiniciar MySQL para aplicar cambios.")
+        else:
+            messagebox.showerror("Error", "No se pudo ejecutar el script con permisos de administrador.")
 
     def center_window(self):
         """Centra la ventana en la pantalla"""
@@ -211,40 +357,52 @@ class ConfiguracionMySQL:
         create_hover_effect(self.save_btn, '#27ae60', '#2ecc71')
 
     def probar_conexion_threaded(self):
-        """Ejecuta la prueba de conexión en un hilo separado"""
+        """Usar la lógica de configurar_servidor.py para probar conexión en hilo"""
         self.test_btn.config(state='disabled')
         self.status_label.config(text="Probando conexión...", fg='#f39c12')
-        
+
         def test_connection():
             try:
+                import mysql.connector
                 host = self.host_var.get().strip()
                 port = int(self.puerto_var.get().strip())
                 user = self.admin_user_var.get().strip()
                 password = self.admin_pass_var.get()
 
-                if not host or not user:
-                    raise Exception("Host y usuario son obligatorios")
+                if not password:
+                    self.config_window.after(0, lambda: self.connection_error("Debe ingresar la contraseña del usuario root"))
+                    self.test_btn.config(state='normal')
+                    return
 
-                connection = pymysql.connect(
+                if host.lower() == 'localhost':
+                    host = '127.0.0.1'
+
+                connection = mysql.connector.connect(
                     host=host,
                     port=port,
                     user=user,
                     password=password,
-                    connect_timeout=10
+                    connection_timeout=10
                 )
-                
-                with connection.cursor() as cursor:
-                    cursor.execute("SELECT VERSION()")
-                    version = cursor.fetchone()[0]
-                
+
+                cursor = connection.cursor()
+                cursor.execute("SELECT VERSION()")
+                version = cursor.fetchone()[0]
+                cursor.close()
                 connection.close()
-                
-                # Actualizar UI en el hilo principal
+
                 self.config_window.after(0, lambda: self.connection_success(version))
-                
+
+            except mysql.connector.Error as e:
+                error_msg = e.msg
+                if "Access denied" in error_msg:
+                    error_msg = "Usuario o contraseña incorrectos"
+                elif "Can't connect" in error_msg:
+                    error_msg = "No se puede conectar al servidor MySQL"
+                self.config_window.after(0, lambda: self.connection_error(error_msg))
             except Exception as e:
-                # Actualizar UI en el hilo principal
-                self.config_window.after(0, lambda: self.connection_error(str(e)))
+                error_msg = str(e)
+                self.config_window.after(0, lambda: self.connection_error(error_msg))
 
         threading.Thread(target=test_connection, daemon=True).start()
 
@@ -267,10 +425,15 @@ class ConfiguracionMySQL:
         self.test_btn.config(state='normal')
 
     def guardar_y_continuar(self):
-        """Guarda la configuración y continúa"""
         self.guardar_configuracion()
+        self.aplicar_configuracion_red()  # Aplica configuración y reinicia MySQL
+
+        host = self.host_var.get().strip()
+        if host.lower() == 'localhost':
+            host = '127.0.0.1'
+
         self.result = {
-            'host': self.host_var.get().strip(),
+            'host': host,
             'port': int(self.puerto_var.get().strip()),
             'user': self.admin_user_var.get().strip(),
             'password': self.admin_pass_var.get()
@@ -283,18 +446,31 @@ class ConfiguracionMySQL:
         self.config_window.destroy()
 
     def guardar_configuracion(self):
-        """Guarda la configuración en archivo"""
         config = configparser.ConfigParser()
+        
+        host = self.host_var.get().strip()
+        if host.lower() == 'localhost':
+            host = '127.0.0.1'  # Guardar como IP
+            
         config['MySQL'] = {
-            'host': self.host_var.get().strip(),
+            'host': host,
             'port': self.puerto_var.get().strip(),
-            'admin_user': self.admin_user_var.get().strip()
-            # No guardamos la contraseña por seguridad
+            'admin_user': self.admin_user_var.get().strip(),
+            'admin_pass': self.admin_pass_var.get(),
+            'bind_address': '0.0.0.0',  # Puedes agregar un campo para esto en UI si quieres
+            'max_connections': '100',   # Igual para max_connections y timeout
+            'timeout': '28800',
+            'database': 'insumos'
         }
         
         try:
+            config_dir = os.path.dirname(self.config_file) if os.path.dirname(self.config_file) else '.'
+            if not os.path.exists(config_dir):
+                os.makedirs(config_dir, exist_ok=True)
+                
             with open(self.config_file, 'w') as f:
                 config.write(f)
+            print(f"Configuración guardada en: {os.path.abspath(self.config_file)}")
         except Exception as e:
             messagebox.showerror("Error", f"No se pudo guardar la configuración: {str(e)}")
 
@@ -307,12 +483,14 @@ class ConfiguracionMySQL:
                 
                 if 'MySQL' in config:
                     mysql_config = config['MySQL']
-                    self.host_var.set(mysql_config.get('host', 'localhost'))
+                    self.host_var.set(mysql_config.get('host', '127.0.0.1'))
                     self.puerto_var.set(mysql_config.get('port', '3306'))
                     self.admin_user_var.set(mysql_config.get('admin_user', 'root'))
+                    self.admin_pass_var.set(mysql_config.get('admin_pass', ''))
+                    print("Configuración cargada desde archivo")
                     
             except Exception as e:
-                pass  # Si no se puede cargar, usar valores por defecto
+                print(f"Error cargando configuración: {e}")
 
 class LoginWindow:
     def __init__(self):
@@ -334,32 +512,54 @@ class LoginWindow:
         
         # Variable para mostrar/ocultar contraseña
         self.show_password = False
+        self.loading_active = False
+        self.animation_job = None
         
         # Verificar conexión MySQL antes de mostrar login
         self.verificar_mysql_y_continuar()
 
+    
     def verificar_mysql_y_continuar(self):
         """Verifica la conexión MySQL y decide qué mostrar"""
         def verificar_conexion():
             try:
+                print("Iniciando verificación de conexión MySQL...")
+                
                 # Intentar crear las tablas - esto verificará la conexión
                 crear_tabla_usuarios()
                 
+                print("Conexión MySQL exitosa, mostrando login...")
                 # Si llegamos aquí, la conexión funciona
                 self.root.after(0, self.mostrar_login)
                 
             except Exception as e:
+                error_msg = str(e)
+                print(f"Error de conexión MySQL: {error_msg}")
+                
                 # Error de conexión - mostrar configuración
-                self.root.after(0, lambda: self.mostrar_configuracion_mysql(str(e)))
+                self.root.after(0, lambda: self.mostrar_configuracion_mysql(error_msg))
 
         # Mostrar mensaje de carga
         self.mostrar_mensaje_carga()
         
-        # Ejecutar verificación en hilo separado
-        threading.Thread(target=verificar_conexion, daemon=True).start()
+        # Agregar un pequeño delay antes de ejecutar la verificación
+        self.root.after(500, lambda: threading.Thread(target=verificar_conexion, daemon=True).start())
 
     def mostrar_mensaje_carga(self):
         """Muestra un mensaje de carga mientras verifica la conexión"""
+        print("Mostrando mensaje de carga...")
+        
+        # Detener animaciones previas
+        self.loading_active = False
+        if self.animation_job:
+            try:
+                self.root.after_cancel(self.animation_job)
+            except:
+                pass
+
+        # Activar modo de carga
+        self.loading_active = True
+        
         # Limpiar la ventana
         for widget in self.root.winfo_children():
             widget.destroy()
@@ -377,60 +577,212 @@ class LoginWindow:
             icon_label = tk.Label(center_frame, image=self.icons['medical_120'], bg='#f8f9fa')
             icon_label.pack(pady=(0, 20))
 
-        # Mensaje
+        # Mensaje principal
         tk.Label(
             center_frame,
             text="Verificando conexión MySQL...",
             font=('Segoe UI', 14, 'bold'),
             bg='#f8f9fa',
             fg='#2c3e50'
+        ).pack(pady=(0, 10))
+
+        # Mensaje secundario
+        tk.Label(
+            center_frame,
+            text="Por favor espere un momento",
+            font=('Segoe UI', 10),
+            bg='#f8f9fa',
+            fg='#7f8c8d'
         ).pack()
+
+        # Barra de progreso simulada (opcional)
+        progress_frame = tk.Frame(center_frame, bg='#f8f9fa')
+        progress_frame.pack(pady=(20, 0))
+
+        # Crear una barra de progreso simple
+        canvas = tk.Canvas(progress_frame, width=200, height=4, bg='#f8f9fa', highlightthickness=0)
+        canvas.pack()
+
+        # Animar la barra de progreso
+        def animate_progress():
+            canvas.delete("all")
+            canvas.create_rectangle(0, 0, 200, 4, fill='#ecf0f1', outline='')
+            
+            import time
+            start_time = time.time()
+            
+            def update_progress():
+                if not self.loading_active:
+                    return
+                    
+                try:
+                    if not canvas.winfo_exists():
+                        return
+                        
+                    elapsed = (time.time() - start_time) % 2
+                    progress = (elapsed / 2) * 200
+                    
+                    canvas.delete("progress")
+                    canvas.create_rectangle(0, 0, progress, 4, fill='#3498db', outline='', tags="progress")
+                    
+                    if self.loading_active:
+                        self.animation_job = self.root.after(50, update_progress)
+                        
+                except Exception as e:
+                    self.loading_active = False
+            
+            update_progress()
+
+        animate_progress()
 
         # Actualizar la ventana
         self.root.update()
 
     def mostrar_configuracion_mysql(self, error_msg):
         """Muestra la ventana de configuración MySQL"""
+        print(f"Mostrando configuración MySQL debido a error: {error_msg}")
+        
         # Limpiar la ventana
         for widget in self.root.winfo_children():
             widget.destroy()
 
-        # Mensaje de error
-        error_frame = tk.Frame(self.root, bg='#f8f9fa')
-        error_frame.pack(fill='x', padx=20, pady=10)
+        # Frame principal para la configuración
+        config_frame = tk.Frame(self.root, bg='#f8f9fa')
+        config_frame.pack(fill='both', expand=True, padx=20, pady=20)
+
+        # Título de error
+        title_frame = tk.Frame(config_frame, bg='#f8f9fa')
+        title_frame.pack(fill='x', pady=(0, 20))
 
         tk.Label(
-            error_frame,
-            text="⚠️ No se pudo conectar a MySQL",
-            font=('Segoe UI', 12, 'bold'),
+            title_frame,
+            text="⚠️ Error de Conexión MySQL",
+            font=('Segoe UI', 16, 'bold'),
             bg='#f8f9fa',
             fg='#e74c3c'
         ).pack()
 
         tk.Label(
-            error_frame,
-            text=f"Error: {error_msg}",
-            font=('Segoe UI', 9),
+            title_frame,
+            text=f"No se pudo conectar a la base de datos:",
+            font=('Segoe UI', 10),
             bg='#f8f9fa',
-            fg='#7f8c8d',
-            wraplength=600
+            fg='#7f8c8d'
         ).pack(pady=(5, 0))
 
-        # Mostrar configuración
-        config_mysql = ConfiguracionMySQL(self.root)
+        # Frame para el mensaje de error
+        error_frame = tk.Frame(config_frame, bg='#fff5f5', relief='solid', bd=1)
+        error_frame.pack(fill='x', pady=(0, 20), padx=10)
+
+        tk.Label(
+            error_frame,
+            text=error_msg,
+            font=('Segoe UI', 9),
+            bg='#fff5f5',
+            fg='#c53030',
+            wraplength=700,
+            justify='left'
+        ).pack(padx=15, pady=10)
+
+        # Botones de acción
+        btn_frame = tk.Frame(config_frame, bg='#f8f9fa')
+        btn_frame.pack(fill='x', pady=10)
+
+        # Botón para configurar MySQL
+        config_btn = tk.Button(
+            btn_frame,
+            text="Configurar Conexión MySQL",
+            font=('Segoe UI', 11, 'bold'),
+            bg='#3498db',
+            fg='white',
+            relief='flat',
+            padx=20,
+            pady=10,
+            cursor='hand2',
+            command=self.abrir_configuracion_mysql
+        )
+        config_btn.pack(side='left', padx=(0, 10))
+
+        # Botón para reintentar
+        retry_btn = tk.Button(
+            btn_frame,
+            text="Reintentar Conexión",
+            font=('Segoe UI', 11, 'bold'),
+            bg='#27ae60',
+            fg='white',
+            relief='flat',
+            padx=20,
+            pady=10,
+            cursor='hand2',
+            command=self.reintentar_conexion
+        )
+        retry_btn.pack(side='left', padx=(0, 10))
+
+        # Botón para salir
+        exit_btn = tk.Button(
+            btn_frame,
+            text="Salir",
+            font=('Segoe UI', 11, 'bold'),
+            bg='#e74c3c',
+            fg='white',
+            relief='flat',
+            padx=20,
+            pady=10,
+            cursor='hand2',
+            command=self.root.quit
+        )
+        exit_btn.pack(side='right')
+
+        # Efectos hover
+        def create_hover_effect(button, normal_color, hover_color):
+            def on_enter(e):
+                button.configure(bg=hover_color)
+            def on_leave(e):
+                button.configure(bg=normal_color)
+            button.bind('<Enter>', on_enter)
+            button.bind('<Leave>', on_leave)
+
+        create_hover_effect(config_btn, '#3498db', '#2980b9')
+        create_hover_effect(retry_btn, '#27ae60', '#2ecc71')
+        create_hover_effect(exit_btn, '#e74c3c', '#c0392b')
+
+    def abrir_configuracion_mysql(self):
+        """Abre la ventana de configuración MySQL"""
+        print("Abriendo configuración MySQL...")
         
-        # Esperar resultado
-        self.root.wait_window(config_mysql.config_window)
-        
-        if config_mysql.result:
-            # Reintentar conexión con nueva configuración
-            self.verificar_mysql_y_continuar()
-        else:
-            # Usuario canceló - cerrar aplicación
-            self.root.quit()
+        try:
+            config_mysql = ConfiguracionMySQL(self.root)
+            
+            # Esperar resultado
+            self.root.wait_window(config_mysql.config_window)
+            
+            if hasattr(config_mysql, 'result') and config_mysql.result:
+                print("Configuración guardada, reintentando conexión...")
+                # Reintentar conexión con nueva configuración
+                self.reintentar_conexion()
+            else:
+                print("Configuración cancelada")
+                # Usuario canceló - mostrar opciones nuevamente
+                
+        except Exception as e:
+            print(f"Error en configuración MySQL: {e}")
+            messagebox.showerror("Error", f"Error al abrir configuración: {str(e)}")
+
+    def reintentar_conexion(self):
+        """Reintenta la verificación de conexión"""
+        print("Reintentando conexión...")
+        self.verificar_mysql_y_continuar()
 
     def mostrar_login(self):
         """Muestra la pantalla de login"""
+        # Detener todas las animaciones primero
+        self.loading_active = False
+        if hasattr(self, 'animation_job') and self.animation_job:
+            try:
+                self.root.after_cancel(self.animation_job)
+            except:
+                pass
+        
         # Limpiar la ventana
         for widget in self.root.winfo_children():
             widget.destroy()
@@ -714,5 +1066,12 @@ class LoginWindow:
         self.root.mainloop()
 
 if __name__ == "__main__":
+    # Primero prueba la conexión directamente
+    print("Probando conexión MySQL directamente...")
+    if debug_mysql_connection():
+        print("Conexión OK, iniciando aplicación normal")
+    else:
+        print("Conexión falló, se mostrará configuración")
+    
     login = LoginWindow()
     login.run()
