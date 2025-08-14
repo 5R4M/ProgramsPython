@@ -1,7 +1,8 @@
 import ctypes
+import socket
 import tkinter as tk
 from tkinter import messagebox
-import mysql
+import mysql.connector
 import sys
 import os
 from PIL import Image, ImageTk
@@ -71,15 +72,13 @@ def ejecutar_como_admin():
         return True
 
 def debug_mysql_connection():
-    """Función de debug para probar la conexión MySQL directamente"""
+    """Función de debug para probar la conexión MySQL directamente - CORREGIDA"""
     try:
         print("=== DEBUG: Probando conexión MySQL ===")
         
-        # Importar aquí para evitar errores si no está disponible
-        import mysql.connector
+        import mysql.connector  # Importación corregida
         
         # Cargar configuración
-        import configparser
         config = configparser.ConfigParser()
         config_file = "mysql_config.ini"
         
@@ -94,32 +93,75 @@ def debug_mysql_connection():
                 
                 print(f"Intentando conectar a: {user}@{host}:{port}")
                 
+                # Verificar conectividad de red primero
+                if not verificar_conectividad_red(host, port):
+                    print("❌ Sin conectividad de red al servidor MySQL")
+                    return False
+                
                 connection = mysql.connector.connect(
                     host=host,
                     port=port,
                     user=user,
                     password=password,
-                    connection_timeout=10
+                    connection_timeout=10,
+                    autocommit=True  # Agregar autocommit
                 )
                 
                 cursor = connection.cursor()
                 cursor.execute("SELECT VERSION()")
                 version = cursor.fetchone()[0]
-                print(f"Conexión exitosa - MySQL {version}")
+                print(f"✅ Conexión exitosa - MySQL {version}")
                 cursor.close()
                 connection.close()
                 
                 return True
             else:
-                print("No hay configuración MySQL en el archivo")
+                print("❌ No hay configuración MySQL en el archivo")
         else:
-            print("No existe archivo de configuración MySQL")
+            print("❌ No existe archivo de configuración MySQL")
             
+    except mysql.connector.Error as e:
+        print(f"❌ Error MySQL: {e.errno} - {e.msg}")
+        return False
     except Exception as e:
-        print(f"Error en debug de conexión: {e}")
+        print(f"❌ Error en debug de conexión: {e}")
         return False
     
     return False
+
+def verificar_conectividad_red(host, port):
+    """Verifica si el puerto MySQL está accesible - NUEVA FUNCIÓN"""
+    try:
+        # Resolver DNS primero
+        if host.lower() == 'localhost':
+            host = '127.0.0.1'
+        
+        ip = socket.gethostbyname(host)
+        print(f"DNS resuelto: {host} -> {ip}")
+        
+        # Probar conexión TCP
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        sock.settimeout(10)  # 10 segundos timeout
+        result = sock.connect_ex((ip, port))
+        sock.close()
+        
+        if result == 0:
+            print(f"✅ Puerto {port} accesible en {host}")
+            return True
+        else:
+            print(f"❌ Puerto {port} NO accesible en {host}")
+            print("💡 Posibles causas:")
+            print("   - MySQL no está ejecutándose")
+            print("   - Firewall bloqueando el puerto")
+            print("   - bind-address configurado incorrectamente")
+            return False
+            
+    except socket.gaierror as e:
+        print(f"❌ Error DNS: No se pudo resolver {host}")
+        return False
+    except Exception as e:
+        print(f"❌ Error de conectividad: {e}")
+        return False
 
 def resource_path(relative_path):
     try:
@@ -357,13 +399,12 @@ class ConfiguracionMySQL:
         create_hover_effect(self.save_btn, '#27ae60', '#2ecc71')
 
     def probar_conexion_threaded(self):
-        """Usar la lógica de configurar_servidor.py para probar conexión en hilo"""
+        """Usar threading mejorado para probar conexión"""
         self.test_btn.config(state='disabled')
         self.status_label.config(text="Probando conexión...", fg='#f39c12')
 
         def test_connection():
             try:
-                import mysql.connector
                 host = self.host_var.get().strip()
                 port = int(self.puerto_var.get().strip())
                 user = self.admin_user_var.get().strip()
@@ -371,18 +412,26 @@ class ConfiguracionMySQL:
 
                 if not password:
                     self.config_window.after(0, lambda: self.connection_error("Debe ingresar la contraseña del usuario root"))
-                    self.test_btn.config(state='normal')
                     return
 
                 if host.lower() == 'localhost':
                     host = '127.0.0.1'
 
+                print(f"Probando conexión a {user}@{host}:{port}")
+                
+                # Verificar conectividad de red primero
+                if not verificar_conectividad_red(host, port):
+                    self.config_window.after(0, lambda: self.connection_error("Puerto MySQL no accesible. Verifique que MySQL esté ejecutándose."))
+                    return
+
+                # Intentar conexión MySQL
                 connection = mysql.connector.connect(
                     host=host,
                     port=port,
                     user=user,
                     password=password,
-                    connection_timeout=10
+                    connection_timeout=10,
+                    autocommit=True
                 )
 
                 cursor = connection.cursor()
@@ -394,15 +443,23 @@ class ConfiguracionMySQL:
                 self.config_window.after(0, lambda: self.connection_success(version))
 
             except mysql.connector.Error as e:
-                error_msg = e.msg
-                if "Access denied" in error_msg:
+                error_msg = f"Error {e.errno}: {e.msg}"
+                if e.errno == 1045:  # Access denied
                     error_msg = "Usuario o contraseña incorrectos"
-                elif "Can't connect" in error_msg:
-                    error_msg = "No se puede conectar al servidor MySQL"
+                elif e.errno == 2003:  # Can't connect
+                    error_msg = "No se puede conectar al servidor MySQL. Verifique que esté ejecutándose."
+                elif e.errno == 1130:  # Host not allowed
+                    error_msg = "Host no autorizado para conectar"
+                
+                print(f"❌ Error MySQL: {error_msg}")
                 self.config_window.after(0, lambda: self.connection_error(error_msg))
+                
             except Exception as e:
-                error_msg = str(e)
+                error_msg = f"Error inesperado: {str(e)}"
+                print(f"❌ {error_msg}")
                 self.config_window.after(0, lambda: self.connection_error(error_msg))
+            finally:
+                self.config_window.after(0, lambda: self.test_btn.config(state='normal'))
 
         threading.Thread(target=test_connection, daemon=True).start()
 
@@ -520,23 +577,68 @@ class LoginWindow:
 
     
     def verificar_mysql_y_continuar(self):
-        """Verifica la conexión MySQL y decide qué mostrar"""
+        """Verifica la conexión MySQL y decide qué mostrar - MEJORADA"""
         def verificar_conexion():
             try:
                 print("Iniciando verificación de conexión MySQL...")
                 
+                # Verificar si existe archivo de configuración
+                if not os.path.exists("mysql_config.ini"):
+                    error_msg = "Archivo de configuración MySQL no encontrado (mysql_config.ini)"
+                    self.root.after(0, lambda: self.mostrar_configuracion_mysql(error_msg))
+                    return
+                
+                # Cargar configuración
+                config = configparser.ConfigParser()
+                config.read("mysql_config.ini")
+                
+                if 'MySQL' not in config:
+                    error_msg = "Configuración MySQL no válida en archivo mysql_config.ini"
+                    self.root.after(0, lambda: self.mostrar_configuracion_mysql(error_msg))
+                    return
+                
+                mysql_config = config['MySQL']
+                host = mysql_config.get('host', 'localhost')
+                port = int(mysql_config.get('port', '3306'))
+                user = mysql_config.get('admin_user', 'root')
+                password = mysql_config.get('admin_pass', '')
+                
+                if not password:
+                    error_msg = "Contraseña de MySQL no configurada"
+                    self.root.after(0, lambda: self.mostrar_configuracion_mysql(error_msg))
+                    return
+                
+                print(f"Probando conexión a {user}@{host}:{port}")
+                
+                # Verificar conectividad de red
+                if not verificar_conectividad_red(host, port):
+                    error_msg = f"No se puede acceder al puerto {port} en {host}. Verifique que MySQL esté ejecutándose."
+                    self.root.after(0, lambda: self.mostrar_configuracion_mysql(error_msg))
+                    return
+                
                 # Intentar crear las tablas - esto verificará la conexión
+                from src.database.db_manager import crear_tabla_usuarios
                 crear_tabla_usuarios()
                 
-                print("Conexión MySQL exitosa, mostrando login...")
+                print("✅ Conexión MySQL exitosa, mostrando login...")
                 # Si llegamos aquí, la conexión funciona
                 self.root.after(0, self.mostrar_login)
                 
-            except Exception as e:
-                error_msg = str(e)
-                print(f"Error de conexión MySQL: {error_msg}")
+            except mysql.connector.Error as e:
+                error_msg = f"Error MySQL {e.errno}: {e.msg}"
+                if e.errno == 1045:
+                    error_msg = "Usuario o contraseña incorrectos en configuración MySQL"
+                elif e.errno == 2003:
+                    error_msg = "No se puede conectar al servidor MySQL. Verifique que esté ejecutándose."
+                elif e.errno == 1049:
+                    error_msg = "Base de datos no existe. Se creará automáticamente."
                 
-                # Error de conexión - mostrar configuración
+                print(f"❌ Error de conexión MySQL: {error_msg}")
+                self.root.after(0, lambda: self.mostrar_configuracion_mysql(error_msg))
+                
+            except Exception as e:
+                error_msg = f"Error inesperado: {str(e)}"
+                print(f"❌ Error de conexión MySQL: {error_msg}")
                 self.root.after(0, lambda: self.mostrar_configuracion_mysql(error_msg))
 
         # Mostrar mensaje de carga
@@ -1041,6 +1143,7 @@ class LoginWindow:
                 self.toggle_btn.configure(image=self.icons['eye_24'])
 
     def login(self):
+        """Función de login mejorada con mejor manejo de errores"""
         username = self.username_entry.get().strip().lower()
         password = self.password_entry.get().strip()
 
@@ -1048,19 +1151,57 @@ class LoginWindow:
             messagebox.showerror("Error", "Por favor ingrese usuario y contraseña")
             return
 
-        try:
-            usuario = verificar_credenciales(username, password)
-            if usuario:
-                self.root.destroy()
-                app = MainWindow(usuario)
-                app.run()
-            else:
-                messagebox.showerror("Error", "Usuario o contraseña incorrectos")
-                self.password_entry.delete(0, tk.END)
-                self.password_entry.focus()
-        except Exception as e:
-            messagebox.showerror("Error de Conexión", 
-                               f"Error al verificar credenciales:\n{str(e)}\n\nVerifique la configuración de MySQL")
+        def login_thread():
+            try:
+                # Verificar conectividad antes de intentar login
+                config = configparser.ConfigParser()
+                config.read("mysql_config.ini")
+                
+                if 'MySQL' in config:
+                    mysql_config = config['MySQL']
+                    host = mysql_config.get('host', 'localhost')
+                    port = int(mysql_config.get('port', '3306'))
+                    
+                    if not verificar_conectividad_red(host, port):
+                        self.root.after(0, lambda: messagebox.showerror("Error de Conexión", 
+                            "No se puede conectar al servidor MySQL.\nVerifique que esté ejecutándose y accesible."))
+                        return
+                
+                # Importar y usar verificar_credenciales
+                from src.database.db_manager import verificar_credenciales
+                usuario = verificar_credenciales(username, password)
+                
+                if usuario:
+                    # Conexión exitosa - cerrar login y abrir aplicación principal
+                    def abrir_aplicacion():
+                        self.root.destroy()
+                        from src.gui.main_window import MainWindow
+                        app = MainWindow(usuario)
+                        app.run()
+                    
+                    self.root.after(0, abrir_aplicacion)
+                else:
+                    self.root.after(0, lambda: [
+                        messagebox.showerror("Error", "Usuario o contraseña incorrectos"),
+                        self.password_entry.delete(0, tk.END),
+                        self.password_entry.focus()
+                    ])
+                    
+            except mysql.connector.Error as e:
+                error_msg = f"Error de base de datos: {e.msg}"
+                if e.errno == 2003:
+                    error_msg = "No se puede conectar al servidor MySQL.\nVerifique la configuración de red."
+                elif e.errno == 1045:
+                    error_msg = "Error de credenciales del servidor MySQL.\nVerifique la configuración."
+                    
+                self.root.after(0, lambda: messagebox.showerror("Error de Conexión", error_msg))
+                
+            except Exception as e:
+                error_msg = f"Error al verificar credenciales:\n{str(e)}\n\nVerifique la configuración de MySQL"
+                self.root.after(0, lambda: messagebox.showerror("Error de Conexión", error_msg))
+
+        # Ejecutar login en hilo separado para no bloquear UI
+        threading.Thread(target=login_thread, daemon=True).start()
 
     def run(self):
         self.root.mainloop()
