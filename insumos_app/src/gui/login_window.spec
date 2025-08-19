@@ -28,9 +28,9 @@ block_cipher = None
 
 a = Analysis(
     ['login_window.py'],
-    pathex=[os.path.abspath('.')],   # directorio actual
+    pathex=[],
     binaries=binaries,
-    datas=datas,
+    datas=datas,     
     hiddenimports=hiddenimports,
     hookspath=[],
     hooksconfig={},

@@ -175,6 +175,7 @@ pause
 
 def verificar_credenciales_fallback(username, password):
     """Función fallback para verificar credenciales cuando no se puede importar el módulo"""
+    import hashlib
     try:
         config_file = get_config_path("mysql_config.ini")
         if not os.path.exists(config_file):
@@ -185,7 +186,7 @@ def verificar_credenciales_fallback(username, password):
         
         if 'MySQL' not in config:
             return None
-            
+
         mysql_config = config['MySQL']
         host = mysql_config.get('host', 'localhost')
         port = int(mysql_config.get('port', '3306'))
@@ -193,7 +194,7 @@ def verificar_credenciales_fallback(username, password):
         password_db = mysql_config.get('admin_pass', '')
         database = mysql_config.get('database', 'insumos')
         
-        # Conectar a MySQL y verificar/crear tabla
+        # Conectar a MySQL
         connection = mysql.connector.connect(
             host=host,
             port=port,
@@ -201,10 +202,9 @@ def verificar_credenciales_fallback(username, password):
             password=password_db,
             connection_timeout=10
         )
-        
         cursor = connection.cursor()
-        
-        # Crear database si no existe
+
+        # Crear base de datos si no existe
         cursor.execute(f"CREATE DATABASE IF NOT EXISTS {database}")
         cursor.execute(f"USE {database}")
         
@@ -222,19 +222,22 @@ def verificar_credenciales_fallback(username, password):
         """
         cursor.execute(create_table_query)
 
-        # Insertar usuario admin por defecto si no existe
+        # Insertar usuario admin por defecto con contraseña en SHA256
         cursor.execute("SELECT COUNT(*) FROM usuarios WHERE username = 'admin'")
         if cursor.fetchone()[0] == 0:
+            admin_pass = "admin123"
+            password_hash = hashlib.sha256(admin_pass.encode()).hexdigest()
             cursor.execute(
                 "INSERT INTO usuarios (username, password, nombre_completo, rol, activo) VALUES (%s, %s, %s, %s, %s)",
-                ('admin', 'admin123', 'Administrador del Sistema', 'super_admin', True)
+                ('admin', password_hash, 'Administrador del Sistema', 'super_admin', True)
             )
             connection.commit()
         
-        # Verificar credenciales del usuario
+        # Verificar credenciales del usuario ingresado
+        password_hash = hashlib.sha256(password.encode()).hexdigest()
         cursor.execute(
-            "SELECT id, username, nombre, cargo FROM usuarios WHERE username = %s AND password = %s AND activo = TRUE",
-            (username, password)
+            "SELECT id, username, nombre_completo, rol FROM usuarios WHERE username = %s AND password = %s AND activo = TRUE",
+            (username, password_hash)
         )
         
         result = cursor.fetchone()
@@ -245,8 +248,8 @@ def verificar_credenciales_fallback(username, password):
             return {
                 'id': result[0],
                 'username': result[1],
-                'nombre': result[2],
-                'cargo': result[3]
+                'nombre_completo': result[2],
+                'rol': result[3]
             }
         else:
             return None
@@ -254,6 +257,7 @@ def verificar_credenciales_fallback(username, password):
     except Exception as e:
         print(f"Error en verificar_credenciales_fallback: {e}")
         return None
+
 
 def crear_tabla_usuarios_fallback():
     """Función fallback para crear tabla usuarios"""
