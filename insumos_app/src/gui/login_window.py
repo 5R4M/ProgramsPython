@@ -9,16 +9,142 @@ from PIL import Image, ImageTk
 import configparser
 import threading
 
-# Agregar el directorio raíz del proyecto al PATH de Python
-project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-sys.path.append(project_root)
+def get_executable_dir():
+    """Obtiene el directorio donde está el ejecutable o el script"""
+    if getattr(sys, 'frozen', False):
+        # Ejecutable de PyInstaller - usar directorio del ejecutable
+        return os.path.dirname(os.path.abspath(sys.executable))
+    else:
+        # En desarrollo - obtener el directorio src/gui donde están los archivos
+        current_dir = os.path.dirname(os.path.abspath(__file__))
+        return current_dir
 
-from src.database.db_manager import verificar_credenciales
-from src.gui.main_window import MainWindow
-from src.database.db_manager import verificar_credenciales, crear_tabla_usuarios
+def get_config_path(filename):
+    """Obtiene la ruta correcta para archivos de configuración"""
+    if getattr(sys, 'frozen', False):
+        # En ejecutable con PyInstaller, usar el directorio temporal interno
+        try:
+            # Primero intentar desde el directorio temporal de PyInstaller
+            temp_path = os.path.join(sys._MEIPASS, filename)
+            if os.path.exists(temp_path):
+                return temp_path
+        except AttributeError:
+            pass
+        
+        # Fallback: junto al ejecutable
+        exe_dir = os.path.dirname(os.path.abspath(sys.executable))
+        return os.path.join(exe_dir, filename)
+    else:
+        # En desarrollo, están en el mismo directorio del script (src/gui)
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        return os.path.join(script_dir, filename)
+
+def get_bat_path():
+    """Obtiene la ruta correcta para el archivo .bat"""
+    if getattr(sys, 'frozen', False):
+        # En ejecutable con PyInstaller, usar el directorio temporal interno
+        try:
+            # Primero intentar desde el directorio temporal de PyInstaller
+            temp_path = os.path.join(sys._MEIPASS, "modificar_mysql.bat")
+            if os.path.exists(temp_path):
+                return temp_path
+        except AttributeError:
+            pass
+        
+        # Fallback: junto al ejecutable
+        exe_dir = os.path.dirname(os.path.abspath(sys.executable))
+        return os.path.join(exe_dir, "modificar_mysql.bat")
+    else:
+        # En desarrollo - el .bat está en src/gui
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        return os.path.join(script_dir, "modificar_mysql.bat")
+
+def resource_path(relative_path):
+    """Obtiene la ruta correcta para recursos (iconos, etc.)"""
+    try:
+        # En ejecutable de PyInstaller
+        base_path = sys._MEIPASS
+    except AttributeError:
+        # En desarrollo - desde src/gui, subir a la raíz del proyecto
+        base_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
+    return os.path.join(base_path, relative_path)
+
+def debug_paths():
+    """Función de debug para mostrar todas las rutas que se están usando"""
+    try:
+        print("=== DEBUG: RUTAS DE ARCHIVOS ===")
+        print(f"Script actual: {__file__}")
+        print(f"Directorio del script: {os.path.dirname(os.path.abspath(__file__))}")
+        print(f"¿Es ejecutable?: {getattr(sys, 'frozen', False)}")
+        
+        # Información específica de PyInstaller
+        if getattr(sys, 'frozen', False):
+            print(f"Ejecutable: {sys.executable}")
+            try:
+                print(f"Directorio temporal PyInstaller: {sys._MEIPASS}")
+                if os.path.exists(sys._MEIPASS):
+                    print("Contenido del directorio temporal:")
+                    for item in os.listdir(sys._MEIPASS):
+                        print(f"  {item}")
+                else:
+                    print("El directorio _MEIPASS no existe")
+            except AttributeError:
+                print("Sin directorio temporal _MEIPASS")
+            except Exception as e:
+                print(f"Error listando _MEIPASS: {e}")
+        
+        config_path = get_config_path("mysql_config.ini")
+        bat_path = get_bat_path()
+        
+        print(f"Ruta config: {config_path}")
+        print(f"¿Existe config?: {os.path.exists(config_path) if config_path else False}")
+        print(f"Ruta bat: {bat_path}")
+        print(f"¿Existe bat?: {os.path.exists(bat_path) if bat_path else False}")
+        
+        # Mostrar contenido del directorio actual solo en desarrollo
+        if not getattr(sys, 'frozen', False):
+            script_dir = os.path.dirname(os.path.abspath(__file__))
+            print(f"Contenido de {script_dir}:")
+            try:
+                for item in os.listdir(script_dir):
+                    item_path = os.path.join(script_dir, item)
+                    print(f"  {'[D]' if os.path.isdir(item_path) else '[F]'} {item}")
+            except Exception as e:
+                print(f"  Error listando directorio: {e}")
+        print("================================")
+    except Exception as e:
+        print(f"Error en debug_paths: {e}")
+        import traceback
+        traceback.print_exc()
+
+# CORRECCIÓN 2: Manejo seguro de importaciones
+# Agregar el directorio raíz del proyecto al PATH de Python
+if not getattr(sys, 'frozen', False):
+    # Solo en desarrollo
+    try:
+        project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        sys.path.append(project_root)
+    except Exception:
+        pass
+
+# Agregar el directorio raíz del proyecto al PATH de Python
+if not getattr(sys, 'frozen', False):
+    # Solo en desarrollo
+    project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    sys.path.append(project_root)
+
+try:
+    from src.database.db_manager import verificar_credenciales, crear_tabla_usuarios
+except ImportError:
+    # En caso de que no se pueda importar, definir funciones básicas
+    def verificar_credenciales(username, password):
+        # Implementación básica para el ejecutable
+        pass
+    def crear_tabla_usuarios():
+        pass
 
 def crear_script_bat(bind_address, port, max_connections, ruta_bat):
-        contenido = f"""@echo off
+    contenido = f"""@echo off
 setlocal enabledelayedexpansion
 
 set CONFIG_FILE="C:\\ProgramData\\MySQL\\MySQL Server 8.0\\my.ini"
@@ -39,8 +165,249 @@ net start MySQL80
 echo Servicio MySQL reiniciado.
 pause
 """
+    try:
+        os.makedirs(os.path.dirname(ruta_bat), exist_ok=True)
         with open(ruta_bat, 'w', encoding='utf-8') as f:
             f.write(contenido)
+        print(f"Script .bat creado en: {ruta_bat}")
+    except Exception as e:
+        print(f"Error creando script .bat: {e}")
+
+def verificar_credenciales_fallback(username, password):
+    """Función fallback para verificar credenciales cuando no se puede importar el módulo"""
+    try:
+        config_file = get_config_path("mysql_config.ini")
+        if not os.path.exists(config_file):
+            return None
+            
+        config = configparser.ConfigParser()
+        config.read(config_file, encoding='utf-8')
+        
+        if 'MySQL' not in config:
+            return None
+            
+        mysql_config = config['MySQL']
+        host = mysql_config.get('host', 'localhost')
+        port = int(mysql_config.get('port', '3306'))
+        user = mysql_config.get('admin_user', 'root')
+        password_db = mysql_config.get('admin_pass', '')
+        database = mysql_config.get('database', 'insumos')
+        
+        # Conectar a MySQL y verificar/crear tabla
+        connection = mysql.connector.connect(
+            host=host,
+            port=port,
+            user=user,
+            password=password_db,
+            connection_timeout=10
+        )
+        
+        cursor = connection.cursor()
+        
+        # Crear database si no existe
+        cursor.execute(f"CREATE DATABASE IF NOT EXISTS {database}")
+        cursor.execute(f"USE {database}")
+        
+        # Crear tabla usuarios si no existe
+        create_table_query = """
+        CREATE TABLE IF NOT EXISTS usuarios (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            username VARCHAR(50) UNIQUE NOT NULL,
+            password VARCHAR(255) NOT NULL,
+            nombre VARCHAR(100) NOT NULL,
+            cargo VARCHAR(100),
+            activo BOOLEAN DEFAULT TRUE,
+            fecha_creacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+        """
+        cursor.execute(create_table_query)
+        
+        # Insertar usuario admin por defecto si no existe
+        cursor.execute("SELECT COUNT(*) FROM usuarios WHERE username = 'admin'")
+        if cursor.fetchone()[0] == 0:
+            cursor.execute(
+                "INSERT INTO usuarios (username, password, nombre, cargo) VALUES (%s, %s, %s, %s)",
+                ('admin', 'admin123', 'Administrador', 'Administrador del Sistema')
+            )
+            connection.commit()
+        
+        # Verificar credenciales del usuario
+        cursor.execute(
+            "SELECT id, username, nombre, cargo FROM usuarios WHERE username = %s AND password = %s AND activo = TRUE",
+            (username, password)
+        )
+        
+        result = cursor.fetchone()
+        cursor.close()
+        connection.close()
+        
+        if result:
+            return {
+                'id': result[0],
+                'username': result[1],
+                'nombre': result[2],
+                'cargo': result[3]
+            }
+        else:
+            return None
+            
+    except Exception as e:
+        print(f"Error en verificar_credenciales_fallback: {e}")
+        return None
+
+def crear_tabla_usuarios_fallback():
+    """Función fallback para crear tabla usuarios"""
+    return True  # Ya se maneja en verificar_credenciales_fallback
+
+# Intentar importar funciones del módulo, usar fallback si falla
+try:
+    if not getattr(sys, 'frozen', False):
+        from src.database.db_manager import verificar_credenciales, crear_tabla_usuarios
+    else:
+        # En ejecutable, usar funciones fallback
+        verificar_credenciales = verificar_credenciales_fallback
+        crear_tabla_usuarios = crear_tabla_usuarios_fallback
+except ImportError:
+    print("Usando funciones fallback para manejo de base de datos")
+    verificar_credenciales = verificar_credenciales_fallback
+    crear_tabla_usuarios = crear_tabla_usuarios_fallback
+
+# CORRECCIÓN 3: Función verificar_mysql_y_continuar más robusta
+def verificar_mysql_y_continuar(self):
+    """Verifica la conexión MySQL y decide qué mostrar - VERSIÓN CORREGIDA"""
+    def verificar_conexion():
+        try:
+            print("Iniciando verificación de conexión MySQL...")
+            
+            # Debug completo de rutas con manejo de errores
+            try:
+                debug_paths()
+            except Exception as e:
+                print(f"Error en debug_paths: {e}")
+            
+            # Usar la nueva función para obtener la ruta del config
+            config_file = get_config_path("mysql_config.ini")
+            print(f"Buscando archivo de configuración en: {config_file}")
+            
+            if not config_file or not os.path.exists(config_file):
+                # En ejecutable, intentar crear un archivo de configuración básico
+                if getattr(sys, 'frozen', False):
+                    print("⚠️ Archivo config no encontrado en ejecutable, intentando crear uno básico...")
+                    try:
+                        self.crear_config_basico(config_file)
+                        if os.path.exists(config_file):
+                            print("✅ Archivo de configuración básico creado")
+                        else:
+                            error_msg = f"No se pudo crear archivo de configuración en: {config_file}"
+                            print(f"❌ {error_msg}")
+                            self.root.after(0, lambda: self.mostrar_configuracion_mysql(error_msg))
+                            return
+                    except Exception as e:
+                        error_msg = f"Error creando configuración básica: {str(e)}"
+                        print(f"❌ {error_msg}")
+                        self.root.after(0, lambda: self.mostrar_configuracion_mysql(error_msg))
+                        return
+                else:
+                    error_msg = f"Archivo de configuración MySQL no encontrado en: {config_file}"
+                    print(f"❌ {error_msg}")
+                    self.root.after(0, lambda: self.mostrar_configuracion_mysql(error_msg))
+                    return
+            
+            # Cargar configuración usando la ruta correcta
+            config = configparser.ConfigParser()
+            try:
+                config.read(config_file, encoding='utf-8')
+                print(f"✅ Archivo de configuración leído correctamente")
+            except Exception as e:
+                error_msg = f"Error leyendo archivo de configuración: {str(e)}"
+                print(f"❌ {error_msg}")
+                self.root.after(0, lambda: self.mostrar_configuracion_mysql(error_msg))
+                return
+            
+            if 'MySQL' not in config:
+                error_msg = "Configuración MySQL no válida en archivo mysql_config.ini"
+                print(f"❌ {error_msg}")
+                self.root.after(0, lambda: self.mostrar_configuracion_mysql(error_msg))
+                return
+            
+            mysql_config = config['MySQL']
+            host = mysql_config.get('host', 'localhost')
+            port = int(mysql_config.get('port', '3306'))
+            user = mysql_config.get('admin_user', 'root')
+            password = mysql_config.get('admin_pass', '')
+            
+            print(f"Configuración cargada: {user}@{host}:{port}")
+            
+            if not password:
+                error_msg = "Contraseña de MySQL no configurada"
+                print(f"❌ {error_msg}")
+                self.root.after(0, lambda: self.mostrar_configuracion_mysql(error_msg))
+                return
+            
+            print(f"Probando conexión a {user}@{host}:{port}")
+            
+            # Verificar conectividad de red
+            if not verificar_conectividad_red(host, port):
+                error_msg = f"No se puede acceder al puerto {port} en {host}. Verifique que MySQL esté ejecutándose."
+                print(f"❌ {error_msg}")
+                self.root.after(0, lambda: self.mostrar_configuracion_mysql(error_msg))
+                return
+            
+            # Intentar conexión MySQL básica
+            try:
+                connection = mysql.connector.connect(
+                    host=host,
+                    port=port,
+                    user=user,
+                    password=password,
+                    connection_timeout=10,
+                    autocommit=True
+                )
+                
+                cursor = connection.cursor()
+                cursor.execute("SELECT VERSION()")
+                version = cursor.fetchone()[0]
+                print(f"✅ Conexión MySQL exitosa - Versión: {version}")
+                cursor.close()
+                connection.close()
+                
+            except mysql.connector.Error as e:
+                error_msg = f"Error MySQL {e.errno}: {e.msg}"
+                if e.errno == 1045:
+                    error_msg = "Usuario o contraseña incorrectos en configuración MySQL"
+                elif e.errno == 2003:
+                    error_msg = "No se puede conectar al servidor MySQL. Verifique que esté ejecutándose."
+                elif e.errno == 1049:
+                    error_msg = "Base de datos no existe. Se creará automáticamente."
+                
+                print(f"❌ Error de conexión MySQL: {error_msg}")
+                self.root.after(0, lambda: self.mostrar_configuracion_mysql(error_msg))
+                return
+            
+            # Intentar crear las tablas si es posible
+            try:
+                crear_tabla_usuarios()
+                print("✅ Tablas verificadas/creadas")
+            except Exception as e:
+                print(f"⚠️ Error creando tablas: {e} - continuando...")
+            
+            print("✅ Conexión MySQL exitosa, mostrando login...")
+            # Si llegamos aquí, la conexión funciona
+            self.root.after(0, self.mostrar_login)
+            
+        except Exception as e:
+            error_msg = f"Error inesperado en verificación: {str(e)}"
+            print(f"❌ {error_msg}")
+            # Imprimir stack trace completo para debug
+            import traceback
+            traceback.print_exc()
+            self.root.after(0, lambda: self.mostrar_configuracion_mysql(error_msg))
+
+    # Mostrar mensaje de carga
+    self.mostrar_mensaje_carga()
+    
+    # Agregar un pequeño delay antes de ejecutar la verificación
+    self.root.after(500, lambda: threading.Thread(target=verificar_conexion, daemon=True).start())
 
 def ejecutar_bat_con_elevacion(ruta_bat):
     import ctypes
@@ -72,62 +439,123 @@ def ejecutar_como_admin():
         return True
 
 def debug_mysql_connection():
-    """Función de debug para probar la conexión MySQL directamente - CORREGIDA"""
+    """Función de debug para probar la conexión MySQL directamente - MEJORADA PARA EJECUTABLE"""
     try:
         print("=== DEBUG: Probando conexión MySQL ===")
         
-        import mysql.connector  # Importación corregida
+        import mysql.connector
         
-        # Cargar configuración
+        # Cargar configuración usando la ruta correcta
         config = configparser.ConfigParser()
-        config_file = "mysql_config.ini"
+        config_file = get_config_path("mysql_config.ini")
+        print(f"Buscando archivo de configuración en: {config_file}")
         
-        if os.path.exists(config_file):
-            config.read(config_file)
-            if 'MySQL' in config:
-                mysql_config = config['MySQL']
-                host = mysql_config.get('host', 'localhost')
-                port = int(mysql_config.get('port', '3306'))
-                user = mysql_config.get('admin_user', 'root')
-                password = mysql_config.get('admin_pass', '')
-                
-                print(f"Intentando conectar a: {user}@{host}:{port}")
-                
-                # Verificar conectividad de red primero
-                if not verificar_conectividad_red(host, port):
-                    print("❌ Sin conectividad de red al servidor MySQL")
+        if not os.path.exists(config_file):
+            print(f"❌ No existe archivo de configuración MySQL en: {config_file}")
+            
+            # Si es ejecutable, intentar crear uno básico
+            if getattr(sys, 'frozen', False):
+                print("⚠️ Es ejecutable, intentando crear configuración básica...")
+                try:
+                    # Crear configuración básica temporalmente para la clase
+                    temp_login = type('TempLogin', (), {})()
+                    temp_login.crear_config_basico = lambda self, path: crear_config_basico(temp_login, path)
+                    temp_login.crear_config_basico(config_file)
+                    
+                    if os.path.exists(config_file):
+                        print("✅ Configuración básica creada")
+                    else:
+                        return False
+                except Exception as e:
+                    print(f"❌ Error creando configuración: {e}")
                     return False
-                
-                connection = mysql.connector.connect(
-                    host=host,
-                    port=port,
-                    user=user,
-                    password=password,
-                    connection_timeout=10,
-                    autocommit=True  # Agregar autocommit
-                )
-                
-                cursor = connection.cursor()
-                cursor.execute("SELECT VERSION()")
-                version = cursor.fetchone()[0]
-                print(f"✅ Conexión exitosa - MySQL {version}")
-                cursor.close()
-                connection.close()
-                
-                return True
             else:
-                print("❌ No hay configuración MySQL en el archivo")
+                return False
+        
+        try:
+            config.read(config_file, encoding='utf-8')
+        except Exception as e:
+            print(f"❌ Error leyendo configuración: {e}")
+            return False
+            
+        if 'MySQL' in config:
+            mysql_config = config['MySQL']
+            host = mysql_config.get('host', 'localhost')
+            port = int(mysql_config.get('port', '3306'))
+            user = mysql_config.get('admin_user', 'root')
+            password = mysql_config.get('admin_pass', '')
+            
+            if not password:
+                print("❌ Contraseña no configurada en archivo de configuración")
+                return False
+            
+            print(f"Intentando conectar a: {user}@{host}:{port}")
+            
+            # Verificar conectividad de red primero
+            if not verificar_conectividad_red(host, port):
+                print("❌ Sin conectividad de red al servidor MySQL")
+                return False
+            
+            connection = mysql.connector.connect(
+                host=host,
+                port=port,
+                user=user,
+                password=password,
+                connection_timeout=10,
+                autocommit=True
+            )
+            
+            cursor = connection.cursor()
+            cursor.execute("SELECT VERSION()")
+            version = cursor.fetchone()[0]
+            print(f"✅ Conexión exitosa - MySQL {version}")
+            cursor.close()
+            connection.close()
+            
+            return True
         else:
-            print("❌ No existe archivo de configuración MySQL")
+            print("❌ No hay configuración MySQL en el archivo")
             
     except mysql.connector.Error as e:
         print(f"❌ Error MySQL: {e.errno} - {e.msg}")
         return False
     except Exception as e:
         print(f"❌ Error en debug de conexión: {e}")
+        import traceback
+        traceback.print_exc()
         return False
     
     return False
+
+def crear_config_basico(self, config_file):
+        """Crea un archivo de configuración básico si no existe"""
+        try:
+            config = configparser.ConfigParser()
+            config['MySQL'] = {
+                'host': '127.0.0.1',
+                'port': '3306',
+                'admin_user': 'root',
+                'admin_pass': '0.5735',
+                'bind_address': '0.0.0.0',
+                'max_connections': '100',
+                'timeout': '28800',
+                'database': 'insumos'
+            }
+            
+            # Crear directorio si no existe
+            config_dir = os.path.dirname(config_file)
+            if config_dir and not os.path.exists(config_dir):
+                os.makedirs(config_dir, exist_ok=True)
+            
+            # Escribir archivo
+            with open(config_file, 'w', encoding='utf-8') as f:
+                config.write(f)
+            
+            print(f"✅ Archivo de configuración básico creado en: {config_file}")
+            
+        except Exception as e:
+            print(f"❌ Error creando configuración básica: {e}")
+            raise
 
 def verificar_conectividad_red(host, port):
     """Verifica si el puerto MySQL está accesible - NUEVA FUNCIÓN"""
@@ -174,7 +602,7 @@ def resource_path(relative_path):
 class ConfiguracionMySQL:
     def __init__(self, parent):
         self.parent = parent
-        self.config_file = "mysql_config.ini"
+        self.config_file = get_config_path("mysql_config.ini")
         self.max_connections_var = tk.StringVar(value="100")
         self.timeout_var = tk.StringVar(value="28800")
         
@@ -200,12 +628,12 @@ class ConfiguracionMySQL:
                 messagebox.showerror("Error", "Esta función solo está implementada para Windows.")
                 return
 
-            bind_address = '0.0.0.0'  # O tomar de UI
+            bind_address = '0.0.0.0'
             port = int(self.puerto_var.get())
-            max_connections = 100  # O tomar de UI
+            max_connections = 100
 
-            # Crear y ejecutar el .bat con elevación
-            ruta_bat = os.path.join(os.path.abspath(os.path.dirname(__file__)), "modificar_mysql.bat")
+            # Usar la nueva función para obtener la ruta del .bat
+            ruta_bat = get_bat_path()  # CAMBIO AQUÍ
             crear_script_bat(bind_address, port, max_connections, ruta_bat)
 
             messagebox.showinfo("Permisos", "Se solicitarán permisos de administrador para modificar el archivo my.ini.")
@@ -507,22 +935,23 @@ class ConfiguracionMySQL:
         
         host = self.host_var.get().strip()
         if host.lower() == 'localhost':
-            host = '127.0.0.1'  # Guardar como IP
+            host = '127.0.0.1'
             
         config['MySQL'] = {
             'host': host,
             'port': self.puerto_var.get().strip(),
             'admin_user': self.admin_user_var.get().strip(),
             'admin_pass': self.admin_pass_var.get(),
-            'bind_address': '0.0.0.0',  # Puedes agregar un campo para esto en UI si quieres
-            'max_connections': '100',   # Igual para max_connections y timeout
+            'bind_address': '0.0.0.0',
+            'max_connections': '100',
             'timeout': '28800',
             'database': 'insumos'
         }
         
         try:
-            config_dir = os.path.dirname(self.config_file) if os.path.dirname(self.config_file) else '.'
-            if not os.path.exists(config_dir):
+            # Usar la nueva función para obtener la ruta
+            config_dir = os.path.dirname(self.config_file)
+            if config_dir and not os.path.exists(config_dir):
                 os.makedirs(config_dir, exist_ok=True)
                 
             with open(self.config_file, 'w') as f:
@@ -577,23 +1006,56 @@ class LoginWindow:
 
     
     def verificar_mysql_y_continuar(self):
-        """Verifica la conexión MySQL y decide qué mostrar - MEJORADA"""
+        """Verifica la conexión MySQL y decide qué mostrar - MEJORADA PARA EJECUTABLE"""
         def verificar_conexion():
             try:
                 print("Iniciando verificación de conexión MySQL...")
                 
-                # Verificar si existe archivo de configuración
-                if not os.path.exists("mysql_config.ini"):
-                    error_msg = "Archivo de configuración MySQL no encontrado (mysql_config.ini)"
+                # Debug completo de rutas
+                debug_paths()
+                
+                # Usar la nueva función para obtener la ruta del config
+                config_file = get_config_path("mysql_config.ini")
+                print(f"Buscando archivo de configuración en: {config_file}")
+                
+                if not os.path.exists(config_file):
+                    # En ejecutable, intentar crear un archivo de configuración básico
+                    if getattr(sys, 'frozen', False):
+                        print("⚠️ Archivo config no encontrado en ejecutable, intentando crear uno básico...")
+                        try:
+                            self.crear_config_basico(config_file)
+                            if os.path.exists(config_file):
+                                print("✅ Archivo de configuración básico creado")
+                            else:
+                                error_msg = f"No se pudo crear archivo de configuración en: {config_file}"
+                                print(f"❌ {error_msg}")
+                                self.root.after(0, lambda: self.mostrar_configuracion_mysql(error_msg))
+                                return
+                        except Exception as e:
+                            error_msg = f"Error creando configuración básica: {str(e)}"
+                            print(f"❌ {error_msg}")
+                            self.root.after(0, lambda: self.mostrar_configuracion_mysql(error_msg))
+                            return
+                    else:
+                        error_msg = f"Archivo de configuración MySQL no encontrado en: {config_file}"
+                        print(f"❌ {error_msg}")
+                        self.root.after(0, lambda: self.mostrar_configuracion_mysql(error_msg))
+                        return
+                
+                # Cargar configuración usando la ruta correcta
+                config = configparser.ConfigParser()
+                try:
+                    config.read(config_file, encoding='utf-8')
+                    print(f"✅ Archivo de configuración leído correctamente")
+                except Exception as e:
+                    error_msg = f"Error leyendo archivo de configuración: {str(e)}"
+                    print(f"❌ {error_msg}")
                     self.root.after(0, lambda: self.mostrar_configuracion_mysql(error_msg))
                     return
                 
-                # Cargar configuración
-                config = configparser.ConfigParser()
-                config.read("mysql_config.ini")
-                
                 if 'MySQL' not in config:
                     error_msg = "Configuración MySQL no válida en archivo mysql_config.ini"
+                    print(f"❌ {error_msg}")
                     self.root.after(0, lambda: self.mostrar_configuracion_mysql(error_msg))
                     return
                 
@@ -603,8 +1065,11 @@ class LoginWindow:
                 user = mysql_config.get('admin_user', 'root')
                 password = mysql_config.get('admin_pass', '')
                 
+                print(f"Configuración cargada: {user}@{host}:{port}")
+                
                 if not password:
                     error_msg = "Contraseña de MySQL no configurada"
+                    print(f"❌ {error_msg}")
                     self.root.after(0, lambda: self.mostrar_configuracion_mysql(error_msg))
                     return
                 
@@ -613,32 +1078,64 @@ class LoginWindow:
                 # Verificar conectividad de red
                 if not verificar_conectividad_red(host, port):
                     error_msg = f"No se puede acceder al puerto {port} en {host}. Verifique que MySQL esté ejecutándose."
+                    print(f"❌ {error_msg}")
                     self.root.after(0, lambda: self.mostrar_configuracion_mysql(error_msg))
                     return
                 
-                # Intentar crear las tablas - esto verificará la conexión
-                from src.database.db_manager import crear_tabla_usuarios
-                crear_tabla_usuarios()
+                # Intentar conexión MySQL básica
+                try:
+                    import mysql.connector
+                    connection = mysql.connector.connect(
+                        host=host,
+                        port=port,
+                        user=user,
+                        password=password,
+                        connection_timeout=10,
+                        autocommit=True
+                    )
+                    
+                    cursor = connection.cursor()
+                    cursor.execute("SELECT VERSION()")
+                    version = cursor.fetchone()[0]
+                    print(f"✅ Conexión MySQL exitosa - Versión: {version}")
+                    cursor.close()
+                    connection.close()
+                    
+                except mysql.connector.Error as e:
+                    error_msg = f"Error MySQL {e.errno}: {e.msg}"
+                    if e.errno == 1045:
+                        error_msg = "Usuario o contraseña incorrectos en configuración MySQL"
+                    elif e.errno == 2003:
+                        error_msg = "No se puede conectar al servidor MySQL. Verifique que esté ejecutándose."
+                    elif e.errno == 1049:
+                        error_msg = "Base de datos no existe. Se creará automáticamente."
+                    
+                    print(f"❌ Error de conexión MySQL: {error_msg}")
+                    self.root.after(0, lambda: self.mostrar_configuracion_mysql(error_msg))
+                    return
+                
+                # Intentar crear las tablas si es posible
+                try:
+                    if not getattr(sys, 'frozen', False):
+                        # Solo en desarrollo
+                        from src.database.db_manager import crear_tabla_usuarios
+                        crear_tabla_usuarios()
+                        print("✅ Tablas verificadas/creadas")
+                except ImportError:
+                    print("⚠️ No se pudo importar crear_tabla_usuarios - continuando...")
+                except Exception as e:
+                    print(f"⚠️ Error creando tablas: {e} - continuando...")
                 
                 print("✅ Conexión MySQL exitosa, mostrando login...")
                 # Si llegamos aquí, la conexión funciona
                 self.root.after(0, self.mostrar_login)
                 
-            except mysql.connector.Error as e:
-                error_msg = f"Error MySQL {e.errno}: {e.msg}"
-                if e.errno == 1045:
-                    error_msg = "Usuario o contraseña incorrectos en configuración MySQL"
-                elif e.errno == 2003:
-                    error_msg = "No se puede conectar al servidor MySQL. Verifique que esté ejecutándose."
-                elif e.errno == 1049:
-                    error_msg = "Base de datos no existe. Se creará automáticamente."
-                
-                print(f"❌ Error de conexión MySQL: {error_msg}")
-                self.root.after(0, lambda: self.mostrar_configuracion_mysql(error_msg))
-                
             except Exception as e:
-                error_msg = f"Error inesperado: {str(e)}"
-                print(f"❌ Error de conexión MySQL: {error_msg}")
+                error_msg = f"Error inesperado en verificación: {str(e)}"
+                print(f"❌ {error_msg}")
+                # Imprimir stack trace completo para debug
+                import traceback
+                traceback.print_exc()
                 self.root.after(0, lambda: self.mostrar_configuracion_mysql(error_msg))
 
         # Mostrar mensaje de carga
@@ -647,6 +1144,36 @@ class LoginWindow:
         # Agregar un pequeño delay antes de ejecutar la verificación
         self.root.after(500, lambda: threading.Thread(target=verificar_conexion, daemon=True).start())
 
+    def crear_config_basico(self, config_file):
+        """Crea un archivo de configuración básico si no existe"""
+        try:
+            config = configparser.ConfigParser()
+            config['MySQL'] = {
+                'host': '127.0.0.1',
+                'port': '3306',
+                'admin_user': 'root',
+                'admin_pass': '0.5735',
+                'bind_address': '0.0.0.0',
+                'max_connections': '100',
+                'timeout': '28800',
+                'database': 'insumos'
+            }
+            
+            # Crear directorio si no existe
+            config_dir = os.path.dirname(config_file)
+            if config_dir and not os.path.exists(config_dir):
+                os.makedirs(config_dir, exist_ok=True)
+            
+            # Escribir archivo
+            with open(config_file, 'w', encoding='utf-8') as f:
+                config.write(f)
+            
+            print(f"✅ Archivo de configuración básico creado en: {config_file}")
+            
+        except Exception as e:
+            print(f"❌ Error creando configuración básica: {e}")
+            raise
+    
     def mostrar_mensaje_carga(self):
         """Muestra un mensaje de carga mientras verifica la conexión"""
         print("Mostrando mensaje de carga...")
@@ -1153,9 +1680,11 @@ class LoginWindow:
 
         def login_thread():
             try:
-                # Verificar conectividad antes de intentar login
+                # Usar la nueva función para obtener la ruta del config
+                config_file = get_config_path("mysql_config.ini")  # CAMBIO AQUÍ
+                
                 config = configparser.ConfigParser()
-                config.read("mysql_config.ini")
+                config.read(config_file)
                 
                 if 'MySQL' in config:
                     mysql_config = config['MySQL']
@@ -1167,17 +1696,24 @@ class LoginWindow:
                             "No se puede conectar al servidor MySQL.\nVerifique que esté ejecutándose y accesible."))
                         return
                 
-                # Importar y usar verificar_credenciales
-                from src.database.db_manager import verificar_credenciales
-                usuario = verificar_credenciales(username, password)
+                # Verificar credenciales
+                try:
+                    from src.database.db_manager import verificar_credenciales
+                    usuario = verificar_credenciales(username, password)
+                except ImportError:
+                    # Fallback si no se puede importar el módulo
+                    messagebox.showerror("Error", "Error al cargar módulo de base de datos")
+                    return
                 
                 if usuario:
-                    # Conexión exitosa - cerrar login y abrir aplicación principal
                     def abrir_aplicacion():
                         self.root.destroy()
-                        from src.gui.main_window import MainWindow
-                        app = MainWindow(usuario)
-                        app.run()
+                        try:
+                            from src.gui.main_window import MainWindow
+                            app = MainWindow(usuario)
+                            app.run()
+                        except ImportError:
+                            messagebox.showerror("Error", "Error al cargar la aplicación principal")
                     
                     self.root.after(0, abrir_aplicacion)
                 else:
@@ -1187,32 +1723,58 @@ class LoginWindow:
                         self.password_entry.focus()
                     ])
                     
-            except mysql.connector.Error as e:
-                error_msg = f"Error de base de datos: {e.msg}"
-                if e.errno == 2003:
-                    error_msg = "No se puede conectar al servidor MySQL.\nVerifique la configuración de red."
-                elif e.errno == 1045:
-                    error_msg = "Error de credenciales del servidor MySQL.\nVerifique la configuración."
-                    
-                self.root.after(0, lambda: messagebox.showerror("Error de Conexión", error_msg))
-                
             except Exception as e:
                 error_msg = f"Error al verificar credenciales:\n{str(e)}\n\nVerifique la configuración de MySQL"
                 self.root.after(0, lambda: messagebox.showerror("Error de Conexión", error_msg))
 
-        # Ejecutar login en hilo separado para no bloquear UI
         threading.Thread(target=login_thread, daemon=True).start()
 
     def run(self):
         self.root.mainloop()
 
 if __name__ == "__main__":
-    # Primero prueba la conexión directamente
-    print("Probando conexión MySQL directamente...")
-    if debug_mysql_connection():
-        print("Conexión OK, iniciando aplicación normal")
-    else:
-        print("Conexión falló, se mostrará configuración")
+    # Debug completo al inicio
+    print("=" * 50)
+    print("INICIANDO SISTEMA DE GESTIÓN DE INSUMOS")
+    print("=" * 50)
     
-    login = LoginWindow()
-    login.run()
+    # Información del entorno
+    print(f"Python: {sys.version}")
+    print(f"Ejecutable: {getattr(sys, 'frozen', False)}")
+    if getattr(sys, 'frozen', False):
+        print(f"Ruta ejecutable: {sys.executable}")
+        try:
+            print(f"Directorio temporal PyInstaller: {sys._MEIPASS}")
+        except AttributeError:
+            print("Sin directorio temporal _MEIPASS")
+    
+    # Debug de rutas
+    print("\n" + "-" * 30)
+    debug_paths()
+    
+    # Prueba de conexión
+    print("\n" + "-" * 30)
+    print("Probando conexión MySQL directamente...")
+    try:
+        connection_ok = debug_mysql_connection()
+        if connection_ok:
+            print("✅ Conexión MySQL OK, iniciando aplicación normal")
+        else:
+            print("❌ Conexión MySQL falló, se mostrará configuración")
+    except Exception as e:
+        print(f"❌ Error en debug de conexión: {e}")
+        import traceback
+        traceback.print_exc()
+    
+    print("\n" + "=" * 50)
+    print("INICIANDO INTERFAZ GRÁFICA...")
+    print("=" * 50)
+    
+    try:
+        login = LoginWindow()
+        login.run()
+    except Exception as e:
+        print(f"❌ Error fatal iniciando aplicación: {e}")
+        import traceback
+        traceback.print_exc()
+        input("Presione Enter para salir...")
