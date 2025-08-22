@@ -1,36 +1,60 @@
 # -*- mode: python ; coding: utf-8 -*-
 
-import sys
 import os
+import sys
 from PyInstaller.utils.hooks import collect_all
 
-# Recolectar todo lo necesario de mysql-connector-python
+BASE_DIR = os.path.abspath(os.getcwd())
+
+# Recolectar mysql-connector-python
 datas, binaries, hiddenimports = collect_all('mysql')
 
-# Añadir manualmente tus carpetas/archivos
-datas += [
-    ('../utils/**', 'utils'),        # src/utils → dentro del exe se llamará utils
-    ('../database/**', 'database'),  # src/database → dentro del exe se llamará database
-    ('modificar_mysql.bat', '.'),    # está junto a login_window.py (src/gui)
-    ('mysql_config.ini', '.'),       # está junto a login_window.py (src/gui)
-]
+def add_dir_to_datas(src_dir, prefix):
+    """Añade todos los archivos de src_dir a datas manteniendo estructura relativa bajo prefix."""
+    entries = []
+    if not os.path.isdir(src_dir):
+        return entries
+    for root, _, files in os.walk(src_dir):
+        for fname in files:
+            full_path = os.path.join(root, fname)
+            rel_path = os.path.relpath(full_path, src_dir)
+            dest_dir = os.path.join(prefix, os.path.dirname(rel_path)) if os.path.dirname(rel_path) else prefix
+            entries.append((full_path, dest_dir))
+    return entries
+
+# Directorios relativos asumiendo que ejecutas pyinstaller desde src/gui
+UTILS_DIR = os.path.abspath(os.path.join(BASE_DIR, '..', 'utils'))
+DATABASE_DIR = os.path.abspath(os.path.join(BASE_DIR, '..', 'database'))
+
+datas += add_dir_to_datas(UTILS_DIR, 'utils')
+datas += add_dir_to_datas(DATABASE_DIR, 'database')
+
+# Archivos sueltos junto a login_window.py
+BAT_PATH = os.path.join(BASE_DIR, 'modificar_mysql.bat')
+INI_PATH = os.path.join(BASE_DIR, 'mysql_config.ini')
+ICON_PATH = os.path.join(BASE_DIR, 'icono.ico')
+
+if os.path.isfile(BAT_PATH):
+    datas += [(BAT_PATH, '.')]
+if os.path.isfile(INI_PATH):
+    datas += [(INI_PATH, '.')]
 
 hiddenimports += [
     'mysql.connector',
-    'PIL',
+    'PIL',  # si no usas PIL/Pillow, puedes quitarlo
     'configparser',
     'tkinter.messagebox',
     'src.database.db_manager',
-    'src.gui.main_window'
+    'src.gui.main_window',
 ]
 
 block_cipher = None
 
 a = Analysis(
     ['login_window.py'],
-    pathex=[],
+    pathex=[BASE_DIR],
     binaries=binaries,
-    datas=datas,     
+    datas=datas,
     hiddenimports=hiddenimports,
     hookspath=[],
     hooksconfig={},
@@ -42,8 +66,7 @@ a = Analysis(
     noarchive=False,
 )
 
-pyz = PYZ(a.pure, a.zipped_data,
-          cipher=block_cipher)
+pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)
 
 exe = EXE(
     pyz,
@@ -55,8 +78,8 @@ exe = EXE(
     bootloader_ignore_signals=False,
     strip=False,
     upx=True,
-    console=False,   # False = ventana oculta (usa Tkinter como GUI)
-    icon='icono.ico'
+    console=False,  # ponlo True durante pruebas
+    icon=ICON_PATH if os.path.isfile(ICON_PATH) else None,
 )
 
 coll = COLLECT(

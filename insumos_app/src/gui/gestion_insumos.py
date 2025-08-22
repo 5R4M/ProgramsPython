@@ -32,12 +32,11 @@ from src.database import (
 )
 
 def resource_path(relative_path):
-    """Obtiene la ruta absoluta al recurso, funciona en dev y en PyInstaller."""
-    try:
-        base_path = sys._MEIPASS  # PyInstaller crea esta carpeta temporal
-    except Exception:
-        base_path = os.path.abspath(".")
-
+    import sys, os
+    if getattr(sys, 'frozen', False):
+        base_path = os.path.dirname(os.path.abspath(sys.executable))
+    else:
+        base_path = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))  # subir desde src/gui a src
     return os.path.join(base_path, relative_path)
 
 class GestionInsumos:
@@ -120,21 +119,15 @@ class GestionInsumos:
     
     def cargar_iconos(self):
         try:
-            base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-            icons_path = os.path.join(base_dir, "utils", "icons")
-
-            self.icon_add = tk.PhotoImage(file=os.path.join(icons_path, "agregar.png")).subsample(2, 2)
-            self.icon_edit = tk.PhotoImage(file=os.path.join(icons_path, "editar.png")).subsample(2, 2)
+            icons_path = resource_path(os.path.join("utils", "icons"))
+            self.icon_add    = tk.PhotoImage(file=os.path.join(icons_path, "agregar.png")).subsample(2, 2)
+            self.icon_edit   = tk.PhotoImage(file=os.path.join(icons_path, "editar.png")).subsample(2, 2)
             self.icon_delete = tk.PhotoImage(file=os.path.join(icons_path, "eliminar.png")).subsample(2, 2)
-            self.icon_excel = tk.PhotoImage(file=os.path.join(icons_path, "excel.png")).subsample(2, 2)
-            self.icon_close = tk.PhotoImage(file=os.path.join(icons_path, "cerrar.png")).subsample(2, 2)
+            self.icon_excel  = tk.PhotoImage(file=os.path.join(icons_path, "excel.png")).subsample(2, 2)
+            self.icon_close  = tk.PhotoImage(file=os.path.join(icons_path, "cerrar.png")).subsample(2, 2)
         except Exception as e:
             print(f"Error cargando iconos: {e}")
-            self.icon_add = None
-            self.icon_edit = None
-            self.icon_delete = None
-            self.icon_excel = None
-            self.icon_close = None
+            self.icon_add = self.icon_edit = self.icon_delete = self.icon_excel = self.icon_close = None
     
     def verificar_base_datos(self):
         try:
@@ -158,9 +151,19 @@ class GestionInsumos:
 
     def verificar_conexion_db(self):
         try:
-            return verificar_conexion()
+            ok = False
+            err = None
+            try:
+                ok, err = verificar_conexion(return_error=True)
+            except TypeError:
+                ok = verificar_conexion()
+            if ok:
+                return True
+            if err:
+                messagebox.showerror("Error de conexión", f"No se pudo conectar a MySQL.\nDetalle: {err}")
+            return False
         except Exception as e:
-            print(f"Error al verificar conexión: {e}")
+            messagebox.showerror("Error de conexión", f"Fallo al verificar la conexión.\nDetalle: {e}")
             return False
 
     # --- Utilidades ---

@@ -636,19 +636,23 @@ class MainWindow:
             return False
 
     def verify_database_connection(self):
-        """Verifica la conexión a la base de datos MySQL"""
         try:
-            conn = conectar_db()  # Usa tu función que conecta a MySQL
-            if not conn:
-                return False
-            cursor = conn.cursor()
-            cursor.execute("SELECT 1")
-            cursor.fetchone()
-            cursor.close()
-            conn.close()
-            return True
+            from src.database.db_manager import verificar_conexion, get_config
+            try:
+                ok, err = verificar_conexion(return_error=True)
+            except TypeError:
+                ok = verificar_conexion()
+                err = None if ok else "Fallo de conexión"
+            if ok:
+                return True
+            cfg = get_config()
+            messagebox.showerror(
+                "Error de conexión",
+                f"No se pudo conectar a MySQL.\nServidor: {cfg.get('host')}:{cfg.get('port')}\nUsuario: {cfg.get('user')}\nBase: {cfg.get('database')}\n\nDetalle: {err}"
+            )
+            return False
         except Exception as e:
-            print(f"Error al verificar conexión a la base de datos: {e}")
+            messagebox.showerror("Error de conexión", f"Fallo al verificar la conexión.\nDetalle: {e}")
             return False
 
     def on_closing(self):

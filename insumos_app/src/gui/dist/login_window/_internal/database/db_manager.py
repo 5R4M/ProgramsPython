@@ -5,34 +5,93 @@ import os
 from datetime import datetime
 import sys
 import shutil
-
+import socket
 
 def resource_path(relative_path):
     """Obtiene la ruta absoluta al recurso, funciona para desarrollo y PyInstaller."""
     try:
-        # PyInstaller crea una carpeta temporal y asigna esta variable
-        base_path = sys._MEIPASS
+        base_path = sys._MEIPASS  # PyInstaller
     except Exception:
         base_path = os.path.abspath(".")
-
     return os.path.join(base_path, relative_path)
 
-def get_config():
-    config = configparser.ConfigParser()
-    config.read('mysql_config.ini')
-    if 'MySQL' in config:
-        return {
-            'host': config['MySQL'].get('host', 'localhost'),
-            'port': int(config['MySQL'].get('port', 3306)),
-            'user': config['MySQL'].get('admin_user', 'root'),
-            'password': config['MySQL'].get('admin_pass', ''),
-            'database': config['MySQL'].get('database', 'insumos'),
-            'charset': 'utf8mb4',
-            'autocommit': False,
-            'use_unicode': True
-        }
+def get_config_path(filename="mysql_config.ini"):
+    """Devuelve la ruta del archivo de configuración junto al ejecutable (PyInstaller) o junto al script en desarrollo."""
+    if getattr(sys, 'frozen', False):
+        exe_dir = os.path.dirname(os.path.abspath(sys.executable))
+        return os.path.join(exe_dir, filename)
     else:
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        return os.path.join(script_dir, filename)
+
+def resolver_hostname_a_ip(hostname):
+    """Resuelve un hostname a dirección IP"""
+    try:
+        ip = socket.gethostbyname(hostname)
+        print(f"Hostname '{hostname}' resuelto a IP: {ip}")
+        return ip
+    except socket.gaierror as e:
+        print(f"Error al resolver hostname '{hostname}': {e}")
+        print(f"Usando hostname original: {hostname}")
+        return hostname
+
+def create_default_config(config_path):
+    """Crea un archivo de configuración por defecto si no existe"""
+    try:
+        config = configparser.ConfigParser()
+        config['MySQL'] = {
+            'host': 'DESKTOP-KVJ8QQ3',
+            'port': '3306',
+            'admin_user': 'root',
+            'admin_pass': '0.5735', 
+            'bind_address': '0.0.0.0',
+            'max_connections': '100',
+            'timeout': '28800',
+            'database': 'insumos'
+        }
+        
+        # Crear directorio si no existe
+        config_dir = os.path.dirname(config_path)
+        if config_dir and not os.path.exists(config_dir):
+            os.makedirs(config_dir, exist_ok=True)
+        
+        # Escribir archivo
+        with open(config_path, 'w', encoding='utf-8') as f:
+            config.write(f)
+        
+        print(f"Archivo de configuración por defecto creado en: {config_path}")
+        
+    except Exception as e:
+        print(f"Error creando configuración por defecto: {e}")
+        raise
+
+def get_config():
+    config_path = get_config_path("mysql_config.ini")
+
+    # Crear config por defecto si no existe
+    if not os.path.exists(config_path):
+        create_default_config(config_path)
+
+    config = configparser.ConfigParser()
+    config.read(config_path, encoding='utf-8')
+
+    if 'MySQL' not in config:
         raise Exception("No se encontró la configuración MySQL")
+
+    host = config['MySQL'].get('host', 'DESKTOP-KVJ8QQ3').strip()
+    if host.lower() in ('127.0.0.1', 'localhost', ''):
+        host = 'DESKTOP-KVJ8QQ3'
+
+    return {
+        'host': host,
+        'port': int(config['MySQL'].get('port', 3306)),
+        'user': config['MySQL'].get('admin_user', 'root'),
+        'password': config['MySQL'].get('admin_pass', ''),
+        'database': config['MySQL'].get('database', 'insumos'),
+        'charset': 'utf8mb4',
+        'autocommit': False,
+        'use_unicode': True
+    }
 
 def crear_base_datos_si_no_existe():
     """Crea la base de datos si no existe"""
@@ -43,15 +102,15 @@ def crear_base_datos_si_no_existe():
     cursor = None
     
     try:
-        # Configuración para conectar sin especificar base de datos
+    # Configuración para conectar sin especificar base de datos
         temp_config = {
-            'host': config['host'],
-            'user': config['user'],
-            'password': config['password'],
-            'port': config['port'],
-            'charset': 'utf8mb4',
-            'use_unicode': True,
-            'autocommit': True
+        'host': config['host'],
+        'user': config['user'],
+        'password': config['password'],
+        'port': config['port'],
+        'charset': 'utf8mb4',
+        'use_unicode': True,
+        'autocommit': True
         }
         
         print(f"Intentando conectar a MySQL en {temp_config['host']}:{temp_config['port']} con usuario {temp_config['user']}")
@@ -63,7 +122,7 @@ def crear_base_datos_si_no_existe():
         cursor.execute(f"CREATE DATABASE IF NOT EXISTS {database_name} CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci")
         
         print(f"Base de datos '{database_name}' verificada/creada exitosamente.")
-        
+    
     except Error as e:
         print(f"Error al crear/verificar base de datos: {e}")
         # Proporcionar más información sobre el error
@@ -72,7 +131,7 @@ def crear_base_datos_si_no_existe():
             print("1. MySQL esté ejecutándose")
             print("2. El usuario y contraseña sean correctos")
             print("3. El usuario tenga permisos para crear bases de datos")
-        raise e
+            raise e
     finally:
         if cursor:
             cursor.close()
@@ -105,7 +164,7 @@ def conectar_db():
             print("1. Verificar que MySQL esté ejecutándose")
             print("2. Configurar credenciales correctas en la aplicación")
             print("3. Verificar permisos del usuario en MySQL")
-            print("=====================================\n")
+            print("====\n")
         return None
     
 def crear_tablas_si_no_existen(conn):
@@ -116,147 +175,147 @@ def crear_tablas_si_no_existen(conn):
         # Tabla area
         cursor.execute("""
         CREATE TABLE IF NOT EXISTS area (
-            id INT AUTO_INCREMENT PRIMARY KEY,
-            nombre VARCHAR(255) NOT NULL UNIQUE
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        nombre VARCHAR(255) NOT NULL UNIQUE
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
         """)
         
         # Tabla distrito
         cursor.execute("""
         CREATE TABLE IF NOT EXISTS distrito (
-            id INT AUTO_INCREMENT PRIMARY KEY,
-            nombre VARCHAR(255) NOT NULL,
-            id_area INT,
-            FOREIGN KEY (id_area) REFERENCES area(id) ON DELETE SET NULL,
-            INDEX idx_distrito_area (id_area)
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        nombre VARCHAR(255) NOT NULL,
+        id_area INT,
+        FOREIGN KEY (id_area) REFERENCES area(id) ON DELETE SET NULL,
+        INDEX idx_distrito_area (id_area)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
         """)
         
         # Tabla tipo_servicio
         cursor.execute("""
         CREATE TABLE IF NOT EXISTS tipo_servicio (
-            id INT AUTO_INCREMENT PRIMARY KEY,
-            descripcion TEXT NOT NULL,
-            id_distrito INT,
-            FOREIGN KEY (id_distrito) REFERENCES distrito(id) ON DELETE CASCADE,
-            INDEX idx_tipo_servicio_distrito (id_distrito)
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        descripcion TEXT NOT NULL,
+        id_distrito INT,
+        FOREIGN KEY (id_distrito) REFERENCES distrito(id) ON DELETE CASCADE,
+        INDEX idx_tipo_servicio_distrito (id_distrito)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
         """)
         
         # Tabla servicio
         cursor.execute("""
         CREATE TABLE IF NOT EXISTS servicio (
-            id INT AUTO_INCREMENT PRIMARY KEY,
-            nombre VARCHAR(255) NOT NULL,
-            id_tipo_servicio INT,
-            FOREIGN KEY (id_tipo_servicio) REFERENCES tipo_servicio(id) ON DELETE CASCADE,
-            INDEX idx_servicio_tipo (id_tipo_servicio)
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        nombre VARCHAR(255) NOT NULL,
+        id_tipo_servicio INT,
+        FOREIGN KEY (id_tipo_servicio) REFERENCES tipo_servicio(id) ON DELETE CASCADE,
+        INDEX idx_servicio_tipo (id_tipo_servicio)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
         """)
         
         # Tabla tipo_insumo
         cursor.execute("""
         CREATE TABLE IF NOT EXISTS tipo_insumo (
-            id INT AUTO_INCREMENT PRIMARY KEY,
-            descripcion VARCHAR(255) NOT NULL UNIQUE
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        descripcion VARCHAR(255) NOT NULL UNIQUE
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
         """)
         
         # Tabla presentacion
         cursor.execute("""
         CREATE TABLE IF NOT EXISTS presentacion (
-            id INT AUTO_INCREMENT PRIMARY KEY,
-            nombre VARCHAR(255) NOT NULL UNIQUE
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        nombre VARCHAR(255) NOT NULL UNIQUE
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
         """)
         
         # Tabla insumo
         cursor.execute("""
         CREATE TABLE IF NOT EXISTS insumo (
-            id INT AUTO_INCREMENT PRIMARY KEY,
-            nombre VARCHAR(255) NOT NULL,
-            lote VARCHAR(255),
-            fecha_vencimiento DATE,
-            id_tipo_insumo INT,
-            FOREIGN KEY (id_tipo_insumo) REFERENCES tipo_insumo(id) ON DELETE CASCADE,
-            INDEX idx_insumo_tipo (id_tipo_insumo)
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        nombre VARCHAR(255) NOT NULL,
+        lote VARCHAR(255),
+        fecha_vencimiento DATE,
+        id_tipo_insumo INT,
+        FOREIGN KEY (id_tipo_insumo) REFERENCES tipo_insumo(id) ON DELETE CASCADE,
+        INDEX idx_insumo_tipo (id_tipo_insumo)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
         """)
         
         # Tabla insumo_presentacion (relación muchos a muchos)
         cursor.execute("""
         CREATE TABLE IF NOT EXISTS insumo_presentacion (
-            insumo_id INT,
-            presentacion_id INT,
-            PRIMARY KEY (insumo_id, presentacion_id),
-            FOREIGN KEY (insumo_id) REFERENCES insumo(id) ON DELETE CASCADE,
-            FOREIGN KEY (presentacion_id) REFERENCES presentacion(id) ON DELETE CASCADE
+        insumo_id INT,
+        presentacion_id INT,
+        PRIMARY KEY (insumo_id, presentacion_id),
+        FOREIGN KEY (insumo_id) REFERENCES insumo(id) ON DELETE CASCADE,
+        FOREIGN KEY (presentacion_id) REFERENCES presentacion(id) ON DELETE CASCADE
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
         """)
         
         # Tabla tipo_movimiento
         cursor.execute("""
         CREATE TABLE IF NOT EXISTS tipo_movimiento (
-            id INT AUTO_INCREMENT PRIMARY KEY,
-            descripcion VARCHAR(255) NOT NULL UNIQUE
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        descripcion VARCHAR(255) NOT NULL UNIQUE
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
         """)
         
         # Tabla movimiento
         cursor.execute("""
         CREATE TABLE IF NOT EXISTS movimiento (
-            id INT AUTO_INCREMENT PRIMARY KEY,
-            fecha_registro DATE NOT NULL,
-            referencia VARCHAR(255),
-            tipo_movimiento_id INT NOT NULL,
-            area_id INT,
-            distrito_id INT,
-            servicio_id INT,
-            insumo_id INT NOT NULL,
-            presentacion_id INT,
-            lote VARCHAR(255),
-            fecha_vencimiento DATE,
-            cantidad DECIMAL(10,2) NOT NULL,
-            salida_distrito_id INT,
-            salida_servicio_id INT,
-            observaciones TEXT,
-            FOREIGN KEY (tipo_movimiento_id) REFERENCES tipo_movimiento(id),
-            FOREIGN KEY (area_id) REFERENCES area(id) ON DELETE SET NULL,
-            FOREIGN KEY (distrito_id) REFERENCES distrito(id) ON DELETE SET NULL,
-            FOREIGN KEY (servicio_id) REFERENCES servicio(id) ON DELETE SET NULL,
-            FOREIGN KEY (insumo_id) REFERENCES insumo(id),
-            FOREIGN KEY (presentacion_id) REFERENCES presentacion(id) ON DELETE SET NULL,
-            FOREIGN KEY (salida_distrito_id) REFERENCES distrito(id) ON DELETE SET NULL,
-            FOREIGN KEY (salida_servicio_id) REFERENCES servicio(id) ON DELETE SET NULL,
-            INDEX idx_movimiento_fecha (fecha_registro),
-            INDEX idx_movimiento_insumo (insumo_id),
-            INDEX idx_movimiento_tipo (tipo_movimiento_id)
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        fecha_registro DATE NOT NULL,
+        referencia VARCHAR(255),
+        tipo_movimiento_id INT NOT NULL,
+        area_id INT,
+        distrito_id INT,
+        servicio_id INT,
+        insumo_id INT NOT NULL,
+        presentacion_id INT,
+        lote VARCHAR(255),
+        fecha_vencimiento DATE,
+        cantidad DECIMAL(10,2) NOT NULL,
+        salida_distrito_id INT,
+        salida_servicio_id INT,
+        observaciones TEXT,
+        FOREIGN KEY (tipo_movimiento_id) REFERENCES tipo_movimiento(id),
+        FOREIGN KEY (area_id) REFERENCES area(id) ON DELETE SET NULL,
+        FOREIGN KEY (distrito_id) REFERENCES distrito(id) ON DELETE SET NULL,
+        FOREIGN KEY (servicio_id) REFERENCES servicio(id) ON DELETE SET NULL,
+        FOREIGN KEY (insumo_id) REFERENCES insumo(id),
+        FOREIGN KEY (presentacion_id) REFERENCES presentacion(id) ON DELETE SET NULL,
+        FOREIGN KEY (salida_distrito_id) REFERENCES distrito(id) ON DELETE SET NULL,
+        FOREIGN KEY (salida_servicio_id) REFERENCES servicio(id) ON DELETE SET NULL,
+        INDEX idx_movimiento_fecha (fecha_registro),
+        INDEX idx_movimiento_insumo (insumo_id),
+        INDEX idx_movimiento_tipo (tipo_movimiento_id)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
         """)
         
         # Tabla usuarios
         cursor.execute("""
         CREATE TABLE IF NOT EXISTS usuarios (
-            id INT AUTO_INCREMENT PRIMARY KEY,
-            username VARCHAR(255) UNIQUE NOT NULL,
-            password VARCHAR(255) NOT NULL,
-            nombre_completo VARCHAR(255),
-            rol ENUM('admin', 'usuario', 'super_admin') NOT NULL,
-            activo BOOLEAN DEFAULT TRUE,
-            fecha_creacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        username VARCHAR(255) UNIQUE NOT NULL,
+        password VARCHAR(255) NOT NULL,
+        nombre_completo VARCHAR(255),
+        rol ENUM('admin', 'usuario', 'super_admin') NOT NULL,
+        activo BOOLEAN DEFAULT TRUE,
+        fecha_creacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
         """)
         
         conn.commit()
         print("Tablas verificadas/creadas exitosamente.")
-        
+    
     except Error as e:
         print(f"Error al crear tablas: {e}")
         conn.rollback()
     finally:
         cursor.close()
 
-# -------------------- OPERACIONES ÁREA --------------------
+# ---- OPERACIONES ÁREA ----
 
 def obtener_areas():
     conn = conectar_db()
@@ -318,9 +377,9 @@ def eliminar_area(id_area):
             distritos = cursor.fetchall()
             for distrito in distritos:
                 eliminar_distrito(distrito['id'])
-            cursor.execute("DELETE FROM area WHERE id = %s", (id_area,))
-            conn.commit()
-            return True
+                cursor.execute("DELETE FROM area WHERE id = %s", (id_area,))
+                conn.commit()
+                return True
         except Error as e:
             print(f"Error al eliminar área: {e}")
             conn.rollback()
@@ -329,7 +388,7 @@ def eliminar_area(id_area):
             cursor.close()
             conn.close()
 
-# -------------------- OPERACIONES DISTRITO --------------------
+# ---- OPERACIONES DISTRITO ----
 
 def obtener_distritos():
     conn = conectar_db()
@@ -337,10 +396,10 @@ def obtener_distritos():
         try:
             cursor = conn.cursor(dictionary=True)
             cursor.execute("""
-                SELECT d.id, d.nombre, a.nombre AS area_nombre
-                FROM distrito d
-                LEFT JOIN area a ON d.id_area = a.id
-                ORDER BY d.nombre
+            SELECT d.id, d.nombre, a.nombre AS area_nombre
+            FROM distrito d
+            LEFT JOIN area a ON d.id_area = a.id
+            ORDER BY d.nombre
             """)
             return cursor.fetchall()
         except Error as e:
@@ -356,7 +415,7 @@ def obtener_distritos_por_area(id_area):
         try:
             cursor = conn.cursor(dictionary=True)
             cursor.execute("""
-                SELECT id, nombre FROM distrito WHERE id_area = %s ORDER BY nombre
+            SELECT id, nombre FROM distrito WHERE id_area = %s ORDER BY nombre
             """, (id_area,))
             return cursor.fetchall()
         except Error as e:
@@ -395,8 +454,8 @@ def actualizar_distrito(id_distrito, nuevo_nombre, id_area=None):
                 cursor.execute("UPDATE distrito SET nombre = %s, id_area = %s WHERE id = %s", (nuevo_nombre, id_area, id_distrito))
             else:
                 cursor.execute("UPDATE distrito SET nombre = %s WHERE id = %s", (nuevo_nombre, id_distrito))
-            conn.commit()
-            return cursor.rowcount > 0
+                conn.commit()
+                return cursor.rowcount > 0
         except Error as e:
             print(f"Error al actualizar distrito: {e}")
             conn.rollback()
@@ -414,9 +473,9 @@ def eliminar_distrito(id_distrito):
             tipos_servicio = cursor.fetchall()
             for tipo in tipos_servicio:
                 eliminar_tipo_servicio(tipo['id'])
-            cursor.execute("DELETE FROM distrito WHERE id = %s", (id_distrito,))
-            conn.commit()
-            return True
+                cursor.execute("DELETE FROM distrito WHERE id = %s", (id_distrito,))
+                conn.commit()
+                return True
         except Error as e:
             print(f"Error al eliminar distrito: {e}")
             conn.rollback()
@@ -425,7 +484,7 @@ def eliminar_distrito(id_distrito):
             cursor.close()
             conn.close()
 
-# -------------------- OPERACIONES TIPO SERVICIO --------------------
+# ---- OPERACIONES TIPO SERVICIO ----
 
 def obtener_tipos_servicio_por_distrito(id_distrito):
     conn = conectar_db()
@@ -490,7 +549,7 @@ def eliminar_tipo_servicio(id_tipo_servicio):
             cursor.close()
             conn.close()
 
-# -------------------- OPERACIONES SERVICIO --------------------
+# ---- OPERACIONES SERVICIO ----
 
 def obtener_servicios_por_tipo(id_tipo_servicio):
     conn = conectar_db()
@@ -554,7 +613,7 @@ def eliminar_servicio(id_servicio):
             cursor.close()
             conn.close()
 
-# -------------------- OPERACIONES TIPO INSUMO --------------------
+# ---- OPERACIONES TIPO INSUMO ----
 
 def obtener_tipos_insumo():
     conn = conectar_db()
@@ -616,9 +675,9 @@ def eliminar_tipo_insumo(id_tipo_insumo):
             insumos = cursor.fetchall()
             for insumo in insumos:
                 eliminar_insumo(insumo['id'])
-            cursor.execute("DELETE FROM tipo_insumo WHERE id = %s", (id_tipo_insumo,))
-            conn.commit()
-            return True
+                cursor.execute("DELETE FROM tipo_insumo WHERE id = %s", (id_tipo_insumo,))
+                conn.commit()
+                return True
         except Error as e:
             print(f"Error al eliminar tipo de insumo: {e}")
             conn.rollback()
@@ -627,7 +686,7 @@ def eliminar_tipo_insumo(id_tipo_insumo):
             cursor.close()
             conn.close()
 
-# -------------------- OPERACIONES PRESENTACION --------------------
+# ---- OPERACIONES PRESENTACION ----
 
 def obtener_presentaciones():
     conn = conectar_db()
@@ -701,7 +760,7 @@ def eliminar_presentacion(id_presentacion):
             cursor.close()
             conn.close()
 
-# -------------------- OPERACIONES INSUMO --------------------
+# ---- OPERACIONES INSUMO ----
 
 def obtener_insumos_por_tipo(id_tipo_insumo):
     conn = conectar_db()
@@ -710,15 +769,15 @@ def obtener_insumos_por_tipo(id_tipo_insumo):
             cursor = conn.cursor(dictionary=True)
             # Obtener insumos y sus presentaciones concatenadas
             cursor.execute("""
-                SELECT i.id, i.nombre, i.lote, i.fecha_vencimiento, t.descripcion as tipo_insumo,
-                    GROUP_CONCAT(p.nombre SEPARATOR ', ') as nombre_presentacion
-                FROM insumo i
-                JOIN tipo_insumo t ON i.id_tipo_insumo = t.id
-                LEFT JOIN insumo_presentacion ip ON i.id = ip.insumo_id
-                LEFT JOIN presentacion p ON ip.presentacion_id = p.id
-                WHERE i.id_tipo_insumo = %s
-                GROUP BY i.id
-                ORDER BY i.nombre
+            SELECT i.id, i.nombre, i.lote, i.fecha_vencimiento, t.descripcion as tipo_insumo,
+            GROUP_CONCAT(p.nombre SEPARATOR ', ') as nombre_presentacion
+            FROM insumo i
+            JOIN tipo_insumo t ON i.id_tipo_insumo = t.id
+            LEFT JOIN insumo_presentacion ip ON i.id = ip.insumo_id
+            LEFT JOIN presentacion p ON ip.presentacion_id = p.id
+            WHERE i.id_tipo_insumo = %s
+            GROUP BY i.id
+            ORDER BY i.nombre
             """, (id_tipo_insumo,))
             return cursor.fetchall()
         except Error as e:
@@ -734,14 +793,14 @@ def agregar_insumo(nombre, lote, id_presentacion, fecha_vencimiento, id_tipo_ins
         try:
             cursor = conn.cursor()
             cursor.execute("""
-                INSERT INTO insumo (nombre, lote, fecha_vencimiento, id_tipo_insumo)
-                VALUES (%s, %s, %s, %s)""", (nombre, lote, fecha_vencimiento, id_tipo_insumo))
+            INSERT INTO insumo (nombre, lote, fecha_vencimiento, id_tipo_insumo)
+            VALUES (%s, %s, %s, %s)""", (nombre, lote, fecha_vencimiento, id_tipo_insumo))
             id_insumo = cursor.lastrowid
             # Insertar relación con presentación
             if id_presentacion:
                 cursor.execute("""
-                    INSERT INTO insumo_presentacion (insumo_id, presentacion_id)
-                    VALUES (%s, %s)""", (id_insumo, id_presentacion))
+            INSERT INTO insumo_presentacion (insumo_id, presentacion_id)
+            VALUES (%s, %s)""", (id_insumo, id_presentacion))
             conn.commit()
             return id_insumo
         except Error as e:
@@ -758,15 +817,15 @@ def actualizar_insumo(id_insumo, nombre, lote, id_presentacion, fecha_vencimient
         try:
             cursor = conn.cursor()
             cursor.execute("""
-                UPDATE insumo
-                SET nombre = %s, lote = %s, fecha_vencimiento = %s, id_tipo_insumo = %s
-                WHERE id = %s""", (nombre, lote, fecha_vencimiento, id_tipo_insumo, id_insumo))
+            UPDATE insumo
+            SET nombre = %s, lote = %s, fecha_vencimiento = %s, id_tipo_insumo = %s
+            WHERE id = %s""", (nombre, lote, fecha_vencimiento, id_tipo_insumo, id_insumo))
             # Actualizar relación con presentación: eliminar anteriores y agregar la nueva
             cursor.execute("DELETE FROM insumo_presentacion WHERE insumo_id = %s", (id_insumo,))
             if id_presentacion:
                 cursor.execute("INSERT INTO insumo_presentacion (insumo_id, presentacion_id) VALUES (%s, %s)", (id_insumo, id_presentacion))
-            conn.commit()
-            return cursor.rowcount > 0
+                conn.commit()
+                return cursor.rowcount > 0
         except Error as e:
             print(f"Error al actualizar insumo: {e}")
             conn.rollback()
@@ -781,15 +840,15 @@ def obtener_insumo_por_id(id_insumo):
         try:
             cursor = conn.cursor(dictionary=True)
             cursor.execute("""
-                SELECT i.id, i.nombre, i.lote, i.fecha_vencimiento, i.id_tipo_insumo,
-                    t.descripcion as tipo_insumo,
-                    GROUP_CONCAT(p.nombre SEPARATOR ', ') as nombre_presentacion
-                FROM insumo i
-                JOIN tipo_insumo t ON i.id_tipo_insumo = t.id
-                LEFT JOIN insumo_presentacion ip ON i.id = ip.insumo_id
-                LEFT JOIN presentacion p ON ip.presentacion_id = p.id
-                WHERE i.id = %s
-                GROUP BY i.id
+            SELECT i.id, i.nombre, i.lote, i.fecha_vencimiento, i.id_tipo_insumo,
+            t.descripcion as tipo_insumo,
+            GROUP_CONCAT(p.nombre SEPARATOR ', ') as nombre_presentacion
+            FROM insumo i
+            JOIN tipo_insumo t ON i.id_tipo_insumo = t.id
+            LEFT JOIN insumo_presentacion ip ON i.id = ip.insumo_id
+            LEFT JOIN presentacion p ON ip.presentacion_id = p.id
+            WHERE i.id = %s
+            GROUP BY i.id
             """, (id_insumo,))
             return cursor.fetchone()
         except Error as e:
@@ -805,7 +864,7 @@ def obtener_insumo_por_nombre(nombre, id_tipo_insumo):
         try:
             cursor = conn.cursor(dictionary=True)
             cursor.execute("""
-                SELECT id, nombre FROM insumo WHERE nombre = %s AND id_tipo_insumo = %s
+            SELECT id, nombre FROM insumo WHERE nombre = %s AND id_tipo_insumo = %s
             """, (nombre, id_tipo_insumo))
             return cursor.fetchone()
         except Error as e:
@@ -832,7 +891,7 @@ def eliminar_insumo(id_insumo):
             cursor.close()
             conn.close()
 
-# -------------------- OPERACIONES TIPO MOVIMIENTO --------------------
+# ---- OPERACIONES TIPO MOVIMIENTO ----
 
 def obtener_tipos_movimiento():
     conn = conectar_db()
@@ -896,17 +955,17 @@ def eliminar_tipo_movimiento(id_tipo):
             cursor.close()
             conn.close()
 
-# -------------------- OPERACIONES MOVIMIENTO --------------------
+# ---- OPERACIONES MOVIMIENTO ----
 
 def guardar_movimiento(movimiento_data):
     """
     Guarda un movimiento en la base de datos.
 
     Args:
-        movimiento_data (dict): Diccionario con los datos del movimiento
+    movimiento_data (dict): Diccionario con los datos del movimiento
 
     Returns:
-        int: ID del movimiento guardado
+    int: ID del movimiento guardado
     """
     conn = conectar_db()
     if conn:
@@ -914,9 +973,9 @@ def guardar_movimiento(movimiento_data):
             cursor = conn.cursor()
             fecha_registro = movimiento_data['fecha_registro'].strftime('%Y-%m-%d')
             fecha_vencimiento = (
-                movimiento_data['fecha_vencimiento'].strftime('%Y-%m-%d')
-                if movimiento_data['fecha_vencimiento'] is not None
-                else None
+            movimiento_data['fecha_vencimiento'].strftime('%Y-%m-%d')
+            if movimiento_data['fecha_vencimiento'] is not None
+            else None
             )
             # Usar el area_id directamente del diccionario
             area_id = movimiento_data.get('area_id')
@@ -926,38 +985,38 @@ def guardar_movimiento(movimiento_data):
             print(f"Guardando movimiento con area_id={area_id}, distrito_id={distrito_id}, servicio_id={movimiento_data.get('servicio_id')}")
 
             cursor.execute("""
-                INSERT INTO movimiento (
-                    fecha_registro,
-                    referencia,
-                    tipo_movimiento_id,
-                    area_id,
-                    distrito_id,
-                    servicio_id,
-                    insumo_id,
-                    presentacion_id,
-                    lote,
-                    fecha_vencimiento,
-                    cantidad,
-                    salida_distrito_id,
-                    salida_servicio_id,
-                    observaciones
-                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""",
-                (
-                    fecha_registro,
-                    movimiento_data['referencia'],
-                    movimiento_data['tipo_movimiento_id'],
-                    area_id,
-                    distrito_id,
-                    movimiento_data.get('servicio_id'),
-                    movimiento_data['insumo_id'],
-                    movimiento_data.get('presentacion_id'),
-                    movimiento_data['lote'],
-                    fecha_vencimiento,
-                    movimiento_data['cantidad'],
-                    movimiento_data.get('salida_distrito_id'),
-                    movimiento_data.get('salida_servicio_id'),
-                    movimiento_data.get('observaciones')
-                ))
+            INSERT INTO movimiento (
+            fecha_registro,
+            referencia,
+            tipo_movimiento_id,
+            area_id,
+            distrito_id,
+            servicio_id,
+            insumo_id,
+            presentacion_id,
+            lote,
+            fecha_vencimiento,
+            cantidad,
+            salida_distrito_id,
+            salida_servicio_id,
+            observaciones
+            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""",
+            (
+            fecha_registro,
+            movimiento_data['referencia'],
+            movimiento_data['tipo_movimiento_id'],
+            area_id,
+            distrito_id,
+            movimiento_data.get('servicio_id'),
+            movimiento_data['insumo_id'],
+            movimiento_data.get('presentacion_id'),
+            movimiento_data['lote'],
+            fecha_vencimiento,
+            movimiento_data['cantidad'],
+            movimiento_data.get('salida_distrito_id'),
+            movimiento_data.get('salida_servicio_id'),
+            movimiento_data.get('observaciones')
+            ))
             conn.commit()
             return cursor.lastrowid
         except Error as e:
@@ -968,7 +1027,7 @@ def guardar_movimiento(movimiento_data):
             cursor.close()
             conn.close()
 
-# -------------------- FUNCIONES PARA OBTENER IDS --------------------
+# ---- FUNCIONES PARA OBTENER IDS ----
 
 def obtener_id_area(nombre_area):
     conn = conectar_db()
@@ -1090,58 +1149,58 @@ def obtener_id_tipo_servicio(descripcion_tipo_servicio):
             cursor.close()
             conn.close()
 
-# -------------------- FUNCIONES AUXILIARES --------------------
+# ---- FUNCIONES AUXILIARES ----
 
-def verificar_conexion():
-    conn = conectar_db()
-    if conn:
-        try:
-            cursor = conn.cursor()
-            cursor.execute("SELECT 1")
-            cursor.fetchone()  # Consumir el resultado para evitar "Unread result found"
-            return True
-        except Error:
-            return False
-        finally:
-            cursor.close()
-            conn.close()
-    return False
+def verificar_conexion(return_error=False):
+    try:
+        conn = conectar_db()
+        if not conn:
+            raise Exception("conectar_db() devolvió None")
+        cur = conn.cursor()
+        cur.execute("SELECT 1")
+        cur.fetchone()
+        cur.close()
+        conn.close()
+        return (True, None) if return_error else True
+    except Exception as e:
+        return (False, e) if return_error else False
 
 def verificar_tablas():
     conn = conectar_db()
-    if conn:
-        try:
-            cursor = conn.cursor()
-            tablas = [
-                'area',
-                'distrito',
-                'tipo_servicio',
-                'servicio',
-                'tipo_insumo',
-                'presentacion',
-                'insumo',
-                'insumo_presentacion',
-                'tipo_movimiento',
-                'movimiento'
-            ]
-            for tabla in tablas:
-                cursor.execute("SHOW TABLES LIKE %s", (tabla,))
-                if not cursor.fetchone():
-                    return False
-            return True
-        except Error as e:
-            print(f"Error al verificar tablas: {e}")
-            return False
-        finally:
-            cursor.close()
-            conn.close()
-    return False
-
-# -------------------- OPERACIÓN REPORTE --------------------
+    if not conn:
+        return False
+    try:
+        cursor = conn.cursor()
+        tablas = [
+            'area',
+            'distrito',
+            'tipo_servicio',
+            'servicio',
+            'tipo_insumo',
+            'presentacion',
+            'insumo',
+            'insumo_presentacion',
+            'tipo_movimiento',
+            'movimiento',
+            'usuarios'
+        ]
+        for tabla in tablas:
+            cursor.execute("SHOW TABLES LIKE %s", (tabla,))
+            if not cursor.fetchone():
+                return False
+        return True
+    except Error as e:
+        print(f"Error al verificar tablas: {e}")
+        return False
+    finally:
+        cursor.close()
+        conn.close()
+        
+# ---- OPERACIÓN REPORTE ----
 
 def obtener_movimientos_kardex(fecha_inicio, fecha_fin, distrito_nombre=None, tipo_servicio_desc=None,
-                               servicio_nombre=None, tipo_insumo_desc=None, insumo_nombre=None,
-                               presentacion_nombre=None, area_nombre=None):
+    servicio_nombre=None, tipo_insumo_desc=None, insumo_nombre=None,
+    presentacion_nombre=None, area_nombre=None):
     conn = conectar_db()
     if not conn:
         return []
@@ -1150,42 +1209,42 @@ def obtener_movimientos_kardex(fecha_inicio, fecha_fin, distrito_nombre=None, ti
         cursor = conn.cursor(dictionary=True)
 
         query = """
-            SELECT
-                m.fecha_registro AS fecha,
-                m.referencia,
-                tm.descripcion AS tipo_movimiento,
-                m.cantidad,
-                m.lote,
-                m.fecha_vencimiento,
-                m.observaciones,
-                d_salida.nombre AS distrito_destino,
-                s_salida.nombre AS servicio_destino,
-                i.nombre AS nombre_insumo,
-                COALESCE(i.lote, '') AS codigo,
-                COALESCE(p.nombre, '') AS nombre_presentacion,
-                0 AS existencia,
-                0 AS reajuste,
-                -- USAR LOS DATOS DIRECTOS DEL MOVIMIENTO, NO JOINS COMPLEJOS
-                a_directa.nombre AS area_nombre,
-                d_directa.nombre AS distrito_nombre,
-                ts_directa.descripcion AS tipo_servicio_desc,
-                s_directa.nombre AS servicio_nombre
-            FROM movimiento m
-            JOIN tipo_movimiento tm ON m.tipo_movimiento_id = tm.id
-            -- JOINs directos con los IDs guardados en el movimiento
-            LEFT JOIN area a_directa ON m.area_id = a_directa.id
-            LEFT JOIN distrito d_directa ON m.distrito_id = d_directa.id
-            LEFT JOIN servicio s_directa ON m.servicio_id = s_directa.id
-            LEFT JOIN tipo_servicio ts_directa ON s_directa.id_tipo_servicio = ts_directa.id
-            -- JOINs para salida nivel inferior
-            LEFT JOIN distrito d_salida ON m.salida_distrito_id = d_salida.id
-            LEFT JOIN servicio s_salida ON m.salida_servicio_id = s_salida.id
-            -- JOINs para insumo y presentación
-            LEFT JOIN insumo i ON m.insumo_id = i.id
-            LEFT JOIN tipo_insumo ti ON i.id_tipo_insumo = ti.id
-            LEFT JOIN insumo_presentacion ip ON i.id = ip.insumo_id
-            LEFT JOIN presentacion p ON ip.presentacion_id = p.id
-            WHERE m.fecha_registro BETWEEN %s AND %s
+        SELECT
+        m.fecha_registro AS fecha,
+        m.referencia,
+        tm.descripcion AS tipo_movimiento,
+        m.cantidad,
+        m.lote,
+        m.fecha_vencimiento,
+        m.observaciones,
+        d_salida.nombre AS distrito_destino,
+        s_salida.nombre AS servicio_destino,
+        i.nombre AS nombre_insumo,
+        COALESCE(i.lote, '') AS codigo,
+        COALESCE(p.nombre, '') AS nombre_presentacion,
+        0 AS existencia,
+        0 AS reajuste,
+        -- USAR LOS DATOS DIRECTOS DEL MOVIMIENTO, NO JOINS COMPLEJOS
+        a_directa.nombre AS area_nombre,
+        d_directa.nombre AS distrito_nombre,
+        ts_directa.descripcion AS tipo_servicio_desc,
+        s_directa.nombre AS servicio_nombre
+        FROM movimiento m
+        JOIN tipo_movimiento tm ON m.tipo_movimiento_id = tm.id
+        -- JOINs directos con los IDs guardados en el movimiento
+        LEFT JOIN area a_directa ON m.area_id = a_directa.id
+        LEFT JOIN distrito d_directa ON m.distrito_id = d_directa.id
+        LEFT JOIN servicio s_directa ON m.servicio_id = s_directa.id
+        LEFT JOIN tipo_servicio ts_directa ON s_directa.id_tipo_servicio = ts_directa.id
+        -- JOINs para salida nivel inferior
+        LEFT JOIN distrito d_salida ON m.salida_distrito_id = d_salida.id
+        LEFT JOIN servicio s_salida ON m.salida_servicio_id = s_salida.id
+        -- JOINs para insumo y presentación
+        LEFT JOIN insumo i ON m.insumo_id = i.id
+        LEFT JOIN tipo_insumo ti ON i.id_tipo_insumo = ti.id
+        LEFT JOIN insumo_presentacion ip ON i.id = ip.insumo_id
+        LEFT JOIN presentacion p ON ip.presentacion_id = p.id
+        WHERE m.fecha_registro BETWEEN %s AND %s
         """
 
         params = [fecha_inicio, fecha_fin]
@@ -1197,12 +1256,12 @@ def obtener_movimientos_kardex(fecha_inicio, fecha_fin, distrito_nombre=None, ti
         if tipo_insumo_desc and tipo_insumo_desc.strip():
             query += " AND ti.descripcion = %s"
             params.append(tipo_insumo_desc)
-            
+        
         # Filtrar por insumo
         if insumo_nombre and insumo_nombre.strip():
             query += " AND i.nombre = %s"
             params.append(insumo_nombre)
-            
+        
         # Filtrar por presentación
         if presentacion_nombre and presentacion_nombre.strip():
             query += " AND p.nombre = %s"
@@ -1216,24 +1275,24 @@ def obtener_movimientos_kardex(fecha_inicio, fecha_fin, distrito_nombre=None, ti
         movimientos = []
         for row in resultados:
             movimientos.append({
-                'fecha': row['fecha'],
-                'referencia': row['referencia'],
-                'tipo_movimiento': row['tipo_movimiento'],
-                'cantidad': row['cantidad'],
-                'lote': row['lote'],
-                'fecha_vencimiento': row['fecha_vencimiento'],
-                'observaciones': row['observaciones'],
-                'distrito_destino': row['distrito_destino'],
-                'servicio_destino': row['servicio_destino'],
-                'nombre_insumo': row['nombre_insumo'],
-                'codigo': row['codigo'],
-                'nombre_presentacion': row['nombre_presentacion'],
-                'existencia': row['existencia'],
-                'reajuste': row['reajuste'],
-                'area_nombre': row['area_nombre'],
-                'distrito_nombre': row['distrito_nombre'],
-                'tipo_servicio_desc': row['tipo_servicio_desc'],
-                'servicio_nombre': row['servicio_nombre']
+            'fecha': row['fecha'],
+            'referencia': row['referencia'],
+            'tipo_movimiento': row['tipo_movimiento'],
+            'cantidad': row['cantidad'],
+            'lote': row['lote'],
+            'fecha_vencimiento': row['fecha_vencimiento'],
+            'observaciones': row['observaciones'],
+            'distrito_destino': row['distrito_destino'],
+            'servicio_destino': row['servicio_destino'],
+            'nombre_insumo': row['nombre_insumo'],
+            'codigo': row['codigo'],
+            'nombre_presentacion': row['nombre_presentacion'],
+            'existencia': row['existencia'],
+            'reajuste': row['reajuste'],
+            'area_nombre': row['area_nombre'],
+            'distrito_nombre': row['distrito_nombre'],
+            'tipo_servicio_desc': row['tipo_servicio_desc'],
+            'servicio_nombre': row['servicio_nombre']
             })
 
         return movimientos
@@ -1244,8 +1303,8 @@ def obtener_movimientos_kardex(fecha_inicio, fecha_fin, distrito_nombre=None, ti
     finally:
         cursor.close()
         conn.close()
-        
-# -------------------- OPERACIÓN USUARIOS --------------------
+    
+# ---- OPERACIÓN USUARIOS ----
 
 def crear_tabla_usuarios():
     """Crea la tabla de usuarios si no existe y crea el super usuario"""
@@ -1274,10 +1333,10 @@ def crear_super_usuario_si_no_existe():
     
     # Credenciales del super usuario
     super_user = {
-        'username': 'admin',
-        'password': hashlib.sha256('admin123'.encode()).hexdigest(),
-        'nombre_completo': 'Administrador del Sistema',
-        'rol': 'super_admin'
+    'username': 'admin',
+    'password': hashlib.sha256('admin123'.encode()).hexdigest(),
+    'nombre_completo': 'Administrador del Sistema',
+    'rol': 'super_admin'
     }
 
     try:
@@ -1288,22 +1347,23 @@ def crear_super_usuario_si_no_existe():
             
         cursor = conn.cursor(dictionary=True)
         cursor.execute('SELECT id FROM usuarios WHERE username = %s', (super_user['username'],))
+        
         if not cursor.fetchone():
             # Crear super usuario
             cursor.execute('''
-                INSERT INTO usuarios (username, password, nombre_completo, rol)
-                VALUES (%s, %s, %s, %s)
+            INSERT INTO usuarios (username, password, nombre_completo, rol)
+            VALUES (%s, %s, %s, %s)
             ''', (
-                super_user['username'],
-                super_user['password'],
-                super_user['nombre_completo'],
-                super_user['rol']
+            super_user['username'],
+            super_user['password'],
+            super_user['nombre_completo'],
+            super_user['rol']
             ))
             conn.commit()
             print("Super usuario creado exitosamente (usuario: admin, contraseña: admin123)")
         else:
             print("Super usuario ya existe")
-            
+    
     except Exception as e:
         print(f"Error creando super usuario: {e}")
         if conn:
@@ -1313,7 +1373,7 @@ def crear_super_usuario_si_no_existe():
             cursor.close()
         if conn:
             conn.close()
-            
+    
 def existe_usuario(username):
     """Verifica si un nombre de usuario ya existe en la base de datos."""
     conn = conectar_db()
@@ -1341,7 +1401,7 @@ def verificar_credenciales(username, password):
         conn = conectar_db()
         if not conn:
             raise Exception("No se pudo establecer conexión con la base de datos MySQL. Verifique la configuración.")
-            
+        
         cursor = conn.cursor(dictionary=True)
 
         # Hash de la contraseña ingresada
@@ -1349,22 +1409,22 @@ def verificar_credenciales(username, password):
 
         # Buscar usuario sin importar mayúsculas/minúsculas
         cursor.execute("""
-            SELECT id, username, nombre_completo, rol, activo
-            FROM usuarios
-            WHERE LOWER(username) = LOWER(%s) AND password = %s
+        SELECT id, username, nombre_completo, rol, activo
+        FROM usuarios
+        WHERE LOWER(username) = LOWER(%s) AND password = %s
         """, (username, password_hash))
 
         usuario = cursor.fetchone()
 
         if usuario and usuario['activo']:
             return {
-                'id': usuario['id'],
-                'username': usuario['username'],
-                'nombre_completo': usuario['nombre_completo'],
-                'rol': usuario['rol'],
-                'activo': usuario['activo']
+            'id': usuario['id'],
+            'username': usuario['username'],
+            'nombre_completo': usuario['nombre_completo'],
+            'rol': usuario['rol'],
+            'activo': usuario['activo']
             }
-        return None
+            return None
 
     except Exception as e:
         print(f"Error al verificar credenciales: {e}")
@@ -1395,8 +1455,8 @@ def crear_usuario(username, password, nombre_completo, rol, activo=1):
         try:
             cursor = conn.cursor()
             cursor.execute(
-                "INSERT INTO usuarios (username, password, nombre_completo, rol, activo) VALUES (%s, %s, %s, %s, %s)",
-                (username, hashlib.sha256(password.encode()).hexdigest(), nombre_completo, rol, activo)
+            "INSERT INTO usuarios (username, password, nombre_completo, rol, activo) VALUES (%s, %s, %s, %s, %s)",
+            (username, hashlib.sha256(password.encode()).hexdigest(), nombre_completo, rol, activo)
             )
             conn.commit()
             return True
@@ -1413,8 +1473,8 @@ def actualizar_usuario(id_usuario, nombre_completo, rol, activo):
         try:
             cursor = conn.cursor()
             cursor.execute(
-                "UPDATE usuarios SET nombre_completo=%s, rol=%s, activo=%s WHERE id=%s",
-                (nombre_completo, rol, activo, id_usuario)
+            "UPDATE usuarios SET nombre_completo=%s, rol=%s, activo=%s WHERE id=%s",
+            (nombre_completo, rol, activo, id_usuario)
             )
             conn.commit()
             return True
@@ -1432,8 +1492,8 @@ def cambiar_password_usuario(id_usuario, new_password):
         try:
             cursor = conn.cursor()
             cursor.execute(
-                "UPDATE usuarios SET password=%s WHERE id=%s",
-                (hashlib.sha256(new_password.encode()).hexdigest(), id_usuario)
+            "UPDATE usuarios SET password=%s WHERE id=%s",
+            (hashlib.sha256(new_password.encode()).hexdigest(), id_usuario)
             )
             conn.commit()
             return True
@@ -1459,7 +1519,7 @@ def eliminar_usuario(id_usuario):
             cursor.close()
             conn.close()
 
-# -------------------- OPERACIÓN CORRECCIÓN --------------------
+# ---- OPERACIÓN CORRECCIÓN ----
 
 def buscar_movimientos_por_filtros(
     fecha_ini, fecha_fin, area, distrito, tipo_servicio,
@@ -1484,21 +1544,21 @@ def buscar_movimientos_por_filtros(
 
         query = """
         SELECT
-            m.id,
-            m.fecha_registro AS fecha,
-            a2.nombre AS area_nombre,
-            d2.nombre AS distrito_nombre,
-            ts.descripcion AS tipo_servicio_desc,
-            m.referencia,
-            s.nombre AS servicio_nombre,
-            tm.descripcion AS tipo_movimiento,
-            m.lote,
-            m.fecha_vencimiento,
-            m.cantidad,
-            i.nombre AS insumo_nombre,
-            d_salida.nombre AS distrito_salida,
-            s_salida.nombre AS servicio_salida,
-            m.observaciones
+        m.id,
+        m.fecha_registro AS fecha,
+        a2.nombre AS area_nombre,
+        d2.nombre AS distrito_nombre,
+        ts.descripcion AS tipo_servicio_desc,
+        m.referencia,
+        s.nombre AS servicio_nombre,
+        tm.descripcion AS tipo_movimiento,
+        m.lote,
+        m.fecha_vencimiento,
+        m.cantidad,
+        i.nombre AS insumo_nombre,
+        d_salida.nombre AS distrito_salida,
+        s_salida.nombre AS servicio_salida,
+        m.observaciones
         FROM movimiento m
         JOIN tipo_movimiento tm ON m.tipo_movimiento_id = tm.id
         LEFT JOIN area a2 ON m.area_id = a2.id
@@ -1561,17 +1621,17 @@ def buscar_movimientos_por_filtros(
     finally:
         cursor.close()
         conn.close()
-        
+    
 def actualizar_movimiento(mov_id, nuevos_datos):
     """
     Actualiza un movimiento existente con los nuevos datos proporcionados.
 
     Args:
-        mov_id: ID del movimiento a actualizar
-        nuevos_datos: Diccionario con los campos a actualizar
+    mov_id: ID del movimiento a actualizar
+    nuevos_datos: Diccionario con los campos a actualizar
 
     Returns:
-        bool: True si la actualización fue exitosa, False en caso contrario
+    bool: True si la actualización fue exitosa, False en caso contrario
     """
     conn = conectar_db()
     if not conn:
@@ -1601,11 +1661,11 @@ def actualizar_movimiento(mov_id, nuevos_datos):
         if 'tipo_movimiento' in nuevos_datos:
             # Obtenemos el ID del tipo de movimiento
             cursor.execute("SELECT id FROM tipo_movimiento WHERE descripcion = %s",
-                          (nuevos_datos['tipo_movimiento'],))
+            (nuevos_datos['tipo_movimiento'],))
             tipo_mov = cursor.fetchone()
-            if tipo_mov:
-                campos_actualizables.append("tipo_movimiento_id = %s")
-                valores.append(tipo_mov['id'])
+        if tipo_mov:
+            campos_actualizables.append("tipo_movimiento_id = %s")
+            valores.append(tipo_mov['id'])
 
         if 'lote' in nuevos_datos:
             campos_actualizables.append("lote = %s")
@@ -1650,10 +1710,10 @@ def eliminar_movimiento(mov_id):
     Elimina un movimiento por su ID.
 
     Args:
-        mov_id: ID del movimiento a eliminar
+    mov_id: ID del movimiento a eliminar
 
     Returns:
-        bool: True si la eliminación fue exitosa, False en caso contrario
+    bool: True si la eliminación fue exitosa, False en caso contrario
     """
     conn = conectar_db()
     if not conn:
@@ -1671,12 +1731,12 @@ def eliminar_movimiento(mov_id):
     finally:
         cursor.close()
         conn.close()
-        
-# ------ OPERACIONES DEMANDA--------
+    
+# ---- OPERACIONES DEMANDA----
 
 def obtener_movimientos_demanda_real(fecha_inicio, fecha_fin, distrito_nombre=None, tipo_servicio_desc=None,
-                                   servicio_nombre=None, tipo_insumo_desc=None, insumo_nombre=None,
-                                   presentacion_nombre=None):
+    servicio_nombre=None, tipo_insumo_desc=None, insumo_nombre=None,
+    presentacion_nombre=None):
     """
     Función específica para obtener movimientos para el reporte de demanda real
     Incluye todos los tipos de movimiento necesarios para el cálculo
@@ -1690,34 +1750,34 @@ def obtener_movimientos_demanda_real(fecha_inicio, fecha_fin, distrito_nombre=No
         cursor = conn.cursor(dictionary=True)
 
         query = """
-            SELECT
-                m.fecha_registro AS fecha,
-                m.referencia,
-                tm.descripcion AS tipo_movimiento,
-                m.cantidad,
-                m.lote,
-                m.fecha_vencimiento,
-                m.observaciones,
-                d_salida.nombre AS distrito_destino,
-                s_salida.nombre AS servicio_destino,
-                i.nombre AS nombre_insumo,
-                COALESCE(i.lote, '') AS codigo,
-                COALESCE(p.nombre, '') AS presentacion
-            FROM movimiento m
-            JOIN tipo_movimiento tm ON m.tipo_movimiento_id = tm.id
-            LEFT JOIN servicio s ON m.servicio_id = s.id
-            LEFT JOIN tipo_servicio ts ON s.id_tipo_servicio = ts.id
-            LEFT JOIN distrito d ON ts.id_distrito = d.id
-            LEFT JOIN distrito d_salida ON m.salida_distrito_id = d_salida.id
-            LEFT JOIN servicio s_salida ON m.salida_servicio_id = s_salida.id
-            LEFT JOIN insumo i ON m.insumo_id = i.id
-            LEFT JOIN tipo_insumo ti ON i.id_tipo_insumo = ti.id
-            LEFT JOIN insumo_presentacion ip ON i.id = ip.insumo_id
-            LEFT JOIN presentacion p ON ip.presentacion_id = p.id
-            WHERE m.fecha_registro BETWEEN %s AND %s
-            AND tm.descripcion IN ('ENTREGADO', 'NO ENTREGADO', 'INVENTARIO INICIAL', 
-                                 'ENTRADA NIVEL SUPERIOR', 'SALIDA NIVEL INFERIOR',
-                                 'REAJUSTE POSITIVO', 'REAJUSTE NEGATIVO')
+        SELECT
+        m.fecha_registro AS fecha,
+        m.referencia,
+        tm.descripcion AS tipo_movimiento,
+        m.cantidad,
+        m.lote,
+        m.fecha_vencimiento,
+        m.observaciones,
+        d_salida.nombre AS distrito_destino,
+        s_salida.nombre AS servicio_destino,
+        i.nombre AS nombre_insumo,
+        COALESCE(i.lote, '') AS codigo,
+        COALESCE(p.nombre, '') AS presentacion
+        FROM movimiento m
+        JOIN tipo_movimiento tm ON m.tipo_movimiento_id = tm.id
+        LEFT JOIN servicio s ON m.servicio_id = s.id
+        LEFT JOIN tipo_servicio ts ON s.id_tipo_servicio = ts.id
+        LEFT JOIN distrito d ON ts.id_distrito = d.id
+        LEFT JOIN distrito d_salida ON m.salida_distrito_id = d_salida.id
+        LEFT JOIN servicio s_salida ON m.salida_servicio_id = s_salida.id
+        LEFT JOIN insumo i ON m.insumo_id = i.id
+        LEFT JOIN tipo_insumo ti ON i.id_tipo_insumo = ti.id
+        LEFT JOIN insumo_presentacion ip ON i.id = ip.insumo_id
+        LEFT JOIN presentacion p ON ip.presentacion_id = p.id
+        WHERE m.fecha_registro BETWEEN %s AND %s
+        AND tm.descripcion IN ('ENTREGADO', 'NO ENTREGADO', 'INVENTARIO INICIAL', 
+        'ENTRADA NIVEL SUPERIOR', 'SALIDA NIVEL INFERIOR',
+        'REAJUSTE POSITIVO', 'REAJUSTE NEGATIVO')
         """
 
         params = [fecha_inicio, fecha_fin]
@@ -1726,24 +1786,24 @@ def obtener_movimientos_demanda_real(fecha_inicio, fecha_fin, distrito_nombre=No
         if distrito_nombre and distrito_nombre.strip():
             query += " AND d.nombre = %s"
             params.append(distrito_nombre)
-            
+        
         if tipo_servicio_desc and tipo_servicio_desc.strip():
             query += " AND ts.descripcion = %s"
             params.append(tipo_servicio_desc)
-            
+        
         if servicio_nombre and servicio_nombre.strip():
             query += " AND s.nombre = %s"
             params.append(servicio_nombre)
-            
+        
         if tipo_insumo_desc and tipo_insumo_desc.strip():
             query += " AND ti.descripcion = %s"
             params.append(tipo_insumo_desc)
-            
+        
         # Estos son opcionales - solo filtrar si se proporcionan
         if insumo_nombre and insumo_nombre.strip():
             query += " AND i.nombre = %s"
             params.append(insumo_nombre)
-            
+        
         if presentacion_nombre and presentacion_nombre.strip():
             query += " AND p.nombre = %s"
             params.append(presentacion_nombre)
@@ -1756,18 +1816,18 @@ def obtener_movimientos_demanda_real(fecha_inicio, fecha_fin, distrito_nombre=No
         movimientos = []
         for row in resultados:
             movimientos.append({
-                'fecha': row['fecha'],
-                'referencia': row['referencia'],
-                'tipo_movimiento': row['tipo_movimiento'],
-                'cantidad': float(row['cantidad']) if row['cantidad'] else 0,
-                'lote': row['lote'],
-                'fecha_vencimiento': row['fecha_vencimiento'],
-                'observaciones': row['observaciones'],
-                'distrito_destino': row['distrito_destino'],
-                'servicio_destino': row['servicio_destino'],
-                'nombre_insumo': row['nombre_insumo'],
-                'codigo': row['codigo'],
-                'presentacion': row['presentacion']
+            'fecha': row['fecha'],
+            'referencia': row['referencia'],
+            'tipo_movimiento': row['tipo_movimiento'],
+            'cantidad': float(row['cantidad']) if row['cantidad'] else 0,
+            'lote': row['lote'],
+            'fecha_vencimiento': row['fecha_vencimiento'],
+            'observaciones': row['observaciones'],
+            'distrito_destino': row['distrito_destino'],
+            'servicio_destino': row['servicio_destino'],
+            'nombre_insumo': row['nombre_insumo'],
+            'codigo': row['codigo'],
+            'presentacion': row['presentacion']
             })
 
         return movimientos
@@ -1779,7 +1839,7 @@ def obtener_movimientos_demanda_real(fecha_inicio, fecha_fin, distrito_nombre=No
         cursor.close()
         conn.close()
 
-# ------ OPERACIONES BRES--------
+# ---- OPERACIONES BRES----
 
 def obtener_movimientos_historicos(codigo_insumo, fecha_inicio, fecha_fin, distrito=None, tipo_servicio=None, servicio=None):
     """
@@ -1795,11 +1855,11 @@ def obtener_movimientos_historicos(codigo_insumo, fecha_inicio, fecha_fin, distr
         # Query base para obtener movimientos históricos
         query = """
         SELECT 
-            tm.descripcion as tipo_movimiento,
-            m.cantidad,
-            m.fecha_registro as fecha,
-            i.lote as codigo_insumo,
-            i.nombre as nombre_insumo
+        tm.descripcion as tipo_movimiento,
+        m.cantidad,
+        m.fecha_registro as fecha,
+        i.lote as codigo_insumo,
+        i.nombre as nombre_insumo
         FROM movimiento m
         INNER JOIN insumo i ON m.insumo_id = i.id
         INNER JOIN tipo_movimiento tm ON m.tipo_movimiento_id = tm.id
@@ -1817,11 +1877,11 @@ def obtener_movimientos_historicos(codigo_insumo, fecha_inicio, fecha_fin, distr
         if distrito:
             query += " AND d.nombre = %s"
             params.append(distrito)
-            
+        
         if tipo_servicio:
             query += " AND ts.descripcion = %s"
             params.append(tipo_servicio)
-            
+        
         if servicio:
             query += " AND s.nombre = %s"
             params.append(servicio)
@@ -1835,15 +1895,15 @@ def obtener_movimientos_historicos(codigo_insumo, fecha_inicio, fecha_fin, distr
         movimientos = []
         for row in resultados:
             movimientos.append({
-                'tipo_movimiento': row['tipo_movimiento'],
-                'cantidad': float(row['cantidad']) if row['cantidad'] else 0,
-                'fecha': row['fecha'],
-                'codigo_insumo': row['codigo_insumo'],
-                'nombre_insumo': row['nombre_insumo']
+            'tipo_movimiento': row['tipo_movimiento'],
+            'cantidad': float(row['cantidad']) if row['cantidad'] else 0,
+            'fecha': row['fecha'],
+            'codigo_insumo': row['codigo_insumo'],
+            'nombre_insumo': row['nombre_insumo']
             })
         
         return movimientos
-        
+    
     except Error as e:
         print(f"Error al obtener movimientos históricos: {e}")
         return []
@@ -1864,9 +1924,9 @@ def obtener_demanda_por_meses(codigo_insumo, fecha_inicio, fecha_fin, distrito=N
         
         query = """
         SELECT 
-            YEAR(m.fecha_registro) as anio,
-            MONTH(m.fecha_registro) as mes,
-            SUM(m.cantidad) as demanda_total
+        YEAR(m.fecha_registro) as anio,
+        MONTH(m.fecha_registro) as mes,
+        SUM(m.cantidad) as demanda_total
         FROM movimiento m
         INNER JOIN insumo i ON m.insumo_id = i.id
         INNER JOIN tipo_movimiento tm ON m.tipo_movimiento_id = tm.id
@@ -1884,11 +1944,11 @@ def obtener_demanda_por_meses(codigo_insumo, fecha_inicio, fecha_fin, distrito=N
         if distrito:
             query += " AND d.nombre = %s"
             params.append(distrito)
-            
+        
         if tipo_servicio:
             query += " AND ts.descripcion = %s"
             params.append(tipo_servicio)
-            
+        
         if servicio:
             query += " AND s.nombre = %s"
             params.append(servicio)
@@ -1902,13 +1962,13 @@ def obtener_demanda_por_meses(codigo_insumo, fecha_inicio, fecha_fin, distrito=N
         demanda_mensual = []
         for row in resultados:
             demanda_mensual.append({
-                'anio': int(row['anio']),
-                'mes': int(row['mes']),
-                'demanda_total': float(row['demanda_total']) if row['demanda_total'] else 0
+            'anio': int(row['anio']),
+            'mes': int(row['mes']),
+            'demanda_total': float(row['demanda_total']) if row['demanda_total'] else 0
             })
         
         return demanda_mensual
-        
+    
     except Error as e:
         print(f"Error al obtener demanda por meses: {e}")
         return []
@@ -1917,8 +1977,8 @@ def obtener_demanda_por_meses(codigo_insumo, fecha_inicio, fecha_fin, distrito=N
         conn.close()
 
 def obtener_movimientos_bres(fecha_inicio, fecha_fin, area_nombre=None, distrito_nombre=None, tipo_servicio_desc=None,
-                               servicio_nombre=None, tipo_insumo_desc=None, insumo_nombre=None,
-                               presentacion_nombre=None):
+    servicio_nombre=None, tipo_insumo_desc=None, insumo_nombre=None,
+    presentacion_nombre=None):
     conn = conectar_db()
     if not conn:
         return []
@@ -1928,22 +1988,22 @@ def obtener_movimientos_bres(fecha_inicio, fecha_fin, area_nombre=None, distrito
 
         query = """
         SELECT
-            m.fecha_registro AS fecha,
-            m.referencia,
-            tm.descripcion AS tipo_movimiento,
-            m.cantidad,
-            m.lote,
-            m.fecha_vencimiento,
-            m.observaciones,
-            d_salida.nombre AS distrito_destino,
-            s_salida.nombre AS servicio_destino,
-            i.nombre AS nombre_insumo,
-            i.id AS codigo_insumo,
-            COALESCE(p.nombre, '') AS presentacion,
-            a.nombre AS area_nombre,
-            d.nombre AS distrito_nombre,
-            ts.descripcion AS tipo_servicio_descripcion,
-            s.nombre AS servicio_nombre
+        m.fecha_registro AS fecha,
+        m.referencia,
+        tm.descripcion AS tipo_movimiento,
+        m.cantidad,
+        m.lote,
+        m.fecha_vencimiento,
+        m.observaciones,
+        d_salida.nombre AS distrito_destino,
+        s_salida.nombre AS servicio_destino,
+        i.nombre AS nombre_insumo,
+        i.id AS codigo_insumo,
+        COALESCE(p.nombre, '') AS presentacion,
+        a.nombre AS area_nombre,
+        d.nombre AS distrito_nombre,
+        ts.descripcion AS tipo_servicio_descripcion,
+        s.nombre AS servicio_nombre
         FROM movimiento m
         JOIN tipo_movimiento tm ON m.tipo_movimiento_id = tm.id
         LEFT JOIN insumo i ON m.insumo_id = i.id
@@ -1977,35 +2037,35 @@ def obtener_movimientos_bres(fecha_inicio, fecha_fin, area_nombre=None, distrito
         elif distrito_nombre:
             # Nivel DISTRITO: incluir movimientos del distrito Y de todos sus servicios
             query += """ AND (
-                d.nombre = %s OR 
-                s.id IN (
-                    SELECT serv.id 
-                    FROM servicio serv 
-                    INNER JOIN tipo_servicio ts_inner ON serv.id_tipo_servicio = ts_inner.id 
-                    INNER JOIN distrito d_inner ON ts_inner.id_distrito = d_inner.id 
-                    WHERE d_inner.nombre = %s
-                )
+            d.nombre = %s OR 
+            s.id IN (
+            SELECT serv.id 
+            FROM servicio serv 
+            INNER JOIN tipo_servicio ts_inner ON serv.id_tipo_servicio = ts_inner.id 
+            INNER JOIN distrito d_inner ON ts_inner.id_distrito = d_inner.id 
+            WHERE d_inner.nombre = %s
+            )
             )"""
             params.extend([distrito_nombre, distrito_nombre])
 
         elif area_nombre:
             # Nivel ÁREA: incluir movimientos del área Y de todos sus distritos Y servicios
             query += """ AND (
-                a.nombre = %s OR 
-                d.id IN (
-                    SELECT dist.id 
-                    FROM distrito dist 
-                    INNER JOIN area a_inner ON dist.id_area = a_inner.id 
-                    WHERE a_inner.nombre = %s
-                ) OR
-                s.id IN (
-                    SELECT serv.id 
-                    FROM servicio serv 
-                    INNER JOIN tipo_servicio ts_inner ON serv.id_tipo_servicio = ts_inner.id 
-                    INNER JOIN distrito d_inner ON ts_inner.id_distrito = d_inner.id 
-                    INNER JOIN area a_inner ON d_inner.id_area = a_inner.id 
-                    WHERE a_inner.nombre = %s
-                )
+            a.nombre = %s OR 
+            d.id IN (
+            SELECT dist.id 
+            FROM distrito dist 
+            INNER JOIN area a_inner ON dist.id_area = a_inner.id 
+            WHERE a_inner.nombre = %s
+            ) OR
+            s.id IN (
+            SELECT serv.id 
+            FROM servicio serv 
+            INNER JOIN tipo_servicio ts_inner ON serv.id_tipo_servicio = ts_inner.id 
+            INNER JOIN distrito d_inner ON ts_inner.id_distrito = d_inner.id 
+            INNER JOIN area a_inner ON d_inner.id_area = a_inner.id 
+            WHERE a_inner.nombre = %s
+            )
             )"""
             params.extend([area_nombre, area_nombre, area_nombre])
 
@@ -2031,22 +2091,22 @@ def obtener_movimientos_bres(fecha_inicio, fecha_fin, area_nombre=None, distrito
         movimientos = []
         for row in resultados:
             movimientos.append({
-                'fecha': row['fecha'],
-                'referencia': row['referencia'],
-                'tipo_movimiento': row['tipo_movimiento'],
-                'cantidad': float(row['cantidad']) if row['cantidad'] else 0,
-                'lote': row['lote'],
-                'fecha_vencimiento': row['fecha_vencimiento'],
-                'observaciones': row['observaciones'],
-                'distrito_destino': row['distrito_destino'],
-                'servicio_destino': row['servicio_destino'],
-                'nombre_insumo': row['nombre_insumo'],
-                'codigo_insumo': row['codigo_insumo'],
-                'presentacion': row['presentacion'],
-                'area_nombre': row['area_nombre'],
-                'distrito_nombre': row['distrito_nombre'],
-                'tipo_servicio_descripcion': row['tipo_servicio_descripcion'],
-                'servicio_nombre': row['servicio_nombre']
+            'fecha': row['fecha'],
+            'referencia': row['referencia'],
+            'tipo_movimiento': row['tipo_movimiento'],
+            'cantidad': float(row['cantidad']) if row['cantidad'] else 0,
+            'lote': row['lote'],
+            'fecha_vencimiento': row['fecha_vencimiento'],
+            'observaciones': row['observaciones'],
+            'distrito_destino': row['distrito_destino'],
+            'servicio_destino': row['servicio_destino'],
+            'nombre_insumo': row['nombre_insumo'],
+            'codigo_insumo': row['codigo_insumo'],
+            'presentacion': row['presentacion'],
+            'area_nombre': row['area_nombre'],
+            'distrito_nombre': row['distrito_nombre'],
+            'tipo_servicio_descripcion': row['tipo_servicio_descripcion'],
+            'servicio_nombre': row['servicio_nombre']
             })
 
         return movimientos
@@ -2061,8 +2121,8 @@ def obtener_movimientos_bres(fecha_inicio, fecha_fin, area_nombre=None, distrito
         conn.close()
 
 def obtener_movimientos_balance(fecha_inicio, fecha_fin, area_nombre=None, distrito_nombre=None, tipo_servicio_desc=None,
-                               servicio_nombre=None, tipo_insumo_desc=None, insumo_nombre=None,
-                               presentacion_nombre=None):
+    servicio_nombre=None, tipo_insumo_desc=None, insumo_nombre=None,
+    presentacion_nombre=None):
     """
     Obtiene movimientos del balance filtrados por nivel exacto según cómo se guardan los datos
     """
@@ -2071,27 +2131,27 @@ def obtener_movimientos_balance(fecha_inicio, fecha_fin, area_nombre=None, distr
         conn = conectar_db()
         if not conn:
             return []
-            
+        
         cursor = conn.cursor(dictionary=True)
         
         query = """
         SELECT
-            m.fecha_registro AS fecha,
-            m.referencia,
-            tm.descripcion AS tipo_movimiento,
-            m.cantidad,
-            m.lote,
-            m.fecha_vencimiento,
-            m.observaciones,
-            d_salida.nombre AS distrito_destino,
-            s_salida.nombre AS servicio_destino,
-            i.nombre AS nombre_insumo,
-            i.id AS codigo_insumo,
-            COALESCE(p.nombre, '') AS presentacion,
-            a.nombre AS area_nombre,
-            d.nombre AS distrito_nombre,
-            ts.descripcion AS tipo_servicio_descripcion,
-            s.nombre AS servicio_nombre
+        m.fecha_registro AS fecha,
+        m.referencia,
+        tm.descripcion AS tipo_movimiento,
+        m.cantidad,
+        m.lote,
+        m.fecha_vencimiento,
+        m.observaciones,
+        d_salida.nombre AS distrito_destino,
+        s_salida.nombre AS servicio_destino,
+        i.nombre AS nombre_insumo,
+        i.id AS codigo_insumo,
+        COALESCE(p.nombre, '') AS presentacion,
+        a.nombre AS area_nombre,
+        d.nombre AS distrito_nombre,
+        ts.descripcion AS tipo_servicio_descripcion,
+        s.nombre AS servicio_nombre
         FROM movimiento m
         JOIN tipo_movimiento tm ON m.tipo_movimiento_id = tm.id
         LEFT JOIN insumo i ON m.insumo_id = i.id
@@ -2116,15 +2176,15 @@ def obtener_movimientos_balance(fecha_inicio, fecha_fin, area_nombre=None, distr
         if servicio_nombre:
             query += " AND s.nombre = %s"
             params.append(servicio_nombre)
-            
+        
         elif tipo_servicio_desc:
             query += " AND ts.descripcion = %s"
             params.append(tipo_servicio_desc)
-            
+        
         elif distrito_nombre:
             query += " AND d.nombre = %s AND m.servicio_id IS NULL"
             params.append(distrito_nombre)
-            
+        
         elif area_nombre:
             query += " AND a.nombre = %s AND m.distrito_id IS NULL"
             params.append(area_nombre)
@@ -2167,7 +2227,7 @@ def obtener_movimientos_balance(fecha_inicio, fecha_fin, area_nombre=None, distr
                 'tipo_servicio_descripcion': row['tipo_servicio_descripcion'],
                 'servicio_nombre': row['servicio_nombre']
             })
-            
+
         return movimientos
 
     except Exception as e:

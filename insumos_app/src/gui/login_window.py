@@ -20,18 +20,8 @@ def get_executable_dir():
         return current_dir
 
 def get_config_path(filename):
-    """Obtiene la ruta correcta para archivos de configuración"""
+    """Siempre apunta al lado del ejecutable en modo frozen; en desarrollo al lado del script (src/gui)."""
     if getattr(sys, 'frozen', False):
-        # En ejecutable con PyInstaller, usar el directorio temporal interno
-        try:
-            # Primero intentar desde el directorio temporal de PyInstaller
-            temp_path = os.path.join(sys._MEIPASS, filename)
-            if os.path.exists(temp_path):
-                return temp_path
-        except AttributeError:
-            pass
-        
-        # Fallback: junto al ejecutable
         exe_dir = os.path.dirname(os.path.abspath(sys.executable))
         return os.path.join(exe_dir, filename)
     else:
@@ -40,22 +30,11 @@ def get_config_path(filename):
         return os.path.join(script_dir, filename)
 
 def get_bat_path():
-    """Obtiene la ruta correcta para el archivo .bat"""
+    """Siempre apunta al lado del ejecutable en modo frozen; en desarrollo al lado del script (src/gui)."""
     if getattr(sys, 'frozen', False):
-        # En ejecutable con PyInstaller, usar el directorio temporal interno
-        try:
-            # Primero intentar desde el directorio temporal de PyInstaller
-            temp_path = os.path.join(sys._MEIPASS, "modificar_mysql.bat")
-            if os.path.exists(temp_path):
-                return temp_path
-        except AttributeError:
-            pass
-        
-        # Fallback: junto al ejecutable
         exe_dir = os.path.dirname(os.path.abspath(sys.executable))
         return os.path.join(exe_dir, "modificar_mysql.bat")
     else:
-        # En desarrollo - el .bat está en src/gui
         script_dir = os.path.dirname(os.path.abspath(__file__))
         return os.path.join(script_dir, "modificar_mysql.bat")
 
@@ -188,7 +167,7 @@ def verificar_credenciales_fallback(username, password):
             return None
 
         mysql_config = config['MySQL']
-        host = mysql_config.get('host', 'localhost')
+        host = mysql_config.get('host', 'DESKTOP-KVJ8QQ3')
         port = int(mysql_config.get('port', '3306'))
         user = mysql_config.get('admin_user', 'root')
         password_db = mysql_config.get('admin_pass', '')
@@ -335,7 +314,7 @@ def verificar_mysql_y_continuar(self):
                 return
             
             mysql_config = config['MySQL']
-            host = mysql_config.get('host', 'localhost')
+            host = mysql_config.get('host', 'DESKTOP-KVJ8QQ3')
             port = int(mysql_config.get('port', '3306'))
             user = mysql_config.get('admin_user', 'root')
             password = mysql_config.get('admin_pass', '')
@@ -536,7 +515,7 @@ def crear_config_basico(self, config_file):
         try:
             config = configparser.ConfigParser()
             config['MySQL'] = {
-                'host': '127.0.0.1',
+                'host': 'DESKTOP-KVJ8QQ3',
                 'port': '3306',
                 'admin_user': 'root',
                 'admin_pass': '0.5735',
@@ -564,9 +543,6 @@ def crear_config_basico(self, config_file):
 def verificar_conectividad_red(host, port):
     """Verifica si el puerto MySQL está accesible - NUEVA FUNCIÓN"""
     try:
-        # Resolver DNS primero
-        if host.lower() == 'localhost':
-            host = '127.0.0.1'
         
         ip = socket.gethostbyname(host)
         print(f"DNS resuelto: {host} -> {ip}")
@@ -714,7 +690,7 @@ class ConfiguracionMySQL:
         # Host/IP
         tk.Label(config_frame, text="Host/IP del servidor:", font=('Segoe UI', 10), 
                 bg='#ffffff', fg='#2c3e50').grid(row=0, column=0, sticky="w", pady=5)
-        self.host_var = tk.StringVar(value="localhost")
+        self.host_var = tk.StringVar(value="DESKTOP-KVJ8QQ3")
         self.host_entry = tk.Entry(config_frame, textvariable=self.host_var, width=25,
                                   font=('Segoe UI', 10))
         self.host_entry.grid(row=0, column=1, sticky="ew", pady=5, padx=(10, 0))
@@ -846,8 +822,8 @@ class ConfiguracionMySQL:
                     self.config_window.after(0, lambda: self.connection_error("Debe ingresar la contraseña del usuario root"))
                     return
 
-                if host.lower() == 'localhost':
-                    host = '127.0.0.1'
+                if host.lower() in ('localhost', '127.0.0.1', ''):
+                    host = 'DESKTOP-KVJ8QQ3'
 
                 print(f"Probando conexión a {user}@{host}:{port}")
                 
@@ -918,8 +894,8 @@ class ConfiguracionMySQL:
         self.aplicar_configuracion_red()  # Aplica configuración y reinicia MySQL
 
         host = self.host_var.get().strip()
-        if host.lower() == 'localhost':
-            host = '127.0.0.1'
+        if host.lower() in ('localhost', '127.0.0.1', ''):
+            host = 'DESKTOP-KVJ8QQ3'
 
         self.result = {
             'host': host,
@@ -938,8 +914,8 @@ class ConfiguracionMySQL:
         config = configparser.ConfigParser()
         
         host = self.host_var.get().strip()
-        if host.lower() == 'localhost':
-            host = '127.0.0.1'
+        if host.lower() in ('localhost', '127.0.0.1', ''):
+            host = 'DESKTOP-KVJ8QQ3'
             
         config['MySQL'] = {
             'host': host,
@@ -973,7 +949,7 @@ class ConfiguracionMySQL:
                 
                 if 'MySQL' in config:
                     mysql_config = config['MySQL']
-                    self.host_var.set(mysql_config.get('host', '127.0.0.1'))
+                    self.host_var.set(mysql_config.get('host', 'DESKTOP-KVJ8QQ3'))
                     self.puerto_var.set(mysql_config.get('port', '3306'))
                     self.admin_user_var.set(mysql_config.get('admin_user', 'root'))
                     self.admin_pass_var.set(mysql_config.get('admin_pass', ''))
@@ -1064,7 +1040,7 @@ class LoginWindow:
                     return
                 
                 mysql_config = config['MySQL']
-                host = mysql_config.get('host', 'localhost')
+                host = mysql_config.get('host', 'DESKTOP-KVJ8QQ3')
                 port = int(mysql_config.get('port', '3306'))
                 user = mysql_config.get('admin_user', 'root')
                 password = mysql_config.get('admin_pass', '')
@@ -1153,7 +1129,7 @@ class LoginWindow:
         try:
             config = configparser.ConfigParser()
             config['MySQL'] = {
-                'host': '127.0.0.1',
+                'host': 'DESKTOP-KVJ8QQ3',
                 'port': '3306',
                 'admin_user': 'root',
                 'admin_pass': '0.5735',
@@ -1692,7 +1668,7 @@ class LoginWindow:
                 
                 if 'MySQL' in config:
                     mysql_config = config['MySQL']
-                    host = mysql_config.get('host', 'localhost')
+                    host = mysql_config.get('host', 'DESKTOP-KVJ8QQ3')
                     port = int(mysql_config.get('port', '3306'))
                     
                     if not verificar_conectividad_red(host, port):
