@@ -67,21 +67,34 @@ def create_default_config(config_path):
 
 def get_config():
     config_path = get_config_path("mysql_config.ini")
-
+    
+    # DEBUG: Imprimir la ruta del archivo
+    print(f"🔍 DEBUG: Leyendo configuración desde: {config_path}")
+    
     # Crear config por defecto si no existe
     if not os.path.exists(config_path):
         create_default_config(config_path)
 
     config = configparser.ConfigParser()
     config.read(config_path, encoding='utf-8')
-
+    
+    # DEBUG: Imprimir el contenido RAW del archivo
+    if 'MySQL' in config:
+        raw_host = config['MySQL'].get('host', 'DESKTOP-KVJ8QQ3')
+        print(f"🔍 DEBUG: Host RAW del archivo: '{raw_host}'")
+    
     if 'MySQL' not in config:
         raise Exception("No se encontró la configuración MySQL")
 
     host = config['MySQL'].get('host', 'DESKTOP-KVJ8QQ3').strip()
+    print(f"🔍 DEBUG: Host después de .strip(): '{host}'")
+    
     if host.lower() in ('127.0.0.1', 'localhost', ''):
+        print(f"🔍 DEBUG: Host '{host}' está en la lista de reemplazo, cambiando a DESKTOP-KVJ8QQ3")
         host = 'DESKTOP-KVJ8QQ3'
-
+    
+    print(f"🔍 DEBUG: Host final: '{host}'")
+    
     return {
         'host': host,
         'port': int(config['MySQL'].get('port', 3306)),
@@ -102,20 +115,21 @@ def crear_base_datos_si_no_existe():
     cursor = None
     
     try:
-    # Configuración para conectar sin especificar base de datos
-        temp_config = {
-        'host': config['host'],
-        'user': config['user'],
-        'password': config['password'],
-        'port': config['port'],
-        'charset': 'utf8mb4',
-        'use_unicode': True,
-        'autocommit': True
-        }
+        # CORRECCIÓN: Especificar parámetros individualmente para evitar concatenación incorrecta
+        print(f"Intentando conectar a MySQL en {config['host']}:{config['port']} con usuario {config['user']}")
         
-        print(f"Intentando conectar a MySQL en {temp_config['host']}:{temp_config['port']} con usuario {temp_config['user']}")
+        # Conectar SIN especificar base de datos para poder crearla
+        conn = mysql.connector.connect(
+            host=config['host'],
+            port=config['port'],  # Asegurar que sea int
+            user=config['user'],
+            password=config['password'],
+            charset='utf8mb4',
+            use_unicode=True,
+            autocommit=True,
+            connection_timeout=10
+        )
         
-        conn = mysql.connector.connect(**temp_config)
         cursor = conn.cursor()
         
         # Crear base de datos si no existe
@@ -125,13 +139,26 @@ def crear_base_datos_si_no_existe():
     
     except Error as e:
         print(f"Error al crear/verificar base de datos: {e}")
+        print(f"Detalles del error:")
+        print(f"  - Código de error: {e.errno}")
+        print(f"  - Mensaje: {e.msg}")
+        print(f"  - Host: {config['host']}")
+        print(f"  - Puerto: {config['port']} (tipo: {type(config['port'])})")
+        print(f"  - Usuario: {config['user']}")
+        
         # Proporcionar más información sobre el error
         if "Access denied" in str(e):
             print("SOLUCIÓN: Verifique que:")
             print("1. MySQL esté ejecutándose")
             print("2. El usuario y contraseña sean correctos")
             print("3. El usuario tenga permisos para crear bases de datos")
-            raise e
+        elif "Can't connect" in str(e):
+            print("SOLUCIÓN: Verifique que:")
+            print("1. El servidor MySQL esté ejecutándose")
+            print("2. El host y puerto sean correctos")
+            print("3. No haya firewall bloqueando la conexión")
+            print("4. El servidor permita conexiones remotas")
+        raise e
     finally:
         if cursor:
             cursor.close()
@@ -142,21 +169,77 @@ def conectar_db():
     """Conecta a la base de datos MySQL"""
     conn = None
     try:
-        # Primero crear la base de datos si no existe
-        crear_base_datos_si_no_existe()
-        
-        # Ahora conectar con la base de datos
         config = get_config()
-        print(f"Conectando a base de datos {config['database']} en {config['host']}")
         
-        conn = mysql.connector.connect(**config)
+        # Verificar que el puerto sea entero
+        if not isinstance(config['port'], int):
+            config['port'] = int(config['port'])
+        
+        print(f"Conectando a base de datos {config['database']} en {config['host']}:{config['port']}")
+        
+        # Primero intentar crear la base de datos si no existe
+        try:
+            crear_base_datos_si_no_existe()
+        except Error as db_create_error:
+            print(f"Advertencia: No se pudo crear/verificar la base de datos: {db_create_error}")
+            # Continuar intentando conectar de todas formas
+        
+        # Conectar con la base de datos
+        conn = mysql.connector.connect(
+            host=config['host'],
+            port=config['port'],
+            user=config['user'],
+            password=config['password'],
+            database=config['database'],
+            charset=config['charset'],
+            autocommit=config['autocommit'],
+            use_unicode=config['use_unicode'],
+            connection_timeout=10
+        )
+        
+        print("✅ Conexión a base de datos exitosa")
         
         # Crear tablas si no existen
-        crear_tablas_si_no_existen(conn)
+        try:
+            crear_tablas_si_no_existen(conn)
+        except Error as table_error:
+            print(f"Advertencia: Error al crear tablas: {table_error}")
         
         return conn
+        
     except Error as e:
-        print(f"Error al conectar a la base de datos: {e}")
+        print(f"❌ Error al conectar a la base de datos: {e}")
+        print(f"Detalles del error:")
+        print(f"  - Código de error: {e.errno}")
+        print(f"  - Mensaje: {e.msg}")
+        
+        # Diagnóstico específico del error localhost3306
+        if "localhost3306" in str(e) or "3306" in config['host']:
+            print("\n🔍 PROBLEMA DETECTADO: Concatenación incorrecta de host+puerto")
+            print(f"Host actual: '{config['host']}'")
+            print(f"Puerto actual: {config['port']} (tipo: {type(config['port'])})")
+            
+            # Intentar limpiar el host si contiene el puerto
+            if "3306" in config['host']:
+                clean_host = config['host'].replace("3306", "").replace(":", "")
+                print(f"Intentando con host limpio: '{clean_host}'")
+                try:
+                    conn = mysql.connector.connect(
+                        host=clean_host,
+                        port=config['port'],
+                        user=config['user'],
+                        password=config['password'],
+                        database=config['database'],
+                        charset=config['charset'],
+                        autocommit=config['autocommit'],
+                        use_unicode=config['use_unicode'],
+                        connection_timeout=10
+                    )
+                    print("✅ Conexión exitosa con host limpio")
+                    return conn
+                except Error as clean_error:
+                    print(f"❌ Error incluso con host limpio: {clean_error}")
+        
         if "Access denied" in str(e):
             print("\n=== DIAGNÓSTICO DE CONEXIÓN ===")
             print("El error indica problemas de autenticación.")
@@ -165,7 +248,104 @@ def conectar_db():
             print("2. Configurar credenciales correctas en la aplicación")
             print("3. Verificar permisos del usuario en MySQL")
             print("====\n")
+        elif "Can't connect" in str(e):
+            print("\n=== DIAGNÓSTICO DE CONEXIÓN ===")
+            print("No se puede conectar al servidor MySQL.")
+            print("Posibles soluciones:")
+            print("1. Verificar que MySQL esté ejecutándose")
+            print("2. Verificar host y puerto")
+            print("3. Verificar firewall")
+            print("4. Verificar que el servidor permita conexiones remotas")
+            print("====\n")
+            
+            # Ejecutar diagnóstico automático
+            debug_mysql_connection()
+        
         return None
+
+def debug_mysql_connection():
+    """Función específica para diagnosticar problemas de conexión MySQL"""
+    print("=" * 60)
+    print("=== DIAGNÓSTICO ESPECÍFICO MYSQL ===")
+    print("=" * 60)
+    
+    try:
+        # Leer configuración
+        config = get_config()
+        
+        print(f"Host: '{config['host']}' (tipo: {type(config['host'])})")
+        print(f"Port: {config['port']} (tipo: {type(config['port'])})")
+        print(f"User: '{config['user']}'")
+        print(f"Database: '{config['database']}'")
+        
+        # Verificar que el puerto sea entero
+        if not isinstance(config['port'], int):
+            print(f"⚠️ ADVERTENCIA: Puerto no es entero, convirtiendo...")
+            config['port'] = int(config['port'])
+        
+        # Probar conexión básica de red
+        print(f"\n1. Probando conectividad de red a {config['host']}:{config['port']}...")
+        import socket
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        sock.settimeout(5)
+        result = sock.connect_ex((config['host'], config['port']))
+        sock.close()
+        
+        if result == 0:
+            print("✅ Conectividad de red OK")
+        else:
+            print(f"❌ No se puede conectar al puerto {config['port']} en {config['host']}")
+            print(f"   Código de error: {result}")
+            return
+        
+        # Probar conexión MySQL sin base de datos
+        print(f"\n2. Probando conexión MySQL sin base de datos...")
+        try:
+            conn = mysql.connector.connect(
+                host=config['host'],
+                port=config['port'],
+                user=config['user'],
+                password=config['password'],
+                connection_timeout=5
+            )
+            print("✅ Conexión MySQL básica exitosa")
+            conn.close()
+            
+        except mysql.connector.Error as e:
+            print(f"❌ Error MySQL básico: {e.errno} - {e.msg}")
+            if "localhost3306" in str(e):
+                print("🔍 PROBLEMA IDENTIFICADO: Se está concatenando host+puerto incorrectamente")
+            return
+        
+        # Probar conexión completa
+        print(f"\n3. Probando conexión completa con base de datos...")
+        try:
+            conn = mysql.connector.connect(
+                host=config['host'],
+                port=config['port'],
+                user=config['user'],
+                password=config['password'],
+                database=config['database'],
+                connection_timeout=5
+            )
+            print("✅ Conexión completa exitosa")
+            
+            cursor = conn.cursor()
+            cursor.execute("SELECT VERSION()")
+            version = cursor.fetchone()[0]
+            print(f"📊 Versión MySQL: {version}")
+            cursor.close()
+            conn.close()
+            
+        except mysql.connector.Error as e:
+            print(f"❌ Error MySQL completo: {e.errno} - {e.msg}")
+            if e.errno == 1049:  # Base de datos no existe
+                print("💡 La base de datos no existe, se creará automáticamente")
+            
+    except Exception as e:
+        print(f"❌ Error en diagnóstico: {e}")
+        import traceback
+        traceback.print_exc()
     
 def crear_tablas_si_no_existen(conn):
     """Crea todas las tablas necesarias si no existen"""
@@ -1333,14 +1513,29 @@ def crear_super_usuario_si_no_existe():
     
     # Credenciales del super usuario
     super_user = {
-    'username': 'admin',
-    'password': hashlib.sha256('admin123'.encode()).hexdigest(),
-    'nombre_completo': 'Administrador del Sistema',
-    'rol': 'super_admin'
+        'username': 'admin',
+        'password': hashlib.sha256('admin123'.encode()).hexdigest(),
+        'nombre_completo': 'Administrador del Sistema',
+        'rol': 'super_admin'
     }
 
     try:
-        conn = conectar_db()
+        # FORZAR EL HOST CORRECTO - NO USAR get_config() AQUÍ
+        print("Creando super usuario en: DESKTOP-KVJ8QQ3:3306")
+        
+        # Conectar DIRECTAMENTE con valores hardcodeados para evitar problemas
+        conn = mysql.connector.connect(
+            host='DESKTOP-KVJ8QQ3',  # HARDCODEADO
+            port=3306,              # HARDCODEADO
+            user='root',            # HARDCODEADO
+            password='0.5735',      # HARDCODEADO
+            database='insumos',     # HARDCODEADO
+            charset='utf8mb4',
+            autocommit=False,
+            use_unicode=True,
+            connection_timeout=10
+        )
+        
         if not conn:
             print("No se pudo conectar a la base de datos para crear super usuario")
             return
@@ -1350,14 +1545,14 @@ def crear_super_usuario_si_no_existe():
         
         if not cursor.fetchone():
             # Crear super usuario
-            cursor.execute('''
+            cursor.execute("""
             INSERT INTO usuarios (username, password, nombre_completo, rol)
             VALUES (%s, %s, %s, %s)
-            ''', (
-            super_user['username'],
-            super_user['password'],
-            super_user['nombre_completo'],
-            super_user['rol']
+            """, (
+                super_user['username'],
+                super_user['password'],
+                super_user['nombre_completo'],
+                super_user['rol']
             ))
             conn.commit()
             print("Super usuario creado exitosamente (usuario: admin, contraseña: admin123)")

@@ -49,52 +49,333 @@ def resource_path(relative_path):
     return os.path.join(base_path, relative_path)
 
 def debug_paths():
-    """Función de debug para mostrar todas las rutas que se están usando"""
+    """Función de debug para mostrar todas las rutas que se están usando y diagnosticar conectividad"""
     try:
-        print("=== DEBUG: RUTAS DE ARCHIVOS ===")
-        print(f"Script actual: {__file__}")
-        print(f"Directorio del script: {os.path.dirname(os.path.abspath(__file__))}")
-        print(f"¿Es ejecutable?: {getattr(sys, 'frozen', False)}")
+        print("=" * 80)
+        print("=== DEBUG: RUTAS DE ARCHIVOS Y CONECTIVIDAD ===")
+        print("=" * 80)
+        
+        # === INFORMACIÓN DEL SISTEMA ===
+        print("\n🖥️  INFORMACIÓN DEL SISTEMA:")
+        import platform
+        print(f"   Sistema: {platform.system()} {platform.release()}")
+        print(f"   Arquitectura: {platform.architecture()[0]}")
+        print(f"   Nombre del equipo: {platform.node()}")
+        print(f"   Usuario actual: {os.getenv('USERNAME', 'N/A')}")
+        
+        # === INFORMACIÓN DE RUTAS ===
+        print(f"\n📁 RUTAS DE ARCHIVOS:")
+        print(f"   Script actual: {__file__}")
+        print(f"   Directorio del script: {os.path.dirname(os.path.abspath(__file__))}")
+        print(f"   ¿Es ejecutable?: {getattr(sys, 'frozen', False)}")
         
         # Información específica de PyInstaller
         if getattr(sys, 'frozen', False):
-            print(f"Ejecutable: {sys.executable}")
+            print(f"   Ejecutable: {sys.executable}")
             try:
-                print(f"Directorio temporal PyInstaller: {sys._MEIPASS}")
+                print(f"   Directorio temporal PyInstaller: {sys._MEIPASS}")
                 if os.path.exists(sys._MEIPASS):
-                    print("Contenido del directorio temporal:")
+                    print("   Contenido del directorio temporal:")
                     for item in os.listdir(sys._MEIPASS):
-                        print(f"  {item}")
+                        print(f"     {item}")
                 else:
-                    print("El directorio _MEIPASS no existe")
+                    print("   El directorio _MEIPASS no existe")
             except AttributeError:
-                print("Sin directorio temporal _MEIPASS")
+                print("   Sin directorio temporal _MEIPASS")
             except Exception as e:
-                print(f"Error listando _MEIPASS: {e}")
+                print(f"   Error listando _MEIPASS: {e}")
         
         config_path = get_config_path("mysql_config.ini")
         bat_path = get_bat_path()
         
-        print(f"Ruta config: {config_path}")
-        print(f"¿Existe config?: {os.path.exists(config_path) if config_path else False}")
-        print(f"Ruta bat: {bat_path}")
-        print(f"¿Existe bat?: {os.path.exists(bat_path) if bat_path else False}")
+        print(f"   Ruta config: {config_path}")
+        print(f"   ¿Existe config?: {os.path.exists(config_path) if config_path else False}")
+        print(f"   Ruta bat: {bat_path}")
+        print(f"   ¿Existe bat?: {os.path.exists(bat_path) if bat_path else False}")
         
         # Mostrar contenido del directorio actual solo en desarrollo
         if not getattr(sys, 'frozen', False):
             script_dir = os.path.dirname(os.path.abspath(__file__))
-            print(f"Contenido de {script_dir}:")
+            print(f"   Contenido de {script_dir}:")
             try:
                 for item in os.listdir(script_dir):
                     item_path = os.path.join(script_dir, item)
-                    print(f"  {'[D]' if os.path.isdir(item_path) else '[F]'} {item}")
+                    print(f"     {'[D]' if os.path.isdir(item_path) else '[F]'} {item}")
             except Exception as e:
-                print(f"  Error listando directorio: {e}")
-        print("================================")
+                print(f"     Error listando directorio: {e}")
+        
+        # === DIAGNÓSTICO DE CONECTIVIDAD ===
+        print(f"\n🌐 DIAGNÓSTICO DE CONECTIVIDAD:")
+        
+        # Leer configuración desde mysql_config.ini (tu lógica original)
+        mysql_host = "DESKTOP-KVJ8QQ3"  # Valor por defecto
+        mysql_port = 3306
+        mysql_user = "root"
+        mysql_password = "0.5735"  # Valor por defecto
+        
+        # Intentar leer desde el archivo de configuración si existe
+        if config_path and os.path.exists(config_path):
+            try:
+                import configparser
+                config = configparser.ConfigParser()
+                config.read(config_path)
+                if 'MySQL' in config:
+                    mysql_host = config['MySQL'].get('host', mysql_host)
+                    mysql_port = int(config['MySQL'].get('port', mysql_port))
+                    mysql_user = config['MySQL'].get('admin_user', mysql_user)
+                    mysql_password = config['MySQL'].get('admin_pass', mysql_password)
+                    print(f"   ✅ Configuración leída desde: {config_path}")
+                else:
+                    print(f"   ⚠️ Archivo config existe pero sin sección [MySQL]")
+            except Exception as e:
+                print(f"   ⚠️ Error leyendo configuración: {e}")
+                print(f"   🔄 Usando valores por defecto")
+        else:
+            print(f"   ℹ️ Usando configuración por defecto (config no encontrado)")
+        
+        print(f"   Servidor objetivo: {mysql_host}:{mysql_port}")
+        print(f"   Usuario: {mysql_user}")
+        
+        # 1. Verificar resolución DNS
+        print(f"\n🔍 1. RESOLUCIÓN DNS:")
+        try:
+            import socket
+            ip_address = socket.gethostbyname(mysql_host)
+            print(f"   ✅ {mysql_host} resuelve a: {ip_address}")
+        except socket.gaierror as e:
+            print(f"   ❌ Error resolviendo {mysql_host}: {e}")
+            print(f"   💡 Sugerencia: Usar IP directa en lugar del nombre")
+            # Intentar con IP común de red local
+            mysql_host = "192.168.1.100"  # Ajustar según tu red
+            print(f"   🔄 Intentando con IP: {mysql_host}")
+        
+        # 2. Verificar conectividad de red básica
+        print(f"\n🔍 2. CONECTIVIDAD DE RED (Puerto {mysql_port}):")
+        network_ok = test_network_connectivity(mysql_host, mysql_port)
+        
+        # 3. Verificar otros puertos comunes
+        print(f"\n🔍 3. VERIFICACIÓN DE PUERTOS ADICIONALES:")
+        test_ports = [80, 443, 53, 8080]  # Puertos para verificar conectividad general
+        for port in test_ports:
+            result = test_network_connectivity("8.8.8.8", port, timeout=3)  # Google DNS
+            if result:
+                print(f"   ✅ Conectividad general OK (puerto {port})")
+                break
+        else:
+            print(f"   ⚠️ Posibles problemas de conectividad general")
+        
+        # 4. Verificar firewall local
+        print(f"\n🔍 4. VERIFICACIÓN DE FIREWALL:")
+        check_windows_firewall()
+        
+        # 5. Verificar dependencias MySQL
+        print(f"\n🔍 5. DEPENDENCIAS MYSQL:")
+        check_mysql_dependencies()
+        
+        # 6. Intentar conexión MySQL completa
+        if network_ok:
+            print(f"\n🔍 6. CONEXIÓN MYSQL COMPLETA:")
+            mysql_ok = test_mysql_connection(mysql_host, mysql_port, mysql_user, mysql_password)
+        else:
+            mysql_ok = False
+            print(f"\n⚠️ 6. SALTANDO PRUEBA MYSQL (sin conectividad de red)")
+        
+        # 7. Verificar configuración de red local
+        print(f"\n🔍 7. CONFIGURACIÓN DE RED LOCAL:")
+        check_network_config()
+        
+        # === RESUMEN FINAL ===
+        print(f"\n" + "=" * 80)
+        print("📋 RESUMEN DEL DIAGNÓSTICO")
+        print("=" * 80)
+        print(f"🖥️  Sistema: {platform.system()} {platform.release()}")
+        print(f"📁 Ejecutable: {'✅ SÍ' if getattr(sys, 'frozen', False) else '❌ NO (modo desarrollo)'}")
+        print(f"🌐 Conectividad de red: {'✅ OK' if network_ok else '❌ FALLA'}")
+        print(f"🗄️  Conexión MySQL: {'✅ OK' if mysql_ok else '❌ FALLA'}")
+        
+        # Sugerencias específicas
+        print(f"\n💡 SUGERENCIAS:")
+        if not network_ok:
+            print("   🔧 PROBLEMAS DE RED:")
+            print("   1. Verificar que el servidor MySQL esté ejecutándose")
+            print("   2. Verificar firewall en servidor y cliente")
+            print("   3. Verificar que el puerto 3306 esté abierto")
+            print("   4. Probar con la IP del servidor en lugar del nombre")
+            print("   5. Verificar conectividad de red general")
+        elif not mysql_ok:
+            print("   🔧 PROBLEMAS DE MYSQL:")
+            print("   1. Instalar MySQL Connector/C++ Redistributable")
+            print("   2. Instalar Visual C++ Redistributable (todas las versiones)")
+            print("   3. Verificar usuario y contraseña")
+            print("   4. Verificar permisos del usuario en MySQL")
+        else:
+            print("   ✅ Todo parece estar funcionando correctamente")
+        
+        print("=" * 80)
+        
     except Exception as e:
-        print(f"Error en debug_paths: {e}")
+        print(f"❌ Error en debug_paths: {e}")
         import traceback
         traceback.print_exc()
+
+def test_network_connectivity(host, port, timeout=10):
+    """Prueba conectividad de red básica"""
+    try:
+        import socket
+        import time
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        sock.settimeout(timeout)
+        start_time = time.time()
+        result = sock.connect_ex((host, port))
+        end_time = time.time()
+        sock.close()
+        
+        if result == 0:
+            print(f"   ✅ Puerto {port} accesible en {host} ({end_time - start_time:.2f}s)")
+            return True
+        else:
+            print(f"   ❌ Puerto {port} NO accesible en {host} (código: {result})")
+            return False
+    except Exception as e:
+        print(f"   ❌ Error de conectividad a {host}:{port} - {e}")
+        return False
+
+def test_mysql_connection(host, port, user, password):
+    """Prueba conexión MySQL completa"""
+    try:
+        import mysql.connector
+        from mysql.connector import Error
+        print(f"   🔄 Intentando conexión MySQL...")
+        connection = mysql.connector.connect(
+            host=host,
+            port=port,
+            user=user,
+            password=password,
+            connection_timeout=10,
+            autocommit=True
+        )
+        
+        cursor = connection.cursor()
+        cursor.execute("SELECT VERSION()")
+        version = cursor.fetchone()[0]
+        cursor.execute("SHOW DATABASES")
+        databases = [db[0] for db in cursor.fetchall()]
+        cursor.close()
+        connection.close()
+        
+        print(f"   ✅ Conexión MySQL exitosa")
+        print(f"   📊 Versión MySQL: {version}")
+        print(f"   🗄️  Bases de datos disponibles: {', '.join(databases[:5])}")
+        return True
+        
+    except mysql.connector.Error as e:
+        print(f"   ❌ Error MySQL: {e.errno} - {e.msg}")
+        if e.errno == 1045:
+            print(f"   💡 Usuario o contraseña incorrectos")
+        elif e.errno == 2003:
+            print(f"   💡 No se puede conectar al servidor MySQL")
+        elif e.errno == 1130:
+            print(f"   💡 Host no autorizado para conectar")
+        elif e.errno == 2013:
+            print(f"   💡 Conexión perdida con el servidor MySQL")
+        return False
+    except Exception as e:
+        print(f"   ❌ Error inesperado: {e}")
+        return False
+
+def check_mysql_dependencies():
+    """Verifica si las dependencias de MySQL están disponibles"""
+    try:
+        import mysql.connector
+        print(f"   ✅ mysql.connector disponible (versión: {mysql.connector.__version__})")
+        
+        # Verificar DLLs de MySQL en Windows
+        import platform
+        if platform.system() == "Windows":
+            common_mysql_paths = [
+                "C:\\Program Files\\MySQL\\MySQL Server 8.0\\lib\\libmysql.dll",
+                "C:\\Program Files\\MySQL\\MySQL Server 5.7\\lib\\libmysql.dll",
+                "C:\\Windows\\System32\\libmysql.dll",
+                "C:\\Windows\\SysWOW64\\libmysql.dll"
+            ]
+            
+            found_dll = False
+            for dll_path in common_mysql_paths:
+                if os.path.exists(dll_path):
+                    print(f"   ✅ MySQL DLL encontrada: {dll_path}")
+                    found_dll = True
+                    break
+            
+            if not found_dll:
+                print(f"   ⚠️ No se encontraron DLLs de MySQL en ubicaciones comunes")
+                print(f"   💡 Instalar MySQL Connector/C++ Redistributable")
+        
+    except ImportError as e:
+        print(f"   ❌ mysql.connector NO disponible: {e}")
+        print(f"   💡 Instalar: pip install mysql-connector-python")
+
+def check_windows_firewall():
+    """Verifica configuración básica del firewall de Windows"""
+    import platform
+    if platform.system() != "Windows":
+        print(f"   ℹ️ No es Windows, saltando verificación de firewall")
+        return
+    
+    try:
+        import subprocess
+        # Verificar si el firewall está activo
+        result = subprocess.run(
+            ["netsh", "advfirewall", "show", "allprofiles", "state"],
+            capture_output=True, text=True, timeout=10
+        )
+        
+        if result.returncode == 0:
+            if "ON" in result.stdout:
+                print(f"   ⚠️ Firewall de Windows está ACTIVO")
+                print(f"   💡 Verificar reglas para puerto 3306")
+            else:
+                print(f"   ✅ Firewall de Windows está INACTIVO")
+        else:
+            print(f"   ⚠️ No se pudo verificar estado del firewall")
+            
+    except Exception as e:
+        print(f"   ⚠️ Error verificando firewall: {e}")
+
+def check_network_config():
+    """Verifica configuración básica de red"""
+    try:
+        import socket
+        import platform
+        import subprocess
+        
+        # Obtener información de red
+        hostname = socket.gethostname()
+        local_ip = socket.gethostbyname(hostname)
+        
+        print(f"   🖥️ Nombre del equipo: {hostname}")
+        print(f"   🌐 IP local: {local_ip}")
+        
+        # Verificar gateway predeterminado en Windows
+        if platform.system() == "Windows":
+            try:
+                result = subprocess.run(
+                    ["ipconfig", "/all"],
+                    capture_output=True, text=True, timeout=10
+                )
+                
+                if result.returncode == 0:
+                    lines = result.stdout.split('\n')
+                    for line in lines:
+                        if "Default Gateway" in line or "Puerta de enlace predeterminada" in line:
+                            gateway = line.split(':')[-1].strip()
+                            if gateway and gateway != "":
+                                print(f"   🚪 Gateway: {gateway}")
+                                break
+            except Exception as e:
+                print(f"   ⚠️ Error obteniendo gateway: {e}")
+        
+    except Exception as e:
+        print(f"   ⚠️ Error verificando configuración de red: {e}")
 
 # CORRECCIÓN 2: Manejo seguro de importaciones
 # Agregar el directorio raíz del proyecto al PATH de Python

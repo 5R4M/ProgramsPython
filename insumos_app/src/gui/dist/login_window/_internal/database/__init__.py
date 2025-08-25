@@ -1,42 +1,85 @@
 import mysql.connector
 import os
 import sys
+import configparser
 
-def get_db_config():
-    # Configuración de conexión a MySQL
-    # Cambia estos valores según tu entorno
-    return {
-        'host': 'localhost',
+def get_config_path(filename):
+    # Igual que en tu login_window: al lado del .exe si está "frozen"
+    if getattr(sys, 'frozen', False):
+        exe_dir = os.path.dirname(os.path.abspath(sys.executable))
+        return os.path.join(exe_dir, filename)
+    else:
+        # En desarrollo: al lado de este script o ajusta según tu estructura
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        return os.path.join(script_dir, filename)
+
+def load_mysql_config():
+    # Defaults seguros (tu servidor real, no localhost)
+    cfg = {
+        'host': 'DESKTOP-KVJ8QQ3',
+        'port': 3306,
         'user': 'root',
         'password': '0.5735',
         'database': 'insumos'
     }
+    ini_path = get_config_path("mysql_config.ini")
+    if os.path.exists(ini_path):
+        parser = configparser.ConfigParser()
+        parser.read(ini_path, encoding='utf-8')
+        if 'MySQL' in parser:
+            section = parser['MySQL']
+            cfg['host'] = section.get('host', cfg['host'])
+            cfg['port'] = int(section.get('port', cfg['port']))
+            cfg['user'] = section.get('admin_user', cfg['user'])
+            cfg['password'] = section.get('admin_pass', cfg['password'])
+            cfg['database'] = section.get('database', cfg['database'])
+    return cfg
+
+def get_db_config():
+    # Mantener interfaz, pero ahora leyendo del ini
+    return load_mysql_config()
 
 def asegurar_base_datos():
     """Asegura que la base de datos exista, si no, la crea"""
     config = get_db_config()
+    conn = None
     try:
-        # Conexión sin especificar base de datos para crearla si no existe
+        # Conexión sin especificar database para poder crearla
         conn = mysql.connector.connect(
             host=config['host'],
+            port=config['port'],
             user=config['user'],
             password=config['password']
         )
         cursor = conn.cursor()
-        cursor.execute(f"CREATE DATABASE IF NOT EXISTS {config['database']} CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;")
+        dbname = config['database']
+        cursor.execute(f"CREATE DATABASE IF NOT EXISTS `{dbname}` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;")
         conn.commit()
         cursor.close()
         conn.close()
         return True
     except mysql.connector.Error as e:
-        print(f"Error al crear la base de datos: {e}")
+        print(f"Error al crear la base de datos: {e.errno} - {e.msg}")
         return False
+    finally:
+        try:
+            if conn and conn.is_connected():
+                conn.close()
+        except:
+            pass
 
 def verificar_tablas():
     """Verifica que todas las tablas necesarias existan"""
     config = get_db_config()
+    conn = None
     try:
-        conn = mysql.connector.connect(**config)
+        conn = mysql.connector.connect(
+            host=config['host'],
+            port=config['port'],
+            user=config['user'],
+            password=config['password'],
+            database=config['database']
+        )
         cursor = conn.cursor()
 
         tablas_requeridas = [
@@ -54,19 +97,20 @@ def verificar_tablas():
         ]
 
         for tabla in tablas_requeridas:
-            cursor.execute(f"""
-                SHOW TABLES LIKE '{tabla}';
-            """)
+            cursor.execute(f"SHOW TABLES LIKE %s;", (tabla,))
             if not cursor.fetchone():
                 return False
         return True
 
     except mysql.connector.Error as e:
-        print(f"Error al verificar tablas: {e}")
+        print(f"Error al verificar tablas: {e.errno} - {e.msg}")
         return False
     finally:
-        if conn:
-            conn.close()
+        try:
+            if conn and conn.is_connected():
+                conn.close()
+        except:
+            pass
 
 def crear_base_datos():
     """Crea las tablas en la base de datos MySQL"""
@@ -74,8 +118,15 @@ def crear_base_datos():
         raise Exception("No se pudo crear la base de datos")
 
     config = get_db_config()
+    conn = None
     try:
-        conn = mysql.connector.connect(**config)
+        conn = mysql.connector.connect(
+            host=config['host'],
+            port=config['port'],
+            user=config['user'],
+            password=config['password'],
+            database=config['database']
+        )
         cursor = conn.cursor()
 
         # Tabla ÁREA
@@ -208,7 +259,7 @@ def crear_base_datos():
             ) ENGINE=InnoDB;
         """)
 
-        # Crear índices para mejorar rendimiento (sin IF NOT EXISTS)
+        # Índices (ignora si ya existen)
         for index_sql in [
             "CREATE INDEX idx_mov_area ON movimiento(area_id);",
             "CREATE INDEX idx_mov_distrito ON movimiento(distrito_id);",
@@ -218,28 +269,26 @@ def crear_base_datos():
             try:
                 cursor.execute(index_sql)
             except mysql.connector.Error as err:
-                if err.errno == 1061:  # Código error índice duplicado
-                    pass  # Ignorar si ya existe
+                if err.errno == 1061:
+                    pass
                 else:
                     raise
 
         conn.commit()
-        print("Base de datos MySQL creada correctamente.")
+        print("Base de datos MySQL creada/verificada correctamente.")
         return True
 
     except mysql.connector.Error as e:
-        print(f"Error al crear la base de datos: {e}")
+        print(f"Error al crear la base de datos: {e.errno} - {e.msg}")
         return False
     finally:
-        if conn:
-            conn.close()
+        try:
+            if conn and conn.is_connected():
+                conn.close()
+        except:
+            pass
 
-# Exportar las funciones necesarias
-__all__ = [
-    'crear_base_datos',
-    'verificar_tablas',
-    'asegurar_base_datos'
-]
+__all__ = ['crear_base_datos', 'verificar_tablas', 'asegurar_base_datos']
 
 if __name__ == "__main__":
     if crear_base_datos():
