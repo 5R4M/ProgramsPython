@@ -181,25 +181,142 @@ class ReporteBalanceBodega:
             self.icon_excel = None
             self.icon_close = None
     
+    def generar_codigo_insumo(self, movimientos_raw):
+        """
+        Genera códigos únicos para cada insumo basado en:
+        - Primeras 4 letras del tipo de insumo (obtenido de la base de datos)
+        - Guión
+        - Número secuencial con formato 0001, 0002, etc.
+        """
+        # AGREGAR IMPORT AL INICIO DEL ARCHIVO SI NO EXISTE
+        from src.database.db_manager import conectar_db
+        
+        # Diccionario para mapear insumo_id -> código generado
+        codigos_insumos = {}
+        
+        # Obtener todos los insumos únicos
+        insumos_unicos = {}
+        
+        for mov in movimientos_raw:
+            insumo_id = mov.get('codigo_insumo')
+            insumo_nombre = mov.get('nombre_insumo', '')
+            
+            if insumo_id is not None and str(insumo_id).strip():
+                if insumo_id not in insumos_unicos:
+                    insumos_unicos[insumo_id] = insumo_nombre
+        
+        print(f"DEBUG: Insumos únicos encontrados: {len(insumos_unicos)}")
+        
+        try:
+            conn = conectar_db()
+            if not conn:
+                print("DEBUG: No se pudo conectar a la base de datos")
+                return {}
+                
+            cursor = conn.cursor(dictionary=True)
+            
+            # Agrupar insumos por tipo
+            insumos_por_tipo = {}
+            
+            for insumo_id, insumo_nombre in insumos_unicos.items():
+                # CORREGIR: Usar %s en lugar de ? para MySQL
+                query = """
+                SELECT ti.descripcion as tipo_insumo_descripcion
+                FROM insumo i
+                INNER JOIN tipo_insumo ti ON i.id_tipo_insumo = ti.id
+                WHERE i.id = %s
+                """
+                
+                cursor.execute(query, (insumo_id,))
+                resultado = cursor.fetchone()
+                
+                if resultado:
+                    tipo_insumo = resultado['tipo_insumo_descripcion'].strip().upper()
+                    
+                    if tipo_insumo not in insumos_por_tipo:
+                        insumos_por_tipo[tipo_insumo] = {}
+                    
+                    insumos_por_tipo[tipo_insumo][insumo_id] = insumo_nombre
+                else:
+                    # Si no encuentra el tipo de insumo, usar un tipo por defecto
+                    tipo_default = "GENERAL"
+                    if tipo_default not in insumos_por_tipo:
+                        insumos_por_tipo[tipo_default] = {}
+                    insumos_por_tipo[tipo_default][insumo_id] = insumo_nombre
+            
+            conn.close()
+            
+            print(f"DEBUG: Insumos por tipo encontrados: {len(insumos_por_tipo)}")
+            for tipo, insumos in insumos_por_tipo.items():
+                print(f"  {tipo}: {len(insumos)} insumos")
+            
+            # Generar códigos para cada tipo de insumo
+            for tipo_insumo, insumos in insumos_por_tipo.items():
+                # Obtener las primeras 4 letras del tipo de insumo
+                tipo_limpio = ''.join(c for c in tipo_insumo if c.isalnum())
+                prefijo = tipo_limpio[:4].upper()
+                
+                # Si el tipo tiene menos de 4 caracteres, completar con 'X'
+                while len(prefijo) < 4:
+                    prefijo += 'X'
+                
+                # Ordenar insumos por ID para mantener consistencia
+                insumos_ordenados = sorted(insumos.items())
+                
+                # Asignar números secuenciales
+                for contador, (insumo_id, insumo_nombre) in enumerate(insumos_ordenados, 1):
+                    codigo = f"{prefijo}-{contador:04d}"
+                    codigos_insumos[insumo_id] = codigo
+                    print(f"DEBUG: Generado {codigo} para insumo_id {insumo_id}")
+            
+            print(f"DEBUG: Códigos generados: {len(codigos_insumos)}")
+            return codigos_insumos
+            
+        except Exception as e:
+            print(f"DEBUG: Error obteniendo tipos de insumo: {e}")
+            import traceback
+            traceback.print_exc()
+            return {}
+
     def procesar_datos_balance(self, movimientos_raw, fecha_ini, fecha_fin):
+        # Generar códigos de insumos
+        codigos_insumos = self.generar_codigo_insumo(movimientos_raw)
+        print(f"DEBUG: Se generaron {len(codigos_insumos)} códigos de insumos")
+        
+        if not codigos_insumos:
+            print("DEBUG: No se generaron códigos de insumos")
+            # Si no hay códigos, crear códigos temporales
+            for mov in movimientos_raw:
+                insumo_id = mov.get('codigo_insumo')
+                if insumo_id and insumo_id not in codigos_insumos:
+                    codigos_insumos[insumo_id] = f"TEMP-{str(insumo_id).zfill(4)}"
+        
         insumos_dict = {}
 
         for mov in movimientos_raw:
-            codigo_insumo = str(mov.get('codigo_insumo', ''))
+            insumo_id = mov.get('codigo_insumo')
+            
+            # Obtener el código generado
+            codigo_generado = codigos_insumos.get(insumo_id)
+            if not codigo_generado:
+                # Crear código temporal si no existe
+                codigo_generado = f"TEMP-{str(insumo_id).zfill(4)}"
+                codigos_insumos[insumo_id] = codigo_generado
+                
             nombre_insumo = mov.get('nombre_insumo', '')
             tipo_movimiento = mov.get('tipo_movimiento', '').upper()
-
             cantidad = 0
-            if mov.get('cantidad') is not None:
-                try:
-                    cantidad = float(mov['cantidad'])
-                except (ValueError, TypeError):
-                    cantidad = 0
+            try:
+                cantidad = float(mov.get('cantidad', 0))
+            except:
+                cantidad = 0
 
-            if codigo_insumo not in insumos_dict:
-                insumos_dict[codigo_insumo] = {
-                    'codigo_insumo': codigo_insumo,
+            # Usar el código generado como clave
+            if codigo_generado not in insumos_dict:
+                insumos_dict[codigo_generado] = {
+                    'codigo_insumo': codigo_generado,  # Guardar el código generado
                     'nombre_insumo': nombre_insumo,
+                    'insumo_id_original': insumo_id,  # Guardar el ID original por si se necesita
                     'saldo_anterior': 0,
                     'entrada_nivel_superior': 0,
                     'salida_nivel_inferior': 0,
@@ -207,23 +324,27 @@ class ReporteBalanceBodega:
                     'reajuste_negativo': 0,
                 }
 
+            # Procesar movimientos según el tipo
             if tipo_movimiento == 'INVENTARIO INICIAL':
-                insumos_dict[codigo_insumo]['saldo_anterior'] += cantidad
+                insumos_dict[codigo_generado]['saldo_anterior'] += cantidad
             elif tipo_movimiento == 'ENTRADA NIVEL SUPERIOR':
-                insumos_dict[codigo_insumo]['entrada_nivel_superior'] += cantidad
+                insumos_dict[codigo_generado]['entrada_nivel_superior'] += cantidad
             elif tipo_movimiento == 'SALIDA NIVEL INFERIOR':
-                insumos_dict[codigo_insumo]['salida_nivel_inferior'] += cantidad
+                insumos_dict[codigo_generado]['salida_nivel_inferior'] += cantidad
             elif tipo_movimiento == 'REAJUSTE POSITIVO':
-                insumos_dict[codigo_insumo]['reajuste_positivo'] += cantidad
+                insumos_dict[codigo_generado]['reajuste_positivo'] += cantidad
             elif tipo_movimiento == 'REAJUSTE NEGATIVO':
-                insumos_dict[codigo_insumo]['reajuste_negativo'] += cantidad
+                insumos_dict[codigo_generado]['reajuste_negativo'] += cantidad
 
+        # Obtener saldo anterior si no hay inventario inicial
         for codigo, datos in insumos_dict.items():
             if datos['saldo_anterior'] == 0:
-                datos['saldo_anterior'] = self.obtener_saldo_mes_anterior(codigo, fecha_ini)
+                # Usar el ID original para buscar el saldo anterior
+                saldo_anterior = self.obtener_saldo_mes_anterior(datos['insumo_id_original'], fecha_ini)
+                datos['saldo_anterior'] = saldo_anterior
 
+        # Generar datos procesados
         datos_procesados = []
-
         for codigo, datos in insumos_dict.items():
             reajustes_netos = datos['reajuste_positivo'] - datos['reajuste_negativo']
             saldo_mes_siguiente = (
@@ -232,9 +353,9 @@ class ReporteBalanceBodega:
                 datos['salida_nivel_inferior'] +
                 reajustes_netos
             )
-
+            
             datos_procesados.append({
-                'codigo_insumo': codigo,
+                'codigo_insumo': codigo,  # Usar el código generado
                 'nombre_insumo': datos['nombre_insumo'],
                 'saldo_anterior': self.formato_float(datos['saldo_anterior']),
                 'entrada_nivel_superior': self.formato_float(datos['entrada_nivel_superior']),
@@ -242,7 +363,10 @@ class ReporteBalanceBodega:
                 'reajustes': f"+{self.formato_float(datos['reajuste_positivo'])} -{self.formato_float(datos['reajuste_negativo'])}" if datos['reajuste_positivo'] > 0 or datos['reajuste_negativo'] > 0 else "0.00",
                 'saldo_mes_siguiente': self.formato_float(saldo_mes_siguiente)
             })
-
+            
+            print(f"DEBUG: Procesado {codigo} - {datos['nombre_insumo']}")
+        
+        print(f"DEBUG: Se procesaron {len(datos_procesados)} insumos")
         return datos_procesados
 
     def calcular_promedio_periodo_actual(self, codigo_insumo, fecha_inicio, fecha_fin):
@@ -282,7 +406,7 @@ class ReporteBalanceBodega:
             print(f"Error calculando promedio del período actual: {e}")
             return 0.0
 
-    def obtener_saldo_mes_anterior(self, codigo_insumo, fecha_corte):
+    def obtener_saldo_mes_anterior(self, insumo_id_original, fecha_corte):
         """
         Obtiene el saldo del mes anterior para usar como saldo anterior
         si no existe inventario inicial
@@ -302,10 +426,10 @@ class ReporteBalanceBodega:
                 None
             )
             
-            # Filtrar movimientos del mismo insumo
+            # Filtrar movimientos del mismo insumo usando el ID original
             movimientos_insumo = [
                 mov for mov in movimientos 
-                if mov.get('codigo_insumo') == codigo_insumo
+                if mov.get('codigo_insumo') == insumo_id_original
             ]
             
             # Calcular saldo acumulado
@@ -320,6 +444,7 @@ class ReporteBalanceBodega:
                     saldo -= cantidad
                 # NO ENTREGADO no afecta el saldo
             
+            print(f"DEBUG: Saldo anterior calculado para insumo {insumo_id_original}: {saldo}")
             return saldo
             
         except Exception as e:

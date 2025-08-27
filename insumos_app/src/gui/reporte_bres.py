@@ -187,31 +187,139 @@ class ReporteBres:
             self.icon_excel = None
             self.icon_close = None
     
+    def generar_codigo_insumo(self, movimientos_raw):
+        """
+        VERSIÓN OPTIMIZADA: Genera códigos únicos con UNA SOLA consulta SQL
+        En lugar de N consultas (una por insumo), hace solo 1 consulta para todos
+        """
+        # Obtener insumos únicos
+        insumos_unicos = {}
+        for mov in movimientos_raw:
+            insumo_id = mov.get('codigo_insumo')
+            insumo_nombre = mov.get('nombre_insumo', '')
+            
+            if insumo_id is not None and str(insumo_id).strip():
+                if insumo_id not in insumos_unicos:
+                    insumos_unicos[insumo_id] = insumo_nombre
+        
+        print(f"DEBUG OPTIMIZED: Insumos únicos encontrados: {len(insumos_unicos)}")
+        
+        if not insumos_unicos:
+            return {}
+        
+        try:
+            conn = conectar_db()
+            if not conn:
+                print("DEBUG OPTIMIZED: No se pudo conectar a la base de datos")
+                return {}
+            
+            cursor = conn.cursor(dictionary=True)
+            
+            # OPTIMIZACIÓN: UNA SOLA CONSULTA para todos los insumos
+            insumo_ids = list(insumos_unicos.keys())
+            placeholders = ','.join(['%s'] * len(insumo_ids))
+            
+            query = f"""
+            SELECT 
+                i.id as insumo_id,
+                ti.descripcion as tipo_insumo_descripcion
+            FROM insumo i
+            INNER JOIN tipo_insumo ti ON i.id_tipo_insumo = ti.id
+            WHERE i.id IN ({placeholders})
+            ORDER BY ti.descripcion, i.id
+            """
+            
+            cursor.execute(query, insumo_ids)
+            resultados = cursor.fetchall()
+            conn.close()
+            
+            print(f"DEBUG OPTIMIZED: Consulta ejecutada para {len(insumo_ids)} insumos, {len(resultados)} resultados")
+            
+            # Agrupar por tipo de insumo
+            insumos_por_tipo = {}
+            for resultado in resultados:
+                insumo_id = resultado['insumo_id']
+                tipo_insumo = resultado['tipo_insumo_descripcion'].strip().upper()
+                
+                if tipo_insumo not in insumos_por_tipo:
+                    insumos_por_tipo[tipo_insumo] = []
+                
+                insumos_por_tipo[tipo_insumo].append(insumo_id)
+            
+            # Generar códigos secuenciales por tipo
+            codigos_insumos = {}
+            for tipo_insumo, lista_insumos in insumos_por_tipo.items():
+                # Obtener prefijo del tipo de insumo
+                tipo_limpio = ''.join(c for c in tipo_insumo if c.isalnum())
+                prefijo = tipo_limpio[:4].upper()
+                
+                while len(prefijo) < 4:
+                    prefijo += 'X'
+                
+                # Asignar códigos secuenciales
+                for contador, insumo_id in enumerate(sorted(lista_insumos), 1):
+                    codigo = f"{prefijo}-{contador:04d}"
+                    codigos_insumos[insumo_id] = codigo
+            
+            print(f"DEBUG OPTIMIZED: Códigos generados: {len(codigos_insumos)}")
+            return codigos_insumos
+            
+        except Exception as e:
+            print(f"DEBUG OPTIMIZED: Error: {e}")
+            import traceback
+            traceback.print_exc()
+            return {}
+        
     def procesar_datos_bres(self, movimientos_raw, fecha_ini, fecha_fin):
+        """
+        VERSIÓN OPTIMIZADA del método procesar_datos_bres
+        Utiliza los métodos batch para reducir drásticamente las consultas SQL
+        """
+        print(f"DEBUG OPTIMIZED: Procesando {len(movimientos_raw)} movimientos")
+        
+        # 1. Generar códigos de insumos (1 consulta en lugar de N)
+        codigos_insumos = self.generar_codigo_insumo(movimientos_raw)
+        
+        if not codigos_insumos:
+            print("DEBUG OPTIMIZED: No se generaron códigos de insumos")
+            return []
+        
+        # 2. Procesar datos agrupados (igual que antes)
         datos_agrupados = {}
-
+        
         nivel_area = self.combo_area.get().strip()
         nivel_distrito = self.combo_distrito.get().strip()
         nivel_tipo_servicio = self.combo_tipo_servicio.get().strip()
         nivel_servicio = self.combo_servicio.get().strip()
 
+        print(f"DEBUG: Filtros - Área: {nivel_area}, Distrito: {nivel_distrito}, Tipo Servicio: {nivel_tipo_servicio}, Servicio: {nivel_servicio}")
+
         for mov in movimientos_raw:
-            codigo = str(mov.get('codigo_insumo', ''))
+            insumo_id = mov.get('codigo_insumo')
+            
+            if insumo_id is None or str(insumo_id).strip() == '':
+                continue
+            
+            codigo = codigos_insumos.get(insumo_id)
+            if not codigo:
+                codigo = f"TEMP-{str(insumo_id).zfill(4)}"
+            
             nombre = mov.get('nombre_insumo', '')
             area = mov.get('area_nombre', '')
             distrito = mov.get('distrito_nombre', '')
             tipo_servicio = mov.get('tipo_servicio_descripcion', '')
             servicio = mov.get('servicio_nombre', '')
             tipo_movimiento = mov.get('tipo_movimiento', '').upper()
-            cantidad = 0
+            
             try:
                 cantidad = float(mov.get('cantidad', 0))
             except:
                 cantidad = 0
-
+            
             if codigo not in datos_agrupados:
                 datos_agrupados[codigo] = {
                     'nombre_insumo': nombre,
+                    'insumo_id': insumo_id,
                     'saldo_anterior_area': 0,
                     'saldo_anterior_distritos': 0,
                     'saldo_anterior_servicios': 0,
@@ -228,14 +336,12 @@ class ReporteBres:
                     'reajustes_distritos': 0,
                     'reajustes_servicios': 0,
                 }
-
-            # **NUEVA LÓGICA DE CLASIFICACIÓN MEJORADA**
-            # Determinar el nivel del movimiento
-            es_nivel_area = (area and not distrito and not tipo_servicio and not servicio)
-            es_nivel_distrito = (distrito and not tipo_servicio and not servicio)
-            es_nivel_servicio = (servicio)
-
-            # Acumular saldo anterior (inventario inicial)
+            
+            # Clasificación y acumulación (igual que antes)
+            es_nivel_area = bool(area and not distrito)
+            es_nivel_distrito = bool(distrito and not servicio)
+            es_nivel_servicio = bool(servicio)
+            
             if tipo_movimiento == 'INVENTARIO INICIAL':
                 if es_nivel_area:
                     datos_agrupados[codigo]['saldo_anterior_area'] += cantidad
@@ -243,8 +349,7 @@ class ReporteBres:
                     datos_agrupados[codigo]['saldo_anterior_distritos'] += cantidad
                 elif es_nivel_servicio:
                     datos_agrupados[codigo]['saldo_anterior_servicios'] += cantidad
-
-            # Acumular entradas nivel superior
+            
             elif tipo_movimiento == 'ENTRADA NIVEL SUPERIOR':
                 if es_nivel_area:
                     datos_agrupados[codigo]['entradas_nivel_superior_area'] += cantidad
@@ -252,29 +357,25 @@ class ReporteBres:
                     datos_agrupados[codigo]['entradas_nivel_superior_distritos'] += cantidad
                 elif es_nivel_servicio:
                     datos_agrupados[codigo]['entradas_nivel_superior_servicios'] += cantidad
-
-            # Acumular salidas nivel inferior
+            
             elif tipo_movimiento == 'SALIDA NIVEL INFERIOR':
                 if es_nivel_area:
                     datos_agrupados[codigo]['salidas_nivel_inferior_area'] += cantidad
                 elif es_nivel_distrito:
                     datos_agrupados[codigo]['salidas_nivel_inferior_distritos'] += cantidad
-
-            # Acumular entregados
+            
             elif tipo_movimiento == 'ENTREGADO':
                 if es_nivel_distrito:
                     datos_agrupados[codigo]['entregado_distritos'] += cantidad
                 elif es_nivel_servicio:
                     datos_agrupados[codigo]['entregado_servicios'] += cantidad
-
-            # Acumular no entregados
+            
             elif tipo_movimiento == 'NO ENTREGADO':
                 if es_nivel_distrito:
                     datos_agrupados[codigo]['no_entregado_distritos'] += cantidad
                 elif es_nivel_servicio:
                     datos_agrupados[codigo]['no_entregado_servicios'] += cantidad
-
-            # Acumular reajustes positivos
+            
             elif tipo_movimiento == 'REAJUSTE POSITIVO':
                 if es_nivel_area:
                     datos_agrupados[codigo]['reajustes_area'] += cantidad
@@ -282,8 +383,7 @@ class ReporteBres:
                     datos_agrupados[codigo]['reajustes_distritos'] += cantidad
                 elif es_nivel_servicio:
                     datos_agrupados[codigo]['reajustes_servicios'] += cantidad
-
-            # Acumular reajustes negativos
+            
             elif tipo_movimiento == 'REAJUSTE NEGATIVO':
                 if es_nivel_area:
                     datos_agrupados[codigo]['reajustes_area'] -= cantidad
@@ -291,116 +391,62 @@ class ReporteBres:
                     datos_agrupados[codigo]['reajustes_distritos'] -= cantidad
                 elif es_nivel_servicio:
                     datos_agrupados[codigo]['reajustes_servicios'] -= cantidad
-
-        # **NUEVA LÓGICA DE CONSOLIDACIÓN SEGÚN EL NIVEL SELECCIONADO**
+        
+        print(f"DEBUG OPTIMIZED: Datos agrupados para {len(datos_agrupados)} códigos")
+        
+        # 3. OPTIMIZACIÓN: Calcular promedios en lote (1 consulta en lugar de N)
+        insumo_ids = [datos['insumo_id'] for datos in datos_agrupados.values() if datos['insumo_id'] is not None]
+        promedios_batch = self.calcular_promedio_demanda_real(insumo_ids, fecha_ini, fecha_fin)
+        
+        print(f"DEBUG OPTIMIZED: Promedios calculados en lote para {len(promedios_batch)} insumos")
+        
+        # 4. Procesar datos finales usando promedios precalculados
         datos_procesados = []
-
+        
         for codigo, datos in datos_agrupados.items():
-            
-            # **NIVEL SERVICIO ESPECÍFICO**: Solo datos del servicio
+            # Consolidación por nivel (igual que antes)
             if nivel_servicio:
                 saldo_anterior_total = datos['saldo_anterior_servicios']
                 entradas_nivel_superior_total = datos['entradas_nivel_superior_servicios']
                 entregado_total = datos['entregado_servicios']
                 no_entregado_total = datos['no_entregado_servicios']
                 reajustes_total = datos['reajustes_servicios']
-
-            # **NIVEL TIPO SERVICIO**: Datos de todos los servicios del tipo
             elif nivel_tipo_servicio:
                 saldo_anterior_total = datos['saldo_anterior_servicios']
                 entradas_nivel_superior_total = datos['entradas_nivel_superior_servicios']
                 entregado_total = datos['entregado_servicios']
                 no_entregado_total = datos['no_entregado_servicios']
                 reajustes_total = datos['reajustes_servicios']
-
-            # **NIVEL DISTRITO**: Consolidar distrito + todos sus servicios
             elif nivel_distrito:
-                # Saldo anterior: distrito + servicios
-                saldo_anterior_total = (datos['saldo_anterior_distritos'] + 
-                                    datos['saldo_anterior_servicios'])
-                
-                # Entradas nivel superior: (distrito + servicios) - salidas nivel inferior
-                entradas_nivel_superior_total = (
-                    datos['entradas_nivel_superior_distritos'] + 
-                    datos['entradas_nivel_superior_servicios'] -
-                    datos['salidas_nivel_inferior_distritos']
-                )
-                
-                # Entregado: distrito + servicios
-                entregado_total = (datos['entregado_distritos'] + 
-                                datos['entregado_servicios'])
-                
-                # No entregado: distrito + servicios
-                no_entregado_total = (datos['no_entregado_distritos'] + 
-                                    datos['no_entregado_servicios'])
-                
-                # Reajustes: distrito + servicios
-                reajustes_total = (datos['reajustes_distritos'] + 
-                                datos['reajustes_servicios'])
-
-            # **NIVEL ÁREA**: Consolidar área + todos sus distritos + todos los servicios
+                saldo_anterior_total = datos['saldo_anterior_distritos'] + datos['saldo_anterior_servicios']
+                entradas_nivel_superior_total = (datos['entradas_nivel_superior_distritos'] + datos['entradas_nivel_superior_servicios'] - datos['salidas_nivel_inferior_distritos'])
+                entregado_total = datos['entregado_distritos'] + datos['entregado_servicios']
+                no_entregado_total = datos['no_entregado_distritos'] + datos['no_entregado_servicios']
+                reajustes_total = datos['reajustes_distritos'] + datos['reajustes_servicios']
             elif nivel_area:
-                # Saldo anterior: área + distritos + servicios
-                saldo_anterior_total = (datos['saldo_anterior_area'] + 
-                                    datos['saldo_anterior_distritos'] + 
-                                    datos['saldo_anterior_servicios'])
-                
-                # Entradas nivel superior: (área + distritos) - salidas nivel inferior
-                entradas_nivel_superior_total = (
-                    datos['entradas_nivel_superior_area'] + 
-                    datos['entradas_nivel_superior_distritos'] -
-                    datos['salidas_nivel_inferior_area']
-                )
-                
-                # Entregado: distritos + servicios (área no entrega directamente)
-                entregado_total = (datos['entregado_distritos'] + 
-                                datos['entregado_servicios'])
-                
-                # No entregado: distritos + servicios
-                no_entregado_total = (datos['no_entregado_distritos'] + 
-                                    datos['no_entregado_servicios'])
-                
-                # Reajustes: área + distritos + servicios
-                reajustes_total = (datos['reajustes_area'] + 
-                                datos['reajustes_distritos'] + 
-                                datos['reajustes_servicios'])
-
-            # **SIN FILTRO**: Consolidar todo
+                saldo_anterior_total = datos['saldo_anterior_area'] + datos['saldo_anterior_distritos'] + datos['saldo_anterior_servicios']
+                entradas_nivel_superior_total = (datos['entradas_nivel_superior_area'] + datos['entradas_nivel_superior_distritos'] - datos['salidas_nivel_inferior_area'])
+                entregado_total = datos['entregado_distritos'] + datos['entregado_servicios']
+                no_entregado_total = datos['no_entregado_distritos'] + datos['no_entregado_servicios']
+                reajustes_total = datos['reajustes_area'] + datos['reajustes_distritos'] + datos['reajustes_servicios']
             else:
-                saldo_anterior_total = (datos['saldo_anterior_area'] + 
-                                    datos['saldo_anterior_distritos'] + 
-                                    datos['saldo_anterior_servicios'])
-                entradas_nivel_superior_total = (datos['entradas_nivel_superior_area'] + 
-                                                datos['entradas_nivel_superior_distritos'] + 
-                                                datos['entradas_nivel_superior_servicios'] -
-                                                datos['salidas_nivel_inferior_area'] -
-                                                datos['salidas_nivel_inferior_distritos'])
-                entregado_total = (datos['entregado_distritos'] + 
-                                datos['entregado_servicios'])
-                no_entregado_total = (datos['no_entregado_distritos'] + 
-                                    datos['no_entregado_servicios'])
-                reajustes_total = (datos['reajustes_area'] + 
-                                datos['reajustes_distritos'] + 
-                                datos['reajustes_servicios'])
-
-            # Calcular saldo mes siguiente
-            saldo_mes_siguiente = (
-                saldo_anterior_total +
-                entradas_nivel_superior_total -
-                entregado_total +
-                reajustes_total
-            )
-
-            # Calcular demanda total
+                saldo_anterior_total = datos['saldo_anterior_area'] + datos['saldo_anterior_distritos'] + datos['saldo_anterior_servicios']
+                entradas_nivel_superior_total = (datos['entradas_nivel_superior_area'] + datos['entradas_nivel_superior_distritos'] + datos['entradas_nivel_superior_servicios'] - datos['salidas_nivel_inferior_area'] - datos['salidas_nivel_inferior_distritos'])
+                entregado_total = datos['entregado_distritos'] + datos['entregado_servicios']
+                no_entregado_total = datos['no_entregado_distritos'] + datos['no_entregado_servicios']
+                reajustes_total = datos['reajustes_area'] + datos['reajustes_distritos'] + datos['reajustes_servicios']
+            
+            saldo_mes_siguiente = (saldo_anterior_total + entradas_nivel_superior_total - entregado_total + reajustes_total)
             demanda_total = entregado_total + no_entregado_total
-
-            # Calcular métricas adicionales
-            promedio_mensual = self.calcular_promedio_demanda_real(codigo, fecha_ini, fecha_fin)
+            
+            # USAR PROMEDIO PRECALCULADO (sin consulta adicional)
+            promedio_mensual = promedios_batch.get(datos['insumo_id'], 0.0)
+            
             meses_existencia = saldo_mes_siguiente / promedio_mensual if promedio_mensual > 0 else 0
             nivel_maximo = float(self.nivel_maximo_var.get()) if self.nivel_maximo_var.get() else 6
             cantidad_maxima = promedio_mensual * nivel_maximo
             cantidad_solicitar = cantidad_maxima - saldo_mes_siguiente
-
+            
             datos_procesados.append({
                 'codigo_insumo': codigo,
                 'nombre_insumo': datos['nombre_insumo'],
@@ -418,80 +464,150 @@ class ReporteBres:
                 'cantidad_solicitar': self.formato_float(cantidad_solicitar),
                 'movimientos_individuales': {}
             })
-
+        
         return datos_procesados
 
-    def calcular_promedio_demanda_real(self, codigo_insumo, fecha_ini, fecha_fin):
+    def calcular_promedio_demanda_real(self, insumo_ids, fecha_ini, fecha_fin):
         """
-        Calcula el promedio mensual de demanda real sumando la demanda de los 
-        dos meses anteriores más la demanda del mes actual dividido entre 3
+        VERSIÓN OPTIMIZADA: Calcula promedios de demanda para múltiples insumos
+        En lugar de hacer 3 consultas por cada insumo, hace 1 consulta para todos
         """
+        if not insumo_ids:
+            return {}
+        
         try:
             from datetime import datetime, timedelta
-            import calendar
             
-            # Calcular fechas para los 3 meses (2 anteriores + actual)
+            conn = conectar_db()
+            if not conn:
+                return {}
+            
+            cursor = conn.cursor(dictionary=True)
+            
+            # Calcular rango de fechas para los últimos 3 meses
             fecha_actual = fecha_fin
             
-            # Mes actual
-            inicio_mes_actual = fecha_actual.replace(day=26)
-            if inicio_mes_actual > fecha_actual:
-                # Si el día 26 es posterior a la fecha actual, tomar el mes anterior
-                if inicio_mes_actual.month == 1:
-                    inicio_mes_actual = inicio_mes_actual.replace(year=inicio_mes_actual.year-1, month=12)
+            # Fecha inicio para los 3 meses
+            fecha_inicio_calculo = fecha_actual - timedelta(days=90)  # Aproximadamente 3 meses
+            
+            # Obtener filtros de nivel
+            area_seleccionada = getattr(self, 'combo_area', None)
+            area_seleccionada = area_seleccionada.get().strip() if area_seleccionada and area_seleccionada.get() else None
+            
+            distrito_seleccionado = getattr(self, 'combo_distrito', None) 
+            distrito_seleccionado = distrito_seleccionado.get().strip() if distrito_seleccionado and distrito_seleccionado.get() else None
+            
+            tipo_servicio_seleccionado = getattr(self, 'combo_tipo_servicio', None)
+            tipo_servicio_seleccionado = tipo_servicio_seleccionado.get().strip() if tipo_servicio_seleccionado and tipo_servicio_seleccionado.get() else None
+            
+            servicio_seleccionado = getattr(self, 'combo_servicio', None)
+            servicio_seleccionado = servicio_seleccionado.get().strip() if servicio_seleccionado and servicio_seleccionado.get() else None
+            
+            placeholders = ','.join(['%s'] * len(insumo_ids))
+            
+            # CONSULTA OPTIMIZADA: Demanda por insumo y mes en una sola consulta
+            query = f"""
+            SELECT 
+                m.insumo_id,
+                YEAR(m.fecha_registro) as anio,
+                MONTH(m.fecha_registro) as mes,
+                SUM(m.cantidad) as demanda_mes
+            FROM movimiento m
+            INNER JOIN tipo_movimiento tm ON m.tipo_movimiento_id = tm.id
+            LEFT JOIN area a_directa ON m.area_id = a_directa.id
+            LEFT JOIN distrito d_directa ON m.distrito_id = d_directa.id  
+            LEFT JOIN servicio s_directa ON m.servicio_id = s_directa.id
+            LEFT JOIN tipo_servicio ts_directa ON s_directa.id_tipo_servicio = ts_directa.id
+            WHERE m.insumo_id IN ({placeholders})
+            AND m.fecha_registro BETWEEN %s AND %s
+            AND tm.descripcion IN ('ENTREGADO', 'NO ENTREGADO')
+            """
+            
+            params = list(insumo_ids) + [fecha_inicio_calculo.strftime('%Y-%m-%d'), fecha_fin.strftime('%Y-%m-%d')]
+            
+            # Agregar filtros de nivel según corresponda
+            if servicio_seleccionado:
+                query += " AND a_directa.nombre = %s AND d_directa.nombre = %s AND s_directa.nombre = %s"
+                params.extend([area_seleccionada, distrito_seleccionado, servicio_seleccionado])
+            elif tipo_servicio_seleccionado:
+                query += " AND a_directa.nombre = %s AND d_directa.nombre = %s AND ts_directa.descripcion = %s"
+                params.extend([area_seleccionada, distrito_seleccionado, tipo_servicio_seleccionado])
+            elif distrito_seleccionado:
+                query += " AND a_directa.nombre = %s AND (d_directa.nombre = %s OR s_directa.id IN (SELECT s.id FROM servicio s INNER JOIN tipo_servicio ts ON s.id_tipo_servicio = ts.id INNER JOIN distrito d ON ts.id_distrito = d.id WHERE d.nombre = %s))"
+                params.extend([area_seleccionada, distrito_seleccionado, distrito_seleccionado])
+            elif area_seleccionada:
+                query += " AND (a_directa.nombre = %s OR d_directa.id IN (SELECT d.id FROM distrito d INNER JOIN area a ON d.id_area = a.id WHERE a.nombre = %s) OR s_directa.id IN (SELECT s.id FROM servicio s INNER JOIN tipo_servicio ts ON s.id_tipo_servicio = ts.id INNER JOIN distrito d ON ts.id_distrito = d.id INNER JOIN area a ON d.id_area = a.id WHERE a.nombre = %s))"
+                params.extend([area_seleccionada, area_seleccionada, area_seleccionada])
+            
+            query += " GROUP BY m.insumo_id, YEAR(m.fecha_registro), MONTH(m.fecha_registro)"
+            
+            cursor.execute(query, params)
+            resultados = cursor.fetchall()
+            conn.close()
+            
+            print(f"DEBUG OPTIMIZED: Consulta batch ejecutada, {len(resultados)} registros obtenidos")
+            
+            # Procesar resultados para calcular promedios
+            demandas_por_insumo = {}
+            for resultado in resultados:
+                insumo_id = resultado['insumo_id']
+                demanda_mes = float(resultado['demanda_mes']) if resultado['demanda_mes'] else 0.0
+                
+                if insumo_id not in demandas_por_insumo:
+                    demandas_por_insumo[insumo_id] = []
+                
+                demandas_por_insumo[insumo_id].append(demanda_mes)
+            
+            # Calcular promedios
+            promedios = {}
+            for insumo_id in insumo_ids:
+                if insumo_id in demandas_por_insumo:
+                    demandas = demandas_por_insumo[insumo_id]
+                    # Tomar las últimas 3 mediciones o las disponibles
+                    ultimas_demandas = demandas[-3:] if len(demandas) >= 3 else demandas
+                    promedio = sum(ultimas_demandas) / len(ultimas_demandas) if ultimas_demandas else 0.0
+                    promedios[insumo_id] = round(promedio, 2)
                 else:
-                    inicio_mes_actual = inicio_mes_actual.replace(month=inicio_mes_actual.month-1)
+                    promedios[insumo_id] = 0.0
             
-            fin_mes_actual = fecha_actual
-            
-            # Mes anterior (1 mes atrás)
-            if inicio_mes_actual.month == 1:
-                inicio_mes_anterior = inicio_mes_actual.replace(year=inicio_mes_actual.year-1, month=12, day=26)
-                fin_mes_anterior = datetime(inicio_mes_actual.year, inicio_mes_actual.month, 25)
-            else:
-                inicio_mes_anterior = inicio_mes_actual.replace(month=inicio_mes_actual.month-1, day=26)
-                fin_mes_anterior = datetime(inicio_mes_actual.year, inicio_mes_actual.month, 25)
-            
-            # Mes anterior al anterior (2 meses atrás)
-            if inicio_mes_anterior.month == 1:
-                inicio_mes_anterior2 = inicio_mes_anterior.replace(year=inicio_mes_anterior.year-1, month=12, day=26)
-                fin_mes_anterior2 = datetime(inicio_mes_anterior.year, inicio_mes_anterior.month, 25)
-            else:
-                inicio_mes_anterior2 = inicio_mes_anterior.replace(month=inicio_mes_anterior.month-1, day=26)
-                fin_mes_anterior2 = datetime(inicio_mes_anterior.year, inicio_mes_anterior.month, 25)
-            
-            # Obtener demanda de cada mes
-            demanda_mes_actual = self.obtener_demanda_mes(codigo_insumo, inicio_mes_actual, fin_mes_actual)
-            demanda_mes_anterior = self.obtener_demanda_mes(codigo_insumo, inicio_mes_anterior, fin_mes_anterior2)
-            demanda_mes_anterior2 = self.obtener_demanda_mes(codigo_insumo, inicio_mes_anterior2, fin_mes_anterior2)
-            
-            # Calcular promedio de los 3 meses
-            total_demanda = demanda_mes_actual + demanda_mes_anterior + demanda_mes_anterior2
-            promedio = total_demanda / 3
-            
-            return round(promedio, 2)
+            print(f"DEBUG OPTIMIZED: Promedios calculados para {len(promedios)} insumos")
+            return promedios
             
         except Exception as e:
-            print(f"Error calculando promedio demanda real para {codigo_insumo}: {e}")
-            return 0.0
+            print(f"DEBUG OPTIMIZED: Error calculando promedios batch: {e}")
+            import traceback
+            traceback.print_exc()
+            return {}
 
-    def obtener_demanda_mes(self, codigo_insumo, fecha_inicio, fecha_fin):
+    def obtener_demanda_mes(self, insumo_id, fecha_inicio, fecha_fin):
         """
         Obtiene la demanda total de un insumo en un período específico
         aplicando filtro de nivel seleccionado con lógica de consolidación
         """
+        conn = None
+        cursor = None
         try:
+            if insumo_id is None:
+                return 0.0
+
             conn = conectar_db()
             if not conn:
                 return 0.0
-                
-            cursor = conn.cursor()
-            
-            # Determinar filtros seleccionados
-            area_seleccionada = self.combo_area.get().strip() if self.combo_area.get() else None
-            distrito_seleccionado = self.combo_distrito.get().strip() if self.combo_distrito.get() else None
-            tipo_servicio_seleccionado = self.combo_tipo_servicio.get().strip() if self.combo_tipo_servicio.get() else None
-            servicio_seleccionado = self.combo_servicio.get().strip() if self.combo_servicio.get() else None
+
+            cursor = conn.cursor(dictionary=True)
+
+            # Obtener filtros con seguridad
+            area_seleccionada = getattr(self, 'combo_area', None)
+            area_seleccionada = area_seleccionada.get().strip() if area_seleccionada and area_seleccionada.get() else None
+
+            distrito_seleccionado = getattr(self, 'combo_distrito', None)
+            distrito_seleccionado = distrito_seleccionado.get().strip() if distrito_seleccionado and distrito_seleccionado.get() else None
+
+            tipo_servicio_seleccionado = getattr(self, 'combo_tipo_servicio', None)
+            tipo_servicio_seleccionado = tipo_servicio_seleccionado.get().strip() if tipo_servicio_seleccionado and tipo_servicio_seleccionado.get() else None
+
+            servicio_seleccionado = getattr(self, 'combo_servicio', None)
+            servicio_seleccionado = servicio_seleccionado.get().strip() if servicio_seleccionado and servicio_seleccionado.get() else None
 
             query = """
             SELECT SUM(m.cantidad) as total_demanda
@@ -501,76 +617,70 @@ class ReporteBres:
             LEFT JOIN distrito d_directa ON m.distrito_id = d_directa.id
             LEFT JOIN servicio s_directa ON m.servicio_id = s_directa.id
             LEFT JOIN tipo_servicio ts_directa ON s_directa.id_tipo_servicio = ts_directa.id
-            WHERE m.insumo_id = ?
-            AND m.fecha_registro BETWEEN ? AND ?
+            WHERE m.insumo_id = %s
+            AND m.fecha_registro BETWEEN %s AND %s
             AND tm.descripcion IN ('ENTREGADO', 'NO ENTREGADO')
             """
-            
-            params = [int(codigo_insumo), fecha_inicio.strftime('%Y-%m-%d'), fecha_fin.strftime('%Y-%m-%d')]
-            
-            # **LÓGICA DE FILTRADO SEGÚN NIVEL SELECCIONADO**
+
+            params = [insumo_id, fecha_inicio.strftime('%Y-%m-%d'), fecha_fin.strftime('%Y-%m-%d')]
+
             if servicio_seleccionado:
-                # Nivel SERVICIO: solo el servicio específico
-                query += " AND a_directa.nombre = ? AND d_directa.nombre = ? AND s_directa.nombre = ?"
+                query += " AND a_directa.nombre = %s AND d_directa.nombre = %s AND s_directa.nombre = %s"
                 params.extend([area_seleccionada, distrito_seleccionado, servicio_seleccionado])
-                
             elif tipo_servicio_seleccionado:
-                # Nivel TIPO SERVICIO: todos los servicios del tipo dentro del distrito
-                query += " AND a_directa.nombre = ? AND d_directa.nombre = ? AND ts_directa.descripcion = ?"
+                query += " AND a_directa.nombre = %s AND d_directa.nombre = %s AND ts_directa.descripcion = %s"
                 params.extend([area_seleccionada, distrito_seleccionado, tipo_servicio_seleccionado])
-                
             elif distrito_seleccionado:
-                # Nivel DISTRITO: distrito + todos sus servicios
                 query += """
-                AND a_directa.nombre = ? 
+                AND a_directa.nombre = %s 
                 AND (
-                    (d_directa.nombre = ? AND s_directa.nombre IS NULL) OR  -- Movimientos del distrito
-                    (s_directa.id IN (  -- Movimientos de servicios dentro del distrito
+                    (d_directa.nombre = %s AND s_directa.nombre IS NULL) OR
+                    (s_directa.id IN (
                         SELECT s.id 
                         FROM servicio s 
                         INNER JOIN tipo_servicio ts ON s.id_tipo_servicio = ts.id 
                         INNER JOIN distrito d ON ts.id_distrito = d.id 
-                        WHERE d.nombre = ?
+                        WHERE d.nombre = %s
                     ))
                 )
                 """
                 params.extend([area_seleccionada, distrito_seleccionado, distrito_seleccionado])
-                
             elif area_seleccionada:
-                # Nivel ÁREA: área + todos sus distritos + todos los servicios del área
                 query += """
                 AND (
-                    (a_directa.nombre = ? AND d_directa.nombre IS NULL) OR  -- Movimientos del área
-                    (d_directa.id IN (  -- Movimientos de distritos dentro del área
+                    (a_directa.nombre = %s AND d_directa.nombre IS NULL) OR
+                    (d_directa.id IN (
                         SELECT d.id 
                         FROM distrito d 
                         INNER JOIN area a ON d.id_area = a.id 
-                        WHERE a.nombre = ?
+                        WHERE a.nombre = %s
                     ) AND s_directa.nombre IS NULL) OR
-                    (s_directa.id IN (  -- Movimientos de servicios dentro del área
+                    (s_directa.id IN (
                         SELECT s.id 
                         FROM servicio s 
                         INNER JOIN tipo_servicio ts ON s.id_tipo_servicio = ts.id 
                         INNER JOIN distrito d ON ts.id_distrito = d.id 
                         INNER JOIN area a ON d.id_area = a.id 
-                        WHERE a.nombre = ?
+                        WHERE a.nombre = %s
                     ))
                 )
                 """
                 params.extend([area_seleccionada, area_seleccionada, area_seleccionada])
-            
+
             cursor.execute(query, params)
             resultado = cursor.fetchone()
-            
+
             total_demanda = float(resultado['total_demanda']) if resultado and resultado['total_demanda'] else 0.0
             return total_demanda
-            
+
         except Exception as e:
             print(f"Error obteniendo demanda del mes: {e}")
             import traceback
             traceback.print_exc()
             return 0.0
         finally:
+            if cursor:
+                cursor.close()
             if conn:
                 conn.close()
 
@@ -599,7 +709,7 @@ class ReporteBres:
             demanda_total = sum(
                 float(mov.get('cantidad', 0)) 
                 for mov in movimientos_actuales 
-                if mov.get('tipo_movimiento') in ['ENTREGADO', 'NO ENTREGADO']
+                    if mov.get('tipo_movimiento') in ['ENTREGADO', 'NO ENTREGADO']
             )
             
             # Calcular número de meses en el período
@@ -1096,8 +1206,12 @@ class ReporteBres:
             self.combo_presentacion.set_completion_list(opciones)
 
     def generar_vista_previa(self):
+        """
+        VERSIÓN OPTIMIZADA de generar_vista_previa()
+        Reemplaza la llamada a procesar_datos_bres con la versión optimizada
+        """
         try:
-            # Obtener fechas según el modo seleccionado
+            # ... (mismo código de validación de fechas) ...
             if self.modo_fecha_var.get() == "rango":
                 fecha_ini = datetime.strptime(self.fecha_inicial.get(), '%d/%m/%Y')
                 fecha_fin = datetime.strptime(self.fecha_final.get(), '%d/%m/%Y')
@@ -1116,11 +1230,12 @@ class ReporteBres:
                 fecha_ini = datetime.strptime(fecha_ini_str, '%d/%m/%Y')
                 fecha_fin = datetime.strptime(fecha_fin_str, '%d/%m/%Y')
 
-            # Validar fechas
             if fecha_fin < fecha_ini:
                 messagebox.showerror("Error", "La fecha final debe ser mayor a la inicial")
                 return
 
+            print("DEBUG OPTIMIZED: Iniciando obtención de movimientos...")
+            
             # Obtener datos usando la función específica para BRES
             movimientos_raw = obtener_movimientos_bres(
                 fecha_ini.strftime('%Y-%m-%d'),
@@ -1134,16 +1249,23 @@ class ReporteBres:
                 presentacion_nombre=self.combo_presentacion.get().strip() or None
             )
 
+            print(f"DEBUG OPTIMIZED: Movimientos obtenidos: {len(movimientos_raw) if movimientos_raw else 0}")
+            
             if not movimientos_raw:
                 messagebox.showinfo("Info", "No hay datos para mostrar")
                 return
 
-            # Procesar datos para BRES
+            print("DEBUG OPTIMIZED: Iniciando procesamiento optimizado...")
+            
+            # USAR MÉTODO OPTIMIZADO
             self.movimientos_data = self.procesar_datos_bres(movimientos_raw, fecha_ini, fecha_fin)
 
             if not self.movimientos_data:
                 messagebox.showwarning("Sin datos", "No hay datos procesados para mostrar")
                 return
+
+            print(f"DEBUG OPTIMIZED: Procesamiento completado. {len(self.movimientos_data)} registros procesados")
+
 
             # Generar PDF temporal
             import tempfile

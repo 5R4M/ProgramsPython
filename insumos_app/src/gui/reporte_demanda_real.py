@@ -2,7 +2,7 @@ import tkinter as tk
 from tkinter import ttk, messagebox
 from tkcalendar import DateEntry
 import pandas as pd
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, date, time
 import sys
 import os
 from ttkwidgets.autocomplete import AutocompleteCombobox
@@ -42,7 +42,8 @@ from src.database.db_manager import (
     obtener_tipos_insumo,
     obtener_insumos_por_tipo,
     obtener_presentaciones,
-    obtener_movimientos_kardex
+    obtener_movimientos_kardex,
+    conectar_db
 )
 
 def resource_path(relative_path):
@@ -65,14 +66,14 @@ class ReporteDemandaReal:
         style = ttk.Style()
         style.configure('Enabled.TFrame', background='white')
         style.configure('Disabled.TFrame', background='#f0f0f0')
-        
+      
         self.areas = []
-        self.distritos = []       
-        self.tipos_servicio = []  
+        self.distritos = []     
+        self.tipos_servicio = []
         self.tipos_insumo = []
         self.insumos = []
         self.presentaciones = []
-    
+  
         self.setup_ui()
 
     def setup_styles(self):
@@ -92,9 +93,9 @@ class ReporteDemandaReal:
 
         style = ttk.Style()
         style.theme_use('clam')
-        
+      
         style.configure('White.TFrame', background=self.COLORS['white'])
-        
+      
         # Estilo para labels con fondo blanco
         style.configure('White.TLabel',
             background=self.COLORS['white'],
@@ -111,7 +112,7 @@ class ReporteDemandaReal:
         style.map('White.TButton',
             background=[('active', self.COLORS['light']),
                         ('pressed', self.COLORS['light'])])
-        
+      
         style.configure('Card.TLabelframe',
             background=self.COLORS['white'],
             relief='solid',
@@ -135,7 +136,7 @@ class ReporteDemandaReal:
         style.map('Primary.TButton',
             background=[('active', '#1F5F8B'),
                         ('pressed', '#1A4F7A')])
-        
+      
         # Estilos adicionales para radiobuttons y combobox
         style.configure(
             'White.TRadiobutton',
@@ -149,7 +150,7 @@ class ReporteDemandaReal:
             background=self.COLORS['white'],
             foreground=self.COLORS['text_dark']
         )
-    
+  
     def create_titled_frame(self, parent, title):
         container = tk.Frame(parent, bg=self.COLORS['white'], relief='solid', borderwidth=1)
 
@@ -165,11 +166,11 @@ class ReporteDemandaReal:
         content.pack(fill='both', expand=True, padx=10, pady=10)
 
         return container, content
-    
+  
     def cargar_iconos(self):
         try:
             icons_path = resource_path(os.path.join('utils', 'icons'))
-            
+          
             # Ajusta la ruta según tu proyecto
             self.icon_preview = tk.PhotoImage(file=os.path.join(icons_path, "vista_previa.png")).subsample(2, 2)
             self.icon_print = tk.PhotoImage(file=os.path.join(icons_path, "imprimir.png")).subsample(2, 2)
@@ -183,7 +184,7 @@ class ReporteDemandaReal:
             self.icon_pdf = None
             self.icon_excel = None
             self.icon_close = None
-    
+  
     def setup_ui(self):
         # --- Frame principal que contendrá todo ---
         main_container = tk.Frame(self.parent, bg=self.COLORS['light'])
@@ -223,7 +224,7 @@ class ReporteDemandaReal:
 
         # Configurar grid EXACTAMENTE IGUAL que ubicación (solo columnas expandibles específicas)
         self.frame_corte_content.grid_columnconfigure(1, weight=1)  # Año
-        self.frame_corte_content.grid_columnconfigure(3, weight=1)  # Mes Inicio  
+        self.frame_corte_content.grid_columnconfigure(3, weight=1)  # Mes Inicio
         self.frame_corte_content.grid_columnconfigure(5, weight=1)  # Mes Final
         # NO configurar las demás columnas para que no se expandan
 
@@ -243,10 +244,10 @@ class ReporteDemandaReal:
 
         ttk.Label(self.frame_corte_content, text="Mes Inicio:", style='White.TLabel').grid(row=0, column=2, padx=5, sticky='w')
         self.mes_inicio_var = tk.StringVar()
-        
+      
         # Obtener nombres de meses en español
         meses = [datetime(2024, m, 1).strftime("%B").capitalize() for m in range(1, 13)]
-        
+      
         self.combo_mes_inicio = ttk.Combobox(
             self.frame_corte_content,
             textvariable=self.mes_inicio_var,
@@ -259,7 +260,7 @@ class ReporteDemandaReal:
 
         ttk.Label(self.frame_corte_content, text="Mes Final:", style='White.TLabel').grid(row=0, column=4, padx=5, sticky='w')
         self.mes_final_var = tk.StringVar()
-        
+      
         self.combo_mes_final = ttk.Combobox(
             self.frame_corte_content,
             textvariable=self.mes_final_var,
@@ -294,7 +295,7 @@ class ReporteDemandaReal:
         self.area_var = tk.StringVar()
         self.combo_area = AutocompleteCombobox(self.frame_ubicacion_content, textvariable=self.area_var, state="normal", font=('Segoe UI', 9))
         self.combo_area.grid(row=0, column=1, padx=5, sticky='ew')
-        
+      
         ttk.Label(self.frame_ubicacion_content, text="Distrito:", **label_style).grid(row=0, column=2, padx=5, sticky='w')
         self.distrito_var = tk.StringVar()
         self.combo_distrito = AutocompleteCombobox(self.frame_ubicacion_content, textvariable=self.distrito_var, state="normal", font=('Segoe UI', 9))
@@ -304,7 +305,7 @@ class ReporteDemandaReal:
         self.tipo_servicio_var = tk.StringVar()
         self.combo_tipo_servicio = AutocompleteCombobox(self.frame_ubicacion_content, textvariable=self.tipo_servicio_var, state="normal", font=('Segoe UI', 9))
         self.combo_tipo_servicio.grid(row=0, column=5, padx=5, sticky='ew')
-        
+      
         ttk.Label(self.frame_ubicacion_content, text="Servicio:", **label_style).grid(row=0, column=6, padx=5, sticky='w')
         self.servicio_var = tk.StringVar()
         self.combo_servicio = AutocompleteCombobox(self.frame_ubicacion_content, textvariable=self.servicio_var, state="normal", font=('Segoe UI', 9))
@@ -325,12 +326,12 @@ class ReporteDemandaReal:
         self.tipo_insumo_var = tk.StringVar()
         self.combo_tipo_insumo = AutocompleteCombobox(self.frame_insumo_content, textvariable=self.tipo_insumo_var, state="normal", font=('Segoe UI', 9))
         self.combo_tipo_insumo.grid(row=0, column=1, padx=5, sticky='ew')
-        
+      
         ttk.Label(self.frame_insumo_content, text="Insumo:", **label_style).grid(row=0, column=2, padx=5, sticky='w')
         self.insumo_var = tk.StringVar()
         self.combo_insumo = AutocompleteCombobox(self.frame_insumo_content, textvariable=self.insumo_var, state="normal", font=('Segoe UI', 9))
         self.combo_insumo.grid(row=0, column=3, padx=5, sticky='ew')
-        
+      
         ttk.Label(self.frame_insumo_content, text="Presentación:", **label_style).grid(row=0, column=4, padx=5, sticky='w')
         self.presentacion_var = tk.StringVar()
         self.combo_presentacion = AutocompleteCombobox(self.frame_insumo_content, textvariable=self.presentacion_var, state="normal", font=('Segoe UI', 9))
@@ -423,7 +424,7 @@ class ReporteDemandaReal:
         self.combo_distrito.set_completion_list([''])
         self.cargar_tipos_insumo()
         self.cargar_presentaciones()
-        
+      
     def calcular_rango_corte_logistico(self, anio, mes_inicio, mes_final):
         """
         Calcula el rango de fechas para el corte logístico.
@@ -581,21 +582,133 @@ class ReporteDemandaReal:
             return int(num) if num == int(num) else f"{num:.2f}"
         except (ValueError, TypeError):
             return "0"
-    
+  
+    def generar_codigo_insumo(self, movimientos_raw):
+        """
+        Genera códigos con prefijo por tipo de insumo.
+        - Normaliza los IDs (int) para evitar misses str/int.
+        - Mantiene 1 consulta por los insumos presentes.
+        """
+        # 1) Extraer insumos únicos normalizando a int
+        insumos_unicos = {}
+        for mov in movimientos_raw:
+            insumo_id_raw = mov.get('codigo_insumo') or mov.get('insumo_id') or mov.get('codigo')
+            if insumo_id_raw is None or str(insumo_id_raw).strip() == '':
+                continue
+            try:
+                insumo_id = int(str(insumo_id_raw).strip())
+            except:
+                continue
+
+            if insumo_id not in insumos_unicos:
+                insumos_unicos[insumo_id] = mov.get('nombre_insumo', '')
+
+        print(f"DEBUG OPT: Insumos únicos encontrados: {len(insumos_unicos)}")
+        if not insumos_unicos:
+            return {}
+
+        try:
+            conn = conectar_db()
+            if not conn:
+                print("DEBUG OPT: No se pudo conectar a la base de datos")
+                return {}
+
+            cursor = conn.cursor(dictionary=True)
+
+            insumo_ids = list(insumos_unicos.keys())
+            placeholders = ','.join(['%s'] * len(insumo_ids))
+
+            query = f"""
+                SELECT 
+                    i.id AS insumo_id,
+                    ti.descripcion AS tipo_insumo_descripcion
+                FROM insumo i
+                INNER JOIN tipo_insumo ti ON i.id_tipo_insumo = ti.id
+                WHERE i.id IN ({placeholders})
+                ORDER BY ti.descripcion, i.id
+            """
+            cursor.execute(query, insumo_ids)
+            resultados = cursor.fetchall()
+            conn.close()
+
+            print(f"DEBUG OPT: Consulta ejecutada para {len(insumo_ids)} insumos, {len(resultados)} resultados")
+
+            # 2) Agrupar por tipo
+            insumos_por_tipo = {}
+            for r in resultados:
+                insumo_id = int(r['insumo_id'])
+                tipo_insumo = (r['tipo_insumo_descripcion'] or '').strip().upper()
+
+                if tipo_insumo not in insumos_por_tipo:
+                    insumos_por_tipo[tipo_insumo] = []
+                insumos_por_tipo[tipo_insumo].append(insumo_id)
+
+            # 3) Generar códigos usando el ID real del insumo
+            codigos_insumos = {}
+            for tipo_insumo, lista in insumos_por_tipo.items():
+                tipo_limpio = ''.join(c for c in tipo_insumo if c.isalnum())
+                prefijo = (tipo_limpio[:4].upper() + 'XXXX')[:4] if tipo_limpio else 'XXXX'
+
+                for insumo_id in sorted(lista):
+                    codigos_insumos[insumo_id] = f"{prefijo}-{insumo_id:04d}"
+
+            print(f"DEBUG OPT: Códigos generados: {len(codigos_insumos)} (muestra: {list(codigos_insumos.items())[:3]})")
+            return codigos_insumos
+
+        except Exception as e:
+            print(f"DEBUG OPT: Error en generar_codigo_insumo: {e}")
+            import traceback; traceback.print_exc()
+            return {}
+
+    def _to_datetime(self, value):
+        if value is None:
+            return None
+        if isinstance(value, datetime):
+            return value
+        if isinstance(value, date):
+            return datetime.combine(value, time.min)
+        if isinstance(value, str):
+            try:
+                return datetime.strptime(value, '%Y-%m-%d')
+            except ValueError:
+                return datetime.fromisoformat(value)
+        raise TypeError(f"Tipo de fecha no soportado: {type(value)}")
+  
     def procesar_datos(self, movimientos, fecha_ini, fecha_fin, dias):
+        """
+        Versión modificada de procesar_datos que integra la generación de códigos con prefijos
+        """
+        # 1. Generar códigos de insumos (1 consulta en lugar de N)
+        codigos_insumos = self.generar_codigo_insumo(movimientos)
+      
+        print(f"DEBUG: Códigos generados para {len(codigos_insumos)} insumos")
+      
+        # 2. Procesar datos como antes, pero usando los códigos generados
         insumos = {}
-        
+      
         for mov in movimientos:
-            # Usar get() con valores por defecto para evitar KeyError
-            codigo = mov.get('codigo', '')
+            insumo_id_raw = mov.get('codigo_insumo') or mov.get('insumo_id') or mov.get('codigo')
+            try:
+                insumo_id = int(str(insumo_id_raw).strip()) if insumo_id_raw else None
+            except:
+                insumo_id = None
+
+            if insumo_id is None:
+                continue  # no se puede mapear
+
+            codigo_con_prefijo = codigos_insumos.get(insumo_id)
+            if not codigo_con_prefijo:
+                codigo_con_prefijo = f"TEMP-{str(insumo_id).zfill(4)}"
+          
             nombre_insumo = mov.get('nombre_insumo', '')
             presentacion = mov.get('nombre_presentacion', '')
-            
-            insumo_key = f"{codigo}_{nombre_insumo}_{presentacion}"
-            
+          
+            insumo_key = f"{codigo_con_prefijo}_{nombre_insumo}_{presentacion}"
+          
             if insumo_key not in insumos:
                 insumos[insumo_key] = {
-                    'codigo': codigo,
+                    'codigo': codigo_con_prefijo,  # Usar el código con prefijo
+                    'codigo_original': codigo_original,  # Mantener referencia al original
                     'nombre_insumo': nombre_insumo,
                     'presentacion': presentacion,
                     'entregado': {dia: 0 for dia in dias},
@@ -606,21 +719,21 @@ class ReporteDemandaReal:
                     'reajuste_positivo': 0,
                     'reajuste_negativo': 0
                 }
-            
+          
             # Usar get() para obtener valores de manera segura
             fecha_str = mov.get('fecha', '')
             if not fecha_str:
                 continue
-                
+              
             try:
-                fecha_mov = datetime.strptime(fecha_str, '%Y-%m-%d')
+                fecha_mov = self._to_datetime(fecha_str)
             except ValueError:
                 continue
-                
+              
             dia = fecha_mov.day
             cantidad = mov.get('cantidad', 0)
             tipo_mov = mov.get('tipo_movimiento', '')
-            
+          
             if tipo_mov == 'ENTREGADO' and dia in dias:
                 insumos[insumo_key]['entregado'][dia] += cantidad
             elif tipo_mov == 'NO ENTREGADO' and dia in dias:
@@ -635,30 +748,30 @@ class ReporteDemandaReal:
                 insumos[insumo_key]['reajuste_positivo'] += cantidad
             elif tipo_mov == 'REAJUSTE NEGATIVO':
                 insumos[insumo_key]['reajuste_negativo'] += cantidad
-        
-        # **AGREGAR NUMERACIÓN SECUENCIAL**
+      
+        # 3. Procesar datos finales manteniendo el formato original
         datos_procesados = {}
-        contador = 1  # Iniciar contador en 1
-        
+        contador = 1  # Contador para orden de presentación
+      
         for insumo_key, valores in insumos.items():
             fila_datos = {
-                'codigo': str(contador),  # **ASIGNAR NÚMERO SECUENCIAL**
+                'codigo': valores['codigo'],  # Usar el código con prefijo
                 'nombre_insumo': valores['nombre_insumo'],
                 'presentacion': valores['presentacion']
             }
-            
+          
             # Agregar días
             for dia in dias:
                 fila_datos[f'Día_{dia}_Entregado'] = self.formato_valor(valores['entregado'].get(dia, 0))
                 fila_datos[f'Día_{dia}_No_Entregado'] = self.formato_valor(valores['no_entregado'].get(dia, 0))
-            
+          
             # Calcular totales
             total_entregado = sum(valores['entregado'].values())
             total_no_entregado = sum(valores['no_entregado'].values())
-            
+          
             # Calcular reajuste total (positivo - negativo)
             reajuste_total = valores['reajuste_positivo'] - valores['reajuste_negativo']
-            
+          
             # Calcular existencia según la fórmula
             existencia = (valores['inventario_inicial'] + 
                         valores['entrada_nivel_superior'] + 
@@ -666,14 +779,14 @@ class ReporteDemandaReal:
                         valores['salida_nivel_inferior'] - 
                         total_entregado - 
                         valores['reajuste_negativo'])
-            
+          
             # Agregar totales
             fila_datos['Total_Entregado'] = self.formato_valor(total_entregado)
             fila_datos['Total_No_Entregado'] = self.formato_valor(total_no_entregado)
             fila_datos['Demanda'] = self.formato_valor(total_entregado + total_no_entregado)
             fila_datos['Existencia'] = self.formato_valor(existencia)
             fila_datos['Reajuste'] = self.formato_valor(reajuste_total)
-            
+          
             # Guardar valores originales para el PDF
             fila_datos['_valores_originales'] = {
                 'entregado': valores['entregado'],
@@ -683,11 +796,12 @@ class ReporteDemandaReal:
                 'existencia': existencia,
                 'reajuste': reajuste_total
             }
-            
-            # **USAR EL CONTADOR COMO CLAVE PARA MANTENER EL ORDEN**
-            datos_procesados[f"{contador:03d}_{insumo_key}"] = fila_datos
-            contador += 1  # Incrementar contador
-        
+          
+            # **USAR EL CÓDIGO CON PREFIJO PARA LA CLAVE Y MOSTRAR**
+            nueva_clave = f"{valores['codigo']} - {valores['nombre_insumo']} - {valores['presentacion']}"
+            datos_procesados[nueva_clave] = fila_datos
+            contador += 1
+      
         return datos_procesados
 
     def exportar_excel(self):
@@ -695,10 +809,7 @@ class ReporteDemandaReal:
             messagebox.showerror("Error", "Primero debe generar la vista previa del reporte.")
             return
 
-        try:
-            import os
-            from datetime import datetime, timedelta
-            
+        try:         
             # Función para convertir número de columna a letra(s)
             def col_num_to_letter(col_num):
                 """Convierte número de columna (0-based) a letra(s) de Excel"""
@@ -709,7 +820,7 @@ class ReporteDemandaReal:
                     if col_num < 0:
                         break
                 return result
-            
+          
             # Obtener período para el nombre del archivo
             anio = self.anio_var.get()
             mes_inicio = self.mes_inicio_var.get()
@@ -841,7 +952,7 @@ class ReporteDemandaReal:
                     col_fin = total_columnas - 1
                 else:
                     col_fin = min(col_actual + ancho_filtro - 1, total_columnas - 1)
-                
+              
                 # Evitar merge de una sola celda
                 if col_actual != col_fin:
                     col_inicio_letra = col_num_to_letter(col_actual)
@@ -850,7 +961,7 @@ class ReporteDemandaReal:
                 else:
                     col_letra = col_num_to_letter(col_actual)
                     worksheet.write(f'{col_letra}6', filtro, filter_format)
-                
+              
                 col_actual = col_fin + 1
 
             # ENCABEZADOS DE LA TABLA (filas 8 y 9) - TODOS EN LAS MISMAS FILAS
@@ -865,7 +976,7 @@ class ReporteDemandaReal:
             # DÍAS DEL MES
             col_inicio_dias = 3  # Columna D (índice 3)
             col_fin_dias = col_inicio_dias + len(dias) - 1
-            
+          
             # Título "DÍA DEL MES" que abarca todos los días (FILA 8)
             if len(dias) > 1:
                 col_inicio_dias_letra = col_num_to_letter(col_inicio_dias)
@@ -905,18 +1016,20 @@ class ReporteDemandaReal:
 
             # **PROCESAR DATOS DE INSUMOS CON NUMERACIÓN SECUENCIAL Y DIVISIÓN DE TEXTO**
             for insumo_key, valores in self.datos.items():
-                # **EXTRAER NÚMERO SECUENCIAL DEL INICIO DE LA CLAVE**
-                if ' - ' in insumo_key:
-                    partes = insumo_key.split(' - ', 1)
-                    codigo = partes[0]  # Número secuencial (001, 002, etc.)
-                    nombre_presentacion = partes[1]
-                else:
-                    # Si no hay separador, usar toda la cadena como nombre y código vacío
-                    codigo = ''
-                    nombre_presentacion = insumo_key
+                # Aquí asumimos que self.datos guarda también el id_insumo en valores
+                insumo_id = valores.get("id_insumo")  
 
-                # **APLICAR DIVISIÓN DE TEXTO AL NOMBRE DEL MEDICAMENTO**
+                if insumo_id is not None:
+                    codigo = codigos_insumos.get(insumo_id, "")  # Usa la función que genera prefijo+id
+                else:
+                    codigo = ""  # fallback si no se encuentra
+
+                # Mantener el nombre/presentación sin el número secuencial
+                nombre_presentacion = insumo_key if ' - ' not in insumo_key else insumo_key.split(' - ', 1)[1]
+
+                # Aplicar división de texto
                 nombre_dividido = self.dividir_texto_en_lineas(nombre_presentacion, max_caracteres_por_linea=40)
+
 
                 # Calcular totales
                 total_entregado = valores.get('Total_Entregado', 0)
@@ -965,19 +1078,19 @@ class ReporteDemandaReal:
             worksheet.set_column('A:A', 8)   # Código
             worksheet.set_column('B:B', 35)  # Medicamento - AUMENTÉ DE 25 A 35 PARA MÁS ESPACIO
             worksheet.set_column('C:C', 12)  # Movimientos
-            
+          
             # Días (columnas más estrechas)
             for i in range(len(dias)):
                 col_letter = col_num_to_letter(col_inicio_dias + i)
                 worksheet.set_column(f'{col_letter}:{col_letter}', 4)
-            
+          
             # Columnas finales
             col_total_entregado_letra = col_num_to_letter(col_total_entregado)
             col_total_no_entregado_letra = col_num_to_letter(col_total_no_entregado)
             col_demanda_letra = col_num_to_letter(col_demanda)
             col_existencia_letra = col_num_to_letter(col_existencia)
             col_reajuste_letra = col_num_to_letter(col_reajuste)
-            
+          
             worksheet.set_column(f'{col_total_entregado_letra}:{col_total_entregado_letra}', 8)
             worksheet.set_column(f'{col_total_no_entregado_letra}:{col_total_no_entregado_letra}', 8)
             worksheet.set_column(f'{col_demanda_letra}:{col_demanda_letra}', 8)
@@ -1002,13 +1115,13 @@ class ReporteDemandaReal:
 
             # Cerrar archivo
             writer.close()
-            
+          
             # Mensaje con opción de abrir archivo
             respuesta = messagebox.askyesno(
                 "Éxito", 
                 f"Reporte exportado exitosamente a:\n{full_path}\n\n¿Desea abrir el archivo?"
             )
-            
+          
             if respuesta:
                 try:
                     import sys
@@ -1023,14 +1136,14 @@ class ReporteDemandaReal:
 
         except Exception as e:
             messagebox.showerror("Error", f"Error al exportar Excel: {str(e)}")
-        
+      
     def exportar_pdf(self):
         if not hasattr(self, 'temp_pdf_path') or not self.temp_pdf_path:
             messagebox.showerror("Error", "Primero debe generar la vista previa del reporte.")
             return
 
         downloads_path = os.path.expanduser("~/Downloads")
-        
+      
         # Generar nombre con timestamp
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         file_name = f"Reporte_Demanda_Real_{self.periodo_str}_{timestamp}.pdf"
@@ -1039,13 +1152,13 @@ class ReporteDemandaReal:
         try:
             import shutil
             shutil.copy2(self.temp_pdf_path, full_path)
-            
+          
             # Mensaje con opción de abrir archivo
             respuesta = messagebox.askyesno(
                 "Éxito", 
                 f"Reporte exportado exitosamente a:\n{full_path}\n\n¿Desea abrir el archivo?"
             )
-            
+          
             if respuesta:
                 try:
                     import sys
@@ -1057,7 +1170,7 @@ class ReporteDemandaReal:
                         os.system(f'xdg-open "{full_path}"')
                 except Exception as e:
                     messagebox.showwarning("Advertencia", f"No se pudo abrir el archivo automáticamente: {str(e)}")
-                    
+                  
         except Exception as e:
             messagebox.showerror("Error", f"Error al exportar PDF: {str(e)}")
 
@@ -1076,8 +1189,11 @@ class ReporteDemandaReal:
                 os.system(f'xdg-open "{self.temp_pdf_path}"')
         except Exception as e:
             messagebox.showerror("Error", f"No se pudo abrir el PDF: {str(e)}")
-    
+  
     def generar_pdf(self, datos_movimientos, ruta_pdf):
+        """
+        Versión modificada de generar_pdf que usa códigos con prefijos
+        """
         from reportlab.lib import colors
         from reportlab.lib.pagesizes import legal, landscape
         from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
@@ -1101,14 +1217,21 @@ class ReporteDemandaReal:
                 dias.append(fecha_iter.day)
             fecha_iter += timedelta(days=1)
 
-        # Agrupar datos por insumo (codigo_original, nombre+presentacion)
+        # **GENERAR CÓDIGOS CON PREFIJOS PARA EL PDF**
+        codigos_insumos = self.generar_codigo_insumo(datos_movimientos)
+
+        # Agrupar datos por insumo (codigo_con_prefijo, nombre+presentacion)
         insumos = {}
         for mov in datos_movimientos:
-            codigo_original = mov.get('codigo', '')
+            codigo_original = mov.get('codigo_insumo')
+          
+            # Usar código con prefijo si existe, sino temporal
+            codigo_con_prefijo = codigos_insumos.get(codigo_original, f"TEMP-{str(codigo_original).zfill(4)}")
+          
             nombre = mov.get('nombre_insumo', '')
             presentacion = mov.get('nombre_presentacion', '')
-            key = (codigo_original, f"{nombre} {presentacion}".strip())
-            
+            key = (codigo_con_prefijo, f"{nombre} {presentacion}".strip())
+          
             if key not in insumos:
                 insumos[key] = {
                     'entregado': {d:0 for d in dias},
@@ -1119,18 +1242,20 @@ class ReporteDemandaReal:
                     'reajuste_positivo': 0,
                     'reajuste_negativo': 0
                 }
-            
-            fecha_mov = datetime.strptime(mov['fecha'], '%Y-%m-%d')
+          
+            fecha_mov = self._to_datetime(mov['fecha'])
+            if fecha_mov is None:
+                continue  # Saltar este movimiento si no se puede parsear la fecha
             dia_mov = fecha_mov.day
             tipo = mov.get('tipo_movimiento', '').upper()
             cantidad = mov.get('cantidad', 0)
-            
+          
             if fecha_inicio <= fecha_mov <= fecha_fin:
                 if tipo == 'ENTREGADO' and dia_mov in dias:
                     insumos[key]['entregado'][dia_mov] += cantidad
                 elif tipo == 'NO ENTREGADO' and dia_mov in dias:
                     insumos[key]['no_entregado'][dia_mov] += cantidad
-            
+          
             # Procesar todos los movimientos para el cálculo de existencia (sin filtro de fecha)
             if tipo == 'INVENTARIO INICIAL':
                 insumos[key]['inventario_inicial'] += cantidad
@@ -1262,10 +1387,10 @@ class ReporteDemandaReal:
             # Calcular totales de entregado y no entregado
             total_entregado = sum(valores['entregado'].get(d, 0) for d in dias)
             total_no_entregado = sum(valores['no_entregado'].get(d, 0) for d in dias)
-            
+          
             # Calcular reajuste total (positivo - negativo)
             reajuste_total = valores['reajuste_positivo'] - valores['reajuste_negativo']
-            
+          
             # Calcular existencia según la fórmula:
             existencia = (valores['inventario_inicial'] + 
                         valores['entrada_nivel_superior'] + 
@@ -1276,7 +1401,7 @@ class ReporteDemandaReal:
 
             # **APLICAR DIVISIÓN DE TEXTO AL NOMBRE DEL MEDICAMENTO**
             nombre_dividido = self.dividir_texto_en_lineas(nombre_pres, max_caracteres_por_linea=35)
-            
+          
             # Crear Paragraph para el nombre del medicamento con división de líneas
             nombre_paragraph = Paragraph(nombre_dividido, cell_text_style)
 
@@ -1289,7 +1414,7 @@ class ReporteDemandaReal:
             for d in dias:
                 valor = valores['entregado'].get(d, 0)
                 fila_entregado.append(formato_valor(valor))
-            
+          
             fila_entregado += [
                 formato_valor(total_entregado),                             # Total Entregado
                 formato_valor(total_no_entregado),                          # Total No Entregado
@@ -1307,7 +1432,7 @@ class ReporteDemandaReal:
             for d in dias:
                 valor = valores['no_entregado'].get(d, 0)
                 fila_no_entregado.append(formato_valor(valor))
-            
+          
             fila_no_entregado += [
                 '',                  # Total Entregado (vacío, SPAN)
                 '',                  # Total No Entregado (vacío, SPAN)
@@ -1363,17 +1488,11 @@ class ReporteDemandaReal:
         tabla.setStyle(TableStyle(estilos_tabla))
         elementos.append(tabla)
         doc.build(elementos)
-        
+      
     def generar_reporte(self):
-        # Validar filtros obligatorios hasta servicio
-        if not all([
-            self.combo_area.get(),
-            self.combo_distrito.get(),
-            self.combo_tipo_servicio.get(),
-            self.combo_servicio.get(),
-            self.combo_tipo_insumo.get()
-        ]):
-            messagebox.showerror("Error", "Debe seleccionar todos los filtros hasta Servicio, Insumo y Presentación")
+        # Validar que al menos el área esté seleccionada
+        if not self.combo_area.get():
+            messagebox.showerror("Error", "Debe seleccionar al menos el Área")
             return
 
         # Obtener fechas del corte logístico
@@ -1401,24 +1520,25 @@ class ReporteDemandaReal:
                 self.dias.append(fecha_iter.day)
             fecha_iter += timedelta(days=1)
 
-        # Obtener nombres de los combos
-        distrito_nombre = self.combo_distrito.get()
-        tipo_servicio_desc = self.combo_tipo_servicio.get()
-        servicio_nombre = self.combo_servicio.get()
-        tipo_insumo_desc = self.combo_tipo_insumo.get()
-        insumo_nombre = self.combo_insumo.get()
-        presentacion_nombre = self.combo_presentacion.get()
+        # Obtener nombres de los combos (pueden estar vacíos)
+        distrito_nombre = self.combo_distrito.get().strip()
+        tipo_servicio_desc = self.combo_tipo_servicio.get().strip()
+        servicio_nombre = self.combo_servicio.get().strip()
+        tipo_insumo_desc = self.combo_tipo_insumo.get().strip()
+        insumo_nombre = self.combo_insumo.get().strip()
+        presentacion_nombre = self.combo_presentacion.get().strip()
 
         # Obtener movimientos sin filtrar tipo movimiento
+        # Pasar None o el valor según si está vacío
         movimientos_raw = obtener_movimientos_kardex(
             fecha_ini.strftime('%Y-%m-%d'),
             fecha_fin.strftime('%Y-%m-%d'),
-            distrito_nombre,
-            tipo_servicio_desc,
-            servicio_nombre,
-            tipo_insumo_desc,
-            insumo_nombre,
-            presentacion_nombre
+            distrito_nombre if distrito_nombre else None,
+            tipo_servicio_desc if tipo_servicio_desc else None,
+            servicio_nombre if servicio_nombre else None,
+            tipo_insumo_desc if tipo_insumo_desc else None,
+            insumo_nombre if insumo_nombre else None,
+            presentacion_nombre if presentacion_nombre else None
         )
 
         if not movimientos_raw:
@@ -1430,92 +1550,8 @@ class ReporteDemandaReal:
             'ENTREGADO', 'NO ENTREGADO', 'REAJUSTE POSITIVO', 'REAJUSTE NEGATIVO', 'INVENTARIO INICIAL', 'ENTRADA NIVEL SUPERIOR', 'SALDO ANTERIOR'
         ]]
 
-        # Agrupar datos por insumo
-        insumos = {}
-        
-        for mov in movimientos_filtrados:
-            codigo = mov.get('codigo', '')
-            nombre = mov.get('nombre_insumo', '')
-            presentacion = mov.get('nombre_presentacion', '')
-            key = f"{codigo}_{nombre}_{presentacion}"
-            
-            if key not in insumos:
-                insumos[key] = {
-                    'codigo_original': codigo,
-                    'nombre': nombre,
-                    'presentacion': presentacion,
-                    'entregado': {d:0 for d in self.dias},
-                    'no_entregado': {d:0 for d in self.dias},
-                    'inventario_inicial': 0,
-                    'entrada_nivel_superior': 0,
-                    'salida_nivel_inferior': 0,
-                    'reajuste_positivo': 0,
-                    'reajuste_negativo': 0
-                }
-            
-            fecha_str = mov.get('fecha', '')
-            if fecha_str:
-                try:
-                    fecha_mov = datetime.strptime(fecha_str, '%Y-%m-%d')
-                    dia_mov = fecha_mov.day
-                    tipo = mov.get('tipo_movimiento', '').upper()
-                    cantidad = mov.get('cantidad', 0)
-                    
-                    if fecha_ini <= fecha_mov <= fecha_fin:
-                        if tipo == 'ENTREGADO' and dia_mov in self.dias:
-                            insumos[key]['entregado'][dia_mov] += cantidad
-                        elif tipo == 'NO ENTREGADO' and dia_mov in self.dias:
-                            insumos[key]['no_entregado'][dia_mov] += cantidad
-                    
-                    # Procesar movimientos para cálculo de existencia
-                    if tipo == 'INVENTARIO INICIAL':
-                        insumos[key]['inventario_inicial'] += cantidad
-                    elif tipo == 'ENTRADA NIVEL SUPERIOR':
-                        insumos[key]['entrada_nivel_superior'] += cantidad
-                    elif tipo == 'SALIDA NIVEL INFERIOR':
-                        insumos[key]['salida_nivel_inferior'] += cantidad
-                    elif tipo == 'REAJUSTE POSITIVO':
-                        insumos[key]['reajuste_positivo'] += cantidad
-                    elif tipo == 'REAJUSTE NEGATIVO':
-                        insumos[key]['reajuste_negativo'] += cantidad
-                except ValueError:
-                    continue
-
-        # **CONVERTIR A FORMATO PARA EXCEL CON NUMERACIÓN SECUENCIAL**
-        self.datos = {}
-        contador = 1
-        
-        for insumo_key, valores in insumos.items():
-            fila_datos = {}
-            
-            # Agregar días
-            for dia in self.dias:
-                fila_datos[f'Día_{dia}_Entregado'] = valores['entregado'].get(dia, 0)
-                fila_datos[f'Día_{dia}_No_Entregado'] = valores['no_entregado'].get(dia, 0)
-            
-            # Calcular totales
-            total_entregado = sum(valores['entregado'].values())
-            total_no_entregado = sum(valores['no_entregado'].values())
-            reajuste_total = valores['reajuste_positivo'] - valores['reajuste_negativo']
-            existencia = (valores['inventario_inicial'] + 
-                        valores['entrada_nivel_superior'] + 
-                        valores['reajuste_positivo'] - 
-                        valores['salida_nivel_inferior'] - 
-                        total_entregado - 
-                        valores['reajuste_negativo'])
-            
-            # Agregar totales
-            fila_datos['Total_Entregado'] = total_entregado
-            fila_datos['Total_No_Entregado'] = total_no_entregado
-            fila_datos['Demanda'] = total_entregado + total_no_entregado
-            fila_datos['Existencia'] = existencia
-            fila_datos['Reajuste'] = reajuste_total
-            
-            # **USAR CONTADOR COMO CLAVE CON INFORMACIÓN DEL INSUMO**
-            nombre_completo = f"{valores['nombre']} - {valores['presentacion']}"
-            nueva_clave = f"{contador:03d} - {nombre_completo}"
-            self.datos[nueva_clave] = fila_datos
-            contador += 1
+        # **USAR EL NUEVO MÉTODO CON CÓDIGOS CON PREFIJOS**
+        self.datos = self.procesar_datos(movimientos_filtrados, fecha_ini, fecha_fin, self.dias)
 
         periodo_str = f"{fecha_ini.strftime('%d%m%Y')}_{fecha_fin.strftime('%d%m%Y')}"
         self.periodo_str = periodo_str
@@ -1523,6 +1559,8 @@ class ReporteDemandaReal:
         import tempfile
         temp_dir = tempfile.gettempdir()
         self.temp_pdf_path = os.path.join(temp_dir, f"vista_previa_demanda_real_{periodo_str}.pdf")
+      
+        # **MODIFICAR generar_pdf para usar los códigos con prefijos**
         self.generar_pdf(movimientos_filtrados, self.temp_pdf_path)
 
         self.generar_vista_previa_pdf()
@@ -1881,37 +1919,37 @@ class ReporteDemandaReal:
             error_detallado = traceback.format_exc()
             print(f"Error detallado:\n{error_detallado}")
             messagebox.showerror("Error", f"Error al mostrar vista previa PDF: {str(e)}")
-    
+  
     def abrir_pdf_externo(self):
         """Abre el PDF en una aplicación externa del sistema"""
         try:
             if not hasattr(self, 'temp_pdf_path') or not os.path.exists(self.temp_pdf_path):
                 messagebox.showerror("Error", "No hay un PDF generado para abrir.")
                 return
-                
+              
             import sys
             import subprocess
-            
+          
             if sys.platform.startswith('win'):
                 os.startfile(self.temp_pdf_path)
             elif sys.platform.startswith('darwin'):  # macOS
                 subprocess.run(['open', self.temp_pdf_path], check=True)
             else:  # Linux
                 subprocess.run(['xdg-open', self.temp_pdf_path], check=True)
-                
+              
         except Exception as e:
             messagebox.showerror("Error", f"No se pudo abrir el PDF: {str(e)}")
-    
+  
     def dividir_texto_en_lineas(self, texto, max_caracteres_por_linea=30):
         """Divide el texto en múltiples líneas para mejor ajuste"""
         if not texto:
             return ""
-        
+      
         texto = str(texto).strip()
         palabras = texto.split()
         lineas = []
         linea_actual = ""
-        
+      
         for palabra in palabras:
             if len(palabra) > max_caracteres_por_linea:
                 if linea_actual:
@@ -1919,7 +1957,7 @@ class ReporteDemandaReal:
                     linea_actual = ""
                 lineas.append(palabra[:max_caracteres_por_linea-3] + "...")
                 continue
-                
+              
             if len(linea_actual + " " + palabra) > max_caracteres_por_linea:
                 if linea_actual:
                     lineas.append(linea_actual.strip())
@@ -1928,16 +1966,16 @@ class ReporteDemandaReal:
                     lineas.append(palabra)
             else:
                 linea_actual += " " + palabra if linea_actual else palabra
-        
+      
         if linea_actual:
             lineas.append(linea_actual.strip())
-        
+      
         # Limitar a máximo 3 líneas
         if len(lineas) > 3:
             lineas = lineas[:2] + [lineas[2][:max_caracteres_por_linea-3] + "..."]
-        
+      
         return "\n".join(lineas)
-    
+  
     def cerrar_ventana(self):
         """
         Cierra la ventana del reporte, limpia recursos y muestra la pantalla de bienvenida.
@@ -1987,7 +2025,7 @@ class ReporteDemandaReal:
                     sys.exit()
             except Exception:
                 pass
-                
+              
         except Exception as e:
             print(f"Error al cerrar ventana: {e}")
             # En caso de error, intentar cerrar la aplicación
@@ -1995,7 +2033,7 @@ class ReporteDemandaReal:
                 self.parent.quit()
             except:
                 pass
-            
+          
     def destroy(self):
         if hasattr(self, 'frame_principal'):
             self.frame_principal.destroy()

@@ -1399,6 +1399,7 @@ def obtener_movimientos_kardex(fecha_inicio, fecha_fin, distrito_nombre=None, ti
         m.observaciones,
         d_salida.nombre AS distrito_destino,
         s_salida.nombre AS servicio_destino,
+        i.id AS codigo_insumo,
         i.nombre AS nombre_insumo,
         COALESCE(i.lote, '') AS codigo,
         COALESCE(p.nombre, '') AS nombre_presentacion,
@@ -1955,6 +1956,7 @@ def obtener_movimientos_demanda_real(fecha_inicio, fecha_fin, distrito_nombre=No
         m.observaciones,
         d_salida.nombre AS distrito_destino,
         s_salida.nombre AS servicio_destino,
+        i.id AS codigo_insumo,
         i.nombre AS nombre_insumo,
         COALESCE(i.lote, '') AS codigo,
         COALESCE(p.nombre, '') AS presentacion
