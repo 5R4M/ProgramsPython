@@ -189,8 +189,9 @@ class ReporteBres:
     
     def generar_codigo_insumo(self, movimientos_raw):
         """
-        VERSIÓN OPTIMIZADA: Genera códigos únicos con UNA SOLA consulta SQL
-        En lugar de N consultas (una por insumo), hace solo 1 consulta para todos
+        VERSIÓN OPTIMIZADA: Genera códigos únicos basados en posición relativa dentro de cada tipo
+        - Una consulta principal para obtener los insumos del reporte
+        - Una consulta adicional por tipo para obtener la posición relativa correcta
         """
         # Obtener insumos únicos
         insumos_unicos = {}
@@ -215,13 +216,14 @@ class ReporteBres:
             
             cursor = conn.cursor(dictionary=True)
             
-            # OPTIMIZACIÓN: UNA SOLA CONSULTA para todos los insumos
+            # CONSULTA PRINCIPAL: Obtener insumos del reporte y sus tipos
             insumo_ids = list(insumos_unicos.keys())
             placeholders = ','.join(['%s'] * len(insumo_ids))
             
-            query = f"""
+            query_principal = f"""
             SELECT 
                 i.id as insumo_id,
+                ti.id as tipo_id,
                 ti.descripcion as tipo_insumo_descripcion
             FROM insumo i
             INNER JOIN tipo_insumo ti ON i.id_tipo_insumo = ti.id
@@ -229,39 +231,69 @@ class ReporteBres:
             ORDER BY ti.descripcion, i.id
             """
             
-            cursor.execute(query, insumo_ids)
-            resultados = cursor.fetchall()
-            conn.close()
+            cursor.execute(query_principal, insumo_ids)
+            resultados_principales = cursor.fetchall()
             
-            print(f"DEBUG OPTIMIZED: Consulta ejecutada para {len(insumo_ids)} insumos, {len(resultados)} resultados")
+            print(f"DEBUG OPTIMIZED: Consulta principal ejecutada para {len(insumo_ids)} insumos, {len(resultados_principales)} resultados")
             
             # Agrupar por tipo de insumo
             insumos_por_tipo = {}
-            for resultado in resultados:
-                insumo_id = resultado['insumo_id']
-                tipo_insumo = resultado['tipo_insumo_descripcion'].strip().upper()
-                
-                if tipo_insumo not in insumos_por_tipo:
-                    insumos_por_tipo[tipo_insumo] = []
-                
-                insumos_por_tipo[tipo_insumo].append(insumo_id)
+            tipos_unicos = set()
             
-            # Generar códigos secuenciales por tipo
+            for resultado in resultados_principales:
+                insumo_id = resultado['insumo_id']
+                tipo_id = resultado['tipo_id']
+                tipo_descripcion = resultado['tipo_insumo_descripcion'].strip().upper()
+                
+                tipos_unicos.add(tipo_id)
+                
+                if tipo_id not in insumos_por_tipo:
+                    insumos_por_tipo[tipo_id] = {
+                        'descripcion': tipo_descripcion,
+                        'insumos': []
+                    }
+                
+                insumos_por_tipo[tipo_id]['insumos'].append(insumo_id)
+            
+            # Para cada tipo, obtener TODOS los insumos para calcular posición relativa
             codigos_insumos = {}
-            for tipo_insumo, lista_insumos in insumos_por_tipo.items():
-                # Obtener prefijo del tipo de insumo
-                tipo_limpio = ''.join(c for c in tipo_insumo if c.isalnum())
+            
+            for tipo_id, info_tipo in insumos_por_tipo.items():
+                tipo_descripcion = info_tipo['descripcion']
+                insumos_del_reporte = info_tipo['insumos']
+                
+                # Consultar TODOS los insumos de este tipo para obtener posiciones relativas
+                query_todos_tipo = """
+                SELECT i.id as insumo_id
+                FROM insumo i
+                WHERE i.id_tipo_insumo = %s
+                ORDER BY i.id ASC
+                """
+                
+                cursor.execute(query_todos_tipo, (tipo_id,))
+                todos_insumos_tipo = cursor.fetchall()
+                
+                # Crear mapeo de insumo_id a posición relativa (empezando en 1)
+                posicion_relativa = {}
+                for indice, insumo in enumerate(todos_insumos_tipo, 1):
+                    posicion_relativa[insumo['insumo_id']] = indice
+                
+                # Generar códigos para los insumos que están en el reporte
+                tipo_limpio = ''.join(c for c in tipo_descripcion if c.isalnum())
                 prefijo = tipo_limpio[:4].upper()
                 
                 while len(prefijo) < 4:
                     prefijo += 'X'
                 
-                # Asignar códigos secuenciales
-                for contador, insumo_id in enumerate(sorted(lista_insumos), 1):
-                    codigo = f"{prefijo}-{contador:04d}"
-                    codigos_insumos[insumo_id] = codigo
+                for insumo_id in insumos_del_reporte:
+                    if insumo_id in posicion_relativa:
+                        posicion = posicion_relativa[insumo_id]
+                        codigo = f"{prefijo}-{posicion:04d}"
+                        codigos_insumos[insumo_id] = codigo
             
-            print(f"DEBUG OPTIMIZED: Códigos generados: {len(codigos_insumos)}")
+            conn.close()
+            
+            print(f"DEBUG OPTIMIZED: Códigos generados: {len(codigos_insumos)} (muestra: {list(codigos_insumos.items())[:3]})")
             return codigos_insumos
             
         except Exception as e:
@@ -1872,7 +1904,7 @@ class ReporteBres:
                 0.8*inch    # Cantidad a Solicitar
             ]
 
-            table = Table(data, colWidths=colWidths)
+            table = Table(data, colWidths=colWidths, repeatRows=1)
             
             # **ESTILO MEJORADO CON ALTURA DE FILA AJUSTADA**
             table_style = [

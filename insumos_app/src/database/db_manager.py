@@ -1390,26 +1390,27 @@ def obtener_movimientos_kardex(fecha_inicio, fecha_fin, distrito_nombre=None, ti
 
         query = """
         SELECT
-        m.fecha_registro AS fecha,
-        m.referencia,
-        tm.descripcion AS tipo_movimiento,
-        m.cantidad,
-        m.lote,
-        m.fecha_vencimiento,
-        m.observaciones,
-        d_salida.nombre AS distrito_destino,
-        s_salida.nombre AS servicio_destino,
-        i.id AS codigo_insumo,
-        i.nombre AS nombre_insumo,
-        COALESCE(i.lote, '') AS codigo,
-        COALESCE(p.nombre, '') AS nombre_presentacion,
-        0 AS existencia,
-        0 AS reajuste,
-        -- USAR LOS DATOS DIRECTOS DEL MOVIMIENTO, NO JOINS COMPLEJOS
-        a_directa.nombre AS area_nombre,
-        d_directa.nombre AS distrito_nombre,
-        ts_directa.descripcion AS tipo_servicio_desc,
-        s_directa.nombre AS servicio_nombre
+            m.fecha_registro AS fecha,
+            m.referencia,
+            tm.descripcion AS tipo_movimiento,
+            m.cantidad,
+            m.lote,
+            m.fecha_vencimiento,
+            m.observaciones,
+            d_salida.nombre AS distrito_destino,
+            s_salida.nombre AS servicio_destino,
+            i.id AS codigo_insumo,  -- CORREGIDO: Usar i.id como insumo_id
+            i.nombre AS nombre_insumo,
+            COALESCE(i.lote, '') AS codigo,
+            COALESCE(p.nombre, '') AS nombre_presentacion,
+            0 AS existencia,
+            0 AS reajuste,
+            -- USAR LOS DATOS DIRECTOS DEL MOVIMIENTO, NO JOINS COMPLEJOS
+            a_directa.nombre AS area_nombre,
+            d_directa.nombre AS distrito_nombre,
+            ts_directa.descripcion AS tipo_servicio_desc,
+            s_directa.nombre AS servicio_nombre,
+            ti.descripcion AS tipo_insumo_desc  -- AGREGADO: Para generar códigos con prefijo
         FROM movimiento m
         JOIN tipo_movimiento tm ON m.tipo_movimiento_id = tm.id
         -- JOINs directos con los IDs guardados en el movimiento
@@ -1429,9 +1430,6 @@ def obtener_movimientos_kardex(fecha_inicio, fecha_fin, distrito_nombre=None, ti
         """
 
         params = [fecha_inicio, fecha_fin]
-        
-        # SOLO filtrar por tipo de insumo, insumo y presentación (no por ubicación)
-        # El filtrado por ubicación se hará después en filtrar_movimientos_por_nivel
         
         # Filtrar por tipo de insumo
         if tipo_insumo_desc and tipo_insumo_desc.strip():
@@ -1456,24 +1454,27 @@ def obtener_movimientos_kardex(fecha_inicio, fecha_fin, distrito_nombre=None, ti
         movimientos = []
         for row in resultados:
             movimientos.append({
-            'fecha': row['fecha'],
-            'referencia': row['referencia'],
-            'tipo_movimiento': row['tipo_movimiento'],
-            'cantidad': row['cantidad'],
-            'lote': row['lote'],
-            'fecha_vencimiento': row['fecha_vencimiento'],
-            'observaciones': row['observaciones'],
-            'distrito_destino': row['distrito_destino'],
-            'servicio_destino': row['servicio_destino'],
-            'nombre_insumo': row['nombre_insumo'],
-            'codigo': row['codigo'],
-            'nombre_presentacion': row['nombre_presentacion'],
-            'existencia': row['existencia'],
-            'reajuste': row['reajuste'],
-            'area_nombre': row['area_nombre'],
-            'distrito_nombre': row['distrito_nombre'],
-            'tipo_servicio_desc': row['tipo_servicio_desc'],
-            'servicio_nombre': row['servicio_nombre']
+                'fecha': row['fecha'],
+                'referencia': row['referencia'],
+                'tipo_movimiento': row['tipo_movimiento'],
+                'cantidad': row['cantidad'],
+                'lote': row['lote'],
+                'fecha_vencimiento': row['fecha_vencimiento'],
+                'observaciones': row['observaciones'],
+                'distrito_destino': row['distrito_destino'],
+                'servicio_destino': row['servicio_destino'],
+                'codigo_insumo': row['codigo_insumo'],  # CORREGIDO: Usar codigo_insumo consistentemente
+                'insumo_id': row['codigo_insumo'],      # AGREGADO: Alias para compatibilidad
+                'nombre_insumo': row['nombre_insumo'],
+                'codigo': row['codigo'],
+                'nombre_presentacion': row['nombre_presentacion'],
+                'existencia': row['existencia'],
+                'reajuste': row['reajuste'],
+                'area_nombre': row['area_nombre'],
+                'distrito_nombre': row['distrito_nombre'],
+                'tipo_servicio_desc': row['tipo_servicio_desc'],
+                'servicio_nombre': row['servicio_nombre'],
+                'tipo_insumo_desc': row['tipo_insumo_desc']  # AGREGADO: Para generar códigos
             })
 
         return movimientos

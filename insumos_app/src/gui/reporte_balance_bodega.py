@@ -186,7 +186,7 @@ class ReporteBalanceBodega:
         Genera códigos únicos para cada insumo basado en:
         - Primeras 4 letras del tipo de insumo (obtenido de la base de datos)
         - Guión
-        - Número secuencial con formato 0001, 0002, etc.
+        - Número basado en posición relativa dentro del tipo (empezando en 1)
         """
         # AGREGAR IMPORT AL INICIO DEL ARCHIVO SI NO EXISTE
         from src.database.db_manager import conectar_db
@@ -215,13 +215,13 @@ class ReporteBalanceBodega:
                 
             cursor = conn.cursor(dictionary=True)
             
-            # Agrupar insumos por tipo
+            # Agrupar insumos por tipo y obtener información del tipo
             insumos_por_tipo = {}
             
             for insumo_id, insumo_nombre in insumos_unicos.items():
-                # CORREGIR: Usar %s en lugar de ? para MySQL
+                # Obtener tipo de insumo para este insumo específico
                 query = """
-                SELECT ti.descripcion as tipo_insumo_descripcion
+                SELECT ti.id as tipo_id, ti.descripcion as tipo_insumo_descripcion
                 FROM insumo i
                 INNER JOIN tipo_insumo ti ON i.id_tipo_insumo = ti.id
                 WHERE i.id = %s
@@ -231,43 +231,82 @@ class ReporteBalanceBodega:
                 resultado = cursor.fetchone()
                 
                 if resultado:
+                    tipo_id = resultado['tipo_id']
                     tipo_insumo = resultado['tipo_insumo_descripcion'].strip().upper()
                     
-                    if tipo_insumo not in insumos_por_tipo:
-                        insumos_por_tipo[tipo_insumo] = {}
+                    if tipo_id not in insumos_por_tipo:
+                        insumos_por_tipo[tipo_id] = {
+                            'descripcion': tipo_insumo,
+                            'insumos_reporte': []
+                        }
                     
-                    insumos_por_tipo[tipo_insumo][insumo_id] = insumo_nombre
+                    insumos_por_tipo[tipo_id]['insumos_reporte'].append(insumo_id)
                 else:
                     # Si no encuentra el tipo de insumo, usar un tipo por defecto
                     tipo_default = "GENERAL"
-                    if tipo_default not in insumos_por_tipo:
-                        insumos_por_tipo[tipo_default] = {}
-                    insumos_por_tipo[tipo_default][insumo_id] = insumo_nombre
+                    tipo_id_default = -1
+                    
+                    if tipo_id_default not in insumos_por_tipo:
+                        insumos_por_tipo[tipo_id_default] = {
+                            'descripcion': tipo_default,
+                            'insumos_reporte': []
+                        }
+                    insumos_por_tipo[tipo_id_default]['insumos_reporte'].append(insumo_id)
+            
+            print(f"DEBUG: Tipos de insumo encontrados: {len(insumos_por_tipo)}")
+            
+            # Para cada tipo, obtener TODOS los insumos para calcular posición relativa
+            for tipo_id, info_tipo in insumos_por_tipo.items():
+                tipo_descripcion = info_tipo['descripcion']
+                insumos_del_reporte = info_tipo['insumos_reporte']
+                
+                print(f"DEBUG: Procesando tipo '{tipo_descripcion}' con {len(insumos_del_reporte)} insumos")
+                
+                if tipo_id == -1:  # Tipo por defecto
+                    # Para el tipo por defecto, usar numeración secuencial simple
+                    tipo_limpio = ''.join(c for c in tipo_descripcion if c.isalnum())
+                    prefijo = tipo_limpio[:4].upper()
+                    while len(prefijo) < 4:
+                        prefijo += 'X'
+                    
+                    for contador, insumo_id in enumerate(sorted(insumos_del_reporte), 1):
+                        codigo = f"{prefijo}-{contador:04d}"
+                        codigos_insumos[insumo_id] = codigo
+                        print(f"DEBUG: Generado {codigo} para insumo_id {insumo_id} (tipo default)")
+                else:
+                    # Obtener TODOS los insumos de este tipo para calcular posición relativa
+                    query_todos_tipo = """
+                    SELECT i.id as insumo_id
+                    FROM insumo i
+                    WHERE i.id_tipo_insumo = %s
+                    ORDER BY i.id ASC
+                    """
+                    
+                    cursor.execute(query_todos_tipo, (tipo_id,))
+                    todos_insumos_tipo = cursor.fetchall()
+                    
+                    # Crear mapeo de insumo_id a posición relativa (empezando en 1)
+                    posicion_relativa = {}
+                    for indice, insumo in enumerate(todos_insumos_tipo, 1):
+                        posicion_relativa[insumo['insumo_id']] = indice
+                    
+                    # Generar prefijo del tipo
+                    tipo_limpio = ''.join(c for c in tipo_descripcion if c.isalnum())
+                    prefijo = tipo_limpio[:4].upper()
+                    while len(prefijo) < 4:
+                        prefijo += 'X'
+                    
+                    # Asignar códigos usando posición relativa real
+                    for insumo_id in insumos_del_reporte:
+                        if insumo_id in posicion_relativa:
+                            posicion = posicion_relativa[insumo_id]
+                            codigo = f"{prefijo}-{posicion:04d}"
+                            codigos_insumos[insumo_id] = codigo
+                            print(f"DEBUG: Generado {codigo} para insumo_id {insumo_id} (posición {posicion} en '{tipo_descripcion}')")
+                        else:
+                            print(f"WARNING: No se encontró posición para insumo_id {insumo_id}")
             
             conn.close()
-            
-            print(f"DEBUG: Insumos por tipo encontrados: {len(insumos_por_tipo)}")
-            for tipo, insumos in insumos_por_tipo.items():
-                print(f"  {tipo}: {len(insumos)} insumos")
-            
-            # Generar códigos para cada tipo de insumo
-            for tipo_insumo, insumos in insumos_por_tipo.items():
-                # Obtener las primeras 4 letras del tipo de insumo
-                tipo_limpio = ''.join(c for c in tipo_insumo if c.isalnum())
-                prefijo = tipo_limpio[:4].upper()
-                
-                # Si el tipo tiene menos de 4 caracteres, completar con 'X'
-                while len(prefijo) < 4:
-                    prefijo += 'X'
-                
-                # Ordenar insumos por ID para mantener consistencia
-                insumos_ordenados = sorted(insumos.items())
-                
-                # Asignar números secuenciales
-                for contador, (insumo_id, insumo_nombre) in enumerate(insumos_ordenados, 1):
-                    codigo = f"{prefijo}-{contador:04d}"
-                    codigos_insumos[insumo_id] = codigo
-                    print(f"DEBUG: Generado {codigo} para insumo_id {insumo_id}")
             
             print(f"DEBUG: Códigos generados: {len(codigos_insumos)}")
             return codigos_insumos
@@ -1472,7 +1511,7 @@ class ReporteBalanceBodega:
                 1.0*inch    # Saldo Mes Siguiente
             ]
 
-            table = Table(data, colWidths=colWidths)
+            table = Table(data, colWidths=colWidths, repeatRows=1)
 
             # Ajusta el estilo si quieres, manteniendo el existente o simplificándolo
             table_style = [

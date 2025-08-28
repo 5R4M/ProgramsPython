@@ -588,6 +588,7 @@ class ReporteDemandaReal:
         Genera códigos con prefijo por tipo de insumo.
         - Normaliza los IDs (int) para evitar misses str/int.
         - Mantiene 1 consulta por los insumos presentes.
+        - CORREGIDO: Enumera basado en la posición real dentro de cada tipo (empezando en 1)
         """
         # 1) Extraer insumos únicos normalizando a int
         insumos_unicos = {}
@@ -615,42 +616,50 @@ class ReporteDemandaReal:
 
             cursor = conn.cursor(dictionary=True)
 
-            insumo_ids = list(insumos_unicos.keys())
-            placeholders = ','.join(['%s'] * len(insumo_ids))
+            # 2) NUEVA CONSULTA: Obtener TODOS los insumos por tipo para calcular posición relativa
+            query_tipos = """
+                SELECT DISTINCT ti.id as tipo_id, ti.descripcion as tipo_descripcion
+                FROM tipo_insumo ti
+                INNER JOIN insumo i ON i.id_tipo_insumo = ti.id
+                WHERE i.id IN ({})
+                ORDER BY ti.descripcion
+            """.format(','.join(['%s'] * len(insumos_unicos)))
+            
+            cursor.execute(query_tipos, list(insumos_unicos.keys()))
+            tipos_resultado = cursor.fetchall()
 
-            query = f"""
-                SELECT 
-                    i.id AS insumo_id,
-                    ti.descripcion AS tipo_insumo_descripcion
-                FROM insumo i
-                INNER JOIN tipo_insumo ti ON i.id_tipo_insumo = ti.id
-                WHERE i.id IN ({placeholders})
-                ORDER BY ti.descripcion, i.id
-            """
-            cursor.execute(query, insumo_ids)
-            resultados = cursor.fetchall()
-            conn.close()
-
-            print(f"DEBUG OPT: Consulta ejecutada para {len(insumo_ids)} insumos, {len(resultados)} resultados")
-
-            # 2) Agrupar por tipo
-            insumos_por_tipo = {}
-            for r in resultados:
-                insumo_id = int(r['insumo_id'])
-                tipo_insumo = (r['tipo_insumo_descripcion'] or '').strip().upper()
-
-                if tipo_insumo not in insumos_por_tipo:
-                    insumos_por_tipo[tipo_insumo] = []
-                insumos_por_tipo[tipo_insumo].append(insumo_id)
-
-            # 3) Generar códigos usando el ID real del insumo
             codigos_insumos = {}
-            for tipo_insumo, lista in insumos_por_tipo.items():
-                tipo_limpio = ''.join(c for c in tipo_insumo if c.isalnum())
+            
+            # 3) Para cada tipo de insumo, obtener TODOS los insumos de ese tipo ordenados por ID
+            for tipo_info in tipos_resultado:
+                tipo_id = tipo_info['tipo_id']
+                tipo_descripcion = tipo_info['tipo_descripcion']
+                
+                # Consultar TODOS los insumos de este tipo ordenados por ID
+                query_insumos_tipo = """
+                    SELECT i.id AS insumo_id, i.nombre AS insumo_nombre
+                    FROM insumo i
+                    WHERE i.id_tipo_insumo = %s
+                    ORDER BY i.id ASC
+                """
+                cursor.execute(query_insumos_tipo, (tipo_id,))
+                todos_insumos_tipo = cursor.fetchall()
+                
+                # 4) Crear mapeo de ID a posición relativa (empezando en 1)
+                posicion_en_tipo = {}
+                for indice, insumo in enumerate(todos_insumos_tipo, 1):
+                    posicion_en_tipo[insumo['insumo_id']] = indice
+                
+                # 5) Generar códigos solo para los insumos que están en movimientos_raw
+                tipo_limpio = ''.join(c for c in tipo_descripcion.strip().upper() if c.isalnum())
                 prefijo = (tipo_limpio[:4].upper() + 'XXXX')[:4] if tipo_limpio else 'XXXX'
+                
+                for insumo_id in insumos_unicos.keys():
+                    if insumo_id in posicion_en_tipo:
+                        posicion = posicion_en_tipo[insumo_id]
+                        codigos_insumos[insumo_id] = f"{prefijo}-{posicion:04d}"
 
-                for insumo_id in sorted(lista):
-                    codigos_insumos[insumo_id] = f"{prefijo}-{insumo_id:04d}"
+            conn.close()
 
             print(f"DEBUG OPT: Códigos generados: {len(codigos_insumos)} (muestra: {list(codigos_insumos.items())[:3]})")
             return codigos_insumos
@@ -676,16 +685,16 @@ class ReporteDemandaReal:
   
     def procesar_datos(self, movimientos, fecha_ini, fecha_fin, dias):
         """
-        Versión modificada de procesar_datos que integra la generación de códigos con prefijos
+        Versión corregida de procesar_datos que integra correctamente la generación de códigos con prefijos
         """
         # 1. Generar códigos de insumos (1 consulta en lugar de N)
         codigos_insumos = self.generar_codigo_insumo(movimientos)
-      
+        
         print(f"DEBUG: Códigos generados para {len(codigos_insumos)} insumos")
-      
+        
         # 2. Procesar datos como antes, pero usando los códigos generados
         insumos = {}
-      
+        
         for mov in movimientos:
             insumo_id_raw = mov.get('codigo_insumo') or mov.get('insumo_id') or mov.get('codigo')
             try:
@@ -696,19 +705,20 @@ class ReporteDemandaReal:
             if insumo_id is None:
                 continue  # no se puede mapear
 
+            # CORREGIDO: Usar el código con prefijo generado
             codigo_con_prefijo = codigos_insumos.get(insumo_id)
             if not codigo_con_prefijo:
                 codigo_con_prefijo = f"TEMP-{str(insumo_id).zfill(4)}"
-          
+            
             nombre_insumo = mov.get('nombre_insumo', '')
             presentacion = mov.get('nombre_presentacion', '')
-          
+            
             insumo_key = f"{codigo_con_prefijo}_{nombre_insumo}_{presentacion}"
-          
+            
             if insumo_key not in insumos:
                 insumos[insumo_key] = {
                     'codigo': codigo_con_prefijo,  # Usar el código con prefijo
-                    'codigo_original': codigo_original,  # Mantener referencia al original
+                    'insumo_id': insumo_id,  # AGREGADO: Guardar el ID para referencia
                     'nombre_insumo': nombre_insumo,
                     'presentacion': presentacion,
                     'entregado': {dia: 0 for dia in dias},
@@ -719,21 +729,21 @@ class ReporteDemandaReal:
                     'reajuste_positivo': 0,
                     'reajuste_negativo': 0
                 }
-          
+            
             # Usar get() para obtener valores de manera segura
             fecha_str = mov.get('fecha', '')
             if not fecha_str:
                 continue
-              
+                
             try:
                 fecha_mov = self._to_datetime(fecha_str)
             except ValueError:
                 continue
-              
+                
             dia = fecha_mov.day
             cantidad = mov.get('cantidad', 0)
             tipo_mov = mov.get('tipo_movimiento', '')
-          
+            
             if tipo_mov == 'ENTREGADO' and dia in dias:
                 insumos[insumo_key]['entregado'][dia] += cantidad
             elif tipo_mov == 'NO ENTREGADO' and dia in dias:
@@ -748,30 +758,30 @@ class ReporteDemandaReal:
                 insumos[insumo_key]['reajuste_positivo'] += cantidad
             elif tipo_mov == 'REAJUSTE NEGATIVO':
                 insumos[insumo_key]['reajuste_negativo'] += cantidad
-      
+        
         # 3. Procesar datos finales manteniendo el formato original
         datos_procesados = {}
-        contador = 1  # Contador para orden de presentación
-      
+        
         for insumo_key, valores in insumos.items():
             fila_datos = {
                 'codigo': valores['codigo'],  # Usar el código con prefijo
+                'insumo_id': valores['insumo_id'],  # AGREGADO: Para referencia
                 'nombre_insumo': valores['nombre_insumo'],
                 'presentacion': valores['presentacion']
             }
-          
+            
             # Agregar días
             for dia in dias:
                 fila_datos[f'Día_{dia}_Entregado'] = self.formato_valor(valores['entregado'].get(dia, 0))
                 fila_datos[f'Día_{dia}_No_Entregado'] = self.formato_valor(valores['no_entregado'].get(dia, 0))
-          
+            
             # Calcular totales
             total_entregado = sum(valores['entregado'].values())
             total_no_entregado = sum(valores['no_entregado'].values())
-          
+            
             # Calcular reajuste total (positivo - negativo)
             reajuste_total = valores['reajuste_positivo'] - valores['reajuste_negativo']
-          
+            
             # Calcular existencia según la fórmula
             existencia = (valores['inventario_inicial'] + 
                         valores['entrada_nivel_superior'] + 
@@ -779,14 +789,14 @@ class ReporteDemandaReal:
                         valores['salida_nivel_inferior'] - 
                         total_entregado - 
                         valores['reajuste_negativo'])
-          
+            
             # Agregar totales
             fila_datos['Total_Entregado'] = self.formato_valor(total_entregado)
             fila_datos['Total_No_Entregado'] = self.formato_valor(total_no_entregado)
             fila_datos['Demanda'] = self.formato_valor(total_entregado + total_no_entregado)
             fila_datos['Existencia'] = self.formato_valor(existencia)
             fila_datos['Reajuste'] = self.formato_valor(reajuste_total)
-          
+            
             # Guardar valores originales para el PDF
             fila_datos['_valores_originales'] = {
                 'entregado': valores['entregado'],
@@ -796,12 +806,14 @@ class ReporteDemandaReal:
                 'existencia': existencia,
                 'reajuste': reajuste_total
             }
-          
+            
             # **USAR EL CÓDIGO CON PREFIJO PARA LA CLAVE Y MOSTRAR**
             nueva_clave = f"{valores['codigo']} - {valores['nombre_insumo']} - {valores['presentacion']}"
             datos_procesados[nueva_clave] = fila_datos
-            contador += 1
-      
+        
+        # AGREGADO: Guardar códigos para uso en Excel
+        self.codigos_insumos = codigos_insumos
+        
         return datos_procesados
 
     def exportar_excel(self):
@@ -820,7 +832,7 @@ class ReporteDemandaReal:
                     if col_num < 0:
                         break
                 return result
-          
+            
             # Obtener período para el nombre del archivo
             anio = self.anio_var.get()
             mes_inicio = self.mes_inicio_var.get()
@@ -952,7 +964,7 @@ class ReporteDemandaReal:
                     col_fin = total_columnas - 1
                 else:
                     col_fin = min(col_actual + ancho_filtro - 1, total_columnas - 1)
-              
+                
                 # Evitar merge de una sola celda
                 if col_actual != col_fin:
                     col_inicio_letra = col_num_to_letter(col_actual)
@@ -961,7 +973,7 @@ class ReporteDemandaReal:
                 else:
                     col_letra = col_num_to_letter(col_actual)
                     worksheet.write(f'{col_letra}6', filtro, filter_format)
-              
+                
                 col_actual = col_fin + 1
 
             # ENCABEZADOS DE LA TABLA (filas 8 y 9) - TODOS EN LAS MISMAS FILAS
@@ -976,7 +988,7 @@ class ReporteDemandaReal:
             # DÍAS DEL MES
             col_inicio_dias = 3  # Columna D (índice 3)
             col_fin_dias = col_inicio_dias + len(dias) - 1
-          
+            
             # Título "DÍA DEL MES" que abarca todos los días (FILA 8)
             if len(dias) > 1:
                 col_inicio_dias_letra = col_num_to_letter(col_inicio_dias)
@@ -1014,22 +1026,16 @@ class ReporteDemandaReal:
             # DATOS DE LA TABLA - Empezar en fila 10 (sin línea en blanco)
             fila_actual = 9  # Directamente después de los encabezados
 
-            # **PROCESAR DATOS DE INSUMOS CON NUMERACIÓN SECUENCIAL Y DIVISIÓN DE TEXTO**
+            # **PROCESAR DATOS DE INSUMOS CON CÓDIGOS CON PREFIJOS CORRECTOS**
             for insumo_key, valores in self.datos.items():
-                # Aquí asumimos que self.datos guarda también el id_insumo en valores
-                insumo_id = valores.get("id_insumo")  
-
-                if insumo_id is not None:
-                    codigo = codigos_insumos.get(insumo_id, "")  # Usa la función que genera prefijo+id
-                else:
-                    codigo = ""  # fallback si no se encuentra
-
+                # CORREGIDO: Usar el código con prefijo que ya está en valores['codigo']
+                codigo_con_prefijo = valores.get('codigo', '')
+                
                 # Mantener el nombre/presentación sin el número secuencial
-                nombre_presentacion = insumo_key if ' - ' not in insumo_key else insumo_key.split(' - ', 1)[1]
+                nombre_presentacion = f"{valores.get('nombre_insumo', '')} {valores.get('presentacion', '')}".strip()
 
                 # Aplicar división de texto
                 nombre_dividido = self.dividir_texto_en_lineas(nombre_presentacion, max_caracteres_por_linea=40)
-
 
                 # Calcular totales
                 total_entregado = valores.get('Total_Entregado', 0)
@@ -1040,7 +1046,7 @@ class ReporteDemandaReal:
 
                 # FILA ENTREGADO
                 # Combinar celdas verticalmente para código y nombre
-                worksheet.merge_range(fila_actual, 0, fila_actual+1, 0, codigo, data_format)  # **Código secuencial**
+                worksheet.merge_range(fila_actual, 0, fila_actual+1, 0, codigo_con_prefijo, data_format)  # **Código con prefijo**
                 worksheet.merge_range(fila_actual, 1, fila_actual+1, 1, nombre_dividido, text_format)  # **Nombre con texto dividido**
 
                 # Movimiento "Entregado"
@@ -1075,29 +1081,29 @@ class ReporteDemandaReal:
                 fila_actual += 2  # Avanzar 2 filas para el siguiente insumo
 
             # CONFIGURACIÓN DE COLUMNAS - AUMENTAR ANCHO DE COLUMNA B Y AJUSTAR ALTURA DE FILAS
-            worksheet.set_column('A:A', 8)   # Código
-            worksheet.set_column('B:B', 35)  # Medicamento - AUMENTÉ DE 25 A 35 PARA MÁS ESPACIO
+            worksheet.set_column('A:A', 12)   # Código - AUMENTADO para códigos con prefijos
+            worksheet.set_column('B:B', 35)  # Medicamento
             worksheet.set_column('C:C', 12)  # Movimientos
-          
+            
             # Días (columnas más estrechas)
             for i in range(len(dias)):
                 col_letter = col_num_to_letter(col_inicio_dias + i)
                 worksheet.set_column(f'{col_letter}:{col_letter}', 4)
-          
+            
             # Columnas finales
             col_total_entregado_letra = col_num_to_letter(col_total_entregado)
             col_total_no_entregado_letra = col_num_to_letter(col_total_no_entregado)
             col_demanda_letra = col_num_to_letter(col_demanda)
             col_existencia_letra = col_num_to_letter(col_existencia)
             col_reajuste_letra = col_num_to_letter(col_reajuste)
-          
+            
             worksheet.set_column(f'{col_total_entregado_letra}:{col_total_entregado_letra}', 8)
             worksheet.set_column(f'{col_total_no_entregado_letra}:{col_total_no_entregado_letra}', 8)
             worksheet.set_column(f'{col_demanda_letra}:{col_demanda_letra}', 8)
             worksheet.set_column(f'{col_existencia_letra}:{col_existencia_letra}', 8)
             worksheet.set_column(f'{col_reajuste_letra}:{col_reajuste_letra}', 10)
 
-            # **AJUSTAR ALTURA UNIFORME DE LAS FILAS DE DATOS - CORREGIDO**
+            # **AJUSTAR ALTURA UNIFORME DE LAS FILAS DE DATOS**
             fila_inicio_datos = 9   # Empezamos en fila 9 (índice base-0), que es fila 10 en Excel
             fila_fin_datos = fila_actual - 1  # Última fila con datos
 
@@ -1115,13 +1121,13 @@ class ReporteDemandaReal:
 
             # Cerrar archivo
             writer.close()
-          
+            
             # Mensaje con opción de abrir archivo
             respuesta = messagebox.askyesno(
                 "Éxito", 
                 f"Reporte exportado exitosamente a:\n{full_path}\n\n¿Desea abrir el archivo?"
             )
-          
+            
             if respuesta:
                 try:
                     import sys
@@ -1192,7 +1198,7 @@ class ReporteDemandaReal:
   
     def generar_pdf(self, datos_movimientos, ruta_pdf):
         """
-        Versión modificada de generar_pdf que usa códigos con prefijos
+        Versión corregida de generar_pdf que usa códigos con prefijos correctamente
         """
         from reportlab.lib import colors
         from reportlab.lib.pagesizes import legal, landscape
@@ -1220,18 +1226,26 @@ class ReporteDemandaReal:
         # **GENERAR CÓDIGOS CON PREFIJOS PARA EL PDF**
         codigos_insumos = self.generar_codigo_insumo(datos_movimientos)
 
-        # Agrupar datos por insumo (codigo_con_prefijo, nombre+presentacion)
+        # Agrupar datos por insumo usando los códigos generados
         insumos = {}
         for mov in datos_movimientos:
-            codigo_original = mov.get('codigo_insumo')
-          
+            # CORREGIDO: Obtener el ID del insumo correctamente
+            insumo_id_raw = mov.get('codigo_insumo') or mov.get('insumo_id') or mov.get('codigo')
+            try:
+                insumo_id = int(str(insumo_id_raw).strip()) if insumo_id_raw else None
+            except:
+                insumo_id = None
+                
+            if insumo_id is None:
+                continue
+            
             # Usar código con prefijo si existe, sino temporal
-            codigo_con_prefijo = codigos_insumos.get(codigo_original, f"TEMP-{str(codigo_original).zfill(4)}")
-          
+            codigo_con_prefijo = codigos_insumos.get(insumo_id, f"TEMP-{str(insumo_id).zfill(4)}")
+            
             nombre = mov.get('nombre_insumo', '')
             presentacion = mov.get('nombre_presentacion', '')
             key = (codigo_con_prefijo, f"{nombre} {presentacion}".strip())
-          
+            
             if key not in insumos:
                 insumos[key] = {
                     'entregado': {d:0 for d in dias},
@@ -1242,20 +1256,20 @@ class ReporteDemandaReal:
                     'reajuste_positivo': 0,
                     'reajuste_negativo': 0
                 }
-          
+            
             fecha_mov = self._to_datetime(mov['fecha'])
             if fecha_mov is None:
                 continue  # Saltar este movimiento si no se puede parsear la fecha
             dia_mov = fecha_mov.day
             tipo = mov.get('tipo_movimiento', '').upper()
             cantidad = mov.get('cantidad', 0)
-          
+            
             if fecha_inicio <= fecha_mov <= fecha_fin:
                 if tipo == 'ENTREGADO' and dia_mov in dias:
                     insumos[key]['entregado'][dia_mov] += cantidad
                 elif tipo == 'NO ENTREGADO' and dia_mov in dias:
                     insumos[key]['no_entregado'][dia_mov] += cantidad
-          
+            
             # Procesar todos los movimientos para el cálculo de existencia (sin filtro de fecha)
             if tipo == 'INVENTARIO INICIAL':
                 insumos[key]['inventario_inicial'] += cantidad
@@ -1381,16 +1395,15 @@ class ReporteDemandaReal:
 
         data = [encabezado1, encabezado2]
 
-        # **AGREGAR DATOS CON NUMERACIÓN SECUENCIAL Y DIVISIÓN DE TEXTO**
-        contador = 1
-        for (codigo_original, nombre_pres), valores in insumos.items():
+        # **AGREGAR DATOS CON CÓDIGOS CON PREFIJOS CORRECTOS**
+        for (codigo_con_prefijo, nombre_pres), valores in insumos.items():
             # Calcular totales de entregado y no entregado
             total_entregado = sum(valores['entregado'].get(d, 0) for d in dias)
             total_no_entregado = sum(valores['no_entregado'].get(d, 0) for d in dias)
-          
+            
             # Calcular reajuste total (positivo - negativo)
             reajuste_total = valores['reajuste_positivo'] - valores['reajuste_negativo']
-          
+            
             # Calcular existencia según la fórmula:
             existencia = (valores['inventario_inicial'] + 
                         valores['entrada_nivel_superior'] + 
@@ -1401,20 +1414,20 @@ class ReporteDemandaReal:
 
             # **APLICAR DIVISIÓN DE TEXTO AL NOMBRE DEL MEDICAMENTO**
             nombre_dividido = self.dividir_texto_en_lineas(nombre_pres, max_caracteres_por_linea=35)
-          
+            
             # Crear Paragraph para el nombre del medicamento con división de líneas
             nombre_paragraph = Paragraph(nombre_dividido, cell_text_style)
 
-            # Fila Entregado - **USAR CONTADOR SECUENCIAL**
+            # Fila Entregado - **USAR CÓDIGO CON PREFIJO EN LUGAR DEL CONTADOR**
             fila_entregado = [
-                str(contador),       # **NÚMERO SECUENCIAL EN LUGAR DEL CÓDIGO ORIGINAL**
+                codigo_con_prefijo,  # **CÓDIGO CON PREFIJO (ej: MEDI-0001)**
                 nombre_paragraph,    # **USAR PARAGRAPH CON TEXTO DIVIDIDO**
                 'Entregado'
             ]
             for d in dias:
                 valor = valores['entregado'].get(d, 0)
                 fila_entregado.append(formato_valor(valor))
-          
+            
             fila_entregado += [
                 formato_valor(total_entregado),                             # Total Entregado
                 formato_valor(total_no_entregado),                          # Total No Entregado
@@ -1432,7 +1445,7 @@ class ReporteDemandaReal:
             for d in dias:
                 valor = valores['no_entregado'].get(d, 0)
                 fila_no_entregado.append(formato_valor(valor))
-          
+            
             fila_no_entregado += [
                 '',                  # Total Entregado (vacío, SPAN)
                 '',                  # Total No Entregado (vacío, SPAN)
@@ -1443,7 +1456,6 @@ class ReporteDemandaReal:
 
             data.append(fila_entregado)
             data.append(fila_no_entregado)
-            contador += 1  # **INCREMENTAR CONTADOR**
 
         # Anchos de columna - **AUMENTAR ANCHO DE LA COLUMNA DE MEDICAMENTO**
         col_widths = [0.4*inch, 2.8*inch, 0.7*inch] + [0.25*inch] * len(dias) + [0.5*inch, 0.5*inch, 0.5*inch, 0.5*inch, 0.7*inch]

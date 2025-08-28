@@ -1395,211 +1395,213 @@ class ReporteKardex:
             messagebox.showerror("Error", f"Error al exportar PDF: {str(e)}")
     
     def generar_pdf(self, ruta_pdf, es_vista_previa=False):
-        if not self.movimientos_data:
+        if not getattr(self, 'movimientos_data', None):
             messagebox.showwarning("Advertencia", "No hay datos para mostrar")
             return
 
         try:
+            from reportlab.platypus import SimpleDocTemplate, Paragraph, Table, TableStyle, Spacer
+            from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+            from reportlab.lib import colors
+            from reportlab.lib.pagesizes import landscape, legal
+            from reportlab.lib.units import inch
+            from reportlab.lib.enums import TA_CENTER
+
+            # Márgenes: dejamos MÁS espacio en topMargin para separar encabezado y filtros
             doc = SimpleDocTemplate(
                 ruta_pdf,
                 pagesize=landscape(legal),
                 rightMargin=36,
                 leftMargin=36,
-                topMargin=36,
+                topMargin=140,   # aumentado para separar encabezado de filtros
                 bottomMargin=36
             )
 
-            elements = []
             styles = getSampleStyleSheet()
+            elements = []
 
-            # Estilos personalizados
-            title_style = ParagraphStyle(
-                'CustomTitle',
-                parent=styles['Heading1'],
-                alignment=1,
-                spaceAfter=15,
-                fontSize=12
-            )
-            subtitle_style = ParagraphStyle(
-                'CustomSubtitle',
-                parent=styles['Heading2'],
-                alignment=1,
-                spaceAfter=10,
-                fontSize=10
-            )
-            timestamp_style = ParagraphStyle(
-                'TimestampStyle',
-                parent=styles['Normal'],
-                alignment=1,
-                spaceAfter=15,
-                fontSize=9
-            )
+            # Estilos
+            title_style = ParagraphStyle('CustomTitle', parent=styles['Heading1'],
+                                        alignment=TA_CENTER, spaceAfter=6, fontSize=12)
+            subtitle_style = ParagraphStyle('CustomSubtitle', parent=styles['Heading2'],
+                                            alignment=TA_CENTER, spaceAfter=4, fontSize=10)
+            # estilo para filtros: centrado, fontSize pequeño y leading para 2 líneas
+            filtro_style = ParagraphStyle('FiltroStyle', parent=styles['Normal'],
+                                        alignment=TA_CENTER, fontSize=9, leading=11, spaceAfter=0)
 
-            # Títulos principales
-            elements.append(Paragraph(
-                "DIRECCIÓN DEPARTAMENTAL DE REDES INTEGRADAS DE SERVICIOS DE SALUD DE GUATEMALA,",
-                title_style))
-            elements.append(Paragraph("ÁREA NOR ORIENTE", subtitle_style))
-            elements.append(Paragraph("TARJETA DE CONTROL DE SUMINISTROS", subtitle_style))
-            elements.append(Paragraph(
-                f"Generado el: {datetime.now().strftime('%d/%m/%Y %H:%M:%S')}",
-                timestamp_style))
+            referencia_style = ParagraphStyle('ReferenciaStyle', parent=styles['Normal'],
+                                            alignment=TA_CENTER, fontSize=8, leading=10)
+            observaciones_style = ParagraphStyle('ObservacionesStyle', parent=styles['Normal'],
+                                                alignment=TA_CENTER, fontSize=8, leading=10)
 
-            # Filtros en dos filas horizontales
-            filtros = [
-                f"Área: {self.combo_area.get()}",
-                f"Distrito: {self.combo_distrito.get()}",
-                f"Tipo de Servicio: {self.combo_tipo_servicio.get()}",
-                f"Servicio: {self.combo_servicio.get()}",
-                f"Insumo: {self.combo_insumo.get()}",
-                f"Presentación: {self.combo_presentacion.get()}"
+            header_row_height = 36
+            row_height = 30
+
+            headers = [
+                'Fecha',
+                'No.\nReferencia',
+                'Remitente/\nDestinatario',
+                'Entrada',
+                'Precio Unit. (Q.)',
+                'Valor Total (Q.)',
+                'No.\nLote',
+                'Fecha de\nVencimiento',
+                'Salidas',
+                'Reajustes\n(+) (-)',
+                'Cantidad',
+                'Saldo',
+                'Observaciones'
             ]
 
-            # Crear estilo para alineación izquierda
-            left_style = ParagraphStyle(
-                name="LeftAlign",
-                alignment=0,  # 0 = LEFT
-                fontSize=9,
-                fontName='Helvetica'
-            )
+            data = [headers]
+            for mov in self.movimientos_data:
+                referencia_par = Paragraph(str(mov.get('referencia', '') or ''), referencia_style)
+                observaciones_par = Paragraph(str(mov.get('observaciones', '') or ''), observaciones_style)
+                row = [
+                    mov.get('fecha', ''),
+                    referencia_par,
+                    mov.get('tipo_movimiento', ''),
+                    mov.get('entrada', ''),
+                    mov.get('precio_unitario', ''),
+                    mov.get('valor_total', ''),
+                    mov.get('lote') or "N/A",
+                    mov.get('fecha_vencimiento', ''),
+                    mov.get('salida', ''),
+                    mov.get('reajuste', ''),
+                    mov.get('cantidad_col', ''),
+                    mov.get('saldo', ''),
+                    observaciones_par
+                ]
+                data.append(row)
 
-            # Crear tabla con una sola fila y 5 columnas
-            data_filtros = [[Paragraph(item, left_style) for item in filtros]]
+            # Anchos de columna (coinciden con Excel)
+            colWidths = [
+                0.8*inch, 0.9*inch, 1.7*inch, 0.7*inch, 0.9*inch, 0.9*inch,
+                0.9*inch, 0.9*inch, 0.7*inch, 0.8*inch, 0.7*inch, 0.8*inch, 1.5*inch
+            ]
 
-            # Anchos de columna (ajustar según necesidad)
-            col_widths = [125, 125, 125, 125, 125]
+            rowHeights = [header_row_height] + [row_height] * (len(data) - 1)
 
-            table_filtros = Table(data_filtros, colWidths=col_widths)
-            table_filtros.setStyle(TableStyle([
-                ('ALIGN', (0,0), (-1,-1), 'LEFT'),
+            table = Table(data, colWidths=colWidths, rowHeights=rowHeights, repeatRows=1)
+            table.setStyle(TableStyle([
+                ('BACKGROUND', (0,0), (-1,0), colors.lightblue),
+                ('TEXTCOLOR', (0,0), (-1,0), colors.black),
+                ('ALIGN', (0,0), (-1,0), 'CENTER'),
+                ('ALIGN', (0,1), (-1,-1), 'CENTER'),
+                ('FONTNAME', (0,0), (-1,0), 'Helvetica-Bold'),
+                ('FONTSIZE', (0,0), (-1,0), 8),
+                ('FONTSIZE', (0,1), (-1,-1), 8),
+                ('GRID', (0,0), (-1,-1), 0.25, colors.grey),
                 ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
-                ('FONTSIZE', (0,0), (-1,-1), 9),
-                ('GRID', (0,0), (-1,-1), 0.5, colors.lightgrey)
+                ('LEFTPADDING', (0,0), (-1,-1), 4),
+                ('RIGHTPADDING', (0,0), (-1,-1), 4),
             ]))
 
-            elements.append(table_filtros)
-            elements.append(Spacer(1, 30))
+            elements.append(Spacer(1, 12))
+            elements.append(table)
 
-            # Dividir datos en páginas (aproximadamente 25 filas por página)
-            filas_por_pagina = 25
-            total_movimientos = len(self.movimientos_data)
-            
-            for pagina in range(0, total_movimientos, filas_por_pagina):
-                # Si no es la primera página, agregar salto de página
-                if pagina > 0:
-                    from reportlab.platypus import PageBreak
-                    elements.append(PageBreak())
-                    
-                    # Agregar títulos en cada página nueva
-                    elements.append(Paragraph(
-                        "DIRECCIÓN DEPARTAMENTAL DE REDES INTEGRADAS DE SERVICIOS DE SALUD DE GUATEMALA,",
-                        title_style))
-                    elements.append(Paragraph("ÁREA NOR ORIENTE", subtitle_style))
-                    elements.append(Paragraph("TARJETA DE CONTROL DE SUMINISTROS", subtitle_style))
-                    elements.append(Spacer(1, 20))
+            # HEADER: dibuja títulos (separados) y fila de filtros: cada filtro en su bloque (2 líneas centradas),
+            # y el último bloque es "Saldo anterior" (también centrado en 2 líneas).
+            def header(canvas, doc):
+                canvas.saveState()
+                page_num = canvas.getPageNumber()
 
-                # Encabezados de la tabla
-                headers = [
-                    'Fecha',
-                    'Referencia',
-                    'Remitente/\nDestinatario',
-                    'Entrada',
-                    'Precio\nUnitario',
-                    'Valor\nTotal',
-                    'Lote',
-                    'Fecha\nVencimiento',
-                    'Salidas',
-                    'Reajustes\n(+) (-)',
-                    'Cantidad',
-                    'Saldo',
-                    'Observaciones'
+                page_width, page_height = doc.pagesize
+                left = doc.leftMargin
+                right = page_width - doc.rightMargin
+                usable_width = right - left
+
+                # Títulos (separados del área de filtros por la topMargin aumentada)
+                if page_num % 2 == 1:
+                    y_title = page_height - (doc.topMargin - 40)  # bajar títulos dentro del espacio reservado
+                    canvas.setFont('Helvetica-Bold', 11)
+                    canvas.drawCentredString(page_width / 2.0, y_title, "DIRECCIÓN DEPARTAMENTAL DE REDES INTEGRADAS DE SERVICIOS DE SALUD DE GUATEMALA,")
+                    canvas.setFont('Helvetica', 9)
+                    canvas.drawCentredString(page_width / 2.0, y_title - 14, "ÁREA NOR ORIENTE")
+                    canvas.drawCentredString(page_width / 2.0, y_title - 28, "TARJETA DE CONTROL DE SUMINISTROS")
+
+                # --- FILTROS: distribuimos los bloques según los anchos de las columnas de la tabla ---
+                # Mapear bloques a agrupaciones de columnas como en Excel:
+                # Bloque1 = colWidths[0] + colWidths[1]  (A6:B6)
+                # Bloque2 = colWidths[2] + colWidths[3]  (C6:D6)
+                # Bloque3 = colWidths[4] + colWidths[5]  (E6:F6)
+                # Bloque4 = colWidths[6] + colWidths[7]  (G6:H6)
+                # Bloque5 = colWidths[8] + colWidths[9]  (I6:J6)
+                # Bloque6 = colWidths[10] + colWidths[11] (K6:L6)
+                # BloqueSaldo = colWidths[12]  (M6)
+
+                bloques_widths = [
+                    colWidths[0] + colWidths[1],
+                    colWidths[2] + colWidths[3],
+                    colWidths[4] + colWidths[5],
+                    colWidths[6] + colWidths[7],
+                    colWidths[8] + colWidths[9],
+                    colWidths[10] + colWidths[11],
+                    colWidths[12]
                 ]
 
-                # Datos de la página actual
-                data = [headers]
-                
-                # Si no es la primera página, agregar fila con saldo anterior
-                if pagina > 0:
-                    saldo_anterior = self.movimientos_data[pagina - 1]['saldo']
-                    fila_saldo_anterior = [
-                        "SALDO ANTERIOR", "", "", "", "", "", "", "", "", "", "", 
-                        self.formato_float(saldo_anterior), ""
-                    ]
-                    data.append(fila_saldo_anterior)
+                # calcular posiciones x (left of each block)
+                x_positions_left = []
+                cur_x = left
+                for w in bloques_widths:
+                    x_positions_left.append(cur_x)
+                    cur_x += w
 
-                # Agregar movimientos de esta página
-                fin_pagina = min(pagina + filas_por_pagina, total_movimientos)
-                for i in range(pagina, fin_pagina):
-                    mov = self.movimientos_data[i]
-                    
-                    lote_val = mov['lote']
-                    if lote_val is None or lote_val == '':
-                        lote_val = "N/A"
-                    
-                    row = [
-                        mov['fecha'],
-                        mov['referencia'] or "",
-                        mov['tipo_movimiento'],
-                        mov['entrada'],  
-                        mov['precio_unitario'],  
-                        mov['valor_total'], 
-                        lote_val,
-                        mov['fecha_vencimiento'] or "",
-                        mov['salida'],  
-                        mov['reajuste'],  
-                        mov['cantidad_col'],  
-                        mov['saldo'],  
-                        mov['observaciones'] or ""
-                    ]
-                    data.append(row)
-
-                # Crear tabla con formato y anchos ajustados
-                colWidths = [
-                    0.8*inch,  # Fecha (era 0.7)
-                    0.9*inch,  # Ref. (era 0.8)
-                    1.7*inch,  # Remitente (era 1.5)
-                    0.7*inch,  # Entrada (era 0.6)
-                    0.8*inch,  # P.Unit. (era 0.7)
-                    0.8*inch,  # V.Total (era 0.7)
-                    0.9*inch,  # Lote (era 0.8)
-                    0.8*inch,  # F.Venc. (era 0.7)
-                    0.7*inch,  # Salidas (era 0.6)
-                    0.7*inch,  # Reaj. (era 0.6)
-                    0.7*inch,  # Cant. (era 0.6)
-                    0.7*inch,  # Saldo (era 0.6)
-                    1.3*inch   # Obs. (era 1.1
+                # Texto de filtros (cada uno en hasta 2 líneas), usamos Paragraph con filtro_style (centrado, leading para 2 líneas)
+                filtros_list = [
+                    f"Área:\n{self.combo_area.get()}",
+                    f"Distrito:\n{self.combo_distrito.get()}",
+                    f"Tipo de Servicio:\n{self.combo_tipo_servicio.get()}",
+                    f"Servicio:\n{self.combo_servicio.get()}",
+                    f"Insumo:\n{self.combo_insumo.get()}",
+                    f"Presentación:\n{self.combo_presentacion.get()}",
                 ]
+                # Agregamos en la última posición el Saldo anterior como bloque con 2 líneas
+                # calcular saldo para la página (mismo método determinista que antes)
+                try:
+                    usable_table_height = doc.height
+                    filas_por_pagina_estimadas = int(usable_table_height // row_height)
+                    data_rows_per_page = max(1, filas_por_pagina_estimadas - 1)
+                except Exception:
+                    data_rows_per_page = 20
 
-                table = Table(data, colWidths=colWidths)
-                
-                # Estilo base de la tabla
-                table_style = [
-                    ('BACKGROUND', (0,0), (-1,0), colors.lightblue),
-                    ('TEXTCOLOR', (0,0), (-1,0), colors.black),
-                    ('ALIGN', (0,0), (-1,-1), 'CENTER'),
-                    ('FONTNAME', (0,0), (-1,0), 'Helvetica-Bold'),
-                    ('FONTSIZE', (0,0), (-1,0), 7),
-                    ('FONTSIZE', (0,1), (-1,-1), 7),
-                    ('GRID', (0,0), (-1,-1), 0.25, colors.grey),
-                    ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
-                    ('TOPPADDING', (0,0), (-1,0), 6),
-                    ('BOTTOMPADDING', (0,0), (-1,0), 6),
-                    ('TOPPADDING', (0,1), (-1,-1), 2),
-                    ('BOTTOMPADDING', (0,1), (-1,-1), 2),
-                    ('LEFTPADDING', (0,0), (-1,-1), 2),
-                    ('RIGHTPADDING', (0,0), (-1,-1), 2),
-                    ('WORDWRAP', (0,0), (-1,0), True),
-                ]
-                
-                # Si hay saldo anterior, resaltarlo
-                if pagina > 0:
-                    table_style.append(('BACKGROUND', (0,1), (-1,1), colors.lightyellow))
-                    table_style.append(('FONTNAME', (0,1), (-1,1), 'Helvetica-Bold'))
+                saldo_val = 0
+                if page_num > 1:
+                    last_index_prev = (page_num - 1) * data_rows_per_page - 1
+                    if 0 <= last_index_prev < len(self.movimientos_data):
+                        raw = self.movimientos_data[last_index_prev].get('saldo', 0)
+                        try:
+                            saldo_val = float(raw) if raw not in (None, '') else 0
+                        except Exception:
+                            saldo_val = raw
+                    else:
+                        saldo_val = 0
+                else:
+                    saldo_val = 0
 
-                table.setStyle(TableStyle(table_style))
-                elements.append(table)
+                filtros_list.append(f"Saldo anterior:\nQ. {saldo_val:,.2f}" if isinstance(saldo_val, (int, float)) else f"Saldo anterior:\n{saldo_val}")
 
-            doc.build(elements)
+                # posición vertical de los filtros (dentro del topMargin, justo debajo de títulos)
+                y_filtros = page_height - doc.topMargin + 32  # ajuste fino: dentro del topMargin aumentado
+
+                # dibujar cada filtro como Paragraph, centrado en su bloque y con 2 líneas (wrap)
+                for idx, txt in enumerate(filtros_list):
+                    block_left = x_positions_left[idx]
+                    block_w = bloques_widths[idx]
+                    p = Paragraph(txt, filtro_style)
+                    # limitar altura a 2 líneas: leading * 2
+                    max_h = filtro_style.leading * 2 + 2
+                    w_par, h_par = p.wrap(block_w, max_h)
+                    # centrar horizontalmente dentro del bloque
+                    x_draw = block_left + (block_w - w_par) / 2.0
+                    # centrar verticalmente respecto a y_filtros (aprox): drawOn uses bottom-left, así que ajustamos
+                    y_draw = y_filtros - (h_par / 2.0)
+                    p.drawOn(canvas, x_draw, y_draw)
+
+                canvas.restoreState()
+
+            # Construir PDF
+            doc.build(elements, onFirstPage=header, onLaterPages=header)
 
             if not es_vista_previa:
                 messagebox.showinfo("Éxito", f"PDF guardado en:\n{ruta_pdf}")
@@ -1707,12 +1709,13 @@ class ReporteKardex:
 
     def generar_excel(self, movimientos, periodo):
         try:
-            import os  # Importar os al inicio del método
-            
+            import os
+            from datetime import datetime
+
             # Dividir movimientos en hojas (máximo 1000 filas por hoja)
             filas_por_hoja = 1000
             total_movimientos = len(movimientos)
-            
+
             # Generar nombre de archivo con fecha y hora
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             file_name = f"Reporte_Kardex_{periodo}_{timestamp}.xlsx"
@@ -1725,7 +1728,7 @@ class ReporteKardex:
             writer = pd.ExcelWriter(full_path, engine='xlsxwriter')
             workbook = writer.book
 
-            # Estilos comunes
+            # Estilos comunes (títulos y subtítulos mantienen estilo anterior)
             title_format = workbook.add_format({
                 'bold': True,
                 'align': 'center',
@@ -1742,11 +1745,21 @@ class ReporteKardex:
                 'text_wrap': True
             })
 
+            # Formato especial para el "Saldo anterior" en filtros: mismo estilo pero alineado a la derecha
+            saldo_filter_format = workbook.add_format({
+                'bold': True,
+                'align': 'right',    # alineado a la derecha en la celda M6
+                'valign': 'vcenter',
+                'font_size': 10,
+                'text_wrap': True
+            })
+
+            # Encabezado de tabla con borde (ajustado)
             header_format = workbook.add_format({
                 'bold': True,
                 'align': 'center',
                 'valign': 'vcenter',
-                'font_size': 9,
+                'font_size': 8,
                 'bg_color': '#ADD8E6',
                 'text_wrap': True,
                 'border': 1,
@@ -1759,33 +1772,52 @@ class ReporteKardex:
                 'valign': 'vcenter',
                 'font_size': 9,
                 'bg_color': '#FFFFE0',
-                'border': 1
+                'border': 1,
+                'border_color': '#808080'
+            })
+
+            # Formatos de datos
+            data_format_center = workbook.add_format({
+                'align': 'center',
+                'valign': 'vcenter',
+                'font_size': 9,
+                'border': 1,
+                'border_color': '#808080',
+                'text_wrap': True
+            })
+
+            data_format_center_text = workbook.add_format({
+                'align': 'center',
+                'valign': 'vcenter',
+                'font_size': 9,
+                'border': 1,
+                'border_color': '#808080',
+                'text_wrap': True
             })
 
             # Procesar cada hoja
             for hoja_num in range(0, total_movimientos, filas_por_hoja):
-                nombre_hoja = f"Kardex_{hoja_num//filas_por_hoja + 1}"
-                
-                # Filtrar y renombrar columnas para esta hoja
+                nombre_hoja = f"Kardex_{hoja_num // filas_por_hoja + 1}"
+
                 fin_hoja = min(hoja_num + filas_por_hoja, total_movimientos)
                 movimientos_hoja = movimientos[hoja_num:fin_hoja]
-                
+
                 columnas_relevantes = [
                     'fecha', 'referencia', 'tipo_movimiento', 'entrada',
                     'precio_unitario', 'valor_total', 'lote', 'fecha_vencimiento',
                     'salida', 'reajuste', 'cantidad_col', 'saldo', 'observaciones'
                 ]
-                
+
                 df = pd.DataFrame(movimientos_hoja)[columnas_relevantes]
 
-                # Nombres de columnas mejorados
+                # Nombres de columnas (compactos)
                 df.columns = [
                     'Fecha',
                     'No.\nReferencia',
                     'Remitente/\nDestinatario',
                     'Entrada',
-                    'Precio\nUnitario\n(Q.)',
-                    'Valor\nTotal\n(Q.)',
+                    'Precio Unit. (Q.)',
+                    'Valor Total (Q.)',
                     'No.\nLote',
                     'Fecha de\nVencimiento',
                     'Salidas',
@@ -1795,20 +1827,26 @@ class ReporteKardex:
                     'Observaciones'
                 ]
 
+                # Calcular saldo anterior para la etiqueta del filtro (último saldo de la hoja anterior)
+                if hoja_num > 0:
+                    raw_saldo = movimientos[hoja_num - 1].get('saldo', 0)
+                    saldo_para_filtro = raw_saldo if raw_saldo not in (None, '') else 0
+                else:
+                    saldo_para_filtro = 0
+
                 # Escribir datos comenzando en fila 8
                 fila_inicio = 8
-                
-                # Si no es la primera hoja, agregar fila de saldo anterior
+
+                # Si no es la primera hoja, agregar fila de saldo anterior (visible en la hoja)
                 if hoja_num > 0:
-                    saldo_anterior = movimientos[hoja_num - 1]['saldo']
-                    # Crear DataFrame para saldo anterior
+                    saldo_anterior = movimientos[hoja_num - 1].get('saldo', 0)
                     saldo_df = pd.DataFrame([{
                         'Fecha': 'SALDO ANTERIOR',
                         'No.\nReferencia': '',
                         'Remitente/\nDestinatario': '',
                         'Entrada': '',
-                        'Precio\nUnitario\n(Q.)': '',
-                        'Valor\nTotal\n(Q.)': '',
+                        'Precio Unit. (Q.)': '',
+                        'Valor Total (Q.)': '',
                         'No.\nLote': '',
                         'Fecha de\nVencimiento': '',
                         'Salidas': '',
@@ -1817,8 +1855,7 @@ class ReporteKardex:
                         'Saldo': saldo_anterior,
                         'Observaciones': ''
                     }])
-                    
-                    # Escribir saldo anterior
+
                     saldo_df.to_excel(writer, sheet_name=nombre_hoja, startrow=fila_inicio, index=False, header=False)
                     fila_inicio += 1
 
@@ -1828,31 +1865,46 @@ class ReporteKardex:
                 # Obtener worksheet
                 worksheet = writer.sheets[nombre_hoja]
 
-                # Configurar títulos y encabezados
-                self.configurar_hoja_excel(worksheet, workbook, title_format, subtitle_format, 
-                                         header_format, saldo_anterior_format, df, hoja_num > 0, fila_inicio)
+                # Llamar a la configuración pasando el saldo_para_filtro y el formato saldo_filter_format
+                self.configurar_hoja_excel(
+                    worksheet, workbook,
+                    title_format, subtitle_format,
+                    header_format, saldo_anterior_format,
+                    df, hoja_num > 0, fila_inicio,
+                    data_format_center, data_format_center_text,
+                    saldo_para_filtro, saldo_filter_format
+                )
 
             # Guardar archivo
             writer.close()
             messagebox.showinfo("Éxito", f"Reporte guardado en:\n{full_path}")
             return full_path
-            
+
         except Exception as e:
             messagebox.showerror("Error", f"Error al generar Excel: {str(e)}")
             return None
 
-    def configurar_hoja_excel(self, worksheet, workbook, title_format, subtitle_format, 
-                        header_format, saldo_anterior_format, df, tiene_saldo_anterior, fila_inicio):
-        """Configura el formato de una hoja de Excel"""
-        # Configurar altura de filas
-        worksheet.set_row(0, 30)
-        worksheet.set_row(1, 25)
-        worksheet.set_row(2, 25)
-        worksheet.set_row(3, 20)
-        worksheet.set_row(5, 25)
-        worksheet.set_row(fila_inicio - 1, 45)  # Encabezados
+    def configurar_hoja_excel(self, worksheet, workbook, title_format, subtitle_format,
+                            header_format, saldo_anterior_format, df, tiene_saldo_anterior, fila_inicio,
+                            data_format_center, data_format_center_text,
+                            saldo_para_filtro, saldo_filter_format):
+        """Configura la hoja Excel: mayor separación encabezado/filtros, filtros centrados en 2 líneas e incluye Saldo anterior."""
+        from datetime import datetime
 
-        # Títulos principales
+        # Altos (ajustados para dar espacio y permitir 2 líneas en filtros)
+        row_height = 30
+        header_row_height = 36
+
+        # Aumentar separación entre títulos y filtros
+        worksheet.set_row(0, 36)  # Título principal (A1)
+        worksheet.set_row(1, 30)  # Área
+        worksheet.set_row(2, 30)  # Tarjeta
+        worksheet.set_row(3, 24)  # Fecha generación (más espacio)
+        worksheet.set_row(4, 8)   # fila intermedia opcional
+        # FILTROS: reservar altura para 2 líneas
+        worksheet.set_row(5, 40)  # fila de filtros (A6..M6) -> 40 pts para 2 líneas cómodas
+
+        # Títulos principales (centrados y SIN bordes)
         worksheet.merge_range('A1:M1',
             'DIRECCIÓN DEPARTAMENTAL DE REDES INTEGRADAS DE SERVICIOS DE SALUD DE GUATEMALA,',
             title_format)
@@ -1862,52 +1914,77 @@ class ReporteKardex:
             f"Generado el: {datetime.now().strftime('%d/%m/%Y %H:%M:%S')}",
             subtitle_format)
 
-        # Filtros
-        worksheet.merge_range('A6:B6', f"Área: {self.combo_area.get()}", subtitle_format)
-        worksheet.merge_range('C6:D6', f"Distrito: {self.combo_distrito.get()}", subtitle_format)
-        worksheet.merge_range('E6:F6', f"Tipo de Servicio: {self.combo_tipo_servicio.get()}", subtitle_format)
-        worksheet.merge_range('G6:H6', f"Servicio: {self.combo_servicio.get()}", subtitle_format)
-        worksheet.merge_range('I6:J6', f"Insumo: {self.combo_insumo.get()}", subtitle_format)
-        worksheet.merge_range('K6:M6', f"Presentación: {self.combo_presentacion.get()}", subtitle_format)
+        # --- FILTROS: mantenemos merges A6:B6, C6:D6, E6:F6, G6:H6, I6:J6, K6:L6 para que
+        # correspondan exactamente al ancho de la tabla (dos columnas cada bloque) ---
+        # Para que ocupen 2 líneas centradas, usamos subtitle_format con text_wrap=True y centrado.
 
-        # Aplicar formato a encabezados
+        # Asegúrate de que subtitle_format tenga 'text_wrap': True y 'align': 'center'
+        # (si no, puedes crear uno local con esas propiedades)
+
+        # Ejemplo (si quieres definir localmente):
+        # subtitle_format = workbook.add_format({'bold': True, 'align': 'center', 'valign': 'vcenter', 'font_size': 9, 'text_wrap': True})
+
+        worksheet.merge_range('A6:B6', f"Área:\n{self.combo_area.get()}", subtitle_format)
+        worksheet.merge_range('C6:D6', f"Distrito:\n{self.combo_distrito.get()}", subtitle_format)
+        worksheet.merge_range('E6:F6', f"Tipo de Servicio:\n{self.combo_tipo_servicio.get()}", subtitle_format)
+        worksheet.merge_range('G6:H6', f"Servicio:\n{self.combo_servicio.get()}", subtitle_format)
+        worksheet.merge_range('I6:J6', f"Insumo:\n{self.combo_insumo.get()}", subtitle_format)
+        worksheet.merge_range('K6:L6', f"Presentación:\n{self.combo_presentacion.get()}", subtitle_format)
+
+        # SALDO ANTERIOR: colocarlo en M6 pero también centrado y en 2 líneas (se adapta al alto de fila)
+        saldo_val = saldo_para_filtro if saldo_para_filtro not in (None, '') else 0
+        # Usamos el mismo estilo de filtros (centrado y con wrap) para mantener el estilo coherente
+        worksheet.write('M6', f"Saldo anterior:\n{saldo_val}", subtitle_format)
+
+        # Encabezado de la tabla (con borde) y altura fija para el encabezado
+        worksheet.set_row(fila_inicio - 1, header_row_height)
         for col_num, value in enumerate(df.columns.values):
             worksheet.write(fila_inicio - 1, col_num, value, header_format)
 
-        # Aplicar formato a fila saldo anterior (si existe)
+        # Si existe saldo anterior (fila visible), fijar su altura y formatearla
         if tiene_saldo_anterior:
-            worksheet.set_row(fila_inicio, None, saldo_anterior_format)
+            saldo_row = fila_inicio
+            worksheet.set_row(saldo_row, row_height)
+            for col_idx in range(len(df.columns)):
+                try:
+                    existing = worksheet.table.get((saldo_row, col_idx), None) if hasattr(worksheet, 'table') else None
+                except Exception:
+                    existing = None
+                worksheet.write(saldo_row, col_idx, existing if existing is not None else '', saldo_anterior_format)
 
-        # Crear formato para los datos
-        data_format = workbook.add_format({
-            'align': 'center',
-            'valign': 'vcenter',
-            'font_size': 9,
-            'border': 1,
-            'border_color': '#808080'
-        })
-
-        # Aplicar formato a los datos (reescribiendo valores)
-        data_start_row = fila_inicio + (1 if tiene_saldo_anterior else 0)
-        for row_offset, row_data in enumerate(df.values):
-            for col_num, cell_value in enumerate(row_data):
-                worksheet.write(data_start_row + row_offset, col_num, cell_value, data_format)
-
-        # Configuración de página
+        # Configuración de página y márgenes (igual que antes)
         worksheet.set_landscape()
         worksheet.set_paper(5)
         worksheet.fit_to_pages(1, 1)
-        
-        # Centrar Hoja
         worksheet.center_horizontally()
+        worksheet.set_margins(left=0.5, right=0.5, top=0.5, bottom=0.5)
 
-        # Ajustar anchos de columna
-        worksheet.set_column('A:A', 10)    # Fecha
-        worksheet.set_column('B:B', 12)    # No. Referencia
-        worksheet.set_column('C:C', 20)    # Remitente/Destinatario
-        worksheet.set_column('D:D', 10)    # Entrada
-        worksheet.set_column('E:E', 10)    # Precio Unitario
-        worksheet.set_column('F:F', 10)    # Valor Total
+        # Ajustar anchos de columna (mantener como lo tenías; ejemplo ajustado)
+        worksheet.set_column('A:A', 10)
+        worksheet.set_column('B:B', 15)
+        worksheet.set_column('C:C', 20)
+        worksheet.set_column('D:D', 10)
+        worksheet.set_column('E:E', 14)
+        worksheet.set_column('F:F', 14)
+        worksheet.set_column('G:G', 12)
+        worksheet.set_column('H:H', 12)
+        worksheet.set_column('I:I', 10)
+        worksheet.set_column('J:J', 10)
+        worksheet.set_column('K:K', 10)
+        worksheet.set_column('L:L', 10)
+        worksheet.set_column('M:M', 18)
+
+        # Reescribir y aplicar formato a todas las filas de datos con altura fija
+        data_start_row = fila_inicio + (1 if tiene_saldo_anterior else 0)
+        for row_idx in range(len(df)):
+            worksheet.set_row(data_start_row + row_idx, row_height)
+            for col_idx in range(len(df.columns)):
+                value = df.iloc[row_idx, col_idx]
+                if col_idx == 1 or col_idx == 12:
+                    formato = data_format_center_text
+                else:
+                    formato = data_format_center
+                worksheet.write(data_start_row + row_idx, col_idx, value, formato)
 
     def cerrar_ventana(self):
         """
