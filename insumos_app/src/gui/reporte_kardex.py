@@ -1405,15 +1405,15 @@ class ReporteKardex:
             from reportlab.lib import colors
             from reportlab.lib.pagesizes import landscape, legal
             from reportlab.lib.units import inch
-            from reportlab.lib.enums import TA_CENTER
+            from reportlab.lib.enums import TA_CENTER, TA_LEFT
 
-            # Márgenes: dejamos MÁS espacio en topMargin para separar encabezado y filtros
+            # Márgenes: ajustar topMargin para el espaciado correcto
             doc = SimpleDocTemplate(
                 ruta_pdf,
                 pagesize=landscape(legal),
                 rightMargin=36,
                 leftMargin=36,
-                topMargin=140,   # aumentado para separar encabezado de filtros
+                topMargin=150,   # Reducido a 100 para mejor control del espaciado
                 bottomMargin=36
             )
 
@@ -1425,9 +1425,11 @@ class ReporteKardex:
                                         alignment=TA_CENTER, spaceAfter=6, fontSize=12)
             subtitle_style = ParagraphStyle('CustomSubtitle', parent=styles['Heading2'],
                                             alignment=TA_CENTER, spaceAfter=4, fontSize=10)
-            # estilo para filtros: centrado, fontSize pequeño y leading para 2 líneas
+            
+            # Estilo para filtros: alineado a la izquierda, fontSize pequeño y leading para 2 líneas
             filtro_style = ParagraphStyle('FiltroStyle', parent=styles['Normal'],
-                                        alignment=TA_CENTER, fontSize=9, leading=11, spaceAfter=0)
+                                        alignment=TA_LEFT,  # Cambiado de TA_CENTER a TA_LEFT
+                                        fontSize=9, leading=11, spaceAfter=0)
 
             referencia_style = ParagraphStyle('ReferenciaStyle', parent=styles['Normal'],
                                             alignment=TA_CENTER, fontSize=8, leading=10)
@@ -1474,7 +1476,7 @@ class ReporteKardex:
                 ]
                 data.append(row)
 
-            # Anchos de columna (coinciden con Excel)
+            # Anchos de columna
             colWidths = [
                 0.8*inch, 0.9*inch, 1.7*inch, 0.7*inch, 0.9*inch, 0.9*inch,
                 0.9*inch, 0.9*inch, 0.7*inch, 0.8*inch, 0.7*inch, 0.8*inch, 1.5*inch
@@ -1500,8 +1502,7 @@ class ReporteKardex:
             elements.append(Spacer(1, 12))
             elements.append(table)
 
-            # HEADER: dibuja títulos (separados) y fila de filtros: cada filtro en su bloque (2 líneas centradas),
-            # y el último bloque es "Saldo anterior" (también centrado en 2 líneas).
+            # HEADER: diferente para páginas pares e impares
             def header(canvas, doc):
                 canvas.saveState()
                 page_num = canvas.getPageNumber()
@@ -1509,94 +1510,102 @@ class ReporteKardex:
                 page_width, page_height = doc.pagesize
                 left = doc.leftMargin
                 right = page_width - doc.rightMargin
-                usable_width = right - left
 
-                # Títulos (separados del área de filtros por la topMargin aumentada)
+                # PÁGINAS IMPARES: títulos + filtros + tabla
                 if page_num % 2 == 1:
-                    y_title = page_height - (doc.topMargin - 40)  # bajar títulos dentro del espacio reservado
+                    # Títulos del encabezado - posiciones más controladas
+                    y_titulo_principal = page_height - 50
+                    y_area = y_titulo_principal - 14
+                    y_tarjeta = y_area - 14
+                    y_fecha_generacion = y_tarjeta - 14
+                    
                     canvas.setFont('Helvetica-Bold', 11)
-                    canvas.drawCentredString(page_width / 2.0, y_title, "DIRECCIÓN DEPARTAMENTAL DE REDES INTEGRADAS DE SERVICIOS DE SALUD DE GUATEMALA,")
+                    canvas.drawCentredString(page_width / 2.0, y_titulo_principal, 
+                        "DIRECCIÓN DEPARTAMENTAL DE REDES INTEGRADAS DE SERVICIOS DE SALUD DE GUATEMALA,")
                     canvas.setFont('Helvetica', 9)
-                    canvas.drawCentredString(page_width / 2.0, y_title - 14, "ÁREA NOR ORIENTE")
-                    canvas.drawCentredString(page_width / 2.0, y_title - 28, "TARJETA DE CONTROL DE SUMINISTROS")
+                    canvas.drawCentredString(page_width / 2.0, y_area, "ÁREA NOR ORIENTE")
+                    canvas.drawCentredString(page_width / 2.0, y_tarjeta, "TARJETA DE CONTROL DE SUMINISTROS")
+                    
+                    # Fecha y hora de generación
+                    canvas.setFont('Helvetica', 8)
+                    fecha_generacion = datetime.now().strftime('%d/%m/%Y %H:%M:%S')
+                    canvas.drawCentredString(page_width / 2.0, y_fecha_generacion, f"Generado el: {fecha_generacion}")
 
-                # --- FILTROS: distribuimos los bloques según los anchos de las columnas de la tabla ---
-                # Mapear bloques a agrupaciones de columnas como en Excel:
-                # Bloque1 = colWidths[0] + colWidths[1]  (A6:B6)
-                # Bloque2 = colWidths[2] + colWidths[3]  (C6:D6)
-                # Bloque3 = colWidths[4] + colWidths[5]  (E6:F6)
-                # Bloque4 = colWidths[6] + colWidths[7]  (G6:H6)
-                # Bloque5 = colWidths[8] + colWidths[9]  (I6:J6)
-                # Bloque6 = colWidths[10] + colWidths[11] (K6:L6)
-                # BloqueSaldo = colWidths[12]  (M6)
+                    # --- FILTROS: exactamente una fila de separación después de la fecha ---
+                    y_filtros = y_fecha_generacion - 30  # Una fila de separación (24 puntos)
 
-                bloques_widths = [
-                    colWidths[0] + colWidths[1],
-                    colWidths[2] + colWidths[3],
-                    colWidths[4] + colWidths[5],
-                    colWidths[6] + colWidths[7],
-                    colWidths[8] + colWidths[9],
-                    colWidths[10] + colWidths[11],
-                    colWidths[12]
-                ]
+                    # Calcular el ancho total de la tabla y posición inicial
+                    table_width = sum(colWidths)
+                    usable_width = right - left
+                    table_start_x = left + (usable_width - table_width) / 2
+                    
+                    # Definir qué columnas abarca cada filtro
+                    filtros_columnas = [
+                        (0, 1),    # Área: columnas 0-1
+                        (2, 3),    # Distrito: columnas 2-3  
+                        (4, 5),    # Tipo de Servicio: columnas 4-5
+                        (6, 7),    # Servicio: columnas 6-7
+                        (8, 9),    # Insumo: columnas 8-9
+                        (10, 11),  # Presentación: columnas 10-11
+                        (12, 12)   # Saldo anterior: columna 12
+                    ]
+                    
+                    # Calcular posiciones de los filtros
+                    filtros_info = []
+                    for inicio_col, fin_col in filtros_columnas:
+                        pos_x = table_start_x + sum(colWidths[:inicio_col])
+                        ancho = sum(colWidths[inicio_col:fin_col+1])
+                        filtros_info.append((pos_x, ancho))
 
-                # calcular posiciones x (left of each block)
-                x_positions_left = []
-                cur_x = left
-                for w in bloques_widths:
-                    x_positions_left.append(cur_x)
-                    cur_x += w
+                    # Texto de filtros
+                    filtros_list = [
+                        f"Área:\n{self.combo_area.get()}",
+                        f"Distrito:\n{self.combo_distrito.get()}",
+                        f"Tipo de Servicio:\n{self.combo_tipo_servicio.get()}",
+                        f"Servicio:\n{self.combo_servicio.get()}",
+                        f"Insumo:\n{self.combo_insumo.get()}",
+                        f"Presentación:\n{self.combo_presentacion.get()}",
+                    ]
 
-                # Texto de filtros (cada uno en hasta 2 líneas), usamos Paragraph con filtro_style (centrado, leading para 2 líneas)
-                filtros_list = [
-                    f"Área:\n{self.combo_area.get()}",
-                    f"Distrito:\n{self.combo_distrito.get()}",
-                    f"Tipo de Servicio:\n{self.combo_tipo_servicio.get()}",
-                    f"Servicio:\n{self.combo_servicio.get()}",
-                    f"Insumo:\n{self.combo_insumo.get()}",
-                    f"Presentación:\n{self.combo_presentacion.get()}",
-                ]
-                # Agregamos en la última posición el Saldo anterior como bloque con 2 líneas
-                # calcular saldo para la página (mismo método determinista que antes)
-                try:
-                    usable_table_height = doc.height
-                    filas_por_pagina_estimadas = int(usable_table_height // row_height)
-                    data_rows_per_page = max(1, filas_por_pagina_estimadas - 1)
-                except Exception:
-                    data_rows_per_page = 20
+                    # Calcular saldo anterior para esta página
+                    try:
+                        usable_table_height = doc.height
+                        filas_por_pagina_estimadas = int(usable_table_height // row_height)
+                        data_rows_per_page = max(1, filas_por_pagina_estimadas - 1)
+                    except Exception:
+                        data_rows_per_page = 20
 
-                saldo_val = 0
-                if page_num > 1:
-                    last_index_prev = (page_num - 1) * data_rows_per_page - 1
-                    if 0 <= last_index_prev < len(self.movimientos_data):
-                        raw = self.movimientos_data[last_index_prev].get('saldo', 0)
-                        try:
-                            saldo_val = float(raw) if raw not in (None, '') else 0
-                        except Exception:
-                            saldo_val = raw
-                    else:
-                        saldo_val = 0
-                else:
                     saldo_val = 0
+                    if page_num > 1:
+                        last_index_prev = (page_num - 1) * data_rows_per_page - 1
+                        if 0 <= last_index_prev < len(self.movimientos_data):
+                            raw = self.movimientos_data[last_index_prev].get('saldo', 0)
+                            try:
+                                saldo_val = float(raw) if raw not in (None, '') else 0
+                            except Exception:
+                                saldo_val = 0
+                        else:
+                            saldo_val = 0
 
-                filtros_list.append(f"Saldo anterior:\nQ. {saldo_val:,.2f}" if isinstance(saldo_val, (int, float)) else f"Saldo anterior:\n{saldo_val}")
+                    # Agregar saldo anterior
+                    if isinstance(saldo_val, (int, float)):
+                        filtros_list.append(f"Saldo anterior:\n{saldo_val:,.2f}")
+                    else:
+                        filtros_list.append(f"Saldo anterior:\n{saldo_val}")
 
-                # posición vertical de los filtros (dentro del topMargin, justo debajo de títulos)
-                y_filtros = page_height - doc.topMargin + 32  # ajuste fino: dentro del topMargin aumentado
+                    # Dibujar cada filtro alineado con las columnas
+                    for idx, txt in enumerate(filtros_list):
+                        pos_x, ancho = filtros_info[idx]
+                        p = Paragraph(txt, filtro_style)
+                        max_h = filtro_style.leading * 2 + 2
+                        w_par, h_par = p.wrap(ancho, max_h)
+                        # Alinear a la izquierda con pequeño padding
+                        x_draw = pos_x + 4
+                        y_draw = y_filtros - (h_par / 2.0)
+                        p.drawOn(canvas, x_draw, y_draw)
 
-                # dibujar cada filtro como Paragraph, centrado en su bloque y con 2 líneas (wrap)
-                for idx, txt in enumerate(filtros_list):
-                    block_left = x_positions_left[idx]
-                    block_w = bloques_widths[idx]
-                    p = Paragraph(txt, filtro_style)
-                    # limitar altura a 2 líneas: leading * 2
-                    max_h = filtro_style.leading * 2 + 2
-                    w_par, h_par = p.wrap(block_w, max_h)
-                    # centrar horizontalmente dentro del bloque
-                    x_draw = block_left + (block_w - w_par) / 2.0
-                    # centrar verticalmente respecto a y_filtros (aprox): drawOn uses bottom-left, así que ajustamos
-                    y_draw = y_filtros - (h_par / 2.0)
-                    p.drawOn(canvas, x_draw, y_draw)
+                # PÁGINAS PARES: solo tabla (sin títulos ni filtros)
+                # No se dibuja nada adicional, solo la tabla se renderiza automáticamente
 
                 canvas.restoreState()
 
@@ -1608,7 +1617,7 @@ class ReporteKardex:
 
         except Exception as e:
             messagebox.showerror("Error", f"Error al generar PDF: {str(e)}")
-
+        
     def generar_kardex(self):
         try:
             # Obtener fechas según el modo seleccionado
