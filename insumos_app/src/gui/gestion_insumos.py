@@ -58,24 +58,31 @@ class GestionInsumos:
 
         self.cargar_iconos()
         self.setup_ui()
+        
+        # Aplicar estilo solo si es un ttk widget
+        if isinstance(self.parent, ttk.Widget):
+            self.parent.configure(style='MainContent.TFrame')
 
     def setup_styles(self):
         self.COLORS = {
-            'primary': '#2E86AB',
-            'secondary': '#A23B72',
-            'success': '#27AE60',
-            'warning': '#F39C12',
-            'danger': '#E74C3C',
-            'accent': '#8E44AD',
-            'light': '#F8F9FA',
-            'white': '#FFFFFF',
-            'text_dark': '#2C3E50',
-            'text_light': '#7F8C8D',
-            'border': '#BDC3C7'
+            'primary': '#2c3e50',      # Cambiado de '#2E86AB' a '#2c3e50'
+            'secondary': '#34495e',    # Agregado
+            'success': '#27AE60',      # Mantenido
+            'warning': '#F39C12',      # Mantenido
+            'danger': '#E74C3C',       # Mantenido
+            'accent': '#8E44AD',       # Mantenido
+            'light': '#ecf0f1',        # Cambiado de '#F8F9FA' a '#ecf0f1'
+            'white': '#FFFFFF',        # Mantenido
+            'text_dark': '#2C3E50',    # Mantenido
+            'text_light': '#7F8C8D',   # Mantenido
+            'border': '#BDC3C7'        # Mantenido
         }
 
         style = ttk.Style()
         style.theme_use('clam')
+
+        # Configurar el estilo del frame principal para que use el color correcto
+        style.configure('MainContent.TFrame', background=self.COLORS['light'])
 
         style.configure('Card.TLabelframe',
                         background=self.COLORS['white'],
@@ -102,6 +109,19 @@ class GestionInsumos:
                             ('pressed', '#1A4F7A')])
 
     def create_titled_frame(self, parent, title):
+        # Manejar diferentes tipos de parent widgets
+        if hasattr(parent, 'configure'):
+            try:
+                # Intentar configurar como tk.Widget primero
+                parent.configure(bg=self.COLORS['light'])
+            except tk.TclError:
+                # Si falla, es probablemente un ttk widget, intentar con estilo
+                try:
+                    if isinstance(parent, ttk.Widget):
+                        parent.configure(style='MainContent.TFrame')
+                except:
+                    pass  # Si ambos fallan, continuar sin configurar el fondo
+        
         container = tk.Frame(parent, bg=self.COLORS['white'], relief='solid', borderwidth=1)
 
         header = tk.Frame(container, bg=self.COLORS['primary'], height=20)
@@ -200,8 +220,18 @@ class GestionInsumos:
     # --- Configuración UI ---
 
     def setup_ui(self):
+        # Configurar el fondo del parent de manera segura
+        try:
+            if isinstance(self.parent, ttk.Widget):
+                # Es un widget ttk, usar estilo
+                self.parent.configure(style='MainContent.TFrame')
+            else:
+                # Es un widget tk, usar bg directamente
+                self.parent.configure(bg=self.COLORS['light'])
+        except Exception as e:
+            print(f"No se pudo configurar el fondo del parent: {e}")
         
-        # Título principal con estilo
+        # Título principal con estilo - usando colores consistentes
         title_frame = tk.Frame(self.parent, bg=self.COLORS['primary'], height=50)
         title_frame.pack(fill='x', padx=10, pady=(10, 5))
         title_frame.pack_propagate(False)
@@ -216,37 +246,63 @@ class GestionInsumos:
                 fg=self.COLORS['white'],
                 bg=self.COLORS['primary']).pack(anchor='w', padx=10)
 
-        # Separador con color gris claro
-        sep = ttk.Separator(self.parent, orient='horizontal')
-        sep.pack(fill='x', padx=10, pady=5)
+        # Separador con color consistente
+        sep_frame = tk.Frame(self.parent, bg=self.COLORS['border'], height=1)
+        sep_frame.pack(fill='x', padx=10, pady=5)
 
-        self.notebook = ttk.Notebook(self.parent)
-        self.notebook.pack(fill="both", expand=True, padx=10, pady=5)
+        # Notebook con fondo consistente
+        notebook_frame = tk.Frame(self.parent, bg=self.COLORS['light'])
+        notebook_frame.pack(fill="both", expand=True, padx=10, pady=5)
+        
+        self.notebook = ttk.Notebook(notebook_frame)
+        self.notebook.pack(fill="both", expand=True)
 
+        # Crear tabs con fondo consistente
         self.tab_tipos = ttk.Frame(self.notebook)
         self.tab_insumos = ttk.Frame(self.notebook)
         self.tab_presentaciones = ttk.Frame(self.notebook)
+        
+        # Configurar fondo de las tabs
+        for tab in [self.tab_tipos, self.tab_insumos, self.tab_presentaciones]:
+            tab.configure(style='Tab.TFrame')
 
         self.notebook.add(self.tab_tipos, text="Tipos de Insumo")
         self.notebook.add(self.tab_insumos, text="Insumos")
         self.notebook.add(self.tab_presentaciones, text="Presentaciones")
 
+        # Configurar estilo para las tabs
+        style = ttk.Style()
+        style.configure('Tab.TFrame', background=self.COLORS['light'])
+
         self.setup_tipos_tab()
         self.setup_insumos_tab()
         self.setup_presentaciones_tab()
 
-        # Botón cerrar con estilo
-        btn_close = tk.Button(self.parent,
+        # Botón cerrar con estilo consistente
+        button_frame = tk.Frame(self.parent, bg=self.COLORS['light'])
+        button_frame.pack(fill='x', pady=10, padx=10)
+        
+        btn_close = tk.Button(button_frame,
                             text="Cerrar",
                             command=self.cerrar_ventana,
                             font=('Segoe UI', 10, 'bold'),
                             bg=self.COLORS['white'],
                             fg=self.COLORS['text_dark'],
                             relief='flat',
-                            borderwidth=0,
+                            borderwidth=1,
                             padx=15, pady=6,
                             cursor='hand2')
-        btn_close.pack(pady=10, padx=10, anchor='e')
+        btn_close.pack(anchor='e')
+
+        # Efectos hover para el botón cerrar
+        def on_close_enter(e):
+            btn_close.config(bg=self.COLORS['light'])
+        
+        def on_close_leave(e):
+            btn_close.config(bg=self.COLORS['white'])
+        
+        btn_close.bind('<Enter>', on_close_enter)
+        btn_close.bind('<Leave>', on_close_leave)
 
         self.actualizar_tipos()
         self.actualizar_insumos()

@@ -278,10 +278,11 @@ class MainWindow:
 
     def create_layout(self):
         """Crea el layout principal de la aplicación"""
-        # **SIDEBAR (MENÚ LATERAL)**
-        self.sidebar = ttk.Frame(self.root, style='Sidebar.TFrame', width=280)
+        # **SIDEBAR (MENÚ LATERAL)** - Ancho aumentado para acomodar texto completo
+        self.sidebar = ttk.Frame(self.root, style='Sidebar.TFrame', width=380)  # Aumentado a 380px
         self.sidebar.grid(row=0, column=0, sticky="nsew", padx=0, pady=0)
-        self.sidebar.grid_propagate(False)  # Mantener ancho fijo
+        self.sidebar.grid_propagate(False)  # Mantener ancho fijo - CRÍTICO
+        self.sidebar.pack_propagate(False)   # También prevenir expansión con pack
 
         # **ÁREA PRINCIPAL**
         self.main_area = ttk.Frame(self.root, style='MainArea.TFrame')
@@ -301,7 +302,7 @@ class MainWindow:
         self.create_status_bar()
 
     def create_sidebar(self):
-        """Crea el menú lateral"""
+        """Crea el menú lateral con ancho fijo"""
         # **HEADER DEL SIDEBAR**
         header_frame = tk.Frame(self.sidebar, bg=self.COLORS['primary'], height=140)
         header_frame.pack(fill="x", pady=0)
@@ -320,31 +321,49 @@ class MainWindow:
 
         # Título del sistema
         title_label = tk.Label(header_frame,
-                              text="SISTEMA DE GESTIÓN",
-                              font=('Segoe UI', 12, 'bold'),
-                              fg=self.COLORS['white'],
-                              bg=self.COLORS['primary'])
+                            text="SISTEMA DE GESTIÓN",
+                            font=('Segoe UI', 12, 'bold'),
+                            fg=self.COLORS['white'],
+                            bg=self.COLORS['primary'])
         title_label.pack(pady=(5, 2))
 
         subtitle_label = tk.Label(header_frame,
-                                 text="DE INSUMOS",
-                                 font=('Segoe UI', 12, 'bold'),
-                                 fg=self.COLORS['white'],
-                                 bg=self.COLORS['primary'])
+                                text="DE INSUMOS",
+                                font=('Segoe UI', 12, 'bold'),
+                                fg=self.COLORS['white'],
+                                bg=self.COLORS['primary'])
         subtitle_label.pack(pady=(0, 15))
 
         # **SEPARADOR**
         separator = tk.Frame(self.sidebar, bg=self.COLORS['accent'], height=2)
         separator.pack(fill="x", pady=0)
 
-        # **MENÚ DE NAVEGACIÓN**
-        nav_frame = tk.Frame(self.sidebar, bg=self.COLORS['primary'])
-        nav_frame.pack(fill="both", expand=True, padx=0, pady=10)
+        # **MENÚ DE NAVEGACIÓN CON SCROLLBAR**
+        nav_container = tk.Frame(self.sidebar, bg=self.COLORS['primary'])
+        nav_container.pack(fill="both", expand=True, padx=0, pady=10)
 
+        # Canvas para scroll si es necesario
+        canvas = tk.Canvas(nav_container, bg=self.COLORS['primary'], highlightthickness=0)
+        scrollbar = ttk.Scrollbar(nav_container, orient="vertical", command=canvas.yview)
+        nav_frame = tk.Frame(canvas, bg=self.COLORS['primary'])
+
+        # Configurar scroll
+        nav_frame.bind(
+            "<Configure>",
+            lambda e: canvas.configure(scrollregion=canvas.bbox("all"))
+        )
+
+        canvas.create_window((0, 0), window=nav_frame, anchor="nw")
+        canvas.configure(yscrollcommand=scrollbar.set)
+
+        # Pack canvas y scrollbar
+        canvas.pack(side="left", fill="both", expand=True)
+        # Solo mostrar scrollbar si es necesario
+        
         # Crear botones según rol
         self.create_navigation_menu(nav_frame)
 
-        # **BOTÓN DE SALIR (EN LA PARTE INFERIOR) - ACTUALIZADO**
+        # **BOTÓN DE SALIR (EN LA PARTE INFERIOR)**
         exit_frame = tk.Frame(self.sidebar, bg=self.COLORS['primary'], height=70)
         exit_frame.pack(fill="x", side="bottom", pady=(0, 20))
         exit_frame.pack_propagate(False)
@@ -353,42 +372,461 @@ class MainWindow:
         exit_btn = self.create_rounded_button(
             exit_frame,
             "  Salir del Sistema",
-            self.COLORS['exit_btn'],  # Color celeste
-            self.COLORS['exit_hover'], # Color hover celeste oscuro
+            self.COLORS['exit_btn'],
+            self.COLORS['exit_hover'],
             self.on_closing,
             self.icons.get('salir')
         )
 
     def create_navigation_menu(self, parent):
-        """Crea el menú de navegación"""
+        """Crea el menú de navegación con estructura de árbol colapsable"""
         rol = self.usuario['rol']
+        
+        # Frame contenedor del menú árbol
+        tree_container = tk.Frame(parent, bg=self.COLORS['primary'])
+        tree_container.pack(fill="both", expand=True, padx=5, pady=5)
+        
+        # Diccionario para mantener el estado de expansión de cada categoría
+        self.menu_expanded = {}
+        
+        # Diccionario para almacenar los frames de subcategorías
+        self.submenu_frames = {}
+        
+        # Definir la estructura del menú por categorías
+        menu_structure = self.get_menu_structure(rol)
+        
+        # Crear cada categoría del menú
+        for category, items in menu_structure.items():
+            self.create_menu_category(tree_container, category, items)
 
-        # Definir menús por rol
-        menu_items = []
-
+    def get_menu_structure(self, rol):
+        """Define la estructura del menú según el rol del usuario"""
+        menu_structure = {}
+        
         if rol in ("admin", "super_admin"):
-            menu_items.extend([
+            menu_structure["👥 ADMINISTRACIÓN"] = [
                 ("Gestión de Usuarios", self.load_gestion_usuarios, 'usuarios'),
                 ("Gestión de Insumos", self.load_gestion_insumos, 'insumos'),
                 ("Gestión de Servicios", self.load_gestion_servicios, 'servicios'),
                 ("Gestión de Movimientos", self.load_gestion_movimientos, 'movimientos'),
+            ]
+            
+            menu_structure["⚙️ CONFIGURACIÓN"] = [
                 ("Configurar Servidor", self.load_configurar_servidor, 'configurar_servidor'),
-            ])
-
+                ("Importar/Exportar", self.load_importar_exportar, 'import_export'),
+            ]
+        elif rol == "usuario":
+            # Para usuarios normales, solo exponemos Importar/Exportar en Configuración
+            menu_structure["⚙️ CONFIGURACIÓN"] = [
+                ("Importar/Exportar", self.load_importar_exportar, 'import_export'),
+            ]
+        
         if rol in ("usuario", "admin", "super_admin"):
-            menu_items.extend([
+            menu_structure["📦 OPERACIONES"] = [
                 ("Ingreso de Insumos", self.load_ingreso_insumos, 'ingreso'),
+                ("Correcciones", self.load_correccion_movimientos, 'correcciones'),
+            ]
+            
+            menu_structure["📊 REPORTES"] = [
                 ("Reporte Kardex", self.load_reporte_kardex, 'kardex'),
                 ("Reporte Demanda Real", self.load_reporte_demanda_real, 'demanda'),
                 ("Reporte BRES", self.load_reporte_bres, 'bres'),
                 ("Reporte Balance Bodega", self.load_reporte_balance_bodega, 'balance'),
-                ("Correcciones", self.load_correccion_movimientos, 'correcciones'),
-                ("Importar/Exportar", self.load_importar_exportar, 'import_export'),
-            ])
+            ]
+        
+        return menu_structure
 
-        # Crear botones
-        for text, command, icon_key in menu_items:
-            self.create_nav_button(parent, text, command, icon_key)
+    def create_menu_category(self, parent, category_name, items):
+        """Crea una categoría del menú con sus elementos hijo - efectos hover simplificados"""
+        # Frame principal de la categoría
+        category_frame = tk.Frame(parent, bg=self.COLORS['primary'])
+        category_frame.pack(fill="x", pady=2)
+        
+        # Inicializar estado colapsado
+        self.menu_expanded[category_name] = False
+        
+        # Frame para el header de la categoría (clickeable)
+        header_frame = tk.Frame(category_frame, bg=self.COLORS['primary'], cursor='hand2')
+        header_frame.pack(fill="x")
+        
+        # Crear el botón de expansión/colapso
+        expand_button = tk.Label(header_frame, 
+                            text="▶", 
+                            font=('Segoe UI', 10),
+                            fg=self.COLORS['white'],
+                            bg=self.COLORS['primary'],
+                            width=2,
+                            cursor='hand2')
+        expand_button.pack(side="left", padx=(15, 5))
+        
+        # Label del título de la categoría
+        category_label = tk.Label(header_frame,
+                                text=category_name,
+                                font=('Segoe UI', 10, 'bold'),
+                                fg=self.COLORS['white'],
+                                bg=self.COLORS['primary'],
+                                anchor='w',
+                                cursor='hand2')
+        category_label.pack(side="left", fill="x", expand=True, padx=(0, 15))
+        
+        # Frame para los elementos hijo (inicialmente oculto)
+        submenu_frame = tk.Frame(category_frame, bg=self.COLORS['secondary'])
+        self.submenu_frames[category_name] = submenu_frame
+        
+        # Agregar elementos hijo
+        for item_text, item_command, icon_key in items:
+            self.create_tree_menu_item(submenu_frame, item_text, item_command, icon_key)
+        
+        # Función para alternar expansión/colapso
+        def toggle_category():
+            self.toggle_menu_category(category_name, expand_button, submenu_frame)
+        
+        # Vincular eventos de clic a todos los elementos del header
+        header_frame.bind('<Button-1>', lambda e: toggle_category())
+        expand_button.bind('<Button-1>', lambda e: toggle_category())
+        category_label.bind('<Button-1>', lambda e: toggle_category())
+        
+        # EFECTOS HOVER SIMPLIFICADOS para el header - solo cuando está colapsado
+        def on_header_enter(e):
+            if not self.menu_expanded[category_name]:
+                header_frame.config(bg=self.COLORS['secondary'])
+                expand_button.config(bg=self.COLORS['secondary'])
+                category_label.config(bg=self.COLORS['secondary'])
+        
+        def on_header_leave(e):
+            if not self.menu_expanded[category_name]:
+                header_frame.config(bg=self.COLORS['primary'])
+                expand_button.config(bg=self.COLORS['primary'])
+                category_label.config(bg=self.COLORS['primary'])
+        
+        # Vincular solo los eventos hover necesarios
+        header_frame.bind('<Enter>', on_header_enter)
+        header_frame.bind('<Leave>', on_header_leave)
+
+    def create_layout(self):
+        """Crea el layout principal de la aplicación"""
+        # **SIDEBAR (MENÚ LATERAL)** - Ancho aumentado para acomodar texto completo
+        self.sidebar = ttk.Frame(self.root, style='Sidebar.TFrame', width=240)  # Aumentado a 380px
+        self.sidebar.grid(row=0, column=0, sticky="nsew", padx=0, pady=0)
+        self.sidebar.grid_propagate(False)  # Mantener ancho fijo - CRÍTICO
+        self.sidebar.pack_propagate(False)   # También prevenir expansión con pack
+
+        # **ÁREA PRINCIPAL**
+        self.main_area = ttk.Frame(self.root, style='MainArea.TFrame')
+        self.main_area.grid(row=0, column=1, sticky="nsew", padx=0, pady=0)
+
+        # **BARRA DE ESTADO**
+        self.status_bar = ttk.Frame(self.root, style='StatusBar.TFrame')
+        self.status_bar.grid(row=1, column=0, columnspan=2, sticky="ew")
+
+        # Crear contenido del sidebar
+        self.create_sidebar()
+
+        # Crear área de contenido principal
+        self.create_main_content_area()
+
+        # Crear barra de estado
+        self.create_status_bar()
+
+    def create_sidebar(self):
+        """Crea el menú lateral con ancho fijo"""
+        # **HEADER DEL SIDEBAR**
+        header_frame = tk.Frame(self.sidebar, bg=self.COLORS['primary'], height=140)
+        header_frame.pack(fill="x", pady=0)
+        header_frame.pack_propagate(False)
+
+        # Logo (si existe)
+        if self.icons.get('logo'):
+            logo_label = tk.Label(header_frame, 
+                                image=self.icons['logo'],
+                                bg=self.COLORS['primary'])
+            logo_label.pack(pady=(25, 8))
+        else:
+            # Si no hay logo, agregar espacio equivalente
+            spacer = tk.Frame(header_frame, bg=self.COLORS['primary'], height=30)
+            spacer.pack()
+
+        # Título del sistema
+        title_label = tk.Label(header_frame,
+                            text="SISTEMA DE GESTIÓN",
+                            font=('Segoe UI', 12, 'bold'),
+                            fg=self.COLORS['white'],
+                            bg=self.COLORS['primary'])
+        title_label.pack(pady=(5, 2))
+
+        subtitle_label = tk.Label(header_frame,
+                                text="DE INSUMOS",
+                                font=('Segoe UI', 12, 'bold'),
+                                fg=self.COLORS['white'],
+                                bg=self.COLORS['primary'])
+        subtitle_label.pack(pady=(0, 15))
+
+        # **SEPARADOR**
+        separator = tk.Frame(self.sidebar, bg=self.COLORS['accent'], height=2)
+        separator.pack(fill="x", pady=0)
+
+        # **MENÚ DE NAVEGACIÓN CON SCROLLBAR**
+        nav_container = tk.Frame(self.sidebar, bg=self.COLORS['primary'])
+        nav_container.pack(fill="both", expand=True, padx=0, pady=10)
+
+        # Canvas para scroll si es necesario
+        canvas = tk.Canvas(nav_container, bg=self.COLORS['primary'], highlightthickness=0)
+        scrollbar = ttk.Scrollbar(nav_container, orient="vertical", command=canvas.yview)
+        nav_frame = tk.Frame(canvas, bg=self.COLORS['primary'])
+
+        # Configurar scroll
+        nav_frame.bind(
+            "<Configure>",
+            lambda e: canvas.configure(scrollregion=canvas.bbox("all"))
+        )
+
+        canvas.create_window((0, 0), window=nav_frame, anchor="nw")
+        canvas.configure(yscrollcommand=scrollbar.set)
+
+        # Pack canvas y scrollbar
+        canvas.pack(side="left", fill="both", expand=True)
+        # Solo mostrar scrollbar si es necesario
+        
+        # Crear botones según rol
+        self.create_navigation_menu(nav_frame)
+
+        # **BOTÓN DE SALIR (EN LA PARTE INFERIOR)**
+        exit_frame = tk.Frame(self.sidebar, bg=self.COLORS['primary'], height=70)
+        exit_frame.pack(fill="x", side="bottom", pady=(0, 20))
+        exit_frame.pack_propagate(False)
+
+        # Usar la función de botón redondeado con color celeste
+        exit_btn = self.create_rounded_button(
+            exit_frame,
+            "  Salir del Sistema",
+            self.COLORS['exit_btn'],
+            self.COLORS['exit_hover'],
+            self.on_closing,
+            self.icons.get('salir')
+        )
+
+    def create_menu_category(self, parent, category_name, items):
+        """Crea una categoría del menú con sus elementos hijo - ancho controlado"""
+        # Frame principal de la categoría con ancho máximo
+        category_frame = tk.Frame(parent, bg=self.COLORS['primary'])
+        category_frame.pack(fill="x", pady=2)
+        
+        # Inicializar estado colapsado
+        self.menu_expanded[category_name] = False
+        
+        # Frame para el header de la categoría (clickeable) con ancho fijo
+        header_frame = tk.Frame(category_frame, bg=self.COLORS['primary'], cursor='hand2')
+        header_frame.pack(fill="x")
+        
+        # Crear el botón de expansión/colapso
+        expand_button = tk.Label(header_frame, 
+                            text="▶", 
+                            font=('Segoe UI', 10),
+                            fg=self.COLORS['white'],
+                            bg=self.COLORS['primary'],
+                            width=2,
+                            cursor='hand2')
+        expand_button.pack(side="left", padx=(15, 5))
+        
+        # Label del título de la categoría con texto truncado si es necesario
+        category_label = tk.Label(header_frame,
+                                text=category_name,
+                                font=('Segoe UI', 10, 'bold'),
+                                fg=self.COLORS['white'],
+                                bg=self.COLORS['primary'],
+                                anchor='w',
+                                cursor='hand2')
+        category_label.pack(side="left", fill="x", expand=True, padx=(0, 15))
+        
+        # Frame para los elementos hijo (inicialmente oculto) con ancho controlado
+        submenu_frame = tk.Frame(category_frame, bg=self.COLORS['secondary'])
+        self.submenu_frames[category_name] = submenu_frame
+        
+        # Agregar elementos hijo
+        for item_text, item_command, icon_key in items:
+            self.create_tree_menu_item(submenu_frame, item_text, item_command, icon_key)
+        
+        # Función para alternar expansión/colapso
+        def toggle_category():
+            self.toggle_menu_category(category_name, expand_button, submenu_frame)
+        
+        # Vincular eventos de clic a todos los elementos del header
+        header_frame.bind('<Button-1>', lambda e: toggle_category())
+        expand_button.bind('<Button-1>', lambda e: toggle_category())
+        category_label.bind('<Button-1>', lambda e: toggle_category())
+        
+        # Efectos hover para el header completo
+        def on_header_enter(e):
+            if not self.menu_expanded[category_name]:
+                header_frame.config(bg=self.COLORS['secondary'])
+                expand_button.config(bg=self.COLORS['secondary'])
+                category_label.config(bg=self.COLORS['secondary'])
+        
+        def on_header_leave(e):
+            if not self.menu_expanded[category_name]:
+                header_frame.config(bg=self.COLORS['primary'])
+                expand_button.config(bg=self.COLORS['primary'])
+                category_label.config(bg=self.COLORS['primary'])
+        
+        header_frame.bind('<Enter>', on_header_enter)
+        header_frame.bind('<Leave>', on_header_leave)
+        expand_button.bind('<Enter>', on_header_enter)
+        expand_button.bind('<Leave>', on_header_leave)
+        category_label.bind('<Enter>', on_header_enter)
+        category_label.bind('<Leave>', on_header_leave)
+
+    def create_tree_menu_item(self, parent, text, command, icon_key):
+        """Crea un elemento individual del menú árbol sin recuadros y con efecto hover"""
+        # Frame contenedor sin padding para eliminar recuadros transparentes
+        item_frame = tk.Frame(parent, bg=self.COLORS['secondary'])
+        item_frame.pack(fill="x", padx=0, pady=0)  # Sin pady para eliminar espacios
+        
+        # Frame interno para el contenido - mismo color de fondo que el padre
+        inner_frame = tk.Frame(item_frame, bg=self.COLORS['secondary'])
+        inner_frame.pack(fill="x", padx=(25, 15))
+        
+        # Indicador de jerarquía
+        tree_indicator = tk.Label(inner_frame,
+                                text="├─",
+                                font=('Consolas', 9),
+                                fg=self.COLORS['white'],
+                                bg=self.COLORS['secondary'],
+                                width=2)
+        tree_indicator.pack(side="left")
+        
+        # Mostrar texto completo sin truncar
+        display_text = text
+        
+        # Botón del item del menú - configurado para fusionarse con el fondo
+        item_button = tk.Button(inner_frame,
+                            text=f" {display_text}",
+                            font=('Segoe UI', 9),
+                            bg=self.COLORS['secondary'],
+                            fg=self.COLORS['white'],
+                            relief='flat',
+                            borderwidth=0,
+                            highlightthickness=0,  # Eliminar borde de foco
+                            padx=5,
+                            pady=8,  # Ligeramente más alto para mejor área de clic
+                            anchor='w',
+                            cursor='hand2',
+                            command=command)
+        
+        # Agregar icono si existe
+        if self.icons.get(icon_key):
+            item_button.config(image=self.icons[icon_key], compound='left')
+        
+        item_button.pack(side="left", fill="x", expand=True)
+        
+        # Efectos hover que cubren toda el área del elemento
+        def on_item_enter(e):
+            # Cambiar todos los elementos para un hover uniforme
+            item_frame.config(bg=self.COLORS['hover'])
+            inner_frame.config(bg=self.COLORS['hover'])
+            tree_indicator.config(bg=self.COLORS['hover'])
+            item_button.config(bg=self.COLORS['hover'])
+        
+        def on_item_leave(e):
+            # Restaurar todos los colores
+            item_frame.config(bg=self.COLORS['secondary'])
+            inner_frame.config(bg=self.COLORS['secondary'])
+            tree_indicator.config(bg=self.COLORS['secondary'])
+            item_button.config(bg=self.COLORS['secondary'])
+        
+        def on_item_click(e):
+            # Efecto visual de clic en todo el elemento
+            item_frame.config(bg=self.COLORS['active'])
+            inner_frame.config(bg=self.COLORS['active'])
+            tree_indicator.config(bg=self.COLORS['active'])
+            item_button.config(bg=self.COLORS['active'])
+            # Restaurar color después del clic
+            item_frame.after(150, lambda: on_item_leave(None))
+        
+        # Vincular eventos a todos los elementos para área de hover más grande
+        for widget in [item_frame, inner_frame, tree_indicator, item_button]:
+            widget.bind('<Enter>', on_item_enter)
+            widget.bind('<Leave>', on_item_leave)
+            widget.bind('<Button-1>', on_item_click)
+
+    def toggle_menu_category(self, category_name, expand_button, submenu_frame):
+        """Alterna el estado de expansión/colapso de una categoría del menú - sin efectos de sombra"""
+        is_expanded = self.menu_expanded[category_name]
+        
+        if is_expanded:
+            # Colapsar
+            submenu_frame.pack_forget()
+            expand_button.config(text="▶")
+            self.menu_expanded[category_name] = False
+            
+            # SIMPLIFICAR: Solo restaurar colores del header sin efectos adicionales
+            parent_frame = expand_button.master
+            parent_frame.config(bg=self.COLORS['primary'])
+            expand_button.config(bg=self.COLORS['primary'])
+            for child in parent_frame.winfo_children():
+                if isinstance(child, tk.Label) and child != expand_button:
+                    child.config(bg=self.COLORS['primary'])
+        else:
+            # Expandir
+            submenu_frame.pack(fill="x", pady=(0, 5))
+            expand_button.config(text="▼")
+            self.menu_expanded[category_name] = True
+            
+            # SIMPLIFICAR: Solo cambiar colores necesarios
+            parent_frame = expand_button.master
+            parent_frame.config(bg=self.COLORS['secondary'])
+            expand_button.config(bg=self.COLORS['secondary'])
+            for child in parent_frame.winfo_children():
+                if isinstance(child, tk.Label) and child != expand_button:
+                    child.config(bg=self.COLORS['secondary'])
+        
+        # Actualizar layout sin animación adicional
+        self.sidebar.update_idletasks()
+
+    def animate_menu_transition(self):
+        """Proporciona una transición suave para el menú"""
+        # Forzar actualización del layout
+        if hasattr(self, 'sidebar'):
+            self.sidebar.update_idletasks()
+
+    def expand_all_menu_categories(self):
+        """Expande todas las categorías del menú"""
+        for category_name in self.menu_expanded.keys():
+            if not self.menu_expanded[category_name]:
+                # Buscar el botón de expansión y el frame correspondiente
+                for widget in self.sidebar.winfo_children():
+                    if isinstance(widget, tk.Frame):
+                        for child in widget.winfo_children():
+                            if isinstance(child, tk.Frame):
+                                for grandchild in child.winfo_children():
+                                    if isinstance(grandchild, tk.Frame):
+                                        for item in grandchild.winfo_children():
+                                            if (isinstance(item, tk.Label) and 
+                                                hasattr(item, 'cget') and 
+                                                item.cget('text') in ['▶', '▼']):
+                                                if item.cget('text') == '▶':
+                                                    submenu_frame = self.submenu_frames.get(category_name)
+                                                    if submenu_frame:
+                                                        self.toggle_menu_category(category_name, item, submenu_frame)
+
+    def collapse_all_menu_categories(self):
+        """Colapsa todas las categorías del menú"""
+        for category_name in self.menu_expanded.keys():
+            if self.menu_expanded[category_name]:
+                # Similar al método anterior pero para colapsar
+                for widget in self.sidebar.winfo_children():
+                    if isinstance(widget, tk.Frame):
+                        for child in widget.winfo_children():
+                            if isinstance(child, tk.Frame):
+                                for grandchild in child.winfo_children():
+                                    if isinstance(grandchild, tk.Frame):
+                                        for item in grandchild.winfo_children():
+                                            if (isinstance(item, tk.Label) and 
+                                                hasattr(item, 'cget') and 
+                                                item.cget('text') in ['▶', '▼']):
+                                                if item.cget('text') == '▼':
+                                                    submenu_frame = self.submenu_frames.get(category_name)
+                                                    if submenu_frame:
+                                                        self.toggle_menu_category(category_name, item, submenu_frame)
 
     def create_nav_button(self, parent, text, command, icon_key):
         """Crea un botón de navegación"""
