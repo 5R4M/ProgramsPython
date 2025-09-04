@@ -2,11 +2,109 @@
 import tkinter as tk
 from tkinter import ttk, messagebox
 from tkcalendar import DateEntry
-import pandas as pd
 from datetime import datetime
 import sys
 import os
 from ttkwidgets.autocomplete import AutocompleteCombobox
+import threading
+import tkinter.font as tkfont
+
+class HoverTooltip:
+    """Tooltip simple para widgets Tk/ttk. Muestra el texto completo sin cambiar el ancho del widget.
+       text_provider: función que devuelve el texto a mostrar (por ejemplo, lambda: combo.get()).
+       show_only_if_clipped: si True, solo muestra el tooltip si el texto no cabe en el combobox.
+    """
+    def __init__(self, widget, text_provider, delay=250, bg='#111827', fg='#ffffff', show_only_if_clipped=True):
+        self.widget = widget
+        self.text_provider = text_provider
+        self.delay = delay
+        self.bg = bg
+        self.fg = fg
+        self.show_only_if_clipped = show_only_if_clipped
+        self.tw = None
+        self.after_id = None
+
+        widget.bind("<Enter>", self._schedule)
+        widget.bind("<Leave>", self._hide)
+        widget.bind("<Motion>", self._move)
+        widget.bind("<Destroy>", self._on_destroy)
+
+    def _schedule(self, _=None):
+        self._cancel()
+        self.after_id = self.widget.after(self.delay, self._show)
+
+    def _cancel(self):
+        if self.after_id:
+            self.widget.after_cancel(self.after_id)
+            self.after_id = None
+
+    def _is_clipped(self, text):
+        try:
+            f = tkfont.Font(font=self.widget.cget('font') or 'TkDefaultFont')
+        except Exception:
+            f = tkfont.nametofont('TkDefaultFont')
+        text_px = f.measure(text)
+        # algo de margen interno del combobox
+        available = max(0, self.widget.winfo_width() - 16)
+        return text_px > available
+
+    def _show(self):
+        text = (self.text_provider() or '').strip()
+        if not text:
+            return
+        if self.show_only_if_clipped and not self._is_clipped(text):
+            return
+
+        if self.tw:
+            self._hide()
+
+        self.tw = tk.Toplevel(self.widget)
+        self.tw.wm_overrideredirect(True)
+        try:
+            self.tw.attributes('-topmost', True)
+        except Exception:
+            pass
+
+        label = tk.Label(self.tw, text=text, justify='left',
+                         background=self.bg, foreground=self.fg,
+                         relief='solid', borderwidth=1,
+                         padx=6, pady=3, font=('Segoe UI', 9))
+        label.pack()
+        self._place()
+
+    def _place(self, _=None):
+        if not self.tw:
+            return
+        x = self.widget.winfo_rootx()
+        y = self.widget.winfo_rooty() + self.widget.winfo_height() + 2
+        screen_w = self.widget.winfo_screenwidth()
+        self.tw.update_idletasks()
+        tip_w = self.tw.winfo_reqwidth()
+        if x + tip_w > screen_w - 10:
+            x = screen_w - tip_w - 10
+        self.tw.wm_geometry(f"+{x}+{y}")
+
+    def _move(self, e=None):
+        self._place()
+
+    def _hide(self, _=None):
+        self._cancel()
+        if self.tw:
+            try:
+                self.tw.destroy()
+            except Exception:
+                pass
+            self.tw = None
+
+    def _on_destroy(self, _=None):
+        self._hide()
+
+    def flash(self, ms=2000):
+        """Muestra el tooltip durante ms milisegundos (útil al seleccionar)."""
+        self._hide()
+        self._show()
+        if self.tw:
+            self.widget.after(ms, self._hide)
 
 # Agregar el directorio raíz del proyecto al PATH de Python
 sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
@@ -14,6 +112,7 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(
 from src.database.db_manager import (
     obtener_areas,
     obtener_distritos,
+    obtener_distritos_por_area,
     obtener_tipos_servicio_por_distrito,
     obtener_servicios_por_tipo,
     obtener_tipos_insumo,
@@ -30,6 +129,144 @@ def resource_path(relative_path):
         # En desarrollo, base_path es la raíz del proyecto (subir un nivel desde gui)
         base_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
     return os.path.join(base_path, relative_path)
+
+class DataCache:
+    """
+    Cachea catálogos y resuelve IDs sin golpear la BD repetidamente.
+    Prefetch global: áreas, distritos, tipos_insumo, tipos_movimiento.
+    Lazy: distritos_por_area, tipos_servicio_por_distrito, servicios_por_tipo, insumos_por_tipo.
+    """
+    def __init__(self):
+        self.lock = threading.RLock()
+        self.initialized = False
+
+        self.areas = []
+        self.area_name_to_id = {}
+
+        self.distritos = []
+        self.distrito_name_to_id = {}
+
+        self.tipos_insumo = []
+        self.tipo_insumo_desc_to_id = {}
+
+        self.tipos_movimiento = []
+        self.tipo_mov_desc_to_id = {}
+
+        self.distritos_por_area = {}  # area_id -> list(dict)
+        self.tipos_servicio_por_distrito = {}  # distrito_id -> list(dict)
+        self.tipos_serv_desc_to_id_by_distrito = {}  # (distrito_id, desc) -> id
+
+        self.servicios_por_tipo = {}  # tipo_servicio_id -> list(dict)
+        self.servicio_name_to_id_by_tipo = {}  # (tipo_servicio_id, nombre) -> id
+
+        self.insumos_por_tipo = {}  # tipo_insumo_id -> list(dict)
+        self.insumo_name_to_id_by_tipo = {}  # (tipo_insumo_id, nombre) -> id
+
+    def reset(self):
+        with self.lock:
+            self.__init__()
+
+    def initialize(self):
+        with self.lock:
+            if self.initialized:
+                return
+            self.areas = obtener_areas() or []
+            self.area_name_to_id = {a['nombre']: a['id'] for a in self.areas}
+
+            self.distritos = obtener_distritos() or []
+            self.distrito_name_to_id = {d['nombre']: d['id'] for d in self.distritos}
+
+            self.tipos_insumo = obtener_tipos_insumo() or []
+            self.tipo_insumo_desc_to_id = {ti['descripcion']: ti['id'] for ti in self.tipos_insumo}
+
+            self.tipos_movimiento = obtener_tipos_movimiento() or []
+            self.tipo_mov_desc_to_id = {tm['descripcion']: tm['id'] for tm in self.tipos_movimiento}
+
+            self.initialized = True
+
+    # Getters nombres
+    def get_area_names(self):
+        return [a['nombre'] for a in self.areas]
+
+    def get_distritos_names(self):
+        return [d['nombre'] for d in self.distritos]
+
+    def get_tipos_insumo_names(self):
+        return [ti['descripcion'] for ti in self.tipos_insumo]
+
+    def get_tipos_movimiento_names(self):
+        return [tm['descripcion'] for tm in self.tipos_movimiento]
+
+    # Lazy fetch por relaciones
+    def get_distritos_por_area(self, area_id):
+        with self.lock:
+            if area_id in self.distritos_por_area:
+                return self.distritos_por_area[area_id]
+        distritos = obtener_distritos_por_area(area_id) or []
+        with self.lock:
+            self.distritos_por_area[area_id] = distritos
+        return distritos
+
+    def get_tipos_servicio_por_distrito(self, distrito_id):
+        with self.lock:
+            if distrito_id in self.tipos_servicio_por_distrito:
+                return self.tipos_servicio_por_distrito[distrito_id]
+        tipos = obtener_tipos_servicio_por_distrito(distrito_id) or []
+        with self.lock:
+            self.tipos_servicio_por_distrito[distrito_id] = tipos
+            for ts in tipos:
+                self.tipos_serv_desc_to_id_by_distrito[(distrito_id, ts['descripcion'])] = ts['id']
+        return tipos
+
+    def get_servicios_por_tipo(self, tipo_servicio_id):
+        with self.lock:
+            if tipo_servicio_id in self.servicios_por_tipo:
+                return self.servicios_por_tipo[tipo_servicio_id]
+        servicios = obtener_servicios_por_tipo(tipo_servicio_id) or []
+        with self.lock:
+            self.servicios_por_tipo[tipo_servicio_id] = servicios
+            for s in servicios:
+                self.servicio_name_to_id_by_tipo[(tipo_servicio_id, s['nombre'])] = s['id']
+        return servicios
+
+    def get_insumos_por_tipo(self, tipo_insumo_id):
+        with self.lock:
+            if tipo_insumo_id in self.insumos_por_tipo:
+                return self.insumos_por_tipo[tipo_insumo_id]
+        insumos = obtener_insumos_por_tipo(tipo_insumo_id) or []
+        with self.lock:
+            self.insumos_por_tipo[tipo_insumo_id] = insumos
+            for i in insumos:
+                self.insumo_name_to_id_by_tipo[(tipo_insumo_id, i['nombre'])] = i['id']
+        return insumos
+
+    # Resolutores de ID
+    def area_id(self, nombre): return self.area_name_to_id.get(nombre)
+    def distrito_id(self, nombre): return self.distrito_name_to_id.get(nombre)
+    def tipo_insumo_id(self, desc): return self.tipo_insumo_desc_to_id.get(desc)
+    def tipo_movimiento_id(self, desc): return self.tipo_mov_desc_to_id.get(desc)
+
+    def tipo_servicio_id(self, desc, distrito_id):
+        if not desc or not distrito_id:
+            return None
+        self.get_tipos_servicio_por_distrito(distrito_id)  # asegura caché
+        return self.tipos_serv_desc_to_id_by_distrito.get((distrito_id, desc))
+
+    def servicio_id(self, nombre, tipo_servicio_id):
+        if not nombre or not tipo_servicio_id:
+            return None
+        self.get_servicios_por_tipo(tipo_servicio_id)
+        return self.servicio_name_to_id_by_tipo.get((tipo_servicio_id, nombre))
+
+    def insumo_id(self, nombre, tipo_insumo_id):
+        if not nombre or not tipo_insumo_id:
+            return None
+        self.get_insumos_por_tipo(tipo_insumo_id)
+        return self.insumo_name_to_id_by_tipo.get((tipo_insumo_id, nombre))
+
+
+# Instancia global
+cache = DataCache()
 
 class CorreccionMovimientos:
     # Definir las columnas como atributo de la clase
@@ -66,6 +303,7 @@ class CorreccionMovimientos:
         self.tipos_movimiento = []
 
         self.setup_ui()
+        self.preload_data_async()
 
     def cargar_iconos(self):
         try:
@@ -102,104 +340,128 @@ class CorreccionMovimientos:
         return container, content
 
     def setup_styles(self):
+        # Paleta igual a IngresoInsumos.py
         self.COLORS = {
-            'primary': '#2E86AB',
-            'secondary': '#A23B72',
-            'success': '#27AE60',
-            'warning': '#F39C12',
-            'danger': '#E74C3C',
-            'accent': '#8E44AD',
-            'light': '#F8F9FA',
-            'white': '#FFFFFF',
-            'text_dark': '#2C3E50',
-            'text_light': '#7F8C8D',
-            'border': '#BDC3C7'
+            'primary':   '#2c3e50',
+            'secondary': '#34495e',
+            'accent':    '#3498db',
+            'success':   '#27ae60',
+            'warning':   '#f39c12',
+            'danger':    '#e74c3c',
+            'light':     '#ecf0f1',
+            'white':     '#ffffff',
+            'text_dark': '#2c3e50',
+            'text_light':'#7f8c8d',
+            'border':    '#bdc3c7'
         }
 
         style = ttk.Style()
-        style.theme_use('clam')
-        
+        try:
+            style.theme_use('clam')  # asegura que ttk respete los colores
+        except Exception:
+            pass
+
+        # Estilos base usados por esta pantalla
         style.configure('White.TFrame', background=self.COLORS['white'])
-        
-        # Estilo para labels con fondo blanco
         style.configure('White.TLabel',
             background=self.COLORS['white'],
             foreground=self.COLORS['text_dark'],
-            font=('Segoe UI', 9))
-
-        # Estilo para botones con fondo blanco
+            font=('Segoe UI', 9)
+        )
         style.configure('White.TButton',
             background=self.COLORS['white'],
             foreground=self.COLORS['text_dark'],
             font=('Segoe UI', 9),
             relief='flat',
-            borderwidth=0)
+            borderwidth=0
+        )
         style.map('White.TButton',
-            background=[('active', self.COLORS['light']),
-                        ('pressed', self.COLORS['light'])])
-        
+            background=[('active', self.COLORS['light']), ('pressed', self.COLORS['light'])]
+        )
+
         style.configure('Card.TLabelframe',
             background=self.COLORS['white'],
             relief='solid',
             borderwidth=1,
-            labeloutside=False)
-
+            labeloutside=False
+        )
         style.configure('Card.TLabelframe.Label',
             background=self.COLORS['primary'],
             foreground=self.COLORS['light'],
             font=('Segoe UI', 9, 'bold'),
-            padding=(8, 3))
+            padding=(8, 3)
+        )
 
         style.configure('Primary.TButton',
             font=('Segoe UI', 9, 'bold'),
             padding=(12, 6),
             relief='flat',
             borderwidth=0,
-            background=self.COLORS['primary'],
-            foreground=self.COLORS['white'])
-
+            background=self.COLORS['accent'],
+            foreground=self.COLORS['white']
+        )
         style.map('Primary.TButton',
-            background=[('active', '#1F5F8B'),
-                        ('pressed', '#1A4F7A')])
+            background=[('active', '#2980b9'), ('pressed', '#117a8b')],
+            foreground=[('active', '#ffffff'), ('pressed', '#ffffff')]
+        )
 
-        style.configure('Title.TLabel',
-            font=('Segoe UI', 14, 'bold'),
-            background=self.COLORS['white'],
-            foreground=self.COLORS['primary'])
-
-        style.configure('Subtitle.TLabel',
-            font=('Segoe UI', 9),
-            background=self.COLORS['white'],
-            foreground=self.COLORS['text_light'])
-
-        style.configure("Custom.Treeview",
-            background=self.COLORS['white'],
-            foreground=self.COLORS['text_dark'],
-            rowheight=25,
-            fieldbackground=self.COLORS['white'],
-            font=('Segoe UI', 8),
-            borderwidth=1,
-            relief='solid')
-
-        style.configure("Custom.Treeview.Heading",
-            background=self.COLORS['primary'],
-            foreground='white',
-            font=('Segoe UI', 9, 'bold'),
-            relief='raised',
-            borderwidth=1)
-        
         style.configure('Search.TButton',
             font=('Segoe UI', 9, 'bold'),
             padding=(8, 4),
             relief='flat',
             borderwidth=0,
-            background=self.COLORS['primary'],
+            background=self.COLORS['accent'],
             foreground=self.COLORS['white'],
-            focuscolor='none')
-
+            focuscolor='none'
+        )
         style.map('Search.TButton',
-            background=[('active', '#1F5F8B'),
-                        ('pressed', '#1A4F7A')])
+            background=[('active', '#2980b9'), ('pressed', '#117a8b')]
+        )
+
+        style.configure('Title.TLabel',
+            font=('Segoe UI', 12, 'bold'),
+            background=self.COLORS['white'],
+            foreground=self.COLORS['primary']
+        )
+        style.configure('Subtitle.TLabel',
+            font=('Segoe UI', 8),
+            background=self.COLORS['white'],
+            foreground=self.COLORS['text_light']
+        )
+
+        # Treeview igual que IngresoInsumos.py y con headers grises claros
+        style.configure("Custom.Treeview",
+            background=self.COLORS['white'],
+            foreground=self.COLORS['text_dark'],
+            rowheight=18,
+            fieldbackground=self.COLORS['white'],
+            font=('Segoe UI', 9),
+            borderwidth=1,
+            relief='solid'
+        )
+
+        # Encabezados gris claro, texto oscuro
+        HEADER_BG = '#e5e7eb'   # gris claro
+        HEADER_FG = '#111827'   # texto oscuro
+
+        for heading_style in ("Treeview.Heading", "Custom.Treeview.Heading"):
+            style.configure(
+                heading_style,
+                background=HEADER_BG,
+                foreground=HEADER_FG,
+                font=('Segoe UI', 8, 'bold'),
+                relief='flat',
+                borderwidth=1,
+                padding=(3, 6, 3, 6),
+                anchor='center',
+                justify='center'
+            )
+            style.map(heading_style, background=[], foreground=[])
+
+        style.map("Custom.Treeview",
+            background=[('selected', self.COLORS['accent'])],
+            foreground=[('selected', '#ffffff')]
+        )
 
     def setup_ui(self):
         # --- Frame principal que contendrá todo ---
@@ -215,7 +477,7 @@ class CorreccionMovimientos:
         title_inner.pack(fill='both', expand=True, padx=15, pady=8)
 
         tk.Label(title_inner,
-                text="Correcciones Movimientos de Insumos",
+                text="🛠️ Correcciones Movimientos de Insumos",
                 font=('Segoe UI', 12, 'bold'),
                 fg=self.COLORS['white'],
                 bg=self.COLORS['primary']).pack(anchor='w')
@@ -226,56 +488,19 @@ class CorreccionMovimientos:
                 fg=self.COLORS['white'],
                 bg=self.COLORS['primary']).pack(anchor='w', pady=(2, 0))
 
-        # CANVAS CON SCROLLBAR VERTICAL
-        canvas_frame = tk.Frame(main_container, bg=self.COLORS['white'])  # <--- CAMBIO
-        canvas_frame.pack(fill="both", expand=True, padx=10, pady=5)
+        # CONTENIDO SIN SCROLL VERTICAL
+        content_frame = tk.Frame(main_container, bg=self.COLORS['white'])
+        content_frame.pack(fill="both", expand=True, padx=10, pady=5)
 
-        # Canvas y scrollbar vertical
-        self.canvas = tk.Canvas(canvas_frame, bg=self.COLORS['white'], highlightthickness=0)
-        scrollbar = ttk.Scrollbar(canvas_frame, orient="vertical", command=self.canvas.yview)
-        self.scrollable_frame = tk.Frame(self.canvas, bg=self.COLORS['white'])
+        # Mantén el mismo nombre de variable que usas después
+        self.scrollable_frame = content_frame
 
-        self.scrollable_frame.bind(
-            "<Configure>",
-            lambda e: self.canvas.configure(scrollregion=self.canvas.bbox("all"))
-        )
-
-        # Función para ajustar el ancho del scrollable_frame al canvas
-        def configure_scroll_region(event=None):
-            self.canvas.configure(scrollregion=self.canvas.bbox("all"))
-            # Ajustar ancho del scrollable_frame al ancho del canvas
-            canvas_width = self.canvas.winfo_width()
-            if canvas_width > 1:  # Asegurar que el canvas ya tiene dimensiones
-                self.canvas.itemconfig(self.canvas_window, width=canvas_width)
-
-        self.scrollable_frame.bind("<Configure>", configure_scroll_region)
-        self.canvas.bind("<Configure>", configure_scroll_region)
-
-        self.canvas_window = self.canvas.create_window((0, 0), window=self.scrollable_frame, anchor="nw")
-        self.canvas.configure(yscrollcommand=scrollbar.set)
-
-        self.canvas.pack(side="left", fill="both", expand=True)
-        scrollbar.pack(side="right", fill="y")
-
-        # Scroll con rueda del mouse - versión corregida
-        def _on_mousewheel(event):
-            try:
-                if self.canvas.winfo_exists():
-                    self.canvas.yview_scroll(int(-1*(event.delta/120)), "units")
-            except tk.TclError:
-                pass  # El canvas ya no existe, ignorar el evento
-
-        self._on_mousewheel = _on_mousewheel  # Guardar referencia
-        self.canvas.bind_all("<MouseWheel>", self._on_mousewheel)
-
-        self.frame_principal_container, self.frame_principal = self.create_titled_frame(self.scrollable_frame, "Filtros de Búsqueda")
-        self.frame_principal_container.config(bg=self.COLORS['white'])
-        self.frame_principal.config(bg=self.COLORS['white'])
-        self.frame_principal_container.pack(fill="x", expand=False, pady=5)
+        self.frame_principal = tk.Frame(self.scrollable_frame, bg=self.COLORS['white'])
+        self.frame_principal.pack(fill="x", expand=False, pady=5)
 
         # Frame para fechas con título personalizado (menos padding)
         self.frame_fechas_container, self.frame_fechas = self.create_titled_frame(
-            self.frame_principal, "Selección de Fechas", content_padx=5, content_pady=5
+            self.frame_principal, "📅 Selección de Fechas", content_padx=5, content_pady=5
         )
         self.frame_fechas_container.config(bg=self.COLORS['white'])
         self.frame_fechas.config(bg=self.COLORS['white'])
@@ -344,7 +569,7 @@ class CorreccionMovimientos:
 
         # Primera fila de combos con título personalizado
         self.frame_combos1_container, self.frame_combos1 = self.create_titled_frame(
-            self.frame_combos, "Selección de Ubicación", content_padx=5, content_pady=5
+            self.frame_combos, "📍 Selección de Ubicación", content_padx=5, content_pady=5
         )
         self.frame_combos1_container.config(bg=self.COLORS['white'])
         self.frame_combos1.config(bg=self.COLORS['white'])
@@ -390,7 +615,7 @@ class CorreccionMovimientos:
 
         # Segunda fila de combos con título personalizado
         self.frame_combos2_container, self.frame_combos2 = self.create_titled_frame(
-            self.frame_combos, "Selección de Insumos / Tipo Movimiento", content_padx=5, content_pady=5
+            self.frame_combos, "💊 Insumos / Tipo Movimiento", content_padx=5, content_pady=5
         )
         self.frame_combos2_container.config(bg=self.COLORS['white'])
         self.frame_combos2.config(bg=self.COLORS['white'])
@@ -419,12 +644,21 @@ class CorreccionMovimientos:
         self.insumo_var = tk.StringVar()
         self.combo_insumo = AutocompleteCombobox(self.frame_combos2, textvariable=self.insumo_var, state="normal", font=('Segoe UI', 9))
         self.combo_insumo.grid(row=0, column=3, padx=8, sticky='ew', **padding_config)
+        
+        # Tooltip para mostrar el nombre completo del Insumo
+        self.tooltip_insumo = HoverTooltip(
+            self.combo_insumo,
+            text_provider=lambda: self.combo_insumo.get(),
+            delay=250,
+            show_only_if_clipped=True  # Cambia a False si quieres que se muestre siempre
+        )
 
         ttk.Label(self.frame_combos2, text="Presentación:", **label_style).grid(
             row=0, column=4, padx=8, sticky='w', **padding_config
         )
         self.presentacion_var = tk.StringVar()
         self.combo_presentacion = AutocompleteCombobox(self.frame_combos2, textvariable=self.presentacion_var, state="normal", font=('Segoe UI', 9))
+        self.combo_presentacion.config(completevalues=[''])
         self.combo_presentacion.grid(row=0, column=5, padx=8, sticky='ew', **padding_config)
 
         ttk.Label(self.frame_combos2, text="Tipo\nMovimiento:", **label_style).grid(
@@ -473,7 +707,7 @@ class CorreccionMovimientos:
         
         # Frame para el Treeview con título personalizado
         self.frame_treeview_container, self.frame_treeview = self.create_titled_frame(
-            self.frame_principal, "Resultados", content_padx=5, content_pady=5
+            self.frame_principal, "📊 Resultados", content_padx=5, content_pady=5
         )
         self.frame_treeview_container.pack(fill="x", expand=False, padx=5, pady=5)
 
@@ -484,17 +718,35 @@ class CorreccionMovimientos:
         self.tree_frame.config(height=5 * 25 + 30)  # 5 filas * rowheight + espacio encabezado
 
         style = ttk.Style()
-        style.configure("Custom.Treeview.Heading",
-                        font=("Segoe UI", 9, "bold"),
-                        background=self.COLORS['primary'],
-                        foreground='white')
-        style.configure("Custom.Treeview",
-                        font=("Segoe UI", 9),
-                        rowheight=25,
-                        background=self.COLORS['white'],
-                        foreground=self.COLORS['text_dark'],
-                        fieldbackground=self.COLORS['white'])
+        try:
+            style.theme_use('clam')
+        except Exception:
+            pass
 
+        HEADER_BG = '#e5e7eb'
+        HEADER_FG = '#111827'
+
+        style.configure("Custom.Treeview",
+            font=('Segoe UI', 9),
+            rowheight=18,
+            background=self.COLORS['white'],
+            foreground=self.COLORS['text_dark'],
+            fieldbackground=self.COLORS['white']
+        )
+        style.configure("Custom.Treeview.Heading",
+            font=('Segoe UI', 8, 'bold'),
+            background=HEADER_BG,
+            foreground=HEADER_FG,
+            relief='flat',
+            borderwidth=1,
+            padding=(3, 6, 3, 6)
+        )
+        style.map("Custom.Treeview.Heading", background=[], foreground=[])
+        style.map("Custom.Treeview",
+            background=[('selected', self.COLORS['accent'])],
+            foreground=[('selected', '#ffffff')]
+        )
+        
         # Scrollbars para el Treeview
         self.tree_scroll_y = ttk.Scrollbar(self.tree_frame)
         self.tree_scroll_y.pack(side="right", fill="y")
@@ -642,14 +894,60 @@ class CorreccionMovimientos:
         self.distritos = []
         self.combo_distrito.set_completion_list([''])
         self.cargar_tipos_insumo()
-        self.cargar_presentaciones()
         self.cargar_tipos_movimiento()
 
+    def preload_data_async(self):
+        """Precarga catálogos en un hilo y aplica los valores a los combos."""
+        def _run():
+            try:
+                cache.initialize()
+                self.parent.after(0, self._apply_prefetched_data)
+            except Exception as e:
+                print("Error precargando datos:", e)
+        threading.Thread(target=_run, daemon=True).start()
+
+    def _apply_prefetched_data(self):
+        """Carga listas precargadas a los comboboxes (no bloquea el arranque)."""
+        try:
+            # Áreas
+            if hasattr(self, 'combo_area'):
+                self.combo_area.config(completevalues=[''] + cache.get_area_names())
+            # Distritos inicial vacío (depende de área)
+            if hasattr(self, 'combo_distrito'):
+                self.combo_distrito.config(completevalues=[''])
+            # Tipos de insumo
+            if hasattr(self, 'combo_tipo_insumo'):
+                self.combo_tipo_insumo.config(completevalues=[''] + cache.get_tipos_insumo_names())
+            # Presentación se resuelve al seleccionar insumo (como en IngresoInsumos)
+            if hasattr(self, 'combo_presentacion'):
+                self.combo_presentacion.config(completevalues=[''])
+            # Tipos de movimiento
+            if hasattr(self, 'combo_tipo_movimiento'):
+                self.combo_tipo_movimiento.config(completevalues=[''] + cache.get_tipos_movimiento_names())
+        except Exception as e:
+            print("Error aplicando datos precargados:", e)
+
+    def _enable_search_ui(self, enabled: bool):
+        state = 'normal' if enabled else 'disabled'
+        try:
+            self.btn_buscar.config(state=state, cursor=('hand2' if enabled else 'watch'))
+        except Exception:
+            pass
+        try:
+            self.btn_limpiar.config(state=state)
+        except Exception:
+            pass
+        try:
+            root = self.parent.winfo_toplevel()
+            root.configure(cursor=('' if enabled else 'watch'))
+        except Exception:
+            pass
+    
     def cargar_areas(self):
-        self.areas = obtener_areas()
-        if self.areas:
-            opciones = [''] + [a['nombre'] for a in self.areas]
-            self.combo_area.set_completion_list(opciones)
+        # La precarga ya llena; forzamos sincronizar arrays locales si las usas
+        self.areas = cache.areas
+        if hasattr(self, 'combo_area'):
+            self.combo_area.config(completevalues=[''] + cache.get_area_names())
 
     def cargar_distritos(self):
         self.distritos = obtener_distritos()
@@ -658,102 +956,99 @@ class CorreccionMovimientos:
             self.combo_distrito.set_completion_list(opciones)
 
     def cargar_distritos_por_area(self, event=None):
-        area_nombre = self.combo_area.get().strip()
-        if area_nombre:
-            area = next((a for a in self.areas if a['nombre'] == area_nombre), None)
-            if area:
-                from src.database.db_manager import obtener_distritos_por_area
-                distritos = obtener_distritos_por_area(area['id'])
-                self.distritos = distritos or []
-                opciones = [''] + [d['nombre'] for d in self.distritos]
-                self.combo_distrito.set_completion_list(opciones)
-            else:
-                self.distritos = []
-                self.combo_distrito.set_completion_list([''])
-                self.combo_distrito.set('')
+        area_nombre = (self.combo_area.get() or '').strip()
+        area_id = cache.area_id(area_nombre)
+        if area_id:
+            distritos = cache.get_distritos_por_area(area_id) or []
+            self.distritos = distritos
+            self.combo_distrito.config(completevalues=[''] + [d['nombre'] for d in distritos])
         else:
             self.distritos = []
-            self.combo_distrito.set_completion_list([''])
+            self.combo_distrito.config(completevalues=[''])
             self.combo_distrito.set('')
+
+        # Limpiar dependientes
+        if hasattr(self, 'combo_tipo_servicio'):
+            self.combo_tipo_servicio.config(completevalues=[''])
+            self.combo_tipo_servicio.set('')
+        if hasattr(self, 'combo_servicio'):
+            self.combo_servicio.config(completevalues=[''])
+            self.combo_servicio.set('')
 
     def cargar_tipos_servicio(self, event=None):
         self.combo_tipo_servicio.set('')
-        distrito_nombre = self.combo_distrito.get().strip()
-        if distrito_nombre:
-            distrito = next((d for d in self.distritos if d['nombre'] == distrito_nombre), None)
-            if distrito:
-                self.tipos_servicio = obtener_tipos_servicio_por_distrito(distrito['id'])
-                opciones = [''] + [t['descripcion'] for t in self.tipos_servicio]
-                self.combo_tipo_servicio.set_completion_list(opciones)
+        self.combo_servicio.config(completevalues=[''])
+        self.combo_servicio.set('')
+
+        distrito_nombre = (self.combo_distrito.get() or '').strip()
+        distrito_id = cache.distrito_id(distrito_nombre)
+        if distrito_id:
+            tipos = cache.get_tipos_servicio_por_distrito(distrito_id) or []
+            self.tipos_servicio = tipos
+            self.combo_tipo_servicio.config(completevalues=[''] + [t['descripcion'] for t in tipos])
 
     def cargar_servicios(self, event=None):
         self.combo_servicio.set('')
-        tipo_servicio_desc = self.combo_tipo_servicio.get().strip()
-        if tipo_servicio_desc:
-            tipo_servicio = next((t for t in self.tipos_servicio if t['descripcion'] == tipo_servicio_desc), None)
-            if tipo_servicio:
-                servicios = obtener_servicios_por_tipo(tipo_servicio['id'])
-                opciones = [''] + [s['nombre'] for s in servicios]
-                self.combo_servicio.set_completion_list(opciones)
+        tipo_servicio_desc = (self.combo_tipo_servicio.get() or '').strip()
+        distrito_nombre = (self.combo_distrito.get() or '').strip()
+        distrito_id = cache.distrito_id(distrito_nombre)
+
+        if tipo_servicio_desc and distrito_id:
+            tipo_servicio_id = cache.tipo_servicio_id(tipo_servicio_desc, distrito_id)
+            if tipo_servicio_id:
+                servicios = cache.get_servicios_por_tipo(tipo_servicio_id) or []
+                self.combo_servicio.config(completevalues=[''] + [s['nombre'] for s in servicios])
 
     def cargar_tipos_insumo(self):
-        self.tipos_insumo = obtener_tipos_insumo()
-        if self.tipos_insumo:
-            opciones = [''] + [t['descripcion'] for t in self.tipos_insumo]
-            self.combo_tipo_insumo.set_completion_list(opciones)
+        self.tipos_insumo = cache.tipos_insumo
+        self.combo_tipo_insumo.config(completevalues=[''] + cache.get_tipos_insumo_names())
 
     def cargar_insumos(self, event=None):
         self.combo_insumo.set('')
         self.combo_presentacion.set('')
-        tipo_insumo_desc = self.combo_tipo_insumo.get().strip()
-        if tipo_insumo_desc:
-            tipo_insumo = next((t for t in self.tipos_insumo if t['descripcion'] == tipo_insumo_desc), None)
-            if tipo_insumo:
-                self.insumos = obtener_insumos_por_tipo(tipo_insumo['id'])
-                opciones = [''] + [i['nombre'] for i in self.insumos]
-                self.combo_insumo.set_completion_list(opciones)
+
+        tipo_insumo_desc = (self.combo_tipo_insumo.get() or '').strip()
+        tipo_insumo_id = cache.tipo_insumo_id(tipo_insumo_desc)
+        if tipo_insumo_id:
+            self.insumos = cache.get_insumos_por_tipo(tipo_insumo_id) or []
+            self.combo_insumo.config(completevalues=[''] + [i['nombre'] for i in self.insumos])
+        else:
+            self.insumos = []
+            self.combo_insumo.config(completevalues=[''])
 
     def actualizar_presentacion(self, event=None):
-        insumo_nombre = self.combo_insumo.get().strip()
-        if insumo_nombre and self.insumos:
-            insumo = next((i for i in self.insumos if i['nombre'] == insumo_nombre), None)
-            if insumo:
-                self.combo_presentacion.set(insumo['nombre_presentacion'] if 'nombre_presentacion' in insumo.keys() else '')
-            else:
-                self.combo_presentacion.set('')
-        else:
-            self.combo_presentacion.set('')
-
-    def cargar_presentaciones(self):
-        self.presentaciones = obtener_presentaciones()
-        if self.presentaciones:
-            opciones = [''] + [p['nombre'] for p in self.presentaciones]
-            self.combo_presentacion.set_completion_list(opciones)
+        insumo_nombre = (self.combo_insumo.get() or '').strip()
+        tipo_insumo_desc = (self.combo_tipo_insumo.get() or '').strip()
+        tipo_insumo_id = cache.tipo_insumo_id(tipo_insumo_desc)
+        if tipo_insumo_id and insumo_nombre:
+            insumos = cache.get_insumos_por_tipo(tipo_insumo_id) or []
+            insumo_sel = next((i for i in insumos if i['nombre'] == insumo_nombre), None)
+            if insumo_sel and insumo_sel.get('nombre_presentacion'):
+                self.combo_presentacion.config(completevalues=[insumo_sel['nombre_presentacion']])
+                self.combo_presentacion.set(insumo_sel['nombre_presentacion'])
+                return
+        self.combo_presentacion.config(completevalues=[''])
+        self.combo_presentacion.set('')
 
     def cargar_tipos_movimiento(self):
-        self.tipos_movimiento = obtener_tipos_movimiento()
-        if self.tipos_movimiento:
-            opciones = [''] + [t['descripcion'] for t in self.tipos_movimiento]
-            self.combo_tipo_movimiento.set_completion_list(opciones)
+        self.tipos_movimiento = cache.tipos_movimiento  # <-- guardar la lista completa
+        self.combo_tipo_movimiento.config(completevalues=[''] + cache.get_tipos_movimiento_names())
 
     def buscar_movimientos(self):
         try:
-            # Validar fechas
+            # Validaciones rápidas
             fecha_ini_str = self.fecha_inicial.get()
             fecha_fin_str = self.fecha_final.get()
-
             if not fecha_ini_str or not fecha_fin_str:
                 messagebox.showwarning("Advertencia", "Debe seleccionar fecha inicial y fecha final.")
                 return
 
             fecha_ini = datetime.strptime(fecha_ini_str, '%d/%m/%Y')
             fecha_fin = datetime.strptime(fecha_fin_str, '%d/%m/%Y')
-
             if fecha_fin < fecha_ini:
                 messagebox.showerror("Error", "La fecha final debe ser mayor a la inicial")
                 return
 
-            # Validar que al menos un filtro de ubicación, insumo o tipo movimiento esté seleccionado
             filtros_obligatorios = [
                 self.combo_area.get().strip(),
                 self.combo_distrito.get().strip(),
@@ -764,7 +1059,6 @@ class CorreccionMovimientos:
                 self.combo_presentacion.get().strip(),
                 self.combo_tipo_movimiento.get().strip()
             ]
-
             if not any(filtros_obligatorios):
                 messagebox.showwarning(
                     "Advertencia",
@@ -772,8 +1066,10 @@ class CorreccionMovimientos:
                 )
                 return
 
-            # Obtener datos y asignar a self.movimientos_data
-            self.movimientos_data = buscar_movimientos_por_filtros(
+            # Deshabilitar UI y cursor espera
+            self._enable_search_ui(False)
+
+            params = (
                 fecha_ini.strftime('%Y-%m-%d'),
                 fecha_fin.strftime('%Y-%m-%d'),
                 self.combo_area.get(),
@@ -786,47 +1082,76 @@ class CorreccionMovimientos:
                 self.combo_tipo_movimiento.get()
             )
 
-            if not self.movimientos_data:
-                messagebox.showinfo("Info", "No hay datos para mostrar")
-                return
+            def _run():
+                try:
+                    data = buscar_movimientos_por_filtros(*params) or []
+                except Exception as e:
+                    data = e
+                self.parent.after(0, lambda: self._on_search_result(data))
 
-            # Limpiar el Treeview
+            threading.Thread(target=_run, daemon=True).start()
+
+        except Exception as e:
+            self._enable_search_ui(True)
+            messagebox.showerror("Error", f"Error al iniciar la búsqueda: {str(e)}")
+
+    def _on_search_result(self, data):
+        # Rehabilitar UI
+        self._enable_search_ui(True)
+
+        if isinstance(data, Exception):
+            messagebox.showerror("Error", f"Error al buscar movimientos:\n{data}")
+            return
+
+        self.movimientos_data = data
+
+        # Limpiar Treeview rápido
+        try:
+            self.tree.delete(*self.tree.get_children())
+        except Exception:
             for item in self.tree.get_children():
                 self.tree.delete(item)
 
-            # Llenar el Treeview con los datos
-            for mov in self.movimientos_data:
-                fecha_venc = mov.get('fecha_vencimiento')
-                if fecha_venc is None or fecha_venc == '':
-                    fecha_venc = "N/A"
-                    
-                lote = mov.get('lote')
-                if lote is None or lote == '':
-                    lote = "N/A"
-                    
-                self.tree.insert('', 'end', values=(
-                    mov.get('id', ''),                          # ID
-                    mov.get('fecha', ''),                       # Fecha
-                    mov.get('area_nombre', '') or "",           # Área
-                    mov.get('distrito_nombre', '') or "",       # Distrito
-                    mov.get('tipo_servicio_desc', '') or "",    # Tipo de Servicio
-                    mov.get('referencia', '') or "",            # Referencia
-                    mov.get('servicio_nombre', '') or "",       # Servicio
-                    mov.get('tipo_movimiento', '') or "",       # Tipo de Movimiento
-                    lote,                                       # Lote
-                    fecha_venc,                                 # Fecha Vencimiento
-                    self.formato_float(mov.get('cantidad', 0)), # Cantidad
-                    mov.get('insumo_nombre', '') or "",         # Insumo
-                    mov.get('distrito_salida', '') or "",       # Distrito Salida
-                    mov.get('servicio_salida', '') or "",       # Servicio Salida
-                    mov.get('observaciones', '') or ""          # Observaciones
-                ))
+        if not data:
+            messagebox.showinfo("Info", "No hay datos para mostrar")
+            return
 
-        except Exception as e:
-            messagebox.showerror(
-                "Error",
-                f"Error al buscar movimientos:\n{str(e)}\n\nPor favor, verifique los datos e intente nuevamente."
-            )
+        rows = []
+        for mov in data:
+            fecha_venc = mov.get('fecha_vencimiento') or "N/A"
+            lote = mov.get('lote') or "N/A"
+            rows.append((
+                mov.get('id', ''),                          # ID
+                mov.get('fecha', ''),                       # Fecha
+                mov.get('area_nombre', '') or "",           # Área
+                mov.get('distrito_nombre', '') or "",       # Distrito
+                mov.get('tipo_servicio_desc', '') or "",    # Tipo de Servicio
+                mov.get('referencia', '') or "",            # Referencia
+                mov.get('servicio_nombre', '') or "",       # Servicio
+                mov.get('tipo_movimiento', '') or "",       # Tipo de Movimiento
+                lote,                                       # Lote
+                fecha_venc,                                 # Fecha Vencimiento
+                self.formato_float(mov.get('cantidad', 0)), # Cantidad
+                mov.get('insumo_nombre', '') or "",         # Insumo
+                mov.get('distrito_salida', '') or "",       # Distrito Salida
+                mov.get('servicio_salida', '') or "",       # Servicio Salida
+                mov.get('observaciones', '') or ""          # Observaciones
+            ))
+
+        self._populate_tree_chunked(rows, chunk_size=600)
+
+    def _populate_tree_chunked(self, rows, chunk_size=600):
+        total = len(rows)
+        index = 0
+        def _insert_chunk():
+            nonlocal index
+            end = min(index + chunk_size, total)
+            for i in range(index, end):
+                self.tree.insert('', 'end', values=rows[i])
+            index = end
+            if index < total:
+                self.parent.after(1, _insert_chunk)
+        _insert_chunk()
 
     def limpiar_filtros(self):
         # Restablecer fechas
@@ -844,8 +1169,8 @@ class CorreccionMovimientos:
         self.combo_tipo_movimiento.set('')
 
         # Limpiar Treeview
-        for item in self.tree.get_children():
-            self.tree.delete(item)
+        self.tree.delete(*self.tree.get_children())
+        self.movimientos_data = None
 
         # Limpiar datos
         self.movimientos_data = None
@@ -871,272 +1196,318 @@ class CorreccionMovimientos:
         self.abrir_ventana_edicion(movimiento)
 
     def abrir_ventana_edicion(self, movimiento):
-        # Crear ventana de edición
-        edicion_window = tk.Toplevel(self.parent)
-        edicion_window.title("Editar Movimiento")
-        edicion_window.geometry("600x550")
-        edicion_window.grab_set()  # Hacer modal
+        """
+        Edición con estilo de 'Ingreso de Insumos':
+        - Paleta self.COLORS.
+        - Sin nivel de bodega (ubicación solo lectura).
+        - Nombre de insumo envuelto a varias líneas.
+        - Presentación asegurada (resolución robusta vía DataCache sin depender de combos activos).
+        - Checkbuttons con fondo blanco consistente.
+        - Optimización: after_idle y caché.
+        """
+        win = tk.Toplevel(self.parent)
+        win.title("Editar Movimiento")
+        win.configure(bg=self.COLORS['light'])
+        win.grab_set()
+        win.transient(self.parent)
 
-        # Centrar la ventana
-        edicion_window.transient(self.parent)
-        edicion_window.update_idletasks()
+        # Dimensiones y centrado
+        W, H = 980, 650
+        sw, sh = win.winfo_screenwidth(), win.winfo_screenheight()
+        x, y = (sw - W)//2, (sh - H)//2
+        win.geometry(f"{W}x{H}+{x}+{y}")
+        win.resizable(True, True)
 
-        # Obtener dimensiones de la pantalla y la ventana
-        screen_width = edicion_window.winfo_screenwidth()
-        screen_height = edicion_window.winfo_screenheight()
-        window_width = 600
-        window_height = 550
+        # Estilo base
+        style = ttk.Style()
+        try:
+            style.theme_use('clam')
+        except Exception:
+            pass
 
-        # Calcular posición para centrar
-        x = (screen_width - window_width) // 2
-        y = (screen_height - window_height) // 2
+        # Helper de tarjeta
+        def card(parent, title, pad=(20, 15), header_h=26):
+            cont = tk.Frame(parent, bg=self.COLORS['white'], relief='solid', borderwidth=1)
+            cont.pack(fill="x", padx=pad[0], pady=pad[1])
+            header = tk.Frame(cont, bg=self.COLORS['primary'], height=header_h)
+            header.pack(fill='x')
+            header.pack_propagate(False)
+            tk.Label(
+                header, text=title, font=('Segoe UI', 9, 'bold'),
+                fg=self.COLORS['white'], bg=self.COLORS['primary']
+            ).pack(side='left', padx=10, pady=4)
+            content = tk.Frame(cont, bg=self.COLORS['white'])
+            content.pack(fill='x', padx=12, pady=8)
+            return cont, content
 
-        edicion_window.geometry(f"{window_width}x{window_height}+{x}+{y}")
+        # Encabezado
+        header_frame = tk.Frame(win, bg=self.COLORS['primary'], height=44)
+        header_frame.pack(fill="x", padx=20, pady=(20, 0))
+        header_frame.pack_propagate(False)
+        tk.Label(
+            header_frame, text="EDITAR MOVIMIENTO",
+            font=('Segoe UI', 16, 'bold'), bg=self.COLORS['primary'], fg='white'
+        ).pack(expand=True)
 
-        # Frame principal con padding
-        frame_edicion = ttk.Frame(edicion_window, padding=20)
-        frame_edicion.pack(fill="both", expand=True)
-
-        # Título centrado (sin ID)
-        titulo_frame = ttk.Frame(frame_edicion)
-        titulo_frame.pack(fill="x", pady=(0, 20))
-
-        ttk.Label(titulo_frame, text="Editar Movimiento",
-                font=("Arial", 14, "bold")).pack()
-
-        # Frame para los campos con grid
-        campos_frame = ttk.Frame(frame_edicion)
-        campos_frame.pack(fill="both", expand=True)
-
-        # Configurar columnas para que se expandan uniformemente
-        campos_frame.columnconfigure(1, weight=1)
-
-        # Tamaño estándar para todos los campos
-        ANCHO_CAMPO = 25
-
-        row = 0
-
-        # Fecha
-        ttk.Label(campos_frame, text="Fecha:", font=("Arial", 10)).grid(
-            row=row, column=0, sticky="w", padx=(0, 10), pady=8
-        )
-        fecha_entry = DateEntry(
-            campos_frame,
-            width=ANCHO_CAMPO,
-            date_pattern='dd/mm/yyyy',
-            font=("Arial", 10)
-        )
-        fecha_entry.grid(row=row, column=1, sticky="ew", pady=8)
-        if movimiento['fecha']:
-            try:
-                fecha_entry.set_date(datetime.strptime(movimiento['fecha'], '%Y-%m-%d'))
-            except:
-                pass
-        row += 1
-
-        # Referencia
-        ttk.Label(campos_frame, text="Referencia:", font=("Arial", 10)).grid(
-            row=row, column=0, sticky="w", padx=(0, 10), pady=8
-        )
-        referencia_var = tk.StringVar(value=movimiento.get('referencia', '') or "")
-        referencia_entry = ttk.Entry(campos_frame, textvariable=referencia_var,
-                                    width=ANCHO_CAMPO, font=("Arial", 10))
-        referencia_entry.grid(row=row, column=1, sticky="ew", pady=8)
-        row += 1
-
-        # Insumo (solo lectura)
-        ttk.Label(campos_frame, text="Insumo:", font=("Arial", 10)).grid(
-            row=row, column=0, sticky="w", padx=(0, 10), pady=8
-        )
-        insumo_frame = ttk.Frame(campos_frame)
-        insumo_frame.grid(row=row, column=1, sticky="ew", pady=8)
-        insumo_frame.columnconfigure(0, weight=1)
-
-        insumo_label = ttk.Label(insumo_frame,
-                                text=movimiento.get('insumo_nombre', '') or "",
-                                foreground="blue",
-                                font=("Arial", 10),
-                                relief="sunken",
-                                padding=5)
-        insumo_label.grid(row=0, column=0, sticky="ew")
-        row += 1
-
-        # Tipo de Movimiento
-        ttk.Label(campos_frame, text="Tipo de Movimiento:", font=("Arial", 10)).grid(
-            row=row, column=0, sticky="w", padx=(0, 10), pady=8
-        )
-        tipo_movimiento_var = tk.StringVar(value=movimiento.get('tipo_movimiento', '') or "")
-        tipo_movimiento_combo = ttk.Combobox(campos_frame, textvariable=tipo_movimiento_var,
-                                            width=ANCHO_CAMPO, font=("Arial", 10))
-        tipo_movimiento_combo['values'] = [t['descripcion'] for t in self.tipos_movimiento] if self.tipos_movimiento else []
-        tipo_movimiento_combo.grid(row=row, column=1, sticky="ew", pady=8)
-        row += 1
-
-        # Lote
-        ttk.Label(campos_frame, text="Lote:", font=("Arial", 10)).grid(
-            row=row, column=0, sticky="w", padx=(0, 10), pady=8
-        )
-        lote_var = tk.StringVar(value=movimiento.get('lote', '') or "")
-        lote_entry = ttk.Entry(campos_frame, textvariable=lote_var,
-                            width=ANCHO_CAMPO, font=("Arial", 10))
-        lote_entry.grid(row=row, column=1, sticky="ew", pady=8)
-
-        row += 1
-        
-        # Checkbox Sin lote
-        sin_lote_var = tk.BooleanVar(value=False)
-
-        def toggle_lote():
-            if sin_lote_var.get():
-                lote_entry.delete(0, 'end')
-                lote_entry.config(state='disabled')
-            else:
-                lote_entry.config(state='normal')
-
-        checkbox_sin_lote = ttk.Checkbutton(
-            campos_frame,
-            text="Sin lote",
-            variable=sin_lote_var,
-            command=toggle_lote
-        )
-        checkbox_sin_lote.grid(row=row, column=1, sticky='nw', padx=5, pady=2)
-
-        # Inicializar checkbox según valor actual
-        if not movimiento.get('lote') or movimiento.get('lote') in ("", "N/A", None):
-            sin_lote_var.set(True)
-            lote_entry.config(state='disabled')
-        else:
-            sin_lote_var.set(False)
-            lote_entry.config(state='normal')
-
-        row += 1
-
-        # Fecha Vencimiento
-        ttk.Label(campos_frame, text="Fecha Vencimiento:", font=("Arial", 10)).grid(
-            row=row, column=0, sticky="w", padx=(0, 10), pady=8
-        )
-        fecha_venc_entry = DateEntry(
-            campos_frame,
-            width=ANCHO_CAMPO,
-            date_pattern='dd/mm/yyyy',
-            font=("Arial", 10)
-        )
-        fecha_venc_entry.grid(row=row, column=1, sticky="ew", pady=8)
-        if movimiento.get('fecha_vencimiento'):
-            try:
-                fecha_venc_entry.set_date(datetime.strptime(movimiento['fecha_vencimiento'], '%Y-%m-%d'))
-            except:
-                pass
-        row += 1
-        
-        sin_fecha_var = tk.BooleanVar(value=False)
-        def toggle_fecha_venc():
-            if sin_fecha_var.get():
-                fecha_venc_entry.config(state='disabled')
-            else:
-                fecha_venc_entry.config(state='normal')
-
-        checkbox_sin_fecha = ttk.Checkbutton(
-            campos_frame,
-            text="Sin fecha de vencimiento",
-            variable=sin_fecha_var,
-            command=toggle_fecha_venc
-        )
-        checkbox_sin_fecha.grid(row=row, column=1, sticky='w', pady=2)
-        row += 1
-
-        # Inicializar checkbox según valor actual
-        if not movimiento.get('fecha_vencimiento'):
-            sin_fecha_var.set(True)
-            fecha_venc_entry.config(state='disabled')
-        else:
-            sin_fecha_var.set(False)
-            fecha_venc_entry.config(state='normal')
-
-        # Cantidad
-        ttk.Label(campos_frame, text="Cantidad:", font=("Arial", 10)).grid(
-            row=row, column=0, sticky="w", padx=(0, 10), pady=8
-        )
+        # Variables
+        ref_var = tk.StringVar(value=movimiento.get('referencia', '') or "")
+        tipo_mov_var = tk.StringVar(value=movimiento.get('tipo_movimiento', '') or "")
         cantidad_var = tk.StringVar(value=self.formato_float(movimiento.get('cantidad', 0)))
-        cantidad_entry = ttk.Entry(campos_frame, textvariable=cantidad_var,
-                                width=ANCHO_CAMPO, font=("Arial", 10))
-        cantidad_entry.grid(row=row, column=1, sticky="ew", pady=8)
-        row += 1
+        obs_var = tk.StringVar(value=movimiento.get('observaciones', '') or "")
 
-        # Observaciones
-        ttk.Label(campos_frame, text="Observaciones:", font=("Arial", 10)).grid(
-            row=row, column=0, sticky="w", padx=(0, 10), pady=8
+        lote_val_ini = movimiento.get('lote')
+        sin_lote_inicial = (not lote_val_ini) or (lote_val_ini in ("", "N/A", None))
+        lote_var = tk.StringVar(value="" if sin_lote_inicial else (lote_val_ini or ""))
+        sin_lote_var = tk.BooleanVar(value=sin_lote_inicial)
+
+        fecha_db = movimiento.get('fecha')
+        fv_db = movimiento.get('fecha_vencimiento')
+        sin_fv_inicial = not bool(fv_db)
+        sin_fecha_var = tk.BooleanVar(value=sin_fv_inicial)
+
+        insumo_nombre = (movimiento.get('insumo_nombre') or "").strip()
+        # Usa también campos alternativos si existieran en el dict del movimiento
+        presentacion_var = tk.StringVar(value=(movimiento.get('presentacion') or movimiento.get('nombre_presentacion') or "").strip())
+
+        # Tarjeta: Detalles
+        _, det = card(win, "📋 Detalles del Movimiento")
+        for c in range(6):
+            det.grid_columnconfigure(c, weight=1)
+
+        ttk.Label(det, text="Fecha de Registro:", style='White.TLabel').grid(row=0, column=0, padx=5, pady=8, sticky='w')
+        fecha_entry = DateEntry(det, width=25, date_pattern='dd/mm/yyyy')
+        fecha_entry.grid(row=0, column=1, padx=5, pady=8, sticky='ew')
+        try:
+            if fecha_db:
+                fecha_entry.set_date(datetime.strptime(fecha_db, '%Y-%m-%d'))
+        except Exception:
+            pass
+
+        ttk.Label(det, text="Referencia:", style='White.TLabel').grid(row=0, column=2, padx=5, pady=8, sticky='w')
+        ref_entry = ttk.Entry(det, textvariable=ref_var, width=27)
+        ref_entry.grid(row=0, column=3, padx=5, pady=8, sticky='ew')
+
+        ttk.Label(det, text="Tipo Movimiento:", style='White.TLabel').grid(row=0, column=4, padx=5, pady=8, sticky='w')
+        tipo_mov_cb = AutocompleteCombobox(det, textvariable=tipo_mov_var, width=25, state="normal")
+        tipo_mov_cb.grid(row=0, column=5, padx=5, pady=8, sticky='ew')
+        det.after_idle(lambda: tipo_mov_cb.set_completion_list(cache.get_tipos_movimiento_names() or []))
+
+        ttk.Label(det, text="Lote:", style='White.TLabel').grid(row=1, column=0, padx=5, pady=8, sticky='w')
+        lote_row = tk.Frame(det, bg=self.COLORS['white'])
+        lote_row.grid(row=1, column=1, padx=5, pady=8, sticky='ew')
+        lote_row.columnconfigure(0, weight=1)
+        lote_entry = ttk.Entry(lote_row, textvariable=lote_var, width=22)
+        lote_entry.grid(row=0, column=0, sticky='ew')
+        # Checkbutton con fondo blanco
+        chk_sin_lote = tk.Checkbutton(
+            lote_row, text="Sin lote", variable=sin_lote_var,
+            command=lambda: lote_entry.config(state=('disabled' if sin_lote_var.get() else 'normal')),
+            bg=self.COLORS['white'], fg=self.COLORS['text_dark'],
+            activebackground=self.COLORS['white'], activeforeground=self.COLORS['text_dark'],
+            highlightthickness=0, bd=0
         )
-        observaciones_var = tk.StringVar(value=movimiento.get('observaciones', '') or "")
-        observaciones_entry = ttk.Entry(campos_frame, textvariable=observaciones_var,
-                                    width=ANCHO_CAMPO, font=("Arial", 10))
-        observaciones_entry.grid(row=row, column=1, sticky="ew", pady=8)
-        row += 1
+        chk_sin_lote.grid(row=0, column=1, padx=(8, 0), sticky='w')
+        lote_entry.config(state=('disabled' if sin_lote_var.get() else 'normal'))
 
-        # Función para guardar cambios
-        def guardar_cambios():
+        ttk.Label(det, text="Fecha Vencimiento:", style='White.TLabel').grid(row=1, column=2, padx=5, pady=8, sticky='w')
+        fv_row = tk.Frame(det, bg=self.COLORS['white'])
+        fv_row.grid(row=1, column=3, padx=5, pady=8, sticky='w')
+        fecha_venc_entry = DateEntry(fv_row, width=15, date_pattern='dd/mm/yyyy')
+        fecha_venc_entry.pack(side='left')
+        chk_sin_fv = tk.Checkbutton(
+            fv_row, text="Sin fecha", variable=sin_fecha_var,
+            command=lambda: fecha_venc_entry.config(state=('disabled' if sin_fecha_var.get() else 'normal')),
+            bg=self.COLORS['white'], fg=self.COLORS['text_dark'],
+            activebackground=self.COLORS['white'], activeforeground=self.COLORS['text_dark'],
+            highlightthickness=0, bd=0
+        )
+        chk_sin_fv.pack(side='left', padx=(8, 0))
+        try:
+            if fv_db:
+                fecha_venc_entry.set_date(datetime.strptime(fv_db, '%Y-%m-%d'))
+        except Exception:
+            pass
+        fecha_venc_entry.config(state=('disabled' if sin_fecha_var.get() else 'normal'))
+
+        ttk.Label(det, text="Cantidad:", style='White.TLabel').grid(row=1, column=4, padx=5, pady=8, sticky='w')
+        cantidad_entry = ttk.Entry(det, textvariable=cantidad_var, width=27)
+        cantidad_entry.grid(row=1, column=5, padx=5, pady=8, sticky='ew')
+
+        ttk.Label(det, text="Observaciones:", style='White.TLabel').grid(row=2, column=0, padx=5, pady=8, sticky='w')
+        obs_entry = ttk.Entry(det, textvariable=obs_var, width=80)
+        obs_entry.grid(row=2, column=1, columnspan=5, padx=5, pady=8, sticky='ew')
+
+        # Tarjeta: Insumo
+        _, ins = card(win, "💊 Insumo")
+        for c in range(4):
+            ins.grid_columnconfigure(c, weight=1)
+
+        ttk.Label(ins, text="Insumo:", style='White.TLabel').grid(row=0, column=0, padx=5, pady=8, sticky='w')
+        insumo_wrap = tk.Label(
+            ins, text=insumo_nombre, bg=self.COLORS['white'], fg=self.COLORS['text_dark'],
+            font=('Segoe UI', 9), justify='left', anchor='w', wraplength=420
+        )
+        insumo_wrap.grid(row=0, column=1, padx=5, pady=8, sticky='ew')
+
+        ttk.Label(ins, text="Presentación:", style='White.TLabel').grid(row=0, column=2, padx=5, pady=8, sticky='w')
+        presentacion_cb = AutocompleteCombobox(ins, textvariable=presentacion_var, width=25, state="normal")
+        presentacion_cb.grid(row=0, column=3, padx=5, pady=8, sticky='ew')
+
+        # Resolución robusta de Presentación
+        def cargar_presentacion_insumo():
             try:
-                # Validar datos
-                fecha = fecha_entry.get_date().strftime('%Y-%m-%d')
-                tipo_movimiento = tipo_movimiento_var.get()
-
-                # Validar campos numéricos
-                try:
-                    cantidad = float(cantidad_var.get()) if cantidad_var.get() else 0
-                except ValueError:
-                    messagebox.showerror("Error", "El campo cantidad debe contener un valor numérico válido")
+                preset = (presentacion_var.get() or "").strip()
+                if preset:
+                    # Sólo asegura la lista del combo una vez
+                    presentacion_cb.set_completion_list([preset])
                     return
-                
-                if sin_fecha_var.get():
-                    fecha_vencimiento_val = None
-                else:
-                    fecha_vencimiento_val = fecha_venc_entry.get_date().strftime('%Y-%m-%d')
-                    
-                if sin_lote_var.get():
-                    lote_val = None  # o "N/A" según cómo manejes en la base
-                else:
-                    lote_val = lote_var.get().upper()
 
-                # Preparar datos para actualización
+                # Construir o reutilizar índice
+                if hasattr(cache, 'get_insumo_by_nombre'):
+                    ins_sel = cache.get_insumo_by_nombre(insumo_nombre)
+                else:
+                    # Índice local en la vista
+                    if getattr(self, '_idx_insumos_por_nombre', None) is None:
+                        # Construcción diferida para no bloquear la UI
+                        def build_and_set():
+                            self._idx_insumos_por_nombre = {}
+                            for ti in (cache.tipos_insumo or []):
+                                for ins in (cache.get_insumos_por_tipo(ti.get('id')) or []):
+                                    nombre = (ins.get('nombre') or '').strip()
+                                    if nombre and nombre not in self._idx_insumos_por_nombre:
+                                        self._idx_insumos_por_nombre[nombre] = ins
+                            # Luego de construir, resolver presentación
+                            ins_sel2 = self._idx_insumos_por_nombre.get(insumo_nombre)
+                            pres = (ins_sel2 or {}).get('nombre_presentacion') or (ins_sel2 or {}).get('presentacion') or ''
+                            presentacion_var.set(pres)
+                            presentacion_cb.set_completion_list([pres or ''])
+                        ins.after(1, build_and_set)
+                        return
+                    ins_sel = self._idx_insumos_por_nombre.get(insumo_nombre)
+
+                pres = (ins_sel or {}).get('nombre_presentacion') or (ins_sel or {}).get('presentacion') or ''
+                presentacion_var.set(pres)
+                presentacion_cb.set_completion_list([pres or ''])
+
+            except Exception as e:
+                print("Error determinando presentación:", e)
+                presentacion_var.set('')
+                presentacion_cb.set_completion_list([''])
+
+        # Cargar presentación tras pintar UI (no bloquear)
+        ins.after_idle(cargar_presentacion_insumo)
+
+        # Tarjeta: Ubicación (solo lectura)
+        _, ubi = card(win, "📍 Ubicación")
+        for c in range(4):
+            ubi.grid_columnconfigure(c, weight=1)
+
+        ttk.Label(ubi, text="Área:", style='White.TLabel').grid(row=0, column=0, padx=5, pady=6, sticky='w')
+        ttk.Label(ubi, text=movimiento.get('area_nombre', '') or "", style='White.TLabel').grid(row=0, column=1, padx=5, pady=6, sticky='w')
+        ttk.Label(ubi, text="Distrito:", style='White.TLabel').grid(row=0, column=2, padx=5, pady=6, sticky='w')
+        ttk.Label(ubi, text=movimiento.get('distrito_nombre', '') or "", style='White.TLabel').grid(row=0, column=3, padx=5, pady=6, sticky='w')
+
+        ttk.Label(ubi, text="Tipo de Servicio:", style='White.TLabel').grid(row=1, column=0, padx=5, pady=6, sticky='w')
+        ttk.Label(ubi, text=movimiento.get('tipo_servicio_desc', '') or "", style='White.TLabel').grid(row=1, column=1, padx=5, pady=6, sticky='w')
+        ttk.Label(ubi, text="Servicio:", style='White.TLabel').grid(row=1, column=2, padx=5, pady=6, sticky='w')
+        ttk.Label(ubi, text=movimiento.get('servicio_nombre', '') or "", style='White.TLabel').grid(row=1, column=3, padx=5, pady=6, sticky='w')
+
+        # Botones
+        btns_frame = tk.Frame(win, bg=self.COLORS['light'])
+        btns_frame.pack(fill="x", padx=20, pady=24)
+        btns_inner = tk.Frame(btns_frame, bg=self.COLORS['light'])
+        btns_inner.pack(anchor='center')
+
+        def validar():
+            try:
+                _ = fecha_entry.get_date()
+            except Exception:
+                messagebox.showerror("Error", "La fecha de registro es obligatoria")
+                return False
+
+            if not tipo_mov_var.get().strip():
+                messagebox.showerror("Error", "El tipo de movimiento es obligatorio")
+                return False
+
+            if not (presentacion_var.get() or "").strip():
+                messagebox.showerror("Error", "No se pudo determinar la presentación del insumo")
+                return False
+
+            if not sin_lote_var.get() and not (lote_var.get() or "").strip():
+                messagebox.showerror("Error", "El campo Lote es obligatorio si no está marcado 'Sin lote'")
+                return False
+
+            if not sin_fecha_var.get():
+                try:
+                    _ = fecha_venc_entry.get_date()
+                except Exception:
+                    messagebox.showerror("Error", "La fecha de vencimiento es obligatoria si no está marcado 'Sin fecha'")
+                    return False
+
+            try:
+                c = float(cantidad_var.get().strip() or "0")
+                if c <= 0:
+                    messagebox.showerror("Error", "La cantidad debe ser un número positivo")
+                    return False
+            except Exception:
+                messagebox.showerror("Error", "La cantidad debe ser un número válido")
+                return False
+
+            return True
+
+        def guardar():
+            if not validar():
+                return
+            try:
+                fecha_val = fecha_entry.get_date().strftime('%Y-%m-%d')
+                tipo_mov_val = tipo_mov_var.get().strip()
+                lote_val = None if sin_lote_var.get() else (lote_var.get().upper().strip() or None)
+                fv_val = None if sin_fecha_var.get() else fecha_venc_entry.get_date().strftime('%Y-%m-%d')
+                cantidad_val = float(cantidad_var.get().strip() or "0")
+
                 datos_actualizados = {
                     'id': movimiento['id'],
-                    'fecha': fecha,
-                    'referencia': referencia_var.get(),
-                    'tipo_movimiento': tipo_movimiento,
+                    'fecha': fecha_val,
+                    'referencia': ref_var.get(),
+                    'tipo_movimiento': tipo_mov_val,
                     'lote': lote_val,
-                    'fecha_vencimiento': fecha_vencimiento_val,
-                    'cantidad': cantidad,
-                    'observaciones': observaciones_var.get()
+                    'fecha_vencimiento': fv_val,
+                    'cantidad': cantidad_val,
+                    'observaciones': obs_var.get()
                 }
 
-                # Llamar a la función de actualización en la base de datos
                 from src.database.db_manager import actualizar_movimiento
                 actualizar_movimiento(datos_actualizados['id'], datos_actualizados)
 
                 messagebox.showinfo("Éxito", "Movimiento actualizado correctamente")
-                edicion_window.destroy()
-
-                # Actualizar la vista
+                win.destroy()
                 self.buscar_movimientos()
-
             except Exception as e:
                 messagebox.showerror("Error", f"Error al actualizar movimiento: {str(e)}")
 
-        # Frame para botones centrado
-        frame_botones = ttk.Frame(frame_edicion)
-        frame_botones.pack(pady=20)
+        btn_guardar = tk.Button(
+            btns_inner, text="GUARDAR",
+            image=getattr(self, 'icon_guardar', getattr(self, 'icon_editar', None)),
+            compound='left', command=guardar,
+            bg=self.COLORS['light'], fg=self.COLORS['text_dark'],
+            font=('Segoe UI', 9, 'bold'), relief='flat',
+            padx=10, pady=10, cursor='hand2',
+            borderwidth=0, highlightthickness=0
+        )
+        btn_guardar.pack(side='left', padx=10)
 
-        # Botones con estilo uniforme
-        btn_guardar = ttk.Button(frame_botones, text="Modificar",
-                                command=guardar_cambios, width=15)
-        btn_guardar.pack(side="left", padx=10)
+        btn_cerrar = tk.Button(
+            btns_inner, text="CERRAR",
+            image=self.icon_cerrar if getattr(self, 'icon_cerrar', None) else None,
+            compound='left', command=win.destroy,
+            bg=self.COLORS['light'], fg=self.COLORS['text_dark'],
+            font=('Segoe UI', 9, 'bold'), relief='flat',
+            padx=10, pady=10, cursor='hand2',
+            borderwidth=0, highlightthickness=0
+        )
+        btn_cerrar.pack(side='left', padx=10)
 
-        btn_cancelar = ttk.Button(frame_botones, text="Cancelar",
-                                command=edicion_window.destroy, width=15)
-        btn_cancelar.pack(side="left", padx=10)
-
-        # Enfocar el primer campo
-        referencia_entry.focus_set()
+        ref_entry.focus_set()
 
     def eliminar_movimiento(self):
         # Obtener el item seleccionado
@@ -1169,13 +1540,7 @@ class CorreccionMovimientos:
             messagebox.showerror("Error", f"Error al eliminar movimiento: {str(e)}")
 
     def cerrar_ventana(self):
-        if messagebox.askyesno("Confirmar", "¿Está seguro que desea cerrar esta ventana?"):
-            # Desvincular el evento del mouse wheel antes de cerrar
-            try:
-                self.canvas.unbind_all("<MouseWheel>")
-            except:
-                pass
-            
+        if messagebox.askyesno("Confirmar", "¿Está seguro que desea cerrar esta ventana?"):           
             # Limpiar el frame principal
             for widget in self.parent.winfo_children():
                 widget.destroy()

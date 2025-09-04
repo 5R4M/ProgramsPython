@@ -5,8 +5,119 @@ from datetime import datetime
 import sys
 import os
 from ttkwidgets.autocomplete import AutocompleteCombobox
+import threading
+import tkinter.font as tkfont
 
-import os
+class HoverTooltip:
+    """Tooltip simple para widgets Tk/ttk. Muestra el texto completo sin cambiar el ancho del widget.
+       text_provider: función que devuelve el texto a mostrar (por ejemplo, lambda: combo.get()).
+       show_only_if_clipped: si True, solo muestra el tooltip si el texto no cabe en el combobox.
+    """
+    def __init__(self, widget, text_provider, delay=250, bg='#111827', fg='#ffffff', show_only_if_clipped=True):
+        self.widget = widget
+        self.text_provider = text_provider
+        self.delay = delay
+        self.bg = bg
+        self.fg = fg
+        self.show_only_if_clipped = show_only_if_clipped
+        self.tw = None
+        self.after_id = None
+
+        widget.bind("<Enter>", self._schedule)
+        widget.bind("<Leave>", self._hide)
+        widget.bind("<Motion>", self._move)
+        widget.bind("<Destroy>", self._on_destroy)
+
+    def _schedule(self, _=None):
+        self._cancel()
+        self.after_id = self.widget.after(self.delay, self._show)
+
+    def _cancel(self):
+        if self.after_id:
+            self.widget.after_cancel(self.after_id)
+            self.after_id = None
+
+    def _is_clipped(self, text):
+        """Determina si el texto está recortado en el widget"""
+        try:
+            # Obtener la fuente del widget
+            f = tkfont.Font(font=self.widget.cget('font') or 'TkDefaultFont')
+        except Exception:
+            f = tkfont.nametofont('TkDefaultFont')
+        
+        # Medir el ancho del texto en píxeles
+        text_px = f.measure(text)
+        
+        # Obtener el ancho disponible del widget (restando márgenes internos)
+        widget_width = self.widget.winfo_width()
+        
+        # Para AutocompleteCombobox, considerar el espacio del botón dropdown
+        if hasattr(self.widget, 'tk') and 'Combobox' in str(type(self.widget)):
+            # Restar espacio para el botón dropdown y márgenes
+            available = max(0, widget_width - 30)  # 30px para botón + márgenes
+        else:
+            # Para otros widgets, usar margen estándar
+            available = max(0, widget_width - 16)
+        
+        return text_px > available
+
+    def _show(self):
+        text = (self.text_provider() or '').strip()
+        if not text:
+            return
+        if self.show_only_if_clipped and not self._is_clipped(text):
+            return
+
+        if self.tw:
+            self._hide()
+
+        self.tw = tk.Toplevel(self.widget)
+        self.tw.wm_overrideredirect(True)
+        try:
+            self.tw.attributes('-topmost', True)
+        except Exception:
+            pass
+
+        label = tk.Label(self.tw, text=text, justify='left',
+                         background=self.bg, foreground=self.fg,
+                         relief='solid', borderwidth=1,
+                         padx=6, pady=3, font=('Segoe UI', 9))
+        label.pack()
+        self._place()
+
+    def _place(self, _=None):
+        if not self.tw:
+            return
+        x = self.widget.winfo_rootx()
+        y = self.widget.winfo_rooty() + self.widget.winfo_height() + 2
+        screen_w = self.widget.winfo_screenwidth()
+        self.tw.update_idletasks()
+        tip_w = self.tw.winfo_reqwidth()
+        if x + tip_w > screen_w - 10:
+            x = screen_w - tip_w - 10
+        self.tw.wm_geometry(f"+{x}+{y}")
+
+    def _move(self, e=None):
+        self._place()
+
+    def _hide(self, _=None):
+        self._cancel()
+        if self.tw:
+            try:
+                self.tw.destroy()
+            except Exception:
+                pass
+            self.tw = None
+
+    def _on_destroy(self, _=None):
+        self._hide()
+
+    def flash(self, ms=2000):
+        """Muestra el tooltip durante ms milisegundos (útil al seleccionar)."""
+        self._hide()
+        self._show()
+        if self.tw:
+            self.widget.after(ms, self._hide)
 
 # Agregar el directorio raíz del proyecto al PATH de Python
 sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
@@ -38,6 +149,145 @@ def resource_path(relative_path):
         base_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
     return os.path.join(base_path, relative_path)
 
+class DataCache:
+    """
+    Cachea catálogos y resuelve IDs sin golpear la BD repetidamente.
+    Prefetch global: áreas, distritos, tipos_insumo, tipos_movimiento.
+    Lazy: distritos_por_area, tipos_servicio_por_distrito, servicios_por_tipo, insumos_por_tipo.
+    """
+    def __init__(self):
+        self.lock = threading.RLock()
+        self.initialized = False
+
+        self.areas = []
+        self.area_name_to_id = {}
+
+        self.distritos = []
+        self.distrito_name_to_id = {}
+
+        self.tipos_insumo = []
+        self.tipo_insumo_desc_to_id = {}
+
+        self.tipos_movimiento = []
+        self.tipo_mov_desc_to_id = {}
+
+        self.distritos_por_area = {}  # area_id -> list(dict)
+        self.tipos_servicio_por_distrito = {}  # distrito_id -> list(dict)
+        self.tipos_serv_desc_to_id_by_distrito = {}  # (distrito_id, desc) -> id
+
+        self.servicios_por_tipo = {}  # tipo_servicio_id -> list(dict)
+        self.servicio_name_to_id_by_tipo = {}  # (tipo_servicio_id, nombre) -> id
+
+        self.insumos_por_tipo = {}  # tipo_insumo_id -> list(dict)
+        self.insumo_name_to_id_by_tipo = {}  # (tipo_insumo_id, nombre) -> id
+
+    def reset(self):
+        with self.lock:
+            self.__init__()
+
+    def initialize(self):
+        with self.lock:
+            if self.initialized:
+                return
+            self.areas = obtener_areas() or []
+            self.area_name_to_id = {a['nombre']: a['id'] for a in self.areas}
+
+            self.distritos = obtener_distritos() or []
+            self.distrito_name_to_id = {d['nombre']: d['id'] for d in self.distritos}
+
+            self.tipos_insumo = obtener_tipos_insumo() or []
+            self.tipo_insumo_desc_to_id = {ti['descripcion']: ti['id'] for ti in self.tipos_insumo}
+
+            self.tipos_movimiento = obtener_tipos_movimiento() or []
+            self.tipo_mov_desc_to_id = {tm['descripcion']: tm['id'] for tm in self.tipos_movimiento}
+
+            self.initialized = True
+
+    # Getters nombres
+    def get_area_names(self):
+        return [a['nombre'] for a in self.areas]
+
+    def get_distritos_names(self):
+        return [d['nombre'] for d in self.distritos]
+
+    def get_tipos_insumo_names(self):
+        return [ti['descripcion'] for ti in self.tipos_insumo]
+
+    def get_tipos_movimiento_names(self):
+        return [tm['descripcion'] for tm in self.tipos_movimiento]
+
+    # Lazy fetch por relaciones
+    def get_distritos_por_area(self, area_id):
+        with self.lock:
+            if area_id in self.distritos_por_area:
+                return self.distritos_por_area[area_id]
+        distritos = obtener_distritos_por_area(area_id) or []
+        with self.lock:
+            self.distritos_por_area[area_id] = distritos
+        return distritos
+
+    def get_tipos_servicio_por_distrito(self, distrito_id):
+        with self.lock:
+            if distrito_id in self.tipos_servicio_por_distrito:
+                return self.tipos_servicio_por_distrito[distrito_id]
+        tipos = obtener_tipos_servicio_por_distrito(distrito_id) or []
+        with self.lock:
+            self.tipos_servicio_por_distrito[distrito_id] = tipos
+            for ts in tipos:
+                self.tipos_serv_desc_to_id_by_distrito[(distrito_id, ts['descripcion'])] = ts['id']
+        return tipos
+
+    def get_servicios_por_tipo(self, tipo_servicio_id):
+        with self.lock:
+            if tipo_servicio_id in self.servicios_por_tipo:
+                return self.servicios_por_tipo[tipo_servicio_id]
+        servicios = obtener_servicios_por_tipo(tipo_servicio_id) or []
+        with self.lock:
+            self.servicios_por_tipo[tipo_servicio_id] = servicios
+            for s in servicios:
+                self.servicio_name_to_id_by_tipo[(tipo_servicio_id, s['nombre'])] = s['id']
+        return servicios
+
+    def get_insumos_por_tipo(self, tipo_insumo_id):
+        with self.lock:
+            if tipo_insumo_id in self.insumos_por_tipo:
+                return self.insumos_por_tipo[tipo_insumo_id]
+        insumos = obtener_insumos_por_tipo(tipo_insumo_id) or []
+        with self.lock:
+            self.insumos_por_tipo[tipo_insumo_id] = insumos
+            for i in insumos:
+                self.insumo_name_to_id_by_tipo[(tipo_insumo_id, i['nombre'])] = i['id']
+        return insumos
+
+    # Resolutores de ID seguros
+    def area_id(self, nombre): return self.area_name_to_id.get(nombre)
+    def distrito_id(self, nombre): return self.distrito_name_to_id.get(nombre)
+    def tipo_insumo_id(self, desc): return self.tipo_insumo_desc_to_id.get(desc)
+    def tipo_movimiento_id(self, desc): return self.tipo_mov_desc_to_id.get(desc)
+
+    def tipo_servicio_id(self, desc, distrito_id):
+        if not desc or not distrito_id:
+            return None
+        # asegura cache
+        self.get_tipos_servicio_por_distrito(distrito_id)
+        return self.tipos_serv_desc_to_id_by_distrito.get((distrito_id, desc))
+
+    def servicio_id(self, nombre, tipo_servicio_id):
+        if not nombre or not tipo_servicio_id:
+            return None
+        self.get_servicios_por_tipo(tipo_servicio_id)
+        return self.servicio_name_to_id_by_tipo.get((tipo_servicio_id, nombre))
+
+    def insumo_id(self, nombre, tipo_insumo_id):
+        if not nombre or not tipo_insumo_id:
+            return None
+        self.get_insumos_por_tipo(tipo_insumo_id)
+        return self.insumo_name_to_id_by_tipo.get((tipo_insumo_id, nombre))
+
+
+# Instancia global de cache
+cache = DataCache()
+
 class IngresoInsumos:
     def __init__(self, parent_frame, main_window):
         
@@ -66,8 +316,8 @@ class IngresoInsumos:
         # Constantes para el diseño
         self.LABEL_WIDTH = 15
         self.WIDGET_WIDTH = 25
-        self.PADDING_X = 10
-        self.PADDING_Y = 5
+        self.PADDING_X = 8
+        self.PADDING_Y = 2
         
         self.setup_styles()
         self.cargar_iconos()
@@ -76,6 +326,7 @@ class IngresoInsumos:
         self.setup_bindings()
         self.actualizar_estado_comboboxes()  
         self.setup_window_behavior()
+        self.preload_data_async()
     
     def setup_window_behavior(self):
         """Configura el comportamiento de la ventana para iniciar minimizada"""
@@ -102,11 +353,53 @@ class IngresoInsumos:
         # **FORZAR ACTUALIZACIÓN INICIAL**
         root.after(100, self.update_layout)
 
+    def preload_data_async(self):
+        """Precarga catálogos en hilo aparte y aplica resultados a la UI."""
+        def _run():
+            try:
+                cache.initialize()
+                # Aplicar en el hilo de Tk
+                self.parent.after(0, self._apply_prefetched_data)
+            except Exception as e:
+                print("Error precargando datos:", e)
+        threading.Thread(target=_run, daemon=True).start()
+
+    def _apply_prefetched_data(self):
+        """Carga valores precargados en los comboboxes sin bloquear el arranque."""
+        try:
+            # Áreas
+            if hasattr(self, 'area_cb'):
+                self.area_cb.config(completevalues=cache.get_area_names())
+
+            # Distritos SOLO para salida (el distrito principal dependerá de el área seleccionada)
+            if hasattr(self, 'salida_distrito_cb'):
+                self.salida_distrito_cb.config(completevalues=cache.get_distritos_names())
+
+            # Tipos de insumo
+            if hasattr(self, 'tipo_insumo_cb'):
+                self.tipo_insumo_cb.config(completevalues=cache.get_tipos_insumo_names())
+
+            # Tipos de movimiento
+            if hasattr(self, 'tipo_mov_cb'):
+                self.tipo_mov_cb.config(completevalues=cache.get_tipos_movimiento_names())
+        except Exception as e:
+            print("Error aplicando datos precargados:", e)
+    
     def on_window_configure(self, event):
-        """Maneja el redimensionamiento de la ventana"""
-        # Solo procesar eventos de la ventana principal, no de widgets internos
+        """Throttling de eventos Configure para evitar recalcular layout demasiadas veces."""
         if event.widget == self.parent.winfo_toplevel():
-            self.parent.after_idle(self.update_layout)
+            if getattr(self, '_resize_scheduled', False):
+                return
+            self._resize_scheduled = True
+            # Agendar una sola actualización tras 120 ms
+            self.parent.after(120, self._flush_resize)
+
+    def _flush_resize(self):
+        self._resize_scheduled = False
+        try:
+            self.update_layout()
+        except Exception:
+            pass
 
     def update_layout(self):
         """Actualiza el layout cuando cambia el tamaño de la ventana"""
@@ -118,72 +411,165 @@ class IngresoInsumos:
             pass
     
     def setup_styles(self):
-        """Configurar estilos y colores para la interfaz"""
-        # **PALETA DE COLORES PROFESIONAL**
+        """Configurar estilos, colores y espaciados compactos"""
+        # Paleta igual a MainWindow
         self.COLORS = {
-            'primary': '#2E86AB',      # Azul principal
-            'secondary': '#A23B72',    # Rosa/Morado
-            'success': '#27AE60',      # Verde éxito
-            'warning': '#F39C12',      # Naranja advertencia
-            'danger': '#E74C3C',       # Rojo peligro
-            'accent': '#8E44AD',       # Morado acento
-            'light': '#F8F9FA',        # Gris muy claro
-            'white': '#FFFFFF',        # Blanco
-            'text_dark': '#2C3E50',    # Texto oscuro
-            'text_light': '#7F8C8D',   # Texto claro
-            'border': '#BDC3C7'        # Borde
+            'primary':   '#2c3e50',
+            'secondary': '#34495e',
+            'accent':    '#3498db',
+            'success':   '#27ae60',
+            'warning':   '#f39c12',
+            'danger':    '#e74c3c',
+            'light':     '#ecf0f1',
+            'white':     '#ffffff',
+            'text_dark': '#2c3e50',
+            'text_light':'#7f8c8d',
+            'border':    '#bdc3c7',
+            'header_dark': '#1f2937'
         }
         
-        # **CONFIGURACIÓN DE ANCHOS UNIFORMES**
-        self.UNIFORM_WIDTH = 500  # Ancho uniforme para todos los frames principales
-        self.WIDGET_WIDTH = 18    # Ancho uniforme para widgets (Entry, Combobox, etc.)
-        self.BUTTON_WIDTH = 15    # Ancho uniforme para botones
+        style = ttk.Style(self.parent)
 
-        style = ttk.Style()
+        try:
+            ttk.Style().theme_use('clam')
+        except Exception:
+            pass
+
+        root = self.parent.winfo_toplevel()
         
-        # Estilo para LabelFrames (tarjetas)
-        style.configure('Card.TLabelframe',
-            background=self.COLORS['white'],
-            relief='solid',
-            borderwidth=1,
-            labeloutside=False)
-        
-        style.configure('Card.TLabelframe.Label',
-            background=self.COLORS['white'],
-            foreground=self.COLORS['primary'],
-            font=('Segoe UI', 9, 'bold'),
-            padding=(8, 3))
-        
-        # Estilo para botones principales 
-        style.configure('Primary.TButton',
-            font=('Segoe UI', 9, 'bold'),  
-            padding=(12, 6),  
-            relief='flat',
-            borderwidth=0,
-            background=self.COLORS['primary'],
-            foreground=self.COLORS['white'])
-        
-        style.map('Primary.TButton',
-            background=[('active', '#1F5F8B'),
-            ('pressed', '#1A4F7A')])
-        
-        # Estilo para botones de acción 
-        style.configure('Action.TButton',
-            font=('Segoe UI', 8),  
-            padding=(10, 4),  
-            relief='flat',
-            borderwidth=0)
-        
-        # Estilo para labels de título
+        # Espaciados y tamaños compactos globales
+        self.SPACING = {
+            'section_pady': 2,        # separación vertical entre secciones
+            'section_padx': 15,
+            'card_padx': 8,
+            'card_pady': 2,
+            'header_height': 18,      # altura header de cada sección
+            'content_padx': 10,
+            'content_pady': 4,
+            'label_pady': 2,
+            'widget_pady': 2
+        }
+
+        # Anchos/tamaños compactos
+        self.WIDGET_WIDTH = 18
+        self.BUTTON_WIDTH = 15
+
+        # Tarjetas/frames
+        style.configure('Card.TFrame',
+                        background=self.COLORS['white'],
+                        relief='solid',
+                        borderwidth=1)
+        style.configure('MainArea.TFrame',
+                        background=self.COLORS['light'])
+
+        # Encabezados de secciones
+        style.configure('Header.TFrame',
+                        background=self.COLORS['primary'])
+        style.configure('Header.TLabel',
+                        background=self.COLORS['primary'],
+                        foreground=self.COLORS['white'],
+                        font=('Segoe UI', 8, 'bold'))
+
+        # Títulos y subtítulos
         style.configure('Title.TLabel',
-            font=('Segoe UI', 14, 'bold'), 
-            background=self.COLORS['white'],
-            foreground=self.COLORS['primary'])
-        
+                        font=('Segoe UI', 12, 'bold'),
+                        background=self.COLORS['white'],
+                        foreground=self.COLORS['primary'])
         style.configure('Subtitle.TLabel',
-            font=('Segoe UI', 9),  
-            background=self.COLORS['white'],
-            foreground=self.COLORS['text_light'])
+                        font=('Segoe UI', 8),
+                        background=self.COLORS['white'],
+                        foreground=self.COLORS['text_light'])
+
+        # Radio/Check compactos
+        style.configure('Compact.TRadiobutton',
+                        background=self.COLORS['light'],
+                        foreground=self.COLORS['text_dark'],
+                        font=('Segoe UI', 8))
+        style.configure('Compact.TCheckbutton',
+                        background=self.COLORS['light'],
+                        foreground=self.COLORS['text_dark'],
+                        font=('Segoe UI', 8))
+
+        # Botones (si usas ttk)
+        style.configure('Primary.TButton',
+                        font=('Segoe UI', 9, 'bold'),
+                        padding=(10, 4),
+                        relief='flat',
+                        borderwidth=0,
+                        background=self.COLORS['accent'],
+                        foreground=self.COLORS['white'])
+        style.map('Primary.TButton',
+                background=[('active', '#2980b9'), ('pressed', '#117a8b')],
+                foreground=[('active', '#ffffff'), ('pressed', '#ffffff')])
+
+        # Treeview compacto y con paleta del menú
+        style.configure("Custom.Treeview",
+                        background=self.COLORS['white'],
+                        foreground=self.COLORS['text_dark'],
+                        rowheight=18,
+                        fieldbackground=self.COLORS['white'],
+                        font=('Segoe UI', 9),
+                        borderwidth=1,
+                        relief='solid')
+        
+        style.configure("Custom.Treeview.Heading",
+                        background=self.COLORS['primary'],
+                        foreground='#ffffff',
+                        font=('Segoe UI', 8, 'bold'),
+                        relief='raised',
+                        borderwidth=1,
+                        padding=(3, 6, 3, 6),
+                        anchor='center',
+                        justify='center')
+        
+        # Color de fondo y texto de los encabezados del Treeview
+        HEADER_BG = '#e5e7eb'   # gris claro
+        HEADER_FG = '#111827'   # texto oscuro
+
+        for heading_style in ("Treeview.Heading", "Custom.Treeview.Heading"):
+            style.configure(
+                heading_style,
+                background=HEADER_BG,
+                foreground=HEADER_FG,
+                font=('Segoe UI', 8, 'bold'),
+                relief='flat',
+                borderwidth=1,
+                padding=(3, 6, 3, 6),
+                anchor='center',
+                justify='center'
+            )
+            # Desactiva cambios de color por hover/active
+            style.map(heading_style, background=[], foreground=[])
+        
+        style.map("Custom.Treeview",
+                background=[('selected', self.COLORS['accent'])],
+                foreground=[('selected', '#ffffff')])
+        
+        # Popup del ttk.Combobox
+        root.option_add('*TCombobox*Listbox.background', self.COLORS['white'])
+        root.option_add('*TCombobox*Listbox.foreground', self.COLORS['text_dark'])
+        root.option_add('*TCombobox*Listbox.selectBackground', self.COLORS['accent'])
+        root.option_add('*TCombobox*Listbox.selectForeground', self.COLORS['white'])
+        root.option_add('*TCombobox*Listbox.font', '{Segoe UI} 9')  # <-- usa llaves; NO uses 'Segoe UI 9'
+
+        # Sugerencias del ttkwidgets.AutocompleteCombobox (usa Listbox normal)
+        root.option_add('*Listbox.background', self.COLORS['white'])
+        root.option_add('*Listbox.foreground', self.COLORS['text_dark'])
+        root.option_add('*Listbox.selectBackground', self.COLORS['accent'])
+        root.option_add('*Listbox.selectForeground', self.COLORS['white'])
+        root.option_add('*Listbox.font', '{Segoe UI} 9')
+
+        # Colores de selección dentro de la caja del Combobox y entradas
+        style = ttk.Style(self.parent)
+        style.configure('TCombobox',
+                        fieldbackground=self.COLORS['white'],
+                        background=self.COLORS['white'],
+                        foreground=self.COLORS['text_dark'],
+                        selectbackground=self.COLORS['accent'],
+                        selectforeground='#ffffff')
+        style.configure('TEntry',
+                        selectbackground=self.COLORS['accent'],
+                        selectforeground='#ffffff')
     
     def cargar_iconos(self):
         """Cargar iconos PNG"""
@@ -216,33 +602,41 @@ class IngresoInsumos:
     # 1. Métodos de configuración de UI
     
     def create_compact_frame(self, parent, title, bg_color='white', header_color='primary'):
-        """Crear frame compacto con header profesional"""
-        # Contenedor principal
+        """Crear frame de sección compacto con header delgado"""
+        # Contenedor (sobre fondo light para separarlo visualmente del main)
         container = tk.Frame(parent, bg=self.COLORS['light'])
-        container.pack(fill="x", padx=15, pady=3)  # Padding reducido
-        
-        # Frame principal más compacto
-        main_frame = tk.Frame(container, 
-                            bg=self.COLORS[bg_color], 
-                            relief='solid', 
+        container.pack(fill="x",
+                    padx=self.SPACING['section_padx'],
+                    pady=self.SPACING['section_pady'])
+
+        # Tarjeta principal
+        main_frame = tk.Frame(container,
+                            bg=self.COLORS[bg_color],
+                            relief='solid',
                             borderwidth=1)
-        main_frame.pack(fill="x", padx=8, pady=3)  # Padding reducido
-        
-        # Header más compacto
-        header = tk.Frame(main_frame, bg=self.COLORS[header_color], height=22)  # Altura reducida
+        main_frame.pack(fill="x",
+                        padx=self.SPACING['card_padx'],
+                        pady=self.SPACING['card_pady'])
+
+        # Header compacto
+        header = tk.Frame(main_frame,
+                        bg=self.COLORS[header_color],
+                        height=self.SPACING['header_height'])
         header.pack(fill='x')
         header.pack_propagate(False)
-        
-        tk.Label(header, 
-                text=title, 
-                font=('Segoe UI', 9, 'bold'),  # Fuente más pequeña
-                fg=self.COLORS['white'], 
-                bg=self.COLORS[header_color]).pack(side='left', padx=10, pady=3)  # Padding reducido
-        
-        # Contenido más compacto
+
+        tk.Label(header,
+                text=title,
+                font=('Segoe UI', 8, 'bold'),
+                fg=self.COLORS['white'],
+                bg=self.COLORS[header_color]).pack(side='left', padx=10, pady=2)
+
+        # Contenido con padding reducido
         content = tk.Frame(main_frame, bg=self.COLORS[bg_color])
-        content.pack(fill='x', padx=10, pady=6)  # Padding reducido
-        
+        content.pack(fill='x',
+                    padx=self.SPACING['content_padx'],
+                    pady=self.SPACING['content_pady'])
+
         return content, container
         
     def setup_ui(self):
@@ -255,30 +649,26 @@ class IngresoInsumos:
         self.scrollable_frame = tk.Frame(self.main_frame, bg=self.COLORS['light'])
         self.scrollable_frame.pack(fill="both", expand=True)
         
-        # **HEADER PRINCIPAL**
-        header_frame = tk.Frame(self.scrollable_frame, bg=self.COLORS['primary'], height=70)
-        
-        header_frame.pack(fill='x', padx=0, pady=(10, 5))
+        # HEADER PRINCIPAL COMPACTO (reemplaza tu bloque actual de header principal)
+        header_frame = tk.Frame(self.scrollable_frame, bg=self.COLORS['primary'], height=55)
+        header_frame.pack(fill='x', padx=0, pady=(6, 6))
         header_frame.pack_propagate(False)
 
-        # Frame interno con padding - CAMBIO: fondo primary
         header_inner = tk.Frame(header_frame, bg=self.COLORS['primary'])
-        header_inner.pack(fill='both', expand=True, padx=15, pady=5)
+        header_inner.pack(fill='both', expand=True, padx=15, pady=4)
 
-        # Título principal
-        title_label = tk.Label(header_inner, 
-                    text="Ingreso Insumos",
-                    font=('Segoe UI', 12, 'bold'),  # Más compacto
-                    fg=self.COLORS['white'],        # Texto blanco
-                    bg=self.COLORS['primary'])      # Fondo primary
+        title_label = tk.Label(header_inner,
+                            text="📦 Ingreso Insumos",
+                            font=('Segoe UI', 11, 'bold'),
+                            fg=self.COLORS['white'],
+                            bg=self.COLORS['primary'])
         title_label.pack(anchor='w')
 
-        # Subtítulo - CAMBIO: texto blanco y fondo primary
         subtitle_label = tk.Label(header_inner,
                                 text="Registre los movimientos de insumos de manera eficiente y organizada",
                                 font=('Segoe UI', 8),
-                                fg=self.COLORS['white'],     # CAMBIO: texto blanco
-                                bg=self.COLORS['primary'])   # CAMBIO: fondo primary
+                                fg=self.COLORS['white'],
+                                bg=self.COLORS['primary'])
         subtitle_label.pack(anchor='w', pady=(1, 0))
         
         # Frame Nivel de Bodega (radio buttons)
@@ -390,11 +780,10 @@ class IngresoInsumos:
                 fg=self.COLORS['text_dark'],
                 bg=self.COLORS['light']).grid(row=0, column=0, padx=5, pady=3, sticky="w")
 
-        areas = [a['nombre'] for a in obtener_areas() or []]
         self.area_var = tk.StringVar()
         self.area_cb = AutocompleteCombobox(servicios_content, 
                                         textvariable=self.area_var, 
-                                        completevalues=areas, 
+                                        completevalues=[],  # se llena asíncronamente
                                         state="normal",
                                         font=('Segoe UI', 8))
         self.area_cb.grid(row=1, column=0, padx=5, pady=3, sticky="ew")
@@ -406,10 +795,9 @@ class IngresoInsumos:
                 bg=self.COLORS['light']).grid(row=0, column=1, padx=5, pady=3, sticky="w")
 
         self.distrito_var = tk.StringVar()
-        distritos = [d['nombre'] for d in obtener_distritos() or []]
         self.distrito_cb = AutocompleteCombobox(servicios_content, 
                                             textvariable=self.distrito_var, 
-                                            completevalues=distritos, 
+                                            completevalues=[],  # se llena según área
                                             state="normal",
                                             font=('Segoe UI', 8))
         self.distrito_cb.grid(row=1, column=1, padx=5, pady=3, sticky="ew")
@@ -479,17 +867,16 @@ class IngresoInsumos:
         # **PRIMERA FILA: TIPO INSUMO, INSUMO, PRESENTACIÓN (cada uno ocupa 2 columnas)**
         # Tipo de Insumo (columna 0-1)
         tk.Label(insumos_content, text="Tipo de Insumo:",
-            font=('Segoe UI', 8, 'bold'),  # Cambio: de 9 a 8
+            font=('Segoe UI', 8, 'bold'),
             fg=self.COLORS['text_dark'],
-            bg=self.COLORS['light']).grid(row=0, column=0, padx=5, pady=2, sticky="w")  # Cambio: de pady=3 a pady=2
+            bg=self.COLORS['light']).grid(row=0, column=0, padx=5, pady=2, sticky="w")
 
-        tipos_insumo = [ti['descripcion'] for ti in obtener_tipos_insumo() or []]
         self.tipo_insumo_cb = AutocompleteCombobox(insumos_content,
             textvariable=self.tipo_insumo_var,
-            completevalues=tipos_insumo,
+            completevalues=[],  # se llena asíncronamente
             state="normal",
-            font=('Segoe UI', 8))  # Cambio: de 9 a 8
-        self.tipo_insumo_cb.grid(row=1, column=0, columnspan=2, padx=5, pady=2, sticky="ew")  # Cambio: de pady=3 a pady=2
+            font=('Segoe UI', 8))
+        self.tipo_insumo_cb.grid(row=1, column=0, columnspan=2, padx=5, pady=2, sticky="ew")
 
         # Insumo (columna 2-3)
         tk.Label(insumos_content, text="Insumo:",
@@ -504,6 +891,14 @@ class IngresoInsumos:
             font=('Segoe UI', 8))  # Cambio: de 9 a 8
         self.insumo_cb.grid(row=1, column=2, columnspan=2, padx=5, pady=2, sticky="ew")  # Cambio: de pady=3 a pady=2
 
+        # Tooltip para mostrar texto completo del insumo cuando se recorta
+        self.tooltip_insumo = HoverTooltip(
+            self.insumo_cb,
+            text_provider=lambda: self.insumo_var.get(),
+            delay=250,
+            show_only_if_clipped=True
+        )
+        
         # Presentación (columna 4-5)
         tk.Label(insumos_content, text="Presentación:",
             font=('Segoe UI', 8, 'bold'),  # Cambio: de 9 a 8
@@ -641,10 +1036,9 @@ class IngresoInsumos:
             fg=self.COLORS['text_dark'],
             bg=self.COLORS['light']).grid(row=0, column=2, padx=5, pady=3, sticky="w")
 
-        tipos_movimiento = [tm['descripcion'] for tm in obtener_tipos_movimiento() or []]
         self.tipo_mov_cb = AutocompleteCombobox(registro_content,
             textvariable=self.tipo_movimiento_var,
-            completevalues=tipos_movimiento,
+            completevalues=[],  # se llena asíncronamente
             state="normal",
             font=('Segoe UI', 9))
         self.tipo_mov_cb.grid(row=1, column=2, padx=5, pady=3, sticky="ew")
@@ -702,10 +1096,9 @@ class IngresoInsumos:
             fg=self.COLORS['text_dark'],
             bg=self.COLORS['light']).grid(row=0, column=0, padx=5, pady=3, sticky="w")
 
-        distritos = [d['nombre'] for d in obtener_distritos() or []]
         self.salida_distrito_cb = AutocompleteCombobox(salida_content,
             textvariable=self.salida_distrito_var,
-            completevalues=distritos,
+            completevalues=[],  # se llena asíncronamente
             state="disabled",
             font=('Segoe UI', 9))
         self.salida_distrito_cb.grid(row=1, column=0, padx=5, pady=3, sticky="ew")
@@ -799,41 +1192,6 @@ class IngresoInsumos:
             'lote', 'fecha_vencimiento', 'cantidad', 'salida_distrito', 'salida_servicio',
             'observaciones', 'tipo_insumo', 'area', 'distrito', 'tipo_servicio'
         )
-
-        # Estilo para el Treeview - CORREGIDO
-        style = ttk.Style()
-
-        style.theme_use('clam')
-
-        # Configurar estilo del Treeview
-        style.configure("Custom.Treeview",
-            background=self.COLORS['white'],
-            foreground=self.COLORS['text_dark'],
-            rowheight=20,
-            fieldbackground=self.COLORS['white'],
-            font=('Segoe UI', 9),
-            borderwidth=1,
-            relief='solid')
-
-        # **CONFIGURAR HEADERS CON COLORES CONTRASTANTES**
-        style.configure("Custom.Treeview.Heading",
-            background='#2c3e50',  # ← Color fijo que funciona
-            foreground='#ffffff',    # ← Color fijo que funciona
-            font=('Segoe UI', 8, 'bold'),
-            relief='raised',
-            borderwidth=1,
-            padding=(3, 8, 3, 8),
-            anchor= 'center',
-            justify= 'center')
-
-        # Mapeos para interactividad
-        style.map("Custom.Treeview.Heading",
-            background=[('active', '##34495e')],
-            foreground=[('active', '#ffffff')])
-
-        style.map("Custom.Treeview",
-            background=[('selected', self.COLORS['text_light'])],
-            foreground=[('selected', 'white')])
 
         # **CONFIGURAR GRID PARA POSICIONAMIENTO CORRECTO DE SCROLLBARS**
         tree_content.grid_rowconfigure(0, weight=1)
@@ -1192,11 +1550,9 @@ class IngresoInsumos:
     
     def actualizar_tipos_servicio(self, *args):
         distrito_nombre = self.distrito_var.get()
-        distritos = obtener_distritos() or []
-        distrito_id = next((d['id'] for d in distritos if d['nombre'] == distrito_nombre), None)
-
+        distrito_id = cache.distrito_id(distrito_nombre)
         if distrito_id:
-            tipos_servicio = obtener_tipos_servicio_por_distrito(distrito_id) or []
+            tipos_servicio = cache.get_tipos_servicio_por_distrito(distrito_id) or []
             opciones = [ts['descripcion'] for ts in tipos_servicio]
             self.tipo_servicio_cb.config(completevalues=opciones)
             self.tipo_servicio_var.set('')
@@ -1206,32 +1562,27 @@ class IngresoInsumos:
             self.tipo_servicio_var.set('')
             self.servicio_cb.config(completevalues=[])
             self.servicio_var.set('')
-            
+
     def actualizar_servicios(self, *args):
         distrito_nombre = self.distrito_var.get()
         tipo_servicio_desc = self.tipo_servicio_var.get()
-        distritos = obtener_distritos() or []
-        distrito_id = next((d['id'] for d in distritos if d['nombre'] == distrito_nombre), None)
-
+        distrito_id = cache.distrito_id(distrito_nombre)
         if distrito_id:
-            tipos_servicio = obtener_tipos_servicio_por_distrito(distrito_id) or []
-            tipo_servicio_id = next((ts['id'] for ts in tipos_servicio if ts['descripcion'] == tipo_servicio_desc), None)
+            tipo_servicio_id = cache.tipo_servicio_id(tipo_servicio_desc, distrito_id)
             if tipo_servicio_id:
-                servicios = obtener_servicios_por_tipo(tipo_servicio_id) or []
+                servicios = cache.get_servicios_por_tipo(tipo_servicio_id) or []
                 opciones = [s['nombre'] for s in servicios]
                 self.servicio_cb.config(completevalues=opciones)
                 self.servicio_var.set('')
                 return
         self.servicio_cb.config(completevalues=[])
         self.servicio_var.set('')
-    
+
     def actualizar_insumos(self, *args):
         tipo_insumo_desc = self.tipo_insumo_var.get()
-        tipos_insumo = obtener_tipos_insumo() or []
-        tipo_insumo_id = next((ti['id'] for ti in tipos_insumo if ti['descripcion'] == tipo_insumo_desc), None)
-
+        tipo_insumo_id = cache.tipo_insumo_id(tipo_insumo_desc)
         if tipo_insumo_id:
-            insumos = obtener_insumos_por_tipo(tipo_insumo_id) or []
+            insumos = cache.get_insumos_por_tipo(tipo_insumo_id) or []
             opciones = [i['nombre'] for i in insumos]
             self.insumo_cb.config(completevalues=opciones)
             self.insumo_var.set('')
@@ -1242,26 +1593,22 @@ class IngresoInsumos:
     def actualizar_presentacion(self, *args):
         tipo_insumo_desc = self.tipo_insumo_var.get()
         insumo_nombre = self.insumo_var.get()
-        tipos_insumo = obtener_tipos_insumo() or []
-        tipo_insumo_id = next((ti['id'] for ti in tipos_insumo if ti['descripcion'] == tipo_insumo_desc), None)
-
+        tipo_insumo_id = cache.tipo_insumo_id(tipo_insumo_desc)
         if tipo_insumo_id and insumo_nombre:
-            insumos = obtener_insumos_por_tipo(tipo_insumo_id) or []
-            insumo_seleccionado = next((i for i in insumos if i['nombre'] == insumo_nombre), None)
-            if insumo_seleccionado and insumo_seleccionado['nombre_presentacion']:
-                self.presentacion_cb.config(completevalues=[insumo_seleccionado['nombre_presentacion']])
-                self.presentacion_var.set(insumo_seleccionado['nombre_presentacion'])
+            insumos = cache.get_insumos_por_tipo(tipo_insumo_id) or []
+            insumo_sel = next((i for i in insumos if i['nombre'] == insumo_nombre), None)
+            if insumo_sel and insumo_sel.get('nombre_presentacion'):
+                self.presentacion_cb.config(completevalues=[insumo_sel['nombre_presentacion']])
+                self.presentacion_var.set(insumo_sel['nombre_presentacion'])
                 return
         self.presentacion_cb.config(completevalues=[])
         self.presentacion_var.set('')
-    
+
     def actualizar_tipos_servicio_salida(self, *args):
         distrito_nombre = self.salida_distrito_var.get()
-        distritos = obtener_distritos() or []
-        distrito_id = next((d['id'] for d in distritos if d['nombre'] == distrito_nombre), None)
-
+        distrito_id = cache.distrito_id(distrito_nombre)
         if distrito_id:
-            tipos_servicio = obtener_tipos_servicio_por_distrito(distrito_id) or []
+            tipos_servicio = cache.get_tipos_servicio_por_distrito(distrito_id) or []
             opciones = [ts['descripcion'] for ts in tipos_servicio]
             self.salida_tipo_servicio_cb.config(completevalues=opciones)
             self.salida_tipo_servicio_var.set('')
@@ -1275,14 +1622,11 @@ class IngresoInsumos:
     def actualizar_servicios_salida(self, *args):
         distrito_nombre = self.salida_distrito_var.get()
         tipo_servicio_desc = self.salida_tipo_servicio_var.get()
-        distritos = obtener_distritos() or []
-        distrito_id = next((d['id'] for d in distritos if d['nombre'] == distrito_nombre), None)
-
+        distrito_id = cache.distrito_id(distrito_nombre)
         if distrito_id:
-            tipos_servicio = obtener_tipos_servicio_por_distrito(distrito_id) or []
-            tipo_servicio_id = next((ts['id'] for ts in tipos_servicio if ts['descripcion'] == tipo_servicio_desc), None)
+            tipo_servicio_id = cache.tipo_servicio_id(tipo_servicio_desc, distrito_id)
             if tipo_servicio_id:
-                servicios = obtener_servicios_por_tipo(tipo_servicio_id) or []
+                servicios = cache.get_servicios_por_tipo(tipo_servicio_id) or []
                 opciones = [s['nombre'] for s in servicios]
                 self.salida_servicio_cb.config(completevalues=opciones)
                 self.salida_servicio_var.set('')
@@ -1388,7 +1732,7 @@ class IngresoInsumos:
         editar_ventana.configure(bg=self.COLORS['light'])
 
         # Configurar dimensiones iniciales (como main_window.py)
-        ancho_ventana = 1055
+        ancho_ventana = 1075
         alto_ventana = 745
 
         # Obtener dimensiones de pantalla para centrar
@@ -1403,8 +1747,12 @@ class IngresoInsumos:
 
         # **CONFIGURAR ESTILOS PARA LA VENTANA DE EDICIÓN**
         style = ttk.Style()
-        style.theme_use('clam')
-
+        
+        try:
+            cache.initialize()
+        except Exception:
+            pass
+        
         # Configurar estilos para radiobuttons y checkbuttons con fondo blanco
         style.configure("Custom.TRadiobutton",
             background=self.COLORS['white'],
@@ -1419,16 +1767,16 @@ class IngresoInsumos:
                         ('active', 'white')])
 
         style.configure("Custom.TCheckbutton",
-            background=self.COLORS['white'],
+            background=self.COLORS['light'],
             foreground=self.COLORS['text_dark'],
             font=('Segoe UI', 9),
             focuscolor='none')
 
         style.map("Custom.TCheckbutton",
-            background=[('active', self.COLORS['white'])],
-            indicatorcolor=[('selected', 'white'),
-                        ('!selected', 'white'),
-                        ('active', 'white')])
+            background=[('active', self.COLORS['light'])],
+            indicatorcolor=[('selected', 'light'),
+                        ('!selected', 'light'),
+                        ('active', 'light')])
 
         # Configurar estilos para frames
         style.configure("Custom.TLabelframe",
@@ -1470,24 +1818,9 @@ class IngresoInsumos:
         edit_sin_lote_var = tk.BooleanVar()
         edit_sin_fecha_venc = tk.BooleanVar()
 
-        # CONTENEDOR PRINCIPAL CON SCROLL
-        container = tk.Frame(editar_ventana)
-        container.pack(fill='both', expand=True)
-
-        main_canvas = tk.Canvas(container, bg=self.COLORS['light'], highlightthickness=0)
-        scrollbar = ttk.Scrollbar(container, orient='vertical', command=main_canvas.yview)
-        scrollable_frame = tk.Frame(main_canvas, bg=self.COLORS['light'])
-
-        scrollable_frame.bind(
-            "<Configure>",
-            lambda e: main_canvas.configure(scrollregion=main_canvas.bbox("all"))
-        )
-
-        main_canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
-        main_canvas.configure(yscrollcommand=scrollbar.set)
-
-        main_canvas.pack(side="left", fill="both", expand=True)
-        scrollbar.pack(side="right", fill="y")
+        # CONTENEDOR PRINCIPAL SIN SCROLL
+        scrollable_frame = tk.Frame(editar_ventana, bg=self.COLORS['light'])
+        scrollable_frame.pack(fill='both', expand=True)
 
         # HEADER PRINCIPAL
         header_frame = tk.Frame(scrollable_frame, bg=self.COLORS['primary'], height=40)
@@ -1557,13 +1890,13 @@ class IngresoInsumos:
         tk.Label(servicios_content, text="Área:", font=('Segoe UI', 9),
                 bg=self.COLORS['light'], fg=self.COLORS['text_dark']).grid(row=0, column=0, padx=5, pady=8, sticky="w")
         area_cb = AutocompleteCombobox(servicios_content, textvariable=edit_area_var, width=25, state="normal")
-        area_cb.set_completion_list([a['nombre'] for a in obtener_areas() or []])
+        editar_ventana.after_idle(lambda: area_cb.set_completion_list(cache.get_area_names()))
         area_cb.grid(row=0, column=1, padx=5, pady=8, sticky="ew")
 
         tk.Label(servicios_content, text="Distrito:", font=('Segoe UI', 9),
                 bg=self.COLORS['light'], fg=self.COLORS['text_dark']).grid(row=0, column=2, padx=5, pady=8, sticky="w")
         distrito_cb = AutocompleteCombobox(servicios_content, textvariable=edit_distrito_var, width=25, state="normal")
-        distrito_cb.set_completion_list([d['nombre'] for d in obtener_distritos() or []])
+        editar_ventana.after_idle(lambda: distrito_cb.set_completion_list(cache.get_distritos_names()))
         distrito_cb.grid(row=0, column=3, padx=5, pady=8, sticky="ew")
 
         tk.Label(servicios_content, text="Tipo de Servicio:", font=('Segoe UI', 9),
@@ -1641,7 +1974,7 @@ class IngresoInsumos:
         tk.Label(detalles_content, text="Tipo Movimiento:", font=('Segoe UI', 9),
                 bg=self.COLORS['light'], fg=self.COLORS['text_dark']).grid(row=0, column=4, padx=5, pady=8, sticky="w")
         tipo_mov_cb = AutocompleteCombobox(detalles_content, textvariable=edit_tipo_movimiento_var, width=25, state="normal")
-        tipo_mov_cb.set_completion_list([tm['descripcion'] for tm in obtener_tipos_movimiento() or []])
+        editar_ventana.after_idle(lambda: tipo_mov_cb.set_completion_list(cache.get_tipos_movimiento_names()))
         tipo_mov_cb.grid(row=0, column=5, padx=5, pady=8, sticky="ew")
 
         tk.Label(detalles_content, text="Lote:", font=('Segoe UI', 9),
@@ -1768,29 +2101,29 @@ class IngresoInsumos:
 
         def actualizar_tipos_movimiento_filtrados_edit():
             nivel = edit_nivel_bodega_var.get()
-            tipos_movimiento = [tm['descripcion'] for tm in obtener_tipos_movimiento() or []]
+            tipos = cache.get_tipos_movimiento_names() or []
 
             if nivel in ("area", "distrito"):
-                tipos_movimiento = [tm for tm in tipos_movimiento if tm not in ("ENTREGADO", "NO ENTREGADO")]
+                tipos = [t for t in tipos if t not in ("ENTREGADO", "NO ENTREGADO")]
             elif nivel == "servicio":
-                tipos_movimiento = [tm for tm in tipos_movimiento if tm != "SALIDA NIVEL INFERIOR"]
+                tipos = [t for t in tipos if t != "SALIDA NIVEL INFERIOR"]
 
-            tipo_mov_cb.config(completevalues=tipos_movimiento)
-
-            if edit_tipo_movimiento_var.get() not in tipos_movimiento:
+            tipo_mov_cb.set_completion_list(tipos)
+            if edit_tipo_movimiento_var.get() not in tipos:
                 edit_tipo_movimiento_var.set('')
-        
+
         def actualizar_tipos_servicio_edit(*args):
             distrito_nombre = edit_distrito_var.get()
-            distritos = obtener_distritos() or []
-            distrito_id = next((d['id'] for d in distritos if d['nombre'] == distrito_nombre), None)
-
+            distrito_id = cache.distrito_id(distrito_nombre)
             if distrito_id:
-                tipos_servicio = obtener_tipos_servicio_por_distrito(distrito_id) or []
+                tipos_servicio = cache.get_tipos_servicio_por_distrito(distrito_id) or []
                 opciones = [ts['descripcion'] for ts in tipos_servicio]
                 tipo_servicio_cb.set_completion_list(opciones)
                 if edit_tipo_servicio_var.get() not in opciones:
                     edit_tipo_servicio_var.set('')
+                # limpiar servicio dependiente
+                servicio_cb.set_completion_list([])
+                edit_servicio_var.set('')
             else:
                 tipo_servicio_cb.set_completion_list([])
                 edit_tipo_servicio_var.set('')
@@ -1800,29 +2133,24 @@ class IngresoInsumos:
         def actualizar_servicios_edit(*args):
             distrito_nombre = edit_distrito_var.get()
             tipo_servicio_desc = edit_tipo_servicio_var.get()
-            distritos = obtener_distritos() or []
-            distrito_id = next((d['id'] for d in distritos if d['nombre'] == distrito_nombre), None)
-
+            distrito_id = cache.distrito_id(distrito_nombre)
             if distrito_id:
-                tipos_servicio = obtener_tipos_servicio_por_distrito(distrito_id) or []
-                tipo_servicio_id = next((ts['id'] for ts in tipos_servicio if ts['descripcion'] == tipo_servicio_desc), None)
+                tipo_servicio_id = cache.tipo_servicio_id(tipo_servicio_desc, distrito_id)
                 if tipo_servicio_id:
-                    servicios = obtener_servicios_por_tipo(tipo_servicio_id) or []
+                    servicios = cache.get_servicios_por_tipo(tipo_servicio_id) or []
                     opciones = [s['nombre'] for s in servicios]
                     servicio_cb.set_completion_list(opciones)
                     if edit_servicio_var.get() not in opciones:
                         edit_servicio_var.set('')
-            else:
-                servicio_cb.set_completion_list([])
-                edit_servicio_var.set('')
+                    return
+            servicio_cb.set_completion_list([])
+            edit_servicio_var.set('')
 
         def actualizar_tipos_servicio_salida_edit(*args):
             distrito_nombre = edit_salida_distrito_var.get()
-            distritos = obtener_distritos() or []
-            distrito_id = next((d['id'] for d in distritos if d['nombre'] == distrito_nombre), None)
-
+            distrito_id = cache.distrito_id(distrito_nombre)
             if distrito_id:
-                tipos_servicio = obtener_tipos_servicio_por_distrito(distrito_id) or []
+                tipos_servicio = cache.get_tipos_servicio_por_distrito(distrito_id) or []
                 opciones = [ts['descripcion'] for ts in tipos_servicio]
                 salida_tipo_servicio_cb.set_completion_list(opciones)
                 if edit_salida_tipo_servicio_var.get() not in opciones:
@@ -1837,31 +2165,27 @@ class IngresoInsumos:
         def actualizar_servicios_salida_edit(*args):
             distrito_nombre = edit_salida_distrito_var.get()
             tipo_servicio_desc = edit_salida_tipo_servicio_var.get()
-            distritos = obtener_distritos() or []
-            distrito_id = next((d['id'] for d in distritos if d['nombre'] == distrito_nombre), None)
-
+            distrito_id = cache.distrito_id(distrito_nombre)
             if distrito_id:
-                tipos_servicio = obtener_tipos_servicio_por_distrito(distrito_id) or []
-                tipo_servicio_id = next((ts['id'] for ts in tipos_servicio if ts['descripcion'] == tipo_servicio_desc), None)
+                tipo_servicio_id = cache.tipo_servicio_id(tipo_servicio_desc, distrito_id)
                 if tipo_servicio_id:
-                    servicios = obtener_servicios_por_tipo(tipo_servicio_id) or []
+                    servicios = cache.get_servicios_por_tipo(tipo_servicio_id) or []
                     opciones = [s['nombre'] for s in servicios]
                     salida_servicio_cb.set_completion_list(opciones)
                     if edit_salida_servicio_var.get() not in opciones:
                         edit_salida_servicio_var.set('')
-            else:
-                salida_servicio_cb.set_completion_list([])
-                edit_salida_servicio_var.set('')
+                    return
+            salida_servicio_cb.set_completion_list([])
+            edit_salida_servicio_var.set('')
 
         def actualizar_insumos_edit(*args):
             tipo_insumo_desc = edit_tipo_insumo_var.get()
-            tipos_insumo = obtener_tipos_insumo() or []
-            tipo_insumo_id = next((ti['id'] for ti in tipos_insumo if ti['descripcion'] == tipo_insumo_desc), None)
-
+            tipo_insumo_id = cache.tipo_insumo_id(tipo_insumo_desc)
             if tipo_insumo_id:
-                insumos = obtener_insumos_por_tipo(tipo_insumo_id) or []
-                insumo_cb.set_completion_list([i['nombre'] for i in insumos])
-                if edit_insumo_var.get() not in [i['nombre'] for i in insumos]:
+                insumos = cache.get_insumos_por_tipo(tipo_insumo_id) or []
+                opciones = [i['nombre'] for i in insumos]
+                insumo_cb.set_completion_list(opciones)
+                if edit_insumo_var.get() not in opciones:
                     edit_insumo_var.set('')
             else:
                 insumo_cb.set_completion_list([])
@@ -1870,19 +2194,17 @@ class IngresoInsumos:
         def actualizar_presentacion_edit(*args):
             tipo_insumo_desc = edit_tipo_insumo_var.get()
             insumo_nombre = edit_insumo_var.get()
-            tipos_insumo = obtener_tipos_insumo() or []
-            tipo_insumo_id = next((ti['id'] for ti in tipos_insumo if ti['descripcion'] == tipo_insumo_desc), None)
-
+            tipo_insumo_id = cache.tipo_insumo_id(tipo_insumo_desc)
             if tipo_insumo_id and insumo_nombre:
-                insumos = obtener_insumos_por_tipo(tipo_insumo_id) or []
-                insumo_seleccionado = next((i for i in insumos if i['nombre'] == insumo_nombre), None)
-                if insumo_seleccionado and insumo_seleccionado['nombre_presentacion']:
-                    presentacion_cb.set_completion_list([insumo_seleccionado['nombre_presentacion']])
-                    edit_presentacion_var.set(insumo_seleccionado['nombre_presentacion'])
+                insumos = cache.get_insumos_por_tipo(tipo_insumo_id) or []
+                insumo_sel = next((i for i in insumos if i['nombre'] == insumo_nombre), None)
+                if insumo_sel and insumo_sel.get('nombre_presentacion'):
+                    presentacion_cb.set_completion_list([insumo_sel['nombre_presentacion']])
+                    edit_presentacion_var.set(insumo_sel['nombre_presentacion'])
                     return
             presentacion_cb.set_completion_list([])
             edit_presentacion_var.set('')
-        
+                
         def cargar_datos_iniciales():
             area_valor = valores[13] if len(valores) > 13 else ''
             distrito_valor = valores[14] if len(valores) > 14 else ''
@@ -1941,7 +2263,7 @@ class IngresoInsumos:
 
             actualizar_estado_salida_nivel_inferior_edit()
         
-        editar_ventana.after(100, cargar_datos_iniciales)
+        editar_ventana.after_idle(cargar_datos_iniciales)
 
         # **FRAME BOTONES**
         frame_botones = tk.Frame(scrollable_frame, bg=self.COLORS['light'])
@@ -2117,75 +2439,77 @@ class IngresoInsumos:
         movimientos_guardados = 0
         errores = []
 
-        for item in items:
+        for idx, item in enumerate(items, start=1):
             try:
                 valores = self.tree.item(item)['values']
 
-                # Obtener datos con los índices correctos
                 fecha_registro_str = valores[0]
                 referencia = valores[1]
                 tipo_movimiento_desc = valores[2]
                 insumo_nombre = valores[3]
                 presentacion_nombre = valores[4]
                 servicio_nombre = valores[5]
-                lote = valores[6]
-                if lote == "N/A":
-                    lote = None
+                lote = valores[6] if valores[6] != "N/A" else None
                 fecha_vencimiento_str = valores[7]
                 cantidad = float(valores[8])
-                salida_distrito_nombre = valores[9] if valores[9] else None
-                salida_servicio_nombre = valores[10] if valores[10] else None
-                observaciones = valores[11] if valores[11] else None
+                salida_distrito_nombre = valores[9] or None
+                salida_servicio_nombre = valores[10] or None
+                observaciones = valores[11] or None
                 tipo_insumo_desc = valores[12]
-                area_nombre = valores[13]          
-                distrito_nombre = valores[14]       
-                tipo_servicio_desc = valores[15]    
+                area_nombre = valores[13]
+                distrito_nombre = valores[14]
+                tipo_servicio_desc = valores[15]
 
-                # Validaciones
-                if not tipo_insumo_desc:
-                    raise ValueError("El tipo de insumo no puede estar vacío")
-
-                # Obtener IDs
-                area_id = None
-                if area_nombre:
-                    areas = obtener_areas() or []
-                    area_id = next((a['id'] for a in areas if a['nombre'] == area_nombre), None)
-
-                distrito_id = obtener_id_distrito(distrito_nombre) if distrito_nombre else None
+                # Resolver IDs con cache (fallback a funciones de BD si no están en caché)
+                area_id = cache.area_id(area_nombre) if area_nombre else None
+                distrito_id = cache.distrito_id(distrito_nombre) if distrito_nombre else None
 
                 tipo_servicio_id = None
                 if tipo_servicio_desc and distrito_id:
-                    tipos_servicio = obtener_tipos_servicio_por_distrito(distrito_id) or []
-                    tipo_servicio_id = next((ts['id'] for ts in tipos_servicio if ts['descripcion'] == tipo_servicio_desc), None)
+                    tipo_servicio_id = cache.tipo_servicio_id(tipo_servicio_desc, distrito_id)
+                    if tipo_servicio_id is None:
+                        # Fallback (si el catálogo cambió fuera del cache)
+                        tipos = obtener_tipos_servicio_por_distrito(distrito_id) or []
+                        tipo_servicio_id = next((ts['id'] for ts in tipos if ts['descripcion'] == tipo_servicio_desc), None)
 
                 servicio_id = None
                 if servicio_nombre and tipo_servicio_id:
-                    servicios = obtener_servicios_por_tipo(tipo_servicio_id) or []
-                    servicio_id = next((s['id'] for s in servicios if s['nombre'] == servicio_nombre), None)
+                    servicio_id = cache.servicio_id(servicio_nombre, tipo_servicio_id)
+                    if servicio_id is None:
+                        servicios = obtener_servicios_por_tipo(tipo_servicio_id) or []
+                        servicio_id = next((s['id'] for s in servicios if s['nombre'] == servicio_nombre), None)
 
-                tipo_insumo_id = obtener_id_tipo_insumo(tipo_insumo_desc)
+                tipo_insumo_id = cache.tipo_insumo_id(tipo_insumo_desc)
                 if tipo_insumo_id is None:
                     raise ValueError(f"No se encontró el tipo de insumo: {tipo_insumo_desc}")
 
-                insumo_id = obtener_id_insumo(insumo_nombre, tipo_insumo_id)
+                insumo_id = cache.insumo_id(insumo_nombre, tipo_insumo_id)
                 if insumo_id is None:
-                    raise ValueError(f"No se encontró el insumo: {insumo_nombre}")
+                    # Fallback
+                    insumos = obtener_insumos_por_tipo(tipo_insumo_id) or []
+                    insumo_id = next((i['id'] for i in insumos if i['nombre'] == insumo_nombre), None)
+                    if insumo_id is None:
+                        raise ValueError(f"No se encontró el insumo: {insumo_nombre}")
 
+                # Presentación: mantenemos la función existente (si quieres, puedes cachearla también)
                 presentacion_id = obtener_id_presentacion(presentacion_nombre) if presentacion_nombre else None
-                tipo_movimiento_id = obtener_id_tipo_movimiento(tipo_movimiento_desc)
 
-                # Convertir fechas
+                tipo_movimiento_id = cache.tipo_movimiento_id(tipo_movimiento_desc)
+                if tipo_movimiento_id is None:
+                    tipo_movimiento_id = obtener_id_tipo_movimiento(tipo_movimiento_desc)
+
+                # Fechas
                 fecha_registro = datetime.strptime(fecha_registro_str, '%d/%m/%Y')
-                if fecha_vencimiento_str == "N/A":
-                    fecha_vencimiento = None
-                else:
-                    fecha_vencimiento = datetime.strptime(fecha_vencimiento_str, '%d/%m/%Y')
+                fecha_vencimiento = None if fecha_vencimiento_str == "N/A" else datetime.strptime(fecha_vencimiento_str, '%d/%m/%Y')
 
-                # Manejar salida nivel inferior
-                salida_distrito_id = obtener_id_distrito(salida_distrito_nombre) if salida_distrito_nombre else None
-                salida_servicio_id = obtener_id_servicio(salida_servicio_nombre) if salida_servicio_nombre else None
+                salida_distrito_id = cache.distrito_id(salida_distrito_nombre) if salida_distrito_nombre else None
 
-                # Crear diccionario con datos del movimiento
+                salida_servicio_id = None
+                if salida_servicio_nombre:
+                    # Si existe servicio en la BD con nombre único global, puedes resolver así:
+                    # O, si necesita tipo_servicio_id, debes contextualizar (aquí usamos utilidad si existe)
+                    salida_servicio_id = obtener_id_servicio(salida_servicio_nombre)
+
                 movimiento_data = {
                     'fecha_registro': fecha_registro,
                     'referencia': referencia,
@@ -2205,17 +2529,15 @@ class IngresoInsumos:
                     'observaciones': observaciones
                 }
 
-                # Debug: imprimir los IDs que se van a guardar
-                print(f"Guardando movimiento: area_id={area_id}, distrito_id={distrito_id}, servicio_id={servicio_id}")
+                # Debug opcional
+                # print(f"Guardando movimiento: {movimiento_data}")
 
-                # Guardar movimiento
                 guardar_movimiento(movimiento_data)
                 movimientos_guardados += 1
 
             except Exception as e:
-                errores.append(f"Error en movimiento {movimientos_guardados + 1}: {str(e)}")
+                errores.append(f"Error en movimiento {idx}: {str(e)}")
 
-        # Mostrar mensaje de resultado
         if errores:
             messagebox.showerror("Errores al guardar",
                                 f"Se guardaron {movimientos_guardados} movimientos, pero hubo errores:\n" +
@@ -2224,7 +2546,7 @@ class IngresoInsumos:
             messagebox.showinfo("Éxito",
                                 f"Se guardaron {movimientos_guardados} movimientos correctamente")
             self.tree.delete(*self.tree.get_children())
-            
+
         self.limpiar_campos_completo()
     
     # 6. Métodos de utilidad
@@ -2391,25 +2713,21 @@ class IngresoInsumos:
     
     def on_area_selected(self, *args):
         area_nombre = self.area_var.get()
-        areas = obtener_areas() or []
-        area_id = next((a['id'] for a in areas if a['nombre'] == area_nombre), None)
-
+        area_id = cache.area_id(area_nombre)
         if area_id:
-            distritos = obtener_distritos_por_area(area_id) or []
+            distritos = cache.get_distritos_por_area(area_id) or []
             distritos_nombres = [d['nombre'] for d in distritos]
             self.distrito_cb.config(completevalues=distritos_nombres)
             self.distrito_var.set('')
         else:
             self.distrito_cb.config(completevalues=[])
             self.distrito_var.set('')
-    
+
     def on_area_selected_edit(self, area_var, distrito_var, distrito_cb):
         area_nombre = area_var.get()
-        areas = obtener_areas() or []
-        area_id = next((a['id'] for a in areas if a['nombre'] == area_nombre), None)
-
+        area_id = cache.area_id(area_nombre)
         if area_id:
-            distritos = obtener_distritos_por_area(area_id) or []
+            distritos = cache.get_distritos_por_area(area_id) or []
             distritos_nombres = [d['nombre'] for d in distritos]
             distrito_cb.set_completion_list(distritos_nombres)
             if distrito_var.get() not in distritos_nombres:
