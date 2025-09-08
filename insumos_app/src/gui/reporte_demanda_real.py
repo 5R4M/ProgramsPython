@@ -55,6 +55,7 @@ def resource_path(relative_path):
     return os.path.join(base_path, relative_path)
 
 class ReporteDemandaReal:
+    
     def __init__(self, parent_frame, main_window=None):
         self.parent = parent_frame
         self.main_window = main_window
@@ -77,93 +78,102 @@ class ReporteDemandaReal:
         self.setup_ui()
 
     def setup_styles(self):
+        # Paleta igual a IngresoInsumos
         self.COLORS = {
-            'primary': '#2E86AB',
-            'secondary': '#A23B72',
-            'success': '#27AE60',
-            'warning': '#F39C12',
-            'danger': '#E74C3C',
-            'accent': '#8E44AD',
-            'light': '#F8F9FA',
-            'white': '#FFFFFF',
-            'text_dark': '#2C3E50',
-            'text_light': '#7F8C8D',
-            'border': '#BDC3C7'
+            'primary':   '#2c3e50',
+            'secondary': '#34495e',
+            'accent':    '#3498db',
+            'success':   '#27ae60',
+            'warning':   '#f39c12',
+            'danger':    '#e74c3c',
+            'light':     '#ecf0f1',
+            'white':     '#ffffff',
+            'text_dark': '#2c3e50',
+            'text_light':'#7f8c8d',
+            'border':    '#bdc3c7',
+            'header_dark': '#1f2937'
         }
 
-        style = ttk.Style()
-        style.theme_use('clam')
-      
+        # Espaciados compactos como IngresoInsumos
+        self.SPACING = {
+            'section_pady': 2,
+            'section_padx': 15,
+            'card_padx': 8,
+            'card_pady': 2,
+            'header_height': 20,
+            'content_padx': 10,
+            'content_pady': 4,
+            'label_pady': 2,
+            'widget_pady': 2
+        }
+
+        try:
+            ttk.Style().theme_use('clam')
+        except Exception:
+            pass
+
+        style = ttk.Style(self.parent if hasattr(self, 'parent') else None)
+
+        # Fondo general claro
+        style.configure('MainArea.TFrame', background=self.COLORS['light'])
+
+        # Tarjetas
+        style.configure('Card.TFrame', background=self.COLORS['white'], relief='solid', borderwidth=1)
         style.configure('White.TFrame', background=self.COLORS['white'])
-      
-        # Estilo para labels con fondo blanco
-        style.configure('White.TLabel',
-            background=self.COLORS['white'],
-            foreground=self.COLORS['text_dark'],
-            font=('Segoe UI', 9))
 
-        # Estilo para botones con fondo blanco
-        style.configure('White.TButton',
-            background=self.COLORS['white'],
-            foreground=self.COLORS['text_dark'],
-            font=('Segoe UI', 9),
-            relief='flat',
-            borderwidth=0)
-        style.map('White.TButton',
-            background=[('active', self.COLORS['light']),
-                        ('pressed', self.COLORS['light'])])
-      
-        style.configure('Card.TLabelframe',
-            background=self.COLORS['white'],
-            relief='solid',
-            borderwidth=1,
-            labeloutside=False)
+        # Encabezados de sección
+        style.configure('Header.TFrame', background=self.COLORS['primary'])
+        style.configure('Header.TLabel', background=self.COLORS['primary'], foreground=self.COLORS['white'], font=('Segoe UI', 8, 'bold'))
 
-        style.configure('Card.TLabelframe.Label',
-            background=self.COLORS['primary'],
-            foreground=self.COLORS['white'],
-            font=('Segoe UI', 9, 'bold'),
-            padding=(8, 3))
+        # Labels y botones blancos
+        style.configure('White.TLabel', background=self.COLORS['white'], foreground=self.COLORS['text_dark'], font=('Segoe UI', 9))
+        style.configure('White.TButton', background=self.COLORS['white'], foreground=self.COLORS['text_dark'], font=('Segoe UI', 9), relief='flat', borderwidth=0)
+        style.map('White.TButton', background=[('active', self.COLORS['light']), ('pressed', self.COLORS['light'])])
 
-        style.configure('Primary.TButton',
-            font=('Segoe UI', 9, 'bold'),
-            padding=(12, 6),
-            relief='flat',
-            borderwidth=0,
-            background=self.COLORS['primary'],
-            foreground=self.COLORS['white'])
+        # Botón primario (coherente con IngresoInsumos)
+        style.configure('Primary.TButton', font=('Segoe UI', 9, 'bold'), padding=(10, 4), relief='flat', borderwidth=0, background=self.COLORS['accent'], foreground=self.COLORS['white'])
+        style.map('Primary.TButton', background=[('active', '#2980b9'), ('pressed', '#117a8b')], foreground=[('active', '#ffffff'), ('pressed', '#ffffff')])
 
-        style.map('Primary.TButton',
-            background=[('active', '#1F5F8B'),
-                        ('pressed', '#1A4F7A')])
-      
-        # Estilos adicionales para radiobuttons y combobox
-        style.configure(
-            'White.TRadiobutton',
-            background=self.COLORS['white'],
-            foreground=self.COLORS['text_dark'],
-            font=('Segoe UI', 9)
-        )
-        style.configure(
-            'White.TCombobox',
-            fieldbackground=self.COLORS['white'],
-            background=self.COLORS['white'],
-            foreground=self.COLORS['text_dark']
-        )
-  
-    def create_titled_frame(self, parent, title):
-        container = tk.Frame(parent, bg=self.COLORS['white'], relief='solid', borderwidth=1)
+        # Radio y combo
+        style.configure('White.TRadiobutton', background=self.COLORS['white'], foreground=self.COLORS['text_dark'], font=('Segoe UI', 9))
+        style.configure('White.TCombobox', fieldbackground=self.COLORS['white'], background=self.COLORS['white'], foreground=self.COLORS['text_dark'])
+    
+    def create_titled_frame(self, parent, title, header_icon=None):
+        # Contenedor gris claro como fondo
+        container_outer = tk.Frame(parent, bg=self.COLORS['light'])
+        container_outer.pack(fill="x", padx=self.SPACING['section_padx'], pady=self.SPACING['section_pady'])
 
-        header = tk.Frame(container, bg=self.COLORS['primary'], height=20)
+        # Tarjeta blanca
+        container = tk.Frame(container_outer, bg=self.COLORS['white'], relief='solid', borderwidth=1)
+        container.pack(fill="x", padx=self.SPACING['card_padx'], pady=self.SPACING['card_pady'])
+
+        # Header compacto
+        header = tk.Frame(container, bg=self.COLORS['primary'], height=self.SPACING['header_height'])
         header.pack(fill='x')
         header.pack_propagate(False)
 
-        label = tk.Label(header, text=title, font=('Segoe UI', 8, 'bold'),
-                        fg=self.COLORS['white'], bg=self.COLORS['primary'])
-        label.pack(side='left', padx=10, pady=2)
+        # Etiqueta con "mini icono" de texto (emoji/símbolo)
+        if header_icon:
+            tk.Label(
+                header,
+                text=header_icon,
+                font=('Segoe UI Emoji', 9),  # usa fuente compatible con emoji
+                fg=self.COLORS['white'],
+                bg=self.COLORS['primary']
+            ).pack(side='left', padx=(10, 4))
 
+        # Título
+        tk.Label(
+            header,
+            text=title,
+            font=('Segoe UI', 8, 'bold'),
+            fg=self.COLORS['white'],
+            bg=self.COLORS['primary']
+        ).pack(side='left', padx=2, pady=2)
+
+        # Contenido
         content = tk.Frame(container, bg=self.COLORS['white'])
-        content.pack(fill='both', expand=True, padx=10, pady=10)
+        content.pack(fill='x', padx=self.SPACING['content_padx'], pady=self.SPACING['content_pady'])
 
         return container, content
   
@@ -187,40 +197,31 @@ class ReporteDemandaReal:
   
     def setup_ui(self):
         # --- Frame principal que contendrá todo ---
-        main_container = tk.Frame(self.parent, bg=self.COLORS['light'])
+        main_container = ttk.Frame(self.parent, style='MainArea.TFrame')
         main_container.pack(fill="both", expand=True)
 
-        # --- Título principal ---
-        title_frame = tk.Frame(main_container, bg=self.COLORS['primary'], height=70)
-        title_frame.pack(fill='x', padx=0, pady=(10, 5))
+        # --- Header principal compacto (como IngresoInsumos) ---
+        title_frame = tk.Frame(main_container, bg=self.COLORS['primary'], height=55)
+        title_frame.pack(fill='x', padx=0, pady=(6, 6))
         title_frame.pack_propagate(False)
 
         title_inner = tk.Frame(title_frame, bg=self.COLORS['primary'])
-        title_inner.pack(fill='both', expand=True, padx=15, pady=8)
+        title_inner.pack(fill='both', expand=True, padx=15, pady=4)
 
-        tk.Label(title_inner,
-                text="Reporte Demanda Real por Servicio de Salud",
-                font=('Segoe UI', 12, 'bold'),
-                fg=self.COLORS['white'],
-                bg=self.COLORS['primary']).pack(anchor='w')
-
-        tk.Label(title_inner,
-                text="Consulte demanda de los movimientos de los insumos",
-                font=('Segoe UI', 8),
-                fg=self.COLORS['white'],
-                bg=self.COLORS['primary']).pack(anchor='w', pady=(2, 0))
+        tk.Label(title_inner, text="📑 Reporte Demanda Real por Servicio de Salud", font=('Segoe UI', 11, 'bold'), fg=self.COLORS['white'], bg=self.COLORS['primary']).pack(anchor='w')
+        tk.Label(title_inner, text="Consulte demanda de los movimientos de los insumos", font=('Segoe UI', 8), fg=self.COLORS['white'], bg=self.COLORS['primary']).pack(anchor='w', pady=(1, 0))
 
         # Frame principal con título personalizado
-        self.frame_principal_container, self.frame_principal = self.create_titled_frame(main_container, "Filtros de Reporte Demanda Real")
-        self.frame_principal_container.config(bg=self.COLORS['white'])
-        self.frame_principal.config(bg=self.COLORS['white'])
-        self.frame_principal_container.pack(fill="both", expand=True, padx=10, pady=5)
+        # Base blanca para el contenido (no otra tarjeta con título)
+        self.frame_principal = tk.Frame(main_container, bg=self.COLORS['light'])
+        self.frame_principal.pack(fill="both", expand=True)
 
-        # Frame para corte logístico
-        self.frame_corte_container, self.frame_corte_content = self.create_titled_frame(self.frame_principal, "Corte Logístico")
-        self.frame_corte_container.config(bg=self.COLORS['white'])
+        # Corte Logístico
+        self.frame_corte_container, self.frame_corte_content = self.create_titled_frame(
+            self.frame_principal, "Corte Logístico", header_icon="🗓️"
+        )
+        self.frame_corte_container.config(bg=self.COLORS['light'])
         self.frame_corte_content.config(bg=self.COLORS['white'])
-        self.frame_corte_container.pack(fill="x", expand=False, padx=0, pady=5)
 
         # Configurar grid EXACTAMENTE IGUAL que ubicación (solo columnas expandibles específicas)
         self.frame_corte_content.grid_columnconfigure(1, weight=1)  # Año
@@ -229,7 +230,7 @@ class ReporteDemandaReal:
         # NO configurar las demás columnas para que no se expandan
 
         # Distribuir elementos - Año, Mes Inicio, Mes Final
-        ttk.Label(self.frame_corte_content, text="Año:", style='White.TLabel').grid(row=0, column=0, padx=5, sticky='w')
+        ttk.Label(self.frame_corte_content, text="Año:", style='White.TLabel').grid(row=0, column=0, padx=5, pady=2, sticky='w')
         self.anio_var = tk.StringVar()
         anios = [str(a) for a in range(datetime.now().year - 5, datetime.now().year + 2)]
         self.combo_anio = ttk.Combobox(
@@ -239,19 +240,19 @@ class ReporteDemandaReal:
             width=8,
             state="readonly"
         )
-        self.combo_anio.grid(row=0, column=1, padx=5, sticky='ew')
+        self.combo_anio.grid(row=0, column=1, padx=5, pady=2, sticky='ew')
         self.combo_anio.set(str(datetime.now().year))
 
         ttk.Label(self.frame_corte_content, text="Mes Inicio:", style='White.TLabel').grid(row=0, column=2, padx=5, sticky='w')
         self.mes_inicio_var = tk.StringVar()
       
         # Obtener nombres de meses en español
-        meses = [datetime(2024, m, 1).strftime("%B").capitalize() for m in range(1, 13)]
+        self._meses_es = [datetime(2024, m, 1).strftime("%B").capitalize() for m in range(1, 13)]
       
         self.combo_mes_inicio = ttk.Combobox(
             self.frame_corte_content,
             textvariable=self.mes_inicio_var,
-            values=meses,
+            values=self._meses_es,
             width=12,
             state="readonly"
         )
@@ -264,7 +265,7 @@ class ReporteDemandaReal:
         self.combo_mes_final = ttk.Combobox(
             self.frame_corte_content,
             textvariable=self.mes_final_var,
-            values=meses,
+            values=self._meses_es,
             width=12,
             state="readonly"
         )
@@ -274,15 +275,16 @@ class ReporteDemandaReal:
         # NO agregar labels vacíos en columnas 6 y 7 para mantener el ancho correcto
 
         # Eventos para actualizar fechas
-        self.combo_anio.bind('<<ComboboxSelected>>', self.actualizar_fechas_por_corte)
-        self.combo_mes_inicio.bind('<<ComboboxSelected>>', self.actualizar_fechas_por_corte)
-        self.combo_mes_final.bind('<<ComboboxSelected>>', self.actualizar_fechas_por_corte)
+        self.parent.after_idle(lambda: self.combo_anio.bind('<<ComboboxSelected>>', self.actualizar_fechas_por_corte))
+        self.parent.after_idle(lambda: self.combo_mes_inicio.bind('<<ComboboxSelected>>', self.actualizar_fechas_por_corte))
+        self.parent.after_idle(lambda: self.combo_mes_final.bind('<<ComboboxSelected>>', self.actualizar_fechas_por_corte))
 
-        # Frame ubicación
-        self.frame_ubicacion_container, self.frame_ubicacion_content = self.create_titled_frame(self.frame_principal, "Ubicación")
-        self.frame_ubicacion_container.config(bg=self.COLORS['white'])
+        # Ubicación
+        self.frame_ubicacion_container, self.frame_ubicacion_content = self.create_titled_frame(
+            self.frame_principal, "Ubicación", header_icon="📍"
+        )
+        self.frame_ubicacion_container.config(bg=self.COLORS['light'])
         self.frame_ubicacion_content.config(bg=self.COLORS['white'])
-        self.frame_ubicacion_container.pack(fill="x", expand=False, padx=0, pady=5)
 
         # Configurar grid para distribución uniforme
         self.frame_ubicacion_content.grid_columnconfigure(1, weight=1)
@@ -291,124 +293,88 @@ class ReporteDemandaReal:
         self.frame_ubicacion_content.grid_columnconfigure(7, weight=1)
 
         label_style = {'style': 'White.TLabel'}
-        ttk.Label(self.frame_ubicacion_content, text="Área:", **label_style).grid(row=0, column=0, padx=5, sticky='w')
+        ttk.Label(self.frame_ubicacion_content, text="Área:", **label_style).grid(row=0, column=0, padx=5, pady=2, sticky='w')
         self.area_var = tk.StringVar()
         self.combo_area = AutocompleteCombobox(self.frame_ubicacion_content, textvariable=self.area_var, state="normal", font=('Segoe UI', 9))
-        self.combo_area.grid(row=0, column=1, padx=5, sticky='ew')
+        self.combo_area.grid(row=0, column=1, padx=5, pady=2, sticky='ew')
       
-        ttk.Label(self.frame_ubicacion_content, text="Distrito:", **label_style).grid(row=0, column=2, padx=5, sticky='w')
+        ttk.Label(self.frame_ubicacion_content, text="Distrito:", **label_style).grid(row=0, column=2, padx=5, pady=2, sticky='w')
         self.distrito_var = tk.StringVar()
         self.combo_distrito = AutocompleteCombobox(self.frame_ubicacion_content, textvariable=self.distrito_var, state="normal", font=('Segoe UI', 9))
-        self.combo_distrito.grid(row=0, column=3, padx=5, sticky='ew')
+        self.combo_distrito.grid(row=0, column=3, padx=5, pady=2, sticky='ew')
 
-        ttk.Label(self.frame_ubicacion_content, text="Tipo de Servicio:", **label_style).grid(row=0, column=4, padx=5, sticky='w')
+        ttk.Label(self.frame_ubicacion_content, text="Tipo de Servicio:", **label_style).grid(row=0, column=4, padx=5, pady=2, sticky='w')
         self.tipo_servicio_var = tk.StringVar()
         self.combo_tipo_servicio = AutocompleteCombobox(self.frame_ubicacion_content, textvariable=self.tipo_servicio_var, state="normal", font=('Segoe UI', 9))
-        self.combo_tipo_servicio.grid(row=0, column=5, padx=5, sticky='ew')
+        self.combo_tipo_servicio.grid(row=0, column=5, padx=5, pady=2, sticky='ew')
       
-        ttk.Label(self.frame_ubicacion_content, text="Servicio:", **label_style).grid(row=0, column=6, padx=5, sticky='w')
+        ttk.Label(self.frame_ubicacion_content, text="Servicio:", **label_style).grid(row=0, column=6, padx=5, pady=2, sticky='w')
         self.servicio_var = tk.StringVar()
         self.combo_servicio = AutocompleteCombobox(self.frame_ubicacion_content, textvariable=self.servicio_var, state="normal", font=('Segoe UI', 9))
-        self.combo_servicio.grid(row=0, column=7, padx=5, sticky='ew')
+        self.combo_servicio.grid(row=0, column=7, padx=5, pady=2, sticky='ew')
 
-        # Frame insumo
-        self.frame_insumo_container, self.frame_insumo_content = self.create_titled_frame(self.frame_principal, "Insumo")
-        self.frame_insumo_container.config(bg=self.COLORS['white'])
+        # Insumo
+        self.frame_insumo_container, self.frame_insumo_content = self.create_titled_frame(
+            self.frame_principal, "Insumo", header_icon="💊"
+        )
+        self.frame_insumo_container.config(bg=self.COLORS['light'])
         self.frame_insumo_content.config(bg=self.COLORS['white'])
-        self.frame_insumo_container.pack(fill="x", expand=False, padx=0, pady=5)
 
         # Configurar grid para distribución uniforme
         self.frame_insumo_content.grid_columnconfigure(1, weight=1)
         self.frame_insumo_content.grid_columnconfigure(3, weight=1)
         self.frame_insumo_content.grid_columnconfigure(5, weight=1)
 
-        ttk.Label(self.frame_insumo_content, text="Tipo de Insumo:", **label_style).grid(row=0, column=0, padx=5, sticky='w')
+        ttk.Label(self.frame_insumo_content, text="Tipo de Insumo:", **label_style).grid(row=0, column=0, padx=5, pady=2, sticky='w')
         self.tipo_insumo_var = tk.StringVar()
         self.combo_tipo_insumo = AutocompleteCombobox(self.frame_insumo_content, textvariable=self.tipo_insumo_var, state="normal", font=('Segoe UI', 9))
-        self.combo_tipo_insumo.grid(row=0, column=1, padx=5, sticky='ew')
+        self.combo_tipo_insumo.grid(row=0, column=1, padx=5, pady=2, sticky='ew')
       
-        ttk.Label(self.frame_insumo_content, text="Insumo:", **label_style).grid(row=0, column=2, padx=5, sticky='w')
+        ttk.Label(self.frame_insumo_content, text="Insumo:", **label_style).grid(row=0, column=2, padx=5, pady=2, sticky='w')
         self.insumo_var = tk.StringVar()
         self.combo_insumo = AutocompleteCombobox(self.frame_insumo_content, textvariable=self.insumo_var, state="normal", font=('Segoe UI', 9))
-        self.combo_insumo.grid(row=0, column=3, padx=5, sticky='ew')
+        self.combo_insumo.grid(row=0, column=3, padx=5, pady=2, sticky='ew')
       
-        ttk.Label(self.frame_insumo_content, text="Presentación:", **label_style).grid(row=0, column=4, padx=5, sticky='w')
+        ttk.Label(self.frame_insumo_content, text="Presentación:", **label_style).grid(row=0, column=4, padx=5, pady=2, sticky='w')
         self.presentacion_var = tk.StringVar()
         self.combo_presentacion = AutocompleteCombobox(self.frame_insumo_content, textvariable=self.presentacion_var, state="normal", font=('Segoe UI', 9))
-        self.combo_presentacion.grid(row=0, column=5, padx=5, sticky='ew')
+        self.combo_presentacion.grid(row=0, column=5, padx=5, pady=2, sticky='ew')
 
         # --- Frame para el visor PDF (ALTURA FIJA) ---
-        self.pdf_frame = tk.Frame(self.frame_principal, bg=self.COLORS['white'], height=350)
-        self.pdf_frame.pack(fill="x", padx=5, pady=5)
-        self.pdf_frame.pack_propagate(False)  # Para que respete la altura fija
-        self.pdf_viewer = None
+        self.pdf_container, pdf_content = self.create_titled_frame(
+            self.frame_principal, "Vista previa del PDF", header_icon="📄"
+        )
+        self.pdf_container.config(bg=self.COLORS['light'])
+        self.pdf_frame = tk.Frame(pdf_content, bg=self.COLORS['white'], height=350)
+        self.pdf_frame.pack(fill="x")
+        self.pdf_frame.pack_propagate(False)
 
         # --- Frame para botones (fuera del frame principal, pegado abajo) ---
-        self.frame_botones = ttk.Frame(main_container, style='White.TFrame')
-        self.frame_botones.pack(fill="x", side="bottom", pady=(20, 10))
+        self.frame_botones = tk.Frame(main_container, bg=self.COLORS['light'])
+        self.frame_botones.pack(fill="x", side="bottom", pady=(10, 10))
 
         btn_font = ('Segoe UI', 9, 'bold')
-        btn_bg = self.COLORS['white']
+        btn_bg = self.COLORS['light']
         btn_fg = self.COLORS['text_dark']
 
-        # Botón Generar Vista Previa
-        btn_preview = tk.Button(self.frame_botones, 
-                            text="Generar Vista Previa", 
-                            command=self.generar_reporte,
-                            font=btn_font, bg=btn_bg, fg=btn_fg, 
-                            relief='flat', borderwidth=0,
-                            highlightthickness=0, padx=15, pady=6, 
-                            cursor='hand2',
-                            image=self.icon_preview,
-                            compound='left')
+        def make_btn(parent, text, cmd, img=None):
+            return tk.Button(parent, text=text, command=cmd, font=btn_font, bg=btn_bg, fg=btn_fg,
+                            relief='flat', borderwidth=0, highlightthickness=0, padx=12, pady=6,
+                            cursor='hand2', image=img, compound='left')
+
+        btn_preview = make_btn(self.frame_botones, "Generar Vista Previa", self.generar_reporte, self.icon_preview)
         btn_preview.pack(side="left", padx=5)
 
-        # Botón Imprimir
-        btn_print = tk.Button(self.frame_botones, 
-                            text="Imprimir", 
-                            command=self.imprimir_pdf,
-                            font=btn_font, bg=btn_bg, fg=btn_fg, 
-                            relief='flat', borderwidth=0,
-                            highlightthickness=0, padx=15, pady=6, 
-                            cursor='hand2',
-                            image=self.icon_print,
-                            compound='left')
+        btn_print = make_btn(self.frame_botones, "Imprimir", self.imprimir_pdf, self.icon_print)
         btn_print.pack(side="left", padx=5)
 
-        # Botón Exportar a PDF
-        btn_pdf = tk.Button(self.frame_botones, 
-                        text="Exportar a PDF", 
-                        command=self.exportar_pdf,
-                        font=btn_font, bg=btn_bg, fg=btn_fg, 
-                        relief='flat', borderwidth=0,
-                        highlightthickness=0, padx=15, pady=6, 
-                        cursor='hand2',
-                        image=self.icon_pdf,
-                        compound='left')
+        btn_pdf = make_btn(self.frame_botones, "Exportar a PDF", self.exportar_pdf, self.icon_pdf)
         btn_pdf.pack(side="left", padx=5)
 
-        # Botón Exportar a Excel
-        btn_excel = tk.Button(self.frame_botones, 
-                            text="Exportar a Excel", 
-                            command=self.exportar_excel,
-                            font=btn_font, bg=btn_bg, fg=btn_fg, 
-                            relief='flat', borderwidth=0,
-                            highlightthickness=0, padx=15, pady=6, 
-                            cursor='hand2',
-                            image=self.icon_excel,
-                            compound='left')
+        btn_excel = make_btn(self.frame_botones, "Exportar a Excel", self.exportar_excel, self.icon_excel)
         btn_excel.pack(side="left", padx=5)
 
-        # Botón Cerrar
-        btn_close = tk.Button(self.frame_botones, 
-                            text="Cerrar", 
-                            command=self.cerrar_ventana,
-                            font=btn_font, bg=btn_bg, fg=btn_fg, 
-                            relief='flat', borderwidth=0,
-                            highlightthickness=0, padx=15, pady=6, 
-                            cursor='hand2',
-                            image=self.icon_close,
-                            compound='left')
+        btn_close = make_btn(self.frame_botones, "Cerrar", self.cerrar_ventana, self.icon_close)
         btn_close.pack(side="right", padx=5)
 
         # Vincular eventos de cambio
@@ -1197,9 +1163,6 @@ class ReporteDemandaReal:
             messagebox.showerror("Error", f"No se pudo abrir el PDF: {str(e)}")
   
     def generar_pdf(self, datos_movimientos, ruta_pdf):
-        """
-        Versión corregida de generar_pdf que usa códigos con prefijos correctamente
-        """
         from reportlab.lib import colors
         from reportlab.lib.pagesizes import legal, landscape
         from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
@@ -1207,7 +1170,6 @@ class ReporteDemandaReal:
         from reportlab.lib.units import inch
         from datetime import datetime, timedelta
 
-        # USAR LAS FECHAS CALCULADAS DEL CORTE LOGÍSTICO
         anio = self.anio_var.get()
         mes_inicio = self.mes_inicio_var.get()
         mes_final = self.mes_final_var.get()
@@ -1215,62 +1177,58 @@ class ReporteDemandaReal:
         fecha_inicio = datetime.strptime(fecha_ini_str, '%d/%m/%Y')
         fecha_fin = datetime.strptime(fecha_fin_str, '%d/%m/%Y')
 
-        # Generar lista de días hábiles (lunes a viernes) para columnas
+        # Días hábiles
         dias = []
         fecha_iter = fecha_inicio
         while fecha_iter <= fecha_fin:
-            if fecha_iter.weekday() < 5:  # 0=lunes, ..., 4=viernes
+            if fecha_iter.weekday() < 5:
                 dias.append(fecha_iter.day)
             fecha_iter += timedelta(days=1)
 
-        # **GENERAR CÓDIGOS CON PREFIJOS PARA EL PDF**
+        # Códigos con prefijo
         codigos_insumos = self.generar_codigo_insumo(datos_movimientos)
 
-        # Agrupar datos por insumo usando los códigos generados
+        # Agrupar
         insumos = {}
         for mov in datos_movimientos:
-            # CORREGIDO: Obtener el ID del insumo correctamente
             insumo_id_raw = mov.get('codigo_insumo') or mov.get('insumo_id') or mov.get('codigo')
             try:
                 insumo_id = int(str(insumo_id_raw).strip()) if insumo_id_raw else None
             except:
                 insumo_id = None
-                
             if insumo_id is None:
                 continue
-            
-            # Usar código con prefijo si existe, sino temporal
+
             codigo_con_prefijo = codigos_insumos.get(insumo_id, f"TEMP-{str(insumo_id).zfill(4)}")
-            
             nombre = mov.get('nombre_insumo', '')
             presentacion = mov.get('nombre_presentacion', '')
             key = (codigo_con_prefijo, f"{nombre} {presentacion}".strip())
-            
+
             if key not in insumos:
                 insumos[key] = {
-                    'entregado': {d:0 for d in dias},
-                    'no_entregado': {d:0 for d in dias},
+                    'entregado': {d: 0 for d in dias},
+                    'no_entregado': {d: 0 for d in dias},
                     'inventario_inicial': 0,
                     'entrada_nivel_superior': 0,
                     'salida_nivel_inferior': 0,
                     'reajuste_positivo': 0,
                     'reajuste_negativo': 0
                 }
-            
-            fecha_mov = self._to_datetime(mov['fecha'])
+
+            fecha_mov = self._to_datetime(mov.get('fecha'))
             if fecha_mov is None:
-                continue  # Saltar este movimiento si no se puede parsear la fecha
+                continue
+
             dia_mov = fecha_mov.day
-            tipo = mov.get('tipo_movimiento', '').upper()
+            tipo = str(mov.get('tipo_movimiento', '')).upper()
             cantidad = mov.get('cantidad', 0)
-            
+
             if fecha_inicio <= fecha_mov <= fecha_fin:
                 if tipo == 'ENTREGADO' and dia_mov in dias:
                     insumos[key]['entregado'][dia_mov] += cantidad
                 elif tipo == 'NO ENTREGADO' and dia_mov in dias:
                     insumos[key]['no_entregado'][dia_mov] += cantidad
-            
-            # Procesar todos los movimientos para el cálculo de existencia (sin filtro de fecha)
+
             if tipo == 'INVENTARIO INICIAL':
                 insumos[key]['inventario_inicial'] += cantidad
             elif tipo == 'ENTRADA NIVEL SUPERIOR':
@@ -1282,219 +1240,212 @@ class ReporteDemandaReal:
             elif tipo == 'REAJUSTE NEGATIVO':
                 insumos[key]['reajuste_negativo'] += cantidad
 
-        # Función para formatear valores (mostrar vacío si es 0)
-        def formato_valor(valor):
-            try:
-                num = float(valor)
-                return int(num) if num == int(num) else f"{num:.2f}"
-            except (ValueError, TypeError):
-                return "0"
-
-        # Construir documento PDF
+        # Documento
         doc = SimpleDocTemplate(
             ruta_pdf,
             pagesize=landscape(legal),
-            topMargin=0.5*inch, bottomMargin=0.5*inch,
-            leftMargin=0.5*inch, rightMargin=0.5*inch
+            topMargin=0.5 * inch, bottomMargin=0.5 * inch,
+            leftMargin=0.5 * inch, rightMargin=0.5 * inch
         )
         elementos = []
         estilos = getSampleStyleSheet()
 
-        # Estilos personalizados
-        title_style = ParagraphStyle(
-            'CustomTitle',
-            parent=estilos['Heading1'],
-            alignment=1,
-            spaceAfter=15,
-            fontSize=12
-        )
-        subtitle_style = ParagraphStyle(
-            'CustomSubtitle',
-            parent=estilos['Heading2'],
-            alignment=1,
-            spaceAfter=10,
-            fontSize=10
-        )
-        timestamp_style = ParagraphStyle(
-            'TimestampStyle',
-            parent=estilos['Normal'],
-            alignment=1,
-            spaceAfter=15,
-            fontSize=9
-        )
+        # Títulos superiores
+        title_style = ParagraphStyle('CustomTitle', parent=estilos['Heading1'], alignment=1, spaceAfter=12, fontSize=12)
+        subtitle_style = ParagraphStyle('CustomSubtitle', parent=estilos['Heading2'], alignment=1, spaceAfter=8, fontSize=10)
+        timestamp_style = ParagraphStyle('TimestampStyle', parent=estilos['Normal'], alignment=1, spaceAfter=12, fontSize=9)
 
-        # NUEVO: Estilo para texto de celdas con división de líneas - CENTRADO
-        cell_text_style = ParagraphStyle(
-            'CellTextStyle',
-            parent=estilos['Normal'],
-            fontSize=6,
-            leading=7,  # Espaciado entre líneas
-            alignment=1,  # Alineación centrada horizontalmente
-            fontName='Helvetica'
-        )
+        # Estilos tabla
+        header_title_style = ParagraphStyle('HeaderTitle', parent=estilos['Normal'], fontName='Helvetica-Bold', fontSize=6.2, leading=6.6, alignment=1, wordWrap='CJK')
+        header_subtitle_style = ParagraphStyle('HeaderSubtitle', parent=estilos['Normal'], fontName='Helvetica-Bold', fontSize=6.0, leading=6.4, alignment=1, wordWrap='CJK')
 
-        # Títulos principales
-        elementos.append(Paragraph(
-            "DIRECCIÓN DEPARTAMENTAL DE REDES INTEGRADAS DE SERVICIOS DE SALUD DE GUATEMALA,",
-            title_style))
+        # Títulos de “Total Entregado/No Entregado” muy compactos
+        header_totals_xxs = ParagraphStyle(
+            'HeaderTotalsXXS', parent=estilos['Normal'],
+            fontName='Helvetica-Bold', fontSize=4.7, leading=5.3, alignment=1, wordWrap='CJK'
+        )
+        # Truco de tracking: agregamos hair spaces para compactar sin romper palabras
+        def compact(title):
+            # inserta espacios finos entre palabras para permitir mejor ajuste
+            return title.replace(' ', '\u2009')
+
+        # Código pequeño
+        cell_code_style = ParagraphStyle('CellCodeStyle', parent=estilos['Normal'], fontName='Helvetica', fontSize=5.2, leading=6.8, alignment=1, wordWrap='CJK')
+        # Movimientos
+        cell_mov_style = ParagraphStyle('CellMovStyle', parent=estilos['Normal'], fontName='Helvetica-Bold', fontSize=5.6, leading=6.8, alignment=1)
+        # Días
+        cell_day_style = ParagraphStyle('CellDayStyle', parent=estilos['Normal'], fontName='Helvetica', fontSize=5.4, leading=6.8, alignment=1)
+        # Totales (contenido)
+        cell_total_small = ParagraphStyle('CellTotalSmall', parent=estilos['Normal'], fontName='Helvetica-Bold', fontSize=5.2, leading=6.8, alignment=1)
+        # Nombre de medicamento
+        cell_text_style = ParagraphStyle('CellTextStyle', parent=estilos['Normal'], fontName='Helvetica', fontSize=6.0, leading=6.8, alignment=1)
+
+        # Encabezado del documento
+        elementos.append(Paragraph("DIRECCIÓN DEPARTAMENTAL DE REDES INTEGRADAS DE SERVICIOS DE SALUD DE GUATEMALA,", title_style))
         elementos.append(Paragraph("ÁREA NOR ORIENTE", subtitle_style))
         elementos.append(Paragraph("REGISTRO DIARIO DE CONSUMO Y DEMANDA REAL", subtitle_style))
-        elementos.append(Paragraph(
-            f"Generado el: {datetime.now().strftime('%d/%m/%Y %H:%M:%S')}",
-            timestamp_style))
+        elementos.append(Paragraph(f"Generado el: {datetime.now().strftime('%d/%m/%Y %H:%M:%S')}", timestamp_style))
 
-        # Filtros en una sola fila horizontal
+        # Filtros
+        left_style = ParagraphStyle('LeftAlign', alignment=0, fontSize=9, fontName='Helvetica')
         filtros = [
             f"Área: {self.combo_area.get()}",
             f"Distrito: {self.combo_distrito.get()}",
             f"Tipo de Servicio: {self.combo_tipo_servicio.get()}",
             f"Servicio: {self.combo_servicio.get()}"
         ]
-
-        # Crear estilo para alineación izquierda
-        left_style = ParagraphStyle(
-            name="LeftAlign",
-            alignment=0,  # 0 = LEFT
-            fontSize=9,
-            fontName='Helvetica'
-        )
-
-        # Crear tabla con una sola fila y 4 columnas
-        data_filtros = [[Paragraph(item, left_style) for item in filtros]]
-        col_widths = [150, 150, 150, 150]
-
-        table_filtros = Table(data_filtros, colWidths=col_widths)
+        data_filtros = [[Paragraph(str(item), left_style) for item in filtros]]
+        table_filtros = Table(data_filtros, colWidths=[150, 150, 150, 150])
         table_filtros.setStyle(TableStyle([
-            ('ALIGN', (0,0), (-1,-1), 'LEFT'),
-            ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
-            ('FONTSIZE', (0,0), (-1,-1), 9),
-            ('GRID', (0,0), (-1,-1), 0.5, colors.lightgrey)
+            ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+            ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+            ('FONTSIZE', (0, 0), (-1, -1), 9),
+            ('GRID', (0, 0), (-1, -1), 0.25, colors.lightgrey),
         ]))
-
         elementos.append(table_filtros)
-        elementos.append(Spacer(1, 30))
+        elementos.append(Spacer(1, 18))
 
-        # Encabezados de la tabla
+        # Encabezados de tabla
         encabezado1 = [
-            'Código',
-            'MEDICAMENTO',
-            'DIA DEL MES',
-            f'CANTIDAD DE MEDICAMENTOS Y/O PRODUCTOS A FIN'
+            Paragraph('Código', header_title_style),
+            Paragraph('MEDICAMENTO', header_title_style),
+            Paragraph('DIA DEL MES', header_title_style),
+            Paragraph('CANTIDAD DE MEDICAMENTOS Y/O PRODUCTOS A FIN', header_title_style)
         ] + [''] * (len(dias) - 1) + [
-            'Total\nEntregado',
-            'Total\nNo\nEntregado',
-            'Demanda',
-            'Existencia',
-            'Reajuste (+) (-)'
+            Paragraph(compact('Total Entregado'), header_totals_xxs),
+            Paragraph(compact('Total No Entregado'), header_totals_xxs),
+            Paragraph('Demanda', header_title_style),
+            Paragraph('Existencia', header_subtitle_style),  # se mantiene pequeño medio
+            Paragraph('Reajuste (+) (-)', header_title_style)
         ]
         encabezado2 = [
-            '',
-            'Nombre, Concentración\ny Presentación',
-            ''
-        ] + [str(d) for d in dias] + ['', '', '', '', '']
-
+            Paragraph('', header_subtitle_style),
+            Paragraph('Nombre, Concentración y Presentación', header_subtitle_style),
+            Paragraph('', header_subtitle_style)
+        ] + [Paragraph(str(d), header_subtitle_style) for d in dias] + [
+            Paragraph('', header_subtitle_style),
+            Paragraph('', header_subtitle_style),
+            Paragraph('', header_subtitle_style),
+            Paragraph('', header_subtitle_style),
+            Paragraph('', header_subtitle_style)
+        ]
         data = [encabezado1, encabezado2]
 
-        # **AGREGAR DATOS CON CÓDIGOS CON PREFIJOS CORRECTOS**
+        # Filas de datos
         for (codigo_con_prefijo, nombre_pres), valores in insumos.items():
-            # Calcular totales de entregado y no entregado
             total_entregado = sum(valores['entregado'].get(d, 0) for d in dias)
             total_no_entregado = sum(valores['no_entregado'].get(d, 0) for d in dias)
-            
-            # Calcular reajuste total (positivo - negativo)
             reajuste_total = valores['reajuste_positivo'] - valores['reajuste_negativo']
-            
-            # Calcular existencia según la fórmula:
-            existencia = (valores['inventario_inicial'] + 
-                        valores['entrada_nivel_superior'] + 
-                        valores['reajuste_positivo'] - 
-                        valores['salida_nivel_inferior'] - 
-                        total_entregado - 
+            existencia = (valores['inventario_inicial'] +
+                        valores['entrada_nivel_superior'] +
+                        valores['reajuste_positivo'] -
+                        valores['salida_nivel_inferior'] -
+                        total_entregado -
                         valores['reajuste_negativo'])
 
-            # **APLICAR DIVISIÓN DE TEXTO AL NOMBRE DEL MEDICAMENTO**
-            nombre_dividido = self.dividir_texto_en_lineas(nombre_pres, max_caracteres_por_linea=35)
-            
-            # Crear Paragraph para el nombre del medicamento con división de líneas
-            nombre_paragraph = Paragraph(nombre_dividido, cell_text_style)
+            codigo_paragraph = Paragraph(str(codigo_con_prefijo), cell_code_style)
+            nombre_paragraph = Paragraph(str(nombre_pres), cell_text_style)
 
-            # Fila Entregado - **USAR CÓDIGO CON PREFIJO EN LUGAR DEL CONTADOR**
-            fila_entregado = [
-                codigo_con_prefijo,  # **CÓDIGO CON PREFIJO (ej: MEDI-0001)**
-                nombre_paragraph,    # **USAR PARAGRAPH CON TEXTO DIVIDIDO**
-                'Entregado'
-            ]
+            mov_entregado = Paragraph('Entregado', cell_mov_style)
+            mov_no_entregado = Paragraph('No Entregado', cell_mov_style)
+
+            fila_entregado = [codigo_paragraph, nombre_paragraph, mov_entregado]
             for d in dias:
-                valor = valores['entregado'].get(d, 0)
-                fila_entregado.append(formato_valor(valor))
-            
+                fila_entregado.append(Paragraph(str(self.formato_valor(valores['entregado'].get(d, 0))), cell_day_style))
             fila_entregado += [
-                formato_valor(total_entregado),                             # Total Entregado
-                formato_valor(total_no_entregado),                          # Total No Entregado
-                formato_valor(total_entregado + total_no_entregado),        # Demanda
-                formato_valor(existencia),                                  # Existencia calculada
-                formato_valor(reajuste_total)                               # Reajuste calculado
+                Paragraph(str(self.formato_valor(total_entregado)), cell_total_small),
+                Paragraph(str(self.formato_valor(total_no_entregado)), cell_total_small),
+                Paragraph(str(self.formato_valor(total_entregado + total_no_entregado)), header_subtitle_style),
+                Paragraph(str(self.formato_valor(existencia)), cell_total_small),
+                Paragraph(str(self.formato_valor(reajuste_total)), header_subtitle_style),
             ]
 
-            # Fila No Entregado
-            fila_no_entregado = [
-                '',                  # Código (vacío, SPAN)
-                '',                  # Medicamento (vacío, SPAN)
-                'No Entregado'
-            ]
+            fila_no_entregado = [Paragraph('', cell_code_style), Paragraph('', cell_text_style), mov_no_entregado]
             for d in dias:
-                valor = valores['no_entregado'].get(d, 0)
-                fila_no_entregado.append(formato_valor(valor))
-            
-            fila_no_entregado += [
-                '',                  # Total Entregado (vacío, SPAN)
-                '',                  # Total No Entregado (vacío, SPAN)
-                '',                  # Demanda (vacío, SPAN)
-                '',                  # Existencia (vacío, SPAN)
-                ''                   # Reajuste (vacío, SPAN)
-            ]
+                fila_no_entregado.append(Paragraph(str(self.formato_valor(valores['no_entregado'].get(d, 0))), cell_day_style))
+            fila_no_entregado += ['', '', '', '', '']
 
             data.append(fila_entregado)
             data.append(fila_no_entregado)
 
-        # Anchos de columna - **AUMENTAR ANCHO DE LA COLUMNA DE MEDICAMENTO**
-        col_widths = [0.4*inch, 2.8*inch, 0.7*inch] + [0.25*inch] * len(dias) + [0.5*inch, 0.5*inch, 0.5*inch, 0.5*inch, 0.7*inch]
+        # Anchos dinámicos: damos más aire a "Total Entregado" y "Total No Entregado"
+        page_width, _ = landscape(legal)
+        left_margin = doc.leftMargin
+        right_margin = doc.rightMargin
+        ancho_util = page_width - left_margin - right_margin
 
+        num_dias = len(dias)
+        base_codigo = 0.58 * inch
+        base_medicamento = 2.45 * inch  # compactamos un poco más para ceder espacio a totales
+        base_mov = 0.74 * inch
+        base_dia = 0.22 * inch
+        # base_totales: [Total Entregado, Total No Entregado, Demanda, Existencia, Reajuste]
+        base_totales = [0.56 * inch, 0.56 * inch, 0.56 * inch, 0.58 * inch, 0.68 * inch]
+
+        ancho_base = base_codigo + base_medicamento + base_mov + (base_dia * max(0, num_dias)) + sum(base_totales)
+        if ancho_base > ancho_util:
+            factor = max(0.70, min(1.0, ancho_util / ancho_base))
+            base_codigo *= factor
+            base_medicamento *= factor
+            base_mov *= factor
+            base_dia *= factor
+            base_totales = [w * factor for w in base_totales]
+
+        col_widths = [base_codigo, base_medicamento, base_mov] + [base_dia] * num_dias + base_totales
+        suma_col = sum(col_widths)
+        if suma_col > ancho_util and suma_col > 0:
+            factor_final = ancho_util / suma_col
+            col_widths = [w * factor_final for w in col_widths]
+
+        # Tabla
         tabla = Table(data, repeatRows=2, colWidths=col_widths)
 
+        # Estilos de tabla
         estilos_tabla = [
-            ('SPAN', (0,0), (0,1)),  # Código encabezado
-            ('SPAN', (2,0), (2,1)),  # Movimientos encabezado
-            ('SPAN', (3,0), (len(dias)+2,0)),  # Días encabezado
-            ('SPAN', (len(dias)+3,0), (len(dias)+3,1)),  # Total Entregado encabezado
-            ('SPAN', (len(dias)+4,0), (len(dias)+4,1)),  # Total No Entregado encabezado
-            ('SPAN', (len(dias)+5,0), (len(dias)+5,1)),  # Demanda encabezado
-            ('SPAN', (len(dias)+6,0), (len(dias)+6,1)),  # Existencia encabezado
-            ('SPAN', (len(dias)+7,0), (len(dias)+7,1)),  # Reajuste encabezado
-            # Encabezados: fondo azul claro y texto negro
-            ('BACKGROUND', (0,0), (-1,1), colors.lightblue),
-            ('TEXTCOLOR', (0,0), (-1,1), colors.black),
-            ('ALIGN', (0,0), (-1,-1), 'CENTER'),
-            ('FONTNAME', (0,0), (-1,1), 'Helvetica-Bold'),
-            ('FONTSIZE', (0,0), (-1,-1), 6),
-            ('GRID', (0,0), (-1,-1), 0.25, colors.black),
-            ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
-            # **ALINEACIÓN ESPECIAL PARA LA COLUMNA DE MEDICAMENTOS - CENTRADO**
-            ('ALIGN', (1,2), (1,-1), 'CENTER'),  # Columna medicamento centrada horizontalmente
-            ('VALIGN', (1,2), (1,-1), 'MIDDLE'), # Columna medicamento centrada verticalmente
+            # Spans de encabezado
+            ('SPAN', (0, 0), (0, 1)),
+            ('SPAN', (2, 0), (2, 1)),
+            ('SPAN', (3, 0), (2 + num_dias, 0)),
+            ('SPAN', (3 + num_dias, 0), (3 + num_dias, 1)),
+            ('SPAN', (4 + num_dias, 0), (4 + num_dias, 1)),
+            ('SPAN', (5 + num_dias, 0), (5 + num_dias, 1)),
+            ('SPAN', (6 + num_dias, 0), (6 + num_dias, 1)),
+            ('SPAN', (7 + num_dias, 0), (7 + num_dias, 1)),
+
+            ('BACKGROUND', (0, 0), (-1, 1), colors.lightblue),
+            ('TEXTCOLOR', (0, 0), (-1, 1), colors.black),
+            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+            ('FONTNAME', (0, 0), (-1, 1), 'Helvetica-Bold'),
+            ('FONTSIZE', (0, 0), (-1, -1), 6),
+            ('GRID', (0, 0), (-1, -1), 0.25, colors.black),
+            ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+
+            ('ALIGN', (0, 2), (0, -1), 'CENTER'),
+            ('VALIGN', (0, 2), (0, -1), 'MIDDLE'),
+            ('ALIGN', (1, 2), (1, -1), 'CENTER'),
+            ('VALIGN', (1, 2), (1, -1), 'MIDDLE'),
+
+            # Padding y alto homogéneo
+            ('LEFTPADDING', (0, 0), (-1, -1), 2),
+            ('RIGHTPADDING', (0, 0), (-1, -1), 2),
+            ('TOPPADDING', (0, 0), (-1, -1), 2.3),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 2.3),
+
+            # Altura uniforme (ajusta 14->15 si lo deseas más alto)
+            ('ROWHEIGHT', (0, 0), (-1, -1), 15),
         ]
 
-        # SPAN dinámico para las celdas vacías de cada insumo
-        fila_inicio = 2  # porque las dos primeras filas son encabezados
+        # Spans verticales por par de filas
+        fila_inicio = 2
         while fila_inicio < len(data):
-            fila_fin = fila_inicio + 1  # la fila de No Entregado
-            estilos_tabla.append(('SPAN', (0, fila_inicio), (0, fila_fin)))  # Código
-            estilos_tabla.append(('SPAN', (1, fila_inicio), (1, fila_fin)))  # Medicamento
-            estilos_tabla.append(('SPAN', (len(dias)+3, fila_inicio), (len(dias)+3, fila_fin)))  # Total Entregado
-            estilos_tabla.append(('SPAN', (len(dias)+4, fila_inicio), (len(dias)+4, fila_fin)))  # Total No Entregado
-            estilos_tabla.append(('SPAN', (len(dias)+5, fila_inicio), (len(dias)+5, fila_fin)))  # Demanda
-            estilos_tabla.append(('SPAN', (len(dias)+6, fila_inicio), (len(dias)+6, fila_fin)))  # Existencia
-            estilos_tabla.append(('SPAN', (len(dias)+7, fila_inicio), (len(dias)+7, fila_fin)))  # Reajuste
+            fila_fin = fila_inicio + 1
+            estilos_tabla.append(('SPAN', (0, fila_inicio), (0, fila_fin)))
+            estilos_tabla.append(('SPAN', (1, fila_inicio), (1, fila_fin)))
+            estilos_tabla.append(('SPAN', (3 + num_dias, fila_inicio), (3 + num_dias, fila_fin)))
+            estilos_tabla.append(('SPAN', (4 + num_dias, fila_inicio), (4 + num_dias, fila_fin)))
+            estilos_tabla.append(('SPAN', (5 + num_dias, fila_inicio), (5 + num_dias, fila_fin)))
+            estilos_tabla.append(('SPAN', (6 + num_dias, fila_inicio), (6 + num_dias, fila_fin)))
+            estilos_tabla.append(('SPAN', (7 + num_dias, fila_inicio), (7 + num_dias, fila_fin)))
             fila_inicio += 2
 
         tabla.setStyle(TableStyle(estilos_tabla))
