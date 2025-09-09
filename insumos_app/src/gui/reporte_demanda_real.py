@@ -126,7 +126,7 @@ class ReporteDemandaReal:
         style.configure('Header.TLabel', background=self.COLORS['primary'], foreground=self.COLORS['white'], font=('Segoe UI', 8, 'bold'))
 
         # Labels y botones blancos
-        style.configure('White.TLabel', background=self.COLORS['white'], foreground=self.COLORS['text_dark'], font=('Segoe UI', 9))
+        style.configure('White.TLabel', background=self.COLORS['light'], foreground=self.COLORS['text_dark'], font=('Segoe UI', 9))
         style.configure('White.TButton', background=self.COLORS['white'], foreground=self.COLORS['text_dark'], font=('Segoe UI', 9), relief='flat', borderwidth=0)
         style.map('White.TButton', background=[('active', self.COLORS['light']), ('pressed', self.COLORS['light'])])
 
@@ -221,7 +221,7 @@ class ReporteDemandaReal:
             self.frame_principal, "Corte Logístico", header_icon="🗓️"
         )
         self.frame_corte_container.config(bg=self.COLORS['light'])
-        self.frame_corte_content.config(bg=self.COLORS['white'])
+        self.frame_corte_content.config(bg=self.COLORS['light'])
 
         # Configurar grid EXACTAMENTE IGUAL que ubicación (solo columnas expandibles específicas)
         self.frame_corte_content.grid_columnconfigure(1, weight=1)  # Año
@@ -284,7 +284,7 @@ class ReporteDemandaReal:
             self.frame_principal, "Ubicación", header_icon="📍"
         )
         self.frame_ubicacion_container.config(bg=self.COLORS['light'])
-        self.frame_ubicacion_content.config(bg=self.COLORS['white'])
+        self.frame_ubicacion_content.config(bg=self.COLORS['light'])
 
         # Configurar grid para distribución uniforme
         self.frame_ubicacion_content.grid_columnconfigure(1, weight=1)
@@ -318,7 +318,7 @@ class ReporteDemandaReal:
             self.frame_principal, "Insumo", header_icon="💊"
         )
         self.frame_insumo_container.config(bg=self.COLORS['light'])
-        self.frame_insumo_content.config(bg=self.COLORS['white'])
+        self.frame_insumo_content.config(bg=self.COLORS['light'])
 
         # Configurar grid para distribución uniforme
         self.frame_insumo_content.grid_columnconfigure(1, weight=1)

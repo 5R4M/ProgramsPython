@@ -16,7 +16,6 @@ from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, 
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.units import inch
 
-
 # Agregar el directorio raíz del proyecto al PATH de Python
 sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
@@ -43,10 +42,10 @@ class ReporteKardex:
     # Definir las columnas como atributo de la clase
     COLUMNAS = [
         'Fecha', 'Referencia', 'Remitente/Destinatario', 'Entrada',
-        'Precio Unitario', 'Valor Total', 'Lote', 'Fecha Vencimiento', 
+        'Precio Unitario', 'Valor Total', 'Lote', 'Fecha Vencimiento',
         'Salidas', 'Reajustes', 'Saldo', 'Observaciones'
     ]
-    
+
     def formato_float(self, valor):
         try:
             num = float(valor)
@@ -55,88 +54,123 @@ class ReporteKardex:
             return f"{num:.2f}"
         except (ValueError, TypeError):
             return ""
-    
+
     def __init__(self, parent_frame, main_window=None):
         self.parent = parent_frame
         self.main_window = main_window
         self.setup_styles()
         self.cargar_iconos()
         self.movimientos_data = None
-        
+
         # Crear estilos para los frames
         style = ttk.Style()
         style.configure('Enabled.TFrame', background='white')
         style.configure('Disabled.TFrame', background='#f0f0f0')
-        
+
         self.areas = []
-        self.distritos = []       
-        self.tipos_servicio = []  
+        self.distritos = []
+        self.tipos_servicio = []
         self.tipos_insumo = []
         self.insumos = []
         self.presentaciones = []
-        
+
         self.setup_ui()
 
     def setup_styles(self):
         self.COLORS = {
-            'primary': '#2E86AB',
-            'secondary': '#A23B72',
-            'success': '#27AE60',
-            'warning': '#F39C12',
-            'danger': '#E74C3C',
-            'accent': '#8E44AD',
-            'light': '#F8F9FA',
-            'white': '#FFFFFF',
-            'text_dark': '#2C3E50',
-            'text_light': '#7F8C8D',
-            'border': '#BDC3C7'
+            'primary':   '#2c3e50',
+            'secondary': '#34495e',
+            'accent':    '#3498db',
+            'success':   '#27ae60',
+            'warning':   '#f39c12',
+            'danger':    '#e74c3c',
+            'light':     '#ecf0f1',
+            'white':     '#ffffff',
+            'text_dark': '#2c3e50',
+            'text_light':'#7f8c8d',
+            'border':    '#bdc3c7',
+            'header_dark': '#1f2937'
         }
 
-        style = ttk.Style()
-        style.theme_use('clam')
-        
+        style = ttk.Style(self.parent if hasattr(self, 'parent') else None)
+        try:
+            style.theme_use('clam')
+        except Exception:
+            pass
+
+        # Frames base
         style.configure('White.TFrame', background=self.COLORS['white'])
-        
-        # Estilo para labels con fondo blanco
-        style.configure('White.TLabel',
+        style.configure('Enabled.TFrame', background=self.COLORS['white'])
+        style.configure('Disabled.TFrame', background='#f0f0f0')
+
+        # Labels y botones base
+        style.configure(
+            'White.TLabel',
             background=self.COLORS['white'],
             foreground=self.COLORS['text_dark'],
-            font=('Segoe UI', 9))
+            font=('Segoe UI', 9)
+        )
 
-        # Estilo para botones con fondo blanco
-        style.configure('White.TButton',
+        style.configure(
+            'White.TButton',
             background=self.COLORS['white'],
             foreground=self.COLORS['text_dark'],
             font=('Segoe UI', 9),
             relief='flat',
-            borderwidth=0)
-        style.map('White.TButton',
-            background=[('active', self.COLORS['light']),
-                        ('pressed', self.COLORS['light'])])
-        
-        style.configure('Card.TLabelframe',
-            background=self.COLORS['white'],
-            relief='solid',
-            borderwidth=1,
-            labeloutside=False)
+            borderwidth=0
+        )
+        style.map(
+            'White.TButton',
+            background=[('active', self.COLORS['light']), ('pressed', self.COLORS['light'])]
+        )
 
-        style.configure('Card.TLabelframe.Label',
-            background=self.COLORS['primary'],
-            foreground=self.COLORS['white'],
-            font=('Segoe UI', 9, 'bold'),
-            padding=(8, 3))
+        # Títulos de tarjetas
+        style.configure('Card.TLabelframe', background=self.COLORS['white'], relief='solid', borderwidth=1, labeloutside=False)
+        style.configure('Card.TLabelframe.Label', background=self.COLORS['primary'], foreground=self.COLORS['white'], font=('Segoe UI', 9, 'bold'), padding=(8, 3))
 
-        style.configure('Primary.TButton',
+        # Botón primario
+        style.configure(
+            'Primary.TButton',
             font=('Segoe UI', 9, 'bold'),
             padding=(12, 6),
             relief='flat',
             borderwidth=0,
-            background=self.COLORS['primary'],
-            foreground=self.COLORS['white'])
+            background=self.COLORS['accent'],
+            foreground=self.COLORS['white']
+        )
+        style.map(
+            'Primary.TButton',
+            background=[('active', '#2980b9'), ('pressed', '#117a8b')],
+            foreground=[('active', '#ffff'), ('pressed', '#ffff')]
+        )
 
-        style.map('Primary.TButton',
-            background=[('active', '#1F5F8B'),
-                        ('pressed', '#1A4F7A')])
+        # Cabeceras compactas
+        style.configure('Header.TFrame', background=self.COLORS['primary'])
+        style.configure(
+            'Header.TLabel',
+            background=self.COLORS['primary'],
+            foreground=self.COLORS['white'],
+            font=('Segoe UI', 8, 'bold')
+        )
+
+        # Popup del ttk.Combobox y listas (si usas Autocomplete)
+        root = self.parent.winfo_toplevel() if hasattr(self, 'parent') else None
+        if root:
+            root.option_add('*TCombobox*Listbox.background', self.COLORS['white'])
+            root.option_add('*TCombobox*Listbox.foreground', self.COLORS['text_dark'])
+            root.option_add('*TCombobox*Listbox.selectBackground', self.COLORS['accent'])
+            root.option_add('*TCombobox*Listbox.selectForeground', self.COLORS['white'])
+            root.option_add('*TCombobox*Listbox.font', '{Segoe UI} 9')
+
+            root.option_add('*Listbox.background', self.COLORS['white'])
+            root.option_add('*Listbox.foreground', self.COLORS['text_dark'])
+            root.option_add('*Listbox.selectBackground', self.COLORS['accent'])
+            root.option_add('*Listbox.selectForeground', self.COLORS['white'])
+            root.option_add('*Listbox.font', '{Segoe UI} 9')
+
+        # Entradas y Combobox
+        style.configure('TCombobox', fieldbackground=self.COLORS['white'], background=self.COLORS['white'], foreground=self.COLORS['text_dark'])
+        style.configure('TEntry', selectbackground=self.COLORS['accent'], selectforeground='#ffff')
 
     def create_titled_frame(self, parent, title):
         container = tk.Frame(parent, bg=self.COLORS['white'], relief='solid', borderwidth=1)
@@ -145,25 +179,24 @@ class ReporteKardex:
         header.pack(fill='x')
         header.pack_propagate(False)
 
-        label = tk.Label(header, text=title, font=('Segoe UI', 8, 'bold'),
-                        fg=self.COLORS['white'], bg=self.COLORS['primary'])
+        label = tk.Label(header, text=title, font=('Segoe UI', 8, 'bold'), fg=self.COLORS['white'], bg=self.COLORS['primary'])
         label.pack(side='left', padx=10, pady=2)
 
         content = tk.Frame(container, bg=self.COLORS['white'])
         content.pack(fill='both', expand=True, padx=10, pady=10)
 
         return container, content
-    
+
     def cargar_iconos(self):
         try:
             icons_path = resource_path(os.path.join('utils', 'icons'))
-            
+
             # Ajusta la ruta según tu proyecto
             self.icon_preview = tk.PhotoImage(file=os.path.join(icons_path, "vista_previa.png")).subsample(2, 2)
-            self.icon_print = tk.PhotoImage(file=os.path.join(icons_path, "imprimir.png")).subsample(2, 2)
-            self.icon_pdf = tk.PhotoImage(file=os.path.join(icons_path, "pdf.png")).subsample(2, 2)
-            self.icon_excel = tk.PhotoImage(file=os.path.join(icons_path, "excel.png")).subsample(2, 2)
-            self.icon_close = tk.PhotoImage(file=os.path.join(icons_path, "cerrar.png")).subsample(2, 2)
+            self.icon_print   = tk.PhotoImage(file=os.path.join(icons_path, "imprimir.png")).subsample(2, 2)
+            self.icon_pdf     = tk.PhotoImage(file=os.path.join(icons_path, "pdf.png")).subsample(2, 2)
+            self.icon_excel   = tk.PhotoImage(file=os.path.join(icons_path, "excel.png")).subsample(2, 2)
+            self.icon_close   = tk.PhotoImage(file=os.path.join(icons_path, "cerrar.png")).subsample(2, 2)
         except Exception as e:
             print(f"Error cargando iconos: {e}")
             self.icon_preview = None
@@ -171,20 +204,19 @@ class ReporteKardex:
             self.icon_pdf = None
             self.icon_excel = None
             self.icon_close = None
-    
-    import locale
 
-    # Intentar establecer el locale a español
-    try:
-        locale.setlocale(locale.LC_TIME, 'es_ES.UTF-8')  # Linux
-    except locale.Error:
+        import locale
+        # Intentar establecer el locale a español
         try:
-            locale.setlocale(locale.LC_TIME, 'es_ES')  # Otro sistema
+            locale.setlocale(locale.LC_TIME, 'es_ES.UTF-8')  # Linux
         except locale.Error:
             try:
-                locale.setlocale(locale.LC_TIME, 'spanish')  # Windows
+                locale.setlocale(locale.LC_TIME, 'es_ES')  # Otro sistema
             except locale.Error:
-                print("No se pudo establecer el locale a español")
+                try:
+                    locale.setlocale(locale.LC_TIME, 'spanish')  # Windows
+                except locale.Error:
+                    print("No se pudo establecer el locale a español")
 
     def ordenar_movimientos(self, movimientos):
         """
@@ -193,20 +225,15 @@ class ReporteKardex:
         """
         def obtener_prioridad(tipo_movimiento):
             tipo = tipo_movimiento.upper()
-            # Movimientos positivos (prioridad 1)
             if tipo in ['INVENTARIO INICIAL', 'ENTRADA NIVEL SUPERIOR', 'REAJUSTE POSITIVO']:
                 return 1
-            # Movimientos negativos que SÍ afectan el saldo (prioridad 2)
             elif tipo in ['SALIDA NIVEL INFERIOR', 'REAJUSTE NEGATIVO', 'ENTREGADO']:
                 return 2
-            # Movimientos neutrales que NO afectan el saldo (prioridad 3)
             elif tipo == 'NO ENTREGADO':
                 return 3
-            # Cualquier otro tipo no reconocido (prioridad 4)
             else:
                 return 4
 
-        # Ordenar por fecha y luego por prioridad
         return sorted(movimientos, key=lambda x: (x['fecha'], obtener_prioridad(x['tipo_movimiento'])))
 
     def calcular_saldo_acumulado(self, movimientos_ordenados):
@@ -235,7 +262,6 @@ class ReporteKardex:
                     except (ValueError, TypeError):
                         continue
 
-            # Si no encontramos cantidad en los campos esperados, buscar cualquier campo que contenga 'cantidad'
             if cantidad == 0:
                 for key, value in mov.items():
                     if 'cantidad' in key.lower() and value is not None:
@@ -256,7 +282,7 @@ class ReporteKardex:
             lote_val = mov.get('lote')
             if lote_val is None or lote_val == '':
                 lote_val = "N/A"
-            
+
             # Determinar el destinatario para SALIDA NIVEL INFERIOR
             destinatario = mov['tipo_movimiento']
             if tipo == 'SALIDA NIVEL INFERIOR':
@@ -266,30 +292,26 @@ class ReporteKardex:
                     destinatario = mov['servicio_destino']
 
             # Configurar las columnas según el tipo de movimiento
-            entrada = ""  # CAMBIO: Inicializar como cadena vacía
+            entrada = ""
             salida = ""
-            reajuste = ""  # CAMBIO: Inicializar como cadena vacía
-            cantidad_col = self.formato_float(cantidad)  # CAMBIO: Usar formato_float
+            reajuste = ""
+            cantidad_col = self.formato_float(cantidad)
 
             if tipo in ['INVENTARIO INICIAL', 'ENTRADA NIVEL SUPERIOR']:
-                entrada = self.formato_float(cantidad)  # CAMBIO: Usar formato_float
-                saldo += cantidad  # SÍ afecta el saldo
-            elif tipo == 'SALIDA NIVEL INFERIOR':
-                salida = self.formato_float(cantidad)  # CAMBIO: Usar formato_float
-                saldo -= cantidad  # SÍ afecta el saldo
-            elif tipo == 'ENTREGADO':
-                salida = self.formato_float(cantidad)  # CAMBIO: Usar formato_float
-                saldo -= cantidad  # SÍ afecta el saldo
+                entrada = self.formato_float(cantidad)
+                saldo += cantidad
+            elif tipo in ['SALIDA NIVEL INFERIOR', 'ENTREGADO']:
+                salida = self.formato_float(cantidad)
+                saldo -= cantidad
             elif tipo == 'REAJUSTE POSITIVO':
-                reajuste = f"+{self.formato_float(cantidad)}" if cantidad > 0 else ""  # CAMBIO: Formato con signo
-                saldo += cantidad  # SÍ afecta el saldo
+                reajuste = f"+{self.formato_float(cantidad)}" if cantidad > 0 else ""
+                saldo += cantidad
             elif tipo == 'REAJUSTE NEGATIVO':
-                reajuste = f"-{self.formato_float(cantidad)}" if cantidad > 0 else ""  # CAMBIO: Formato con signo
-                saldo -= cantidad  # SÍ afecta el saldo
+                reajuste = f"-{self.formato_float(cantidad)}" if cantidad > 0 else ""
+                saldo -= cantidad
             elif tipo == 'NO ENTREGADO':
-                # NO ENTREGADO se muestra en el reporte pero NO afecta el saldo
-                salida = self.formato_float(cantidad)  # CAMBIO: Usar formato_float
-                # NO se modifica el saldo: saldo permanece igual
+                salida = self.formato_float(cantidad)
+                # saldo no cambia
 
             movimientos_con_saldo.append({
                 'fecha': fecha_registro,
@@ -303,7 +325,7 @@ class ReporteKardex:
                 'salida': salida,
                 'reajuste': reajuste,
                 'cantidad_col': cantidad_col,
-                'saldo': self.formato_float(saldo),  # CAMBIO: Usar formato_float para el saldo
+                'saldo': self.formato_float(saldo),
                 'observaciones': mov.get('observaciones', '')
             })
 
@@ -317,36 +339,26 @@ class ReporteKardex:
             return ""
 
         try:
-            # Si la fecha viene como string, intentar parsearla
             if isinstance(fecha, str):
-                # Intentar diferentes formatos de entrada
                 formatos_entrada = [
-                    '%Y-%m-%d',      # 2024-01-15
-                    '%Y/%m/%d',      # 2024/01/15
-                    '%d-%m-%Y',      # 15-01-2024
-                    '%d/%m/%Y',      # 15/01/2024
-                    '%Y-%m-%d %H:%M:%S',  # 2024-01-15 10:30:00
-                    '%Y/%m/%d %H:%M:%S'   # 2024/01/15 10:30:00
+                    '%Y-%m-%d',
+                    '%Y/%m/%d',
+                    '%d-%m-%Y',
+                    '%d/%m/%Y',
+                    '%Y-%m-%d %H:%M:%S',
+                    '%Y/%m/%d %H:%M:%S'
                 ]
-
                 for formato in formatos_entrada:
                     try:
                         fecha_obj = datetime.strptime(fecha, formato)
                         return fecha_obj.strftime('%d/%m/%Y')
                     except ValueError:
                         continue
-
-                # Si no se pudo parsear, devolver la fecha original
                 return fecha
-
-            # Si la fecha viene como objeto datetime
             elif hasattr(fecha, 'strftime'):
                 return fecha.strftime('%d/%m/%Y')
-
-            # Si es otro tipo, convertir a string
             else:
                 return str(fecha)
-
         except Exception as e:
             print(f"Error al formatear fecha {fecha}: {e}")
             return str(fecha) if fecha else ""
@@ -367,40 +379,44 @@ class ReporteKardex:
                 os.remove(self.temp_pdf_path)
             except:
                 pass
-    
+        # Destruir contenedor principal si existe
+        if hasattr(self, 'main_container'):
+            try:
+                self.main_container.destroy()
+            except Exception:
+                pass
+
     def setup_ui(self):
         # --- Frame principal que contendrá todo ---
-        main_container = tk.Frame(self.parent, bg=self.COLORS['light'])
-        main_container.pack(fill="both", expand=True)
+        self.main_container = tk.Frame(self.parent, bg=self.COLORS['light'])
+        self.main_container.pack(fill="both", expand=True)
 
         # --- Título principal ---
-        title_frame = tk.Frame(main_container, bg=self.COLORS['primary'], height=70)
+        title_frame = tk.Frame(self.main_container, bg=self.COLORS['primary'], height=70)
         title_frame.pack(fill='x', padx=0, pady=(10, 5))
         title_frame.pack_propagate(False)
 
         title_inner = tk.Frame(title_frame, bg=self.COLORS['primary'])
         title_inner.pack(fill='both', expand=True, padx=15, pady=8)
 
-        tk.Label(title_inner,
-                text="Reporte Tarjeta Kardex",
-                font=('Segoe UI', 12, 'bold'),
-                fg=self.COLORS['white'],
-                bg=self.COLORS['primary']).pack(anchor='w')
+        tk.Label(
+            title_inner,
+            text="📒 Reporte Tarjeta Kardex",
+            font=('Segoe UI', 12, 'bold'),
+            fg=self.COLORS['white'],
+            bg=self.COLORS['primary']
+        ).pack(anchor='w')
 
-        tk.Label(title_inner,
-                text="Consulte kardex de los movimientos de los insumos",
-                font=('Segoe UI', 8),
-                fg=self.COLORS['white'],
-                bg=self.COLORS['primary']).pack(anchor='w', pady=(2, 0))
-
-        # Frame principal con título personalizado
-        self.frame_principal_container, self.frame_principal = self.create_titled_frame(main_container, "Filtros de Reporte")
-        self.frame_principal_container.config(bg=self.COLORS['white'])
-        self.frame_principal.config(bg=self.COLORS['white'])
-        self.frame_principal_container.pack(fill="both", expand=True, padx=10, pady=5)
+        tk.Label(
+            title_inner,
+            text="Consulte kardex de los movimientos de los insumos",
+            font=('Segoe UI', 8),
+            fg=self.COLORS['white'],
+            bg=self.COLORS['primary']
+        ).pack(anchor='w', pady=(2, 0))
 
         # Frame para fechas con título personalizado
-        self.frame_fechas_container, self.frame_fechas = self.create_titled_frame(self.frame_principal, "Selección de Fechas/Corte Logístico")
+        self.frame_fechas_container, self.frame_fechas = self.create_titled_frame(self.main_container, "📅 Selección de Fechas/Corte Logístico")
         self.frame_fechas_container.config(bg=self.COLORS['white'])
         self.frame_fechas.config(bg=self.COLORS['white'])
         self.frame_fechas_container.pack(fill="x", expand=False, padx=5, pady=5)
@@ -408,7 +424,7 @@ class ReporteKardex:
         # Modo de selección de fechas
         self.modo_fecha_var = tk.StringVar(value="rango")
 
-        # Rango de fechas (fila 0)
+        # Rango de fechas
         self.frame_fechas.grid_columnconfigure(2, weight=1)
         self.frame_fechas.grid_columnconfigure(4, weight=1)
 
@@ -425,33 +441,16 @@ class ReporteKardex:
         )
         self.radio_rango.grid(row=0, column=0, padx=5, sticky='w')
 
-        tk.Label(self.frame_fechas, text="Fecha Inicial:", 
-                bg=self.COLORS['white'], fg=self.COLORS['text_dark'], 
-                font=('Segoe UI', 9)).grid(row=0, column=1, padx=5, sticky='w')
-
-        self.fecha_inicial = DateEntry(
-            self.frame_fechas,
-            width=12,
-            date_pattern='dd/mm/yyyy',
-            state='normal'
-        )
+        tk.Label(self.frame_fechas, text="Fecha Inicial:", bg=self.COLORS['white'], fg=self.COLORS['text_dark'], font=('Segoe UI', 9)).grid(row=0, column=1, padx=5, sticky='w')
+        self.fecha_inicial = DateEntry(self.frame_fechas, width=12, date_pattern='dd/mm/yyyy', state='normal')
         self.fecha_inicial.grid(row=0, column=2, padx=5, sticky='ew')
 
-        tk.Label(self.frame_fechas, text="Fecha Final:", 
-                bg=self.COLORS['white'], fg=self.COLORS['text_dark'], 
-                font=('Segoe UI', 9)).grid(row=0, column=3, padx=5, sticky='w')
-
-        self.fecha_final = DateEntry(
-            self.frame_fechas,
-            width=12,
-            date_pattern='dd/mm/yyyy',
-            state='normal'
-        )
+        tk.Label(self.frame_fechas, text="Fecha Final:", bg=self.COLORS['white'], fg=self.COLORS['text_dark'], font=('Segoe UI', 9)).grid(row=0, column=3, padx=5, sticky='w')
+        self.fecha_final = DateEntry(self.frame_fechas, width=12, date_pattern='dd/mm/yyyy', state='normal')
         self.fecha_final.grid(row=0, column=4, padx=5, sticky='ew')
 
-        # Corte logístico (fila 1)
+        # Corte logístico
         self.frame_fechas.grid_columnconfigure(6, weight=1)
-
         self.radio_corte = tk.Radiobutton(
             self.frame_fechas,
             text="Corte Logístico:",
@@ -465,46 +464,22 @@ class ReporteKardex:
         )
         self.radio_corte.grid(row=1, column=0, padx=5, sticky='w')
 
-        tk.Label(self.frame_fechas, text="Año:", 
-                bg=self.COLORS['white'], fg=self.COLORS['text_dark'], 
-                font=('Segoe UI', 9)).grid(row=1, column=1, padx=5, sticky='w')
-
+        tk.Label(self.frame_fechas, text="Año:", bg=self.COLORS['white'], fg=self.COLORS['text_dark'], font=('Segoe UI', 9)).grid(row=1, column=1, padx=5, sticky='w')
         self.anio_var = tk.StringVar()
         anios = [str(a) for a in range(datetime.now().year - 5, datetime.now().year + 2)]
-        self.combo_anio = ttk.Combobox(
-            self.frame_fechas,
-            textvariable=self.anio_var,
-            values=anios,
-            width=8
-        )
+        self.combo_anio = ttk.Combobox(self.frame_fechas, textvariable=self.anio_var, values=anios, width=8)
         self.combo_anio.grid(row=1, column=2, padx=5, sticky='ew')
         self.combo_anio.set(str(datetime.now().year))
 
-        tk.Label(self.frame_fechas, text="Mes Inicio:", 
-                bg=self.COLORS['white'], fg=self.COLORS['text_dark'], 
-                font=('Segoe UI', 9)).grid(row=1, column=3, padx=5, sticky='w')
-
+        tk.Label(self.frame_fechas, text="Mes Inicio:", bg=self.COLORS['white'], fg=self.COLORS['text_dark'], font=('Segoe UI', 9)).grid(row=1, column=3, padx=5, sticky='w')
         self.mes_inicio_var = tk.StringVar()
         meses = [datetime(2024, m, 1).strftime("%B").capitalize() for m in range(1, 13)]
-        self.combo_mes_inicio = ttk.Combobox(
-            self.frame_fechas,
-            textvariable=self.mes_inicio_var,
-            values=meses,
-            width=12
-        )
+        self.combo_mes_inicio = ttk.Combobox(self.frame_fechas, textvariable=self.mes_inicio_var, values=meses, width=12)
         self.combo_mes_inicio.grid(row=1, column=4, padx=5, sticky='ew')
 
-        tk.Label(self.frame_fechas, text="Mes Final:", 
-                bg=self.COLORS['white'], fg=self.COLORS['text_dark'], 
-                font=('Segoe UI', 9)).grid(row=1, column=5, padx=5, sticky='w')
-
+        tk.Label(self.frame_fechas, text="Mes Final:", bg=self.COLORS['white'], fg=self.COLORS['text_dark'], font=('Segoe UI', 9)).grid(row=1, column=5, padx=5, sticky='w')
         self.mes_final_var = tk.StringVar()
-        self.combo_mes_final = ttk.Combobox(
-            self.frame_fechas,
-            textvariable=self.mes_final_var,
-            values=meses,
-            width=12
-        )
+        self.combo_mes_final = ttk.Combobox(self.frame_fechas, textvariable=self.mes_final_var, values=meses, width=12)
         self.combo_mes_final.grid(row=1, column=6, padx=5, sticky='ew')
 
         # Eventos para actualizar fechas
@@ -513,19 +488,18 @@ class ReporteKardex:
         self.combo_mes_final.bind('<<ComboboxSelected>>', self.actualizar_fechas_por_corte)
 
         # Frame para combos
-        self.frame_combos = ttk.Frame(self.frame_principal, style='White.TFrame')
+        self.frame_combos = ttk.Frame(self.main_container, style='White.TFrame')
         self.frame_combos.pack(fill="x", expand=False, padx=5, pady=5)
 
         # Inicializar visibilidad
         self.actualizar_visibilidad_fechas()
 
-        # Primera fila de combos con título personalizado
-        self.frame_ubicacion_container, self.frame_ubicacion_content = self.create_titled_frame(self.frame_combos, "Ubicación")
+        # Primera fila de combos
+        self.frame_ubicacion_container, self.frame_ubicacion_content = self.create_titled_frame(self.frame_combos, "📍 Ubicación")
         self.frame_ubicacion_container.config(bg=self.COLORS['white'])
         self.frame_ubicacion_content.config(bg=self.COLORS['white'])
         self.frame_ubicacion_container.pack(fill="x", expand=False, pady=5)
 
-        # Configurar grid para distribución uniforme
         self.frame_ubicacion_content.grid_columnconfigure(1, weight=1)
         self.frame_ubicacion_content.grid_columnconfigure(3, weight=1)
         self.frame_ubicacion_content.grid_columnconfigure(5, weight=1)
@@ -552,13 +526,12 @@ class ReporteKardex:
         self.combo_servicio = AutocompleteCombobox(self.frame_ubicacion_content, textvariable=self.servicio_var, state="normal", font=('Segoe UI', 9))
         self.combo_servicio.grid(row=0, column=7, padx=5, sticky='ew')
 
-        # Segunda fila de combos con título personalizado
-        self.frame_insumo_container, self.frame_insumo_content = self.create_titled_frame(self.frame_combos, "Insumo")
+        # Segunda fila de combos
+        self.frame_insumo_container, self.frame_insumo_content = self.create_titled_frame(self.frame_combos, "💊 Insumo")
         self.frame_insumo_container.config(bg=self.COLORS['white'])
         self.frame_insumo_content.config(bg=self.COLORS['white'])
         self.frame_insumo_container.pack(fill="x", expand=False, pady=5)
 
-        # Configurar grid para distribución uniforme
         self.frame_insumo_content.grid_columnconfigure(1, weight=1)
         self.frame_insumo_content.grid_columnconfigure(3, weight=1)
         self.frame_insumo_content.grid_columnconfigure(5, weight=1)
@@ -578,78 +551,96 @@ class ReporteKardex:
         self.combo_presentacion = AutocompleteCombobox(self.frame_insumo_content, textvariable=self.presentacion_var, state="normal", font=('Segoe UI', 9))
         self.combo_presentacion.grid(row=0, column=5, padx=5, sticky='ew')
 
-        # --- Frame para el visor PDF (ALTURA FIJA) ---
-        self.pdf_frame = tk.Frame(self.frame_principal, bg=self.COLORS['white'], height=350)
-        self.pdf_frame.pack(fill="x", padx=5, pady=5)
-        self.pdf_frame.pack_propagate(False)  # Para que respete la altura fija
-        self.pdf_viewer = None
+        # --- Visor PDF con encabezado, borde y ancho alineado ---
+        self.pdf_outer = tk.Frame(self.frame_combos, bg=self.COLORS['white'])
+        self.pdf_outer.pack(fill="x", expand=False, pady=5)
 
-        # --- Frame para botones (fuera del frame principal, pegado abajo) ---
-        self.frame_botones = ttk.Frame(main_container, style='White.TFrame')
+        self.pdf_frame = tk.Frame(self.pdf_outer, bg=self.COLORS['white'], relief="solid", bd=1, highlightthickness=0)
+        self.pdf_frame.pack(fill="x")
+        self.pdf_frame.configure(height=350)
+        self.pdf_frame.pack_propagate(False)
+
+        self.pdf_header = tk.Frame(self.pdf_frame, bg=self.COLORS['primary'], height=26)
+        self.pdf_header.pack(fill="x")
+        self.pdf_header.pack_propagate(False)
+
+        tk.Label(
+            self.pdf_header,
+            text="🖼️ Vista previa del PDF",
+            font=('Segoe UI', 9, 'bold'),
+            fg=self.COLORS['white'],
+            bg=self.COLORS['primary']
+        ).pack(side="left", padx=10, pady=2)
+
+        self.pdf_body = tk.Frame(self.pdf_frame, bg=self.COLORS['white'])
+        self.pdf_body.pack(fill="both", expand=True, padx=8, pady=8)
+
+        # --- Frame para botones (abajo) ---
+        self.frame_botones = ttk.Frame(self.main_container, style='White.TFrame')
         self.frame_botones.pack(fill="x", side="bottom", pady=(20, 10))
 
         btn_font = ('Segoe UI', 9, 'bold')
         btn_bg = self.COLORS['white']
         btn_fg = self.COLORS['text_dark']
 
-        # Botón Generar Vista Previa
-        btn_preview = tk.Button(self.frame_botones, 
-                            text="Generar Vista Previa", 
-                            command=self.generar_vista_previa,
-                            font=btn_font, bg=btn_bg, fg=btn_fg, 
-                            relief='flat', borderwidth=0,
-                            highlightthickness=0, padx=15, pady=6, 
-                            cursor='hand2',
-                            image=self.icon_preview,
-                            compound='left')
+        btn_preview = tk.Button(
+            self.frame_botones,
+            text="Generar Vista Previa",
+            command=self.generar_vista_previa,
+            font=btn_font, bg=btn_bg, fg=btn_fg,
+            relief='flat', borderwidth=0,
+            highlightthickness=0, padx=15, pady=6,
+            cursor='hand2',
+            image=self.icon_preview, compound='left'
+        )
         btn_preview.pack(side="left", padx=5)
 
-        # Botón Imprimir
-        btn_print = tk.Button(self.frame_botones, 
-                            text="Imprimir", 
-                            command=self.imprimir_pdf,
-                            font=btn_font, bg=btn_bg, fg=btn_fg, 
-                            relief='flat', borderwidth=0,
-                            highlightthickness=0, padx=15, pady=6, 
-                            cursor='hand2',
-                            image=self.icon_print,
-                            compound='left')
+        btn_print = tk.Button(
+            self.frame_botones,
+            text="Imprimir",
+            command=self.imprimir_pdf,
+            font=btn_font, bg=btn_bg, fg=btn_fg,
+            relief='flat', borderwidth=0,
+            highlightthickness=0, padx=15, pady=6,
+            cursor='hand2',
+            image=self.icon_print, compound='left'
+        )
         btn_print.pack(side="left", padx=5)
 
-        # Botón Exportar a PDF
-        btn_pdf = tk.Button(self.frame_botones, 
-                        text="Exportar a PDF", 
-                        command=self.exportar_pdf,
-                        font=btn_font, bg=btn_bg, fg=btn_fg, 
-                        relief='flat', borderwidth=0,
-                        highlightthickness=0, padx=15, pady=6, 
-                        cursor='hand2',
-                        image=self.icon_pdf,
-                        compound='left')
+        btn_pdf = tk.Button(
+            self.frame_botones,
+            text="Exportar a PDF",
+            command=self.exportar_pdf,
+            font=btn_font, bg=btn_bg, fg=btn_fg,
+            relief='flat', borderwidth=0,
+            highlightthickness=0, padx=15, pady=6,
+            cursor='hand2',
+            image=self.icon_pdf, compound='left'
+        )
         btn_pdf.pack(side="left", padx=5)
 
-        # Botón Exportar a Excel
-        btn_excel = tk.Button(self.frame_botones, 
-                            text="Exportar a Excel", 
-                            command=self.generar_kardex,
-                            font=btn_font, bg=btn_bg, fg=btn_fg, 
-                            relief='flat', borderwidth=0,
-                            highlightthickness=0, padx=15, pady=6, 
-                            cursor='hand2',
-                            image=self.icon_excel,
-                            compound='left')
+        btn_excel = tk.Button(
+            self.frame_botones,
+            text="Exportar a Excel",
+            command=self.generar_kardex,
+            font=btn_font, bg=btn_bg, fg=btn_fg,
+            relief='flat', borderwidth=0,
+            highlightthickness=0, padx=15, pady=6,
+            cursor='hand2',
+            image=self.icon_excel, compound='left'
+        )
         btn_excel.pack(side="left", padx=5)
 
-        # Botón Cerrar
-        btn_close = tk.Button(self.frame_botones, 
-                            text="Cerrar", 
-                            command=self.cerrar_ventana,
-                            font=btn_font, bg=btn_bg, fg=btn_fg, 
-                            relief='flat', borderwidth=0,
-                            highlightthickness=0, padx=15, pady=6, 
-                            cursor='hand2',
-                            image=self.icon_close,
-                            compound='left')
+        btn_close = tk.Button(
+            self.frame_botones,
+            text="Cerrar",
+            command=self.cerrar_ventana,
+            font=btn_font, bg=btn_bg, fg=btn_fg,
+            relief='flat', borderwidth=0,
+            highlightthickness=0, padx=15, pady=6,
+            cursor='hand2',
+            image=self.icon_close, compound='left'
+        )
         btn_close.pack(side="right", padx=5)
 
         # Vincular eventos de cambio
@@ -665,48 +656,36 @@ class ReporteKardex:
         self.combo_distrito.set_completion_list([''])
         self.cargar_tipos_insumo()
         self.cargar_presentaciones()
-        
+
     def actualizar_visibilidad_fechas(self):
         modo = self.modo_fecha_var.get()
         if modo == "rango":
-            # Habilitar DateEntry
             self.fecha_inicial.config(state="normal")
             self.fecha_final.config(state="normal")
-
-            # Deshabilitar combos de corte
             self.combo_anio.config(state="disabled")
             self.combo_mes_inicio.config(state="disabled")
             self.combo_mes_final.config(state="disabled")
-
         else:
-            # Deshabilitar DateEntry
             self.fecha_inicial.config(state="disabled")
             self.fecha_final.config(state="disabled")
-
-            # Habilitar combos de corte
             self.combo_anio.config(state="readonly")
             self.combo_mes_inicio.config(state="readonly")
             self.combo_mes_final.config(state="readonly")
-
-        # Forzar actualización visual
         self.frame_fechas.update()
-    
+
     def calcular_rango_corte_logistico(self, anio, mes_inicio, mes_final):
         """
         Calcula el rango de fechas para el corte logístico.
         Retorna (fecha_inicial, fecha_final) en formato dd/mm/yyyy
         """
-        # Diccionario de meses en español a números
         meses_a_numero = {
             'Enero': 1, 'Febrero': 2, 'Marzo': 3, 'Abril': 4,
             'Mayo': 5, 'Junio': 6, 'Julio': 7, 'Agosto': 8,
             'Septiembre': 9, 'Octubre': 10, 'Noviembre': 11, 'Diciembre': 12
         }
 
-        # Convertir nombres de meses a números
         m_ini = meses_a_numero.get(mes_inicio)
         m_fin = meses_a_numero.get(mes_final)
-
         if not (m_ini and m_fin):
             raise ValueError("Mes inicio y mes final deben ser válidos")
 
@@ -715,17 +694,14 @@ class ReporteKardex:
         except ValueError:
             raise ValueError("Año debe ser un número válido")
 
-        # Calcular fecha inicial (26 del mes anterior)
-        if m_ini == 1:  # Si es enero, el mes anterior es diciembre del año anterior
+        if m_ini == 1:
             fecha_ini = datetime(anio - 1, 12, 26)
         else:
             fecha_ini = datetime(anio, m_ini - 1, 26)
 
-        # Calcular fecha final (25 del mes actual)
         fecha_fin = datetime(anio, m_fin, 25)
-
         return fecha_ini.strftime('%d/%m/%Y'), fecha_fin.strftime('%d/%m/%Y')
-    
+
     def actualizar_fechas_por_corte(self, event=None):
         """
         Actualiza las fechas en los DateEntry cuando se selecciona año y meses
@@ -737,13 +713,11 @@ class ReporteKardex:
 
             if anio and mes_inicio and mes_final:
                 fecha_ini, fecha_fin = self.calcular_rango_corte_logistico(anio, mes_inicio, mes_final)
-
-                # Actualizar los DateEntry
                 self.fecha_inicial.set_date(datetime.strptime(fecha_ini, '%d/%m/%Y'))
                 self.fecha_final.set_date(datetime.strptime(fecha_fin, '%d/%m/%Y'))
         except Exception as e:
             messagebox.showerror("Error", f"Error al calcular fechas: {str(e)}")
-            
+
     def cargar_areas(self):
         self.areas = obtener_areas()
         if self.areas:
@@ -755,7 +729,7 @@ class ReporteKardex:
         if self.distritos:
             opciones = [''] + [d['nombre'] for d in self.distritos]
             self.combo_distrito.set_completion_list(opciones)
-    
+
     def cargar_distritos_por_area(self, event=None):
         area_nombre = self.combo_area.get().strip()
         if area_nombre:
@@ -766,8 +740,6 @@ class ReporteKardex:
                 self.distritos = distritos or []
                 opciones = [''] + [d['nombre'] for d in self.distritos]
                 self.combo_distrito.set_completion_list(opciones)
-                # No borrar texto actual para no interferir con la escritura del usuario
-                # self.combo_distrito.set('')  # <-- comentar o eliminar esta línea
             else:
                 self.distritos = []
                 self.combo_distrito.set_completion_list([''])
@@ -813,7 +785,7 @@ class ReporteKardex:
                 self.insumos = obtener_insumos_por_tipo(tipo_insumo['id'])
                 opciones = [''] + [i['nombre'] for i in self.insumos]
                 self.combo_insumo.set_completion_list(opciones)
-           
+
     def actualizar_presentacion(self, event=None):
         insumo_nombre = self.combo_insumo.get().strip()
         if insumo_nombre and self.insumos:
@@ -841,28 +813,21 @@ class ReporteKardex:
                 anio = self.anio_var.get()
                 mes_inicio = self.mes_inicio_var.get()
                 mes_final = self.mes_final_var.get()
-
                 if not all([anio, mes_inicio, mes_final]):
                     messagebox.showerror("Error", "Debe seleccionar Año, Mes Inicio y Mes Final")
                     return
-
-                fecha_ini_str, fecha_fin_str = self.calcular_rango_corte_logistico(
-                    anio, mes_inicio, mes_final
-                )
+                fecha_ini_str, fecha_fin_str = self.calcular_rango_corte_logistico(anio, mes_inicio, mes_final)
                 fecha_ini = datetime.strptime(fecha_ini_str, '%d/%m/%Y')
                 fecha_fin = datetime.strptime(fecha_fin_str, '%d/%m/%Y')
 
-            # Validar fechas
             if fecha_fin < fecha_ini:
                 messagebox.showerror("Error", "La fecha final debe ser mayor a la inicial")
                 return
 
-            # Validar selección de insumo
             if not self.combo_insumo.get():
                 messagebox.showerror("Error", "Debe seleccionar un insumo")
                 return
 
-            # Obtener datos
             movimientos_raw = obtener_movimientos_kardex(
                 fecha_ini.strftime('%Y-%m-%d'),
                 fecha_fin.strftime('%Y-%m-%d'),
@@ -881,34 +846,29 @@ class ReporteKardex:
 
             movimientos_filtrados = self.filtrar_movimientos_por_nivel(movimientos_raw)
             if not movimientos_filtrados:
-                messagebox.showwarning(
-                    "Sin datos",
-                    "No hay movimientos para mostrar con los filtros seleccionados."
-                )
+                messagebox.showwarning("Sin datos", "No hay movimientos para mostrar con los filtros seleccionados.")
                 return
 
             movimientos_ordenados = self.ordenar_movimientos(movimientos_filtrados)
             self.movimientos_data = self.calcular_saldo_acumulado(movimientos_ordenados)
             if not self.movimientos_data:
-                messagebox.showwarning(
-                    "Sin datos",
-                    "No se pudieron procesar los datos para el reporte."
-                )
+                messagebox.showwarning("Sin datos", "No se pudieron procesar los datos para el reporte.")
                 return
 
             # --- Generar PDF temporal ---
-            import tempfile, os, fitz
+            import tempfile, fitz
             from PIL import Image, ImageTk
 
             temp_dir = tempfile.gettempdir()
             self.temp_pdf_path = os.path.join(temp_dir, "vista_previa_kardex.pdf")
             self.generar_pdf(self.temp_pdf_path, es_vista_previa=True)
 
-            # --- Limpiar visor PDF ---
-            for widget in self.pdf_frame.winfo_children():
+            # --- Limpiar visor PDF (solo el cuerpo) ---
+            body_target = getattr(self, 'pdf_body', self.pdf_frame)
+            for widget in body_target.winfo_children():
                 widget.destroy()
 
-            contenedor = tk.Frame(self.pdf_frame, bg=self.COLORS['white'])
+            contenedor = tk.Frame(body_target, bg=self.COLORS['white'])
             contenedor.pack(fill="both", expand=True)
 
             control_frame = tk.Frame(contenedor, bg=self.COLORS['white'])
@@ -922,12 +882,7 @@ class ReporteKardex:
             h_scrollbar = ttk.Scrollbar(canvas_frame, orient="horizontal")
             h_scrollbar.pack(side="bottom", fill="x")
 
-            canvas = tk.Canvas(
-                canvas_frame,
-                bg=self.COLORS['white'],
-                yscrollcommand=v_scrollbar.set,
-                xscrollcommand=h_scrollbar.set
-            )
+            canvas = tk.Canvas(canvas_frame, bg=self.COLORS['white'], yscrollcommand=v_scrollbar.set, xscrollcommand=h_scrollbar.set)
             canvas.pack(side="left", fill="both", expand=True)
             v_scrollbar.config(command=canvas.yview)
             h_scrollbar.config(command=canvas.xview)
@@ -1142,17 +1097,13 @@ class ReporteKardex:
                     ventana_max.bind("<Configure>", lambda e: fit_to_page_max())
 
                     display_page_max()
-
                     canvas_max.bind("<MouseWheel>", lambda e: canvas_max.yview_scroll(int(-1*(e.delta/120)), "units"))
-
                     ventana_max.focus_force()
                     ventana_max.grab_set()
-
                 except Exception as e:
                     messagebox.showerror("Error", f"Error al maximizar reporte: {str(e)}")
 
             # Controles normales
-
             btn_anterior = tk.Button(
                 control_frame, text="◀", command=lambda: change_page(-1),
                 bg=self.COLORS['white'], fg=self.COLORS['text_dark'],
@@ -1176,11 +1127,7 @@ class ReporteKardex:
             )
             btn_siguiente.pack(side="left", padx=2, pady=2)
 
-            separator = tk.Label(
-                control_frame, text="|",
-                bg=self.COLORS['white'], fg=self.COLORS['text_dark'],
-                font=('Segoe UI', 12, 'bold')
-            )
+            separator = tk.Label(control_frame, text="|", bg=self.COLORS['white'], fg=self.COLORS['text_dark'], font=('Segoe UI', 12, 'bold'))
             separator.pack(side="left", padx=5, pady=2)
 
             btn_zoom_out = tk.Button(
@@ -1190,11 +1137,7 @@ class ReporteKardex:
             )
             btn_zoom_out.pack(side="left", padx=2, pady=2)
 
-            zoom_label = tk.Label(
-                control_frame, text=f"Zoom: {int(self.zoom_level * 100)}%",
-                bg=self.COLORS['white'], fg=self.COLORS['text_dark'],
-                font=('Segoe UI', 9, 'bold')
-            )
+            zoom_label = tk.Label(control_frame, text=f"Zoom: {int(self.zoom_level * 100)}%", bg=self.COLORS['white'], fg=self.COLORS['text_dark'], font=('Segoe UI', 9, 'bold'))
             zoom_label.pack(side="left", padx=2, pady=2)
 
             btn_zoom_in = tk.Button(
@@ -1204,36 +1147,18 @@ class ReporteKardex:
             )
             btn_zoom_in.pack(side="left", padx=2, pady=2)
 
-            separator2 = tk.Label(
-                control_frame, text="|",
-                bg=self.COLORS['white'], fg=self.COLORS['text_dark'],
-                font=('Segoe UI', 12, 'bold')
-            )
+            separator2 = tk.Label(control_frame, text="|", bg=self.COLORS['white'], fg=self.COLORS['text_dark'], font=('Segoe UI', 12, 'bold'))
             separator2.pack(side="left", padx=5, pady=2)
 
-            btn_fit_width = tk.Button(
-                control_frame, text="↔ Ajustar Ancho", command=fit_to_width,
-                bg=self.COLORS['white'], fg=self.COLORS['text_dark'],
-                font=('Segoe UI', 9, 'bold'), relief='flat', borderwidth=0, cursor='hand2'
-            )
+            btn_fit_width = tk.Button(control_frame, text="↔ Ajustar Ancho", command=fit_to_width, bg=self.COLORS['white'], fg=self.COLORS['text_dark'], font=('Segoe UI', 9, 'bold'), relief='flat', borderwidth=0, cursor='hand2')
             btn_fit_width.pack(side="left", padx=2, pady=2)
 
-            btn_fit_page = tk.Button(
-                control_frame, text="⛶ Ajustar Página", command=fit_to_page,
-                bg=self.COLORS['white'], fg=self.COLORS['text_dark'],
-                font=('Segoe UI', 9, 'bold'), relief='flat', borderwidth=0, cursor='hand2'
-            )
+            btn_fit_page = tk.Button(control_frame, text="⛶ Ajustar Página", command=fit_to_page, bg=self.COLORS['white'], fg=self.COLORS['text_dark'], font=('Segoe UI', 9, 'bold'), relief='flat', borderwidth=0, cursor='hand2')
             btn_fit_page.pack(side="left", padx=2, pady=2)
 
-            btn_maximizar = tk.Button(
-                control_frame, text="🔳 Maximizar", command=maximizar_reporte,
-                bg=self.COLORS['primary'], fg='white',
-                font=('Segoe UI', 10, 'bold'), relief='flat', borderwidth=0, cursor='hand2',
-                pady=4, padx=12
-            )
+            btn_maximizar = tk.Button(control_frame, text="🔳 Maximizar", command=maximizar_reporte, bg=self.COLORS['primary'], fg='white', font=('Segoe UI', 10, 'bold'), relief='flat', borderwidth=0, cursor='hand2', pady=4, padx=12)
             btn_maximizar.pack(side="left", padx=5, pady=2)
 
-            # Inicializar estado botones
             btn_anterior.config(state="disabled")
             btn_siguiente.config(state="normal" if self.total_pages > 1 else "disabled")
 
@@ -1256,24 +1181,19 @@ class ReporteKardex:
             if not hasattr(self, 'temp_pdf_path') or not os.path.exists(self.temp_pdf_path):
                 messagebox.showerror("Error", "No hay un PDF generado para abrir.")
                 return
-                
-            import sys
+
             import subprocess
-            
             if sys.platform.startswith('win'):
                 os.startfile(self.temp_pdf_path)
-            elif sys.platform.startswith('darwin'):  # macOS
+            elif sys.platform.startswith('darwin'):
                 subprocess.run(['open', self.temp_pdf_path], check=True)
-            else:  # Linux
+            else:
                 subprocess.run(['xdg-open', self.temp_pdf_path], check=True)
-                
         except Exception as e:
             messagebox.showerror("Error", f"No se pudo abrir el PDF: {str(e)}")
-    
+
     def imprimir_pdf(self):
         try:
-            import os
-            import sys
             if not hasattr(self, 'temp_pdf_path') or not os.path.exists(self.temp_pdf_path):
                 messagebox.showerror("Error", "Primero debe generar la vista previa del PDF.")
                 return
@@ -1285,16 +1205,14 @@ class ReporteKardex:
                 os.system(f'xdg-open "{self.temp_pdf_path}"')
         except Exception as e:
             messagebox.showerror("Error", f"No se pudo abrir el PDF: {str(e)}")
-    
+
     def exportar_pdf(self):
         try:
-            import os  # Importar os al inicio del método
-
             # Obtener fechas según el modo seleccionado
             if self.modo_fecha_var.get() == "rango":
                 fecha_ini = datetime.strptime(self.fecha_inicial.get(), '%d/%m/%Y')
                 fecha_fin = datetime.strptime(self.fecha_final.get(), '%d/%m/%Y')
-                periodo = f"{fecha_ini.strftime('%d%m%Y')}_{fecha_fin.strftime('%d%m%Y')}"  # Formato para rango
+                periodo = f"{fecha_ini.strftime('%d%m%Y')}_{fecha_fin.strftime('%d%m%Y')}"
             else:
                 anio = self.anio_var.get()
                 mes_inicio = self.mes_inicio_var.get()
@@ -1304,24 +1222,19 @@ class ReporteKardex:
                     messagebox.showerror("Error", "Debe seleccionar Año, Mes Inicio y Mes Final")
                     return
 
-                fecha_ini_str, fecha_fin_str = self.calcular_rango_corte_logistico(
-                    anio, mes_inicio, mes_final
-                )
+                fecha_ini_str, fecha_fin_str = self.calcular_rango_corte_logistico(anio, mes_inicio, mes_final)
                 fecha_ini = datetime.strptime(fecha_ini_str, '%d/%m/%Y')
                 fecha_fin = datetime.strptime(fecha_fin_str, '%d/%m/%Y')
-                periodo = f"{mes_inicio}_{mes_final}_{anio}"  # Formato para corte
+                periodo = f"{mes_inicio}_{mes_final}_{anio}"
 
-            # Validar fechas
             if fecha_fin < fecha_ini:
                 messagebox.showerror("Error", "La fecha final debe ser mayor a la inicial")
                 return
 
-            # Validar selección de insumo
             if not self.combo_insumo.get():
                 messagebox.showerror("Error", "Debe seleccionar un insumo")
                 return
 
-            # Obtener datos si no existen
             if not self.movimientos_data:
                 movimientos_raw = obtener_movimientos_kardex(
                     fecha_ini.strftime('%Y-%m-%d'),
@@ -1332,55 +1245,36 @@ class ReporteKardex:
                     self.combo_tipo_insumo.get() if self.combo_tipo_insumo.get().strip() else None,
                     self.combo_insumo.get() if self.combo_insumo.get().strip() else None,
                     self.combo_presentacion.get() if self.combo_presentacion.get().strip() else None,
-                    self.combo_area.get() if self.combo_area.get().strip() else None  # NUEVO PARÁMETRO
+                    self.combo_area.get() if self.combo_area.get().strip() else None
                 )
 
                 if not movimientos_raw:
                     messagebox.showinfo("Info", "No hay datos para mostrar")
                     return
 
-                # Filtrar movimientos por nivel jerárquico - NUEVA LÍNEA
                 movimientos_filtrados = self.filtrar_movimientos_por_nivel(movimientos_raw)
-
-                # VALIDAR SI HAY DATOS DESPUÉS DEL FILTRADO
                 if not movimientos_filtrados:
-                    messagebox.showwarning(
-                        "Sin datos", 
-                        "No hay movimientos para mostrar con los filtros seleccionados.\n\n"
-                        "Verifique que:\n"
-                        "• Existan movimientos en el rango de fechas seleccionado\n"
-                        "• Los movimientos estén guardados en el nivel jerárquico seleccionado\n"
-                        "• Los filtros de insumo sean correctos"
-                    )
-                    return  # No generar el reporte si no hay datos
+                    messagebox.showwarning("Sin datos", "No hay movimientos para mostrar con los filtros seleccionados.")
+                    return
 
-                # Ordenar movimientos y calcular saldo - USAR MOVIMIENTOS FILTRADOS
                 movimientos_ordenados = self.ordenar_movimientos(movimientos_filtrados)
                 self.movimientos_data = self.calcular_saldo_acumulado(movimientos_ordenados)
 
-                # VALIDAR NUEVAMENTE DESPUÉS DEL PROCESAMIENTO
                 if not self.movimientos_data:
-                    messagebox.showwarning(
-                        "Sin datos", 
-                        "No se pudieron procesar los datos para el reporte.\n"
-                        "Verifique los filtros seleccionados."
-                    )
+                    messagebox.showwarning("Sin datos", "No se pudieron procesar los datos para el reporte.")
                     return
 
-            # Generar nombre de archivo con fecha y hora
+            # Generar nombre de archivo
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            file_name = f"Reporte_Kardex_{periodo}_{timestamp}.pdf"  # Incluir periodo en nombre
-
-            # Ruta a la carpeta Descargas
+            file_name = f"Reporte_Kardex_{periodo}_{timestamp}.pdf"
             downloads_path = os.path.expanduser("~/Downloads")
             full_path = os.path.join(downloads_path, file_name)
 
-            # Generar el PDF en la ruta de Descargas
+            # Generar el PDF
             self.generar_pdf(full_path)
 
-            # Preguntar si desea abrir el PDF
+            # Abrir PDF
             if messagebox.askyesno("PDF Generado", "PDF guardado exitosamente.\n¿Desea abrirlo ahora?"):
-                import sys
                 try:
                     if sys.platform.startswith('win'):
                         os.startfile(full_path)
@@ -1393,48 +1287,32 @@ class ReporteKardex:
 
         except Exception as e:
             messagebox.showerror("Error", f"Error al exportar PDF: {str(e)}")
-    
+
     def generar_pdf(self, ruta_pdf, es_vista_previa=False):
         if not getattr(self, 'movimientos_data', None):
             messagebox.showwarning("Advertencia", "No hay datos para mostrar")
             return
 
         try:
-            from reportlab.platypus import SimpleDocTemplate, Paragraph, Table, TableStyle, Spacer
-            from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-            from reportlab.lib import colors
-            from reportlab.lib.pagesizes import landscape, legal
-            from reportlab.lib.units import inch
             from reportlab.lib.enums import TA_CENTER, TA_LEFT
 
-            # Márgenes: ajustar topMargin para el espaciado correcto
             doc = SimpleDocTemplate(
                 ruta_pdf,
                 pagesize=landscape(legal),
                 rightMargin=36,
                 leftMargin=36,
-                topMargin=150,   # Reducido a 100 para mejor control del espaciado
+                topMargin=150,
                 bottomMargin=36
             )
 
             styles = getSampleStyleSheet()
             elements = []
 
-            # Estilos
-            title_style = ParagraphStyle('CustomTitle', parent=styles['Heading1'],
-                                        alignment=TA_CENTER, spaceAfter=6, fontSize=12)
-            subtitle_style = ParagraphStyle('CustomSubtitle', parent=styles['Heading2'],
-                                            alignment=TA_CENTER, spaceAfter=4, fontSize=10)
-            
-            # Estilo para filtros: alineado a la izquierda, fontSize pequeño y leading para 2 líneas
-            filtro_style = ParagraphStyle('FiltroStyle', parent=styles['Normal'],
-                                        alignment=TA_LEFT,  # Cambiado de TA_CENTER a TA_LEFT
-                                        fontSize=9, leading=11, spaceAfter=0)
-
-            referencia_style = ParagraphStyle('ReferenciaStyle', parent=styles['Normal'],
-                                            alignment=TA_CENTER, fontSize=8, leading=10)
-            observaciones_style = ParagraphStyle('ObservacionesStyle', parent=styles['Normal'],
-                                                alignment=TA_CENTER, fontSize=8, leading=10)
+            title_style = ParagraphStyle('CustomTitle', parent=styles['Heading1'], alignment=TA_CENTER, spaceAfter=6, fontSize=12)
+            subtitle_style = ParagraphStyle('CustomSubtitle', parent=styles['Heading2'], alignment=TA_CENTER, spaceAfter=4, fontSize=10)
+            filtro_style = ParagraphStyle('FiltroStyle', parent=styles['Normal'], alignment=TA_LEFT, fontSize=9, leading=11, spaceAfter=0)
+            referencia_style = ParagraphStyle('ReferenciaStyle', parent=styles['Normal'], alignment=TA_CENTER, fontSize=8, leading=10)
+            observaciones_style = ParagraphStyle('ObservacionesStyle', parent=styles['Normal'], alignment=TA_CENTER, fontSize=8, leading=10)
 
             header_row_height = 36
             row_height = 30
@@ -1460,23 +1338,22 @@ class ReporteKardex:
                 referencia_par = Paragraph(str(mov.get('referencia', '') or ''), referencia_style)
                 observaciones_par = Paragraph(str(mov.get('observaciones', '') or ''), observaciones_style)
                 row = [
-                    mov.get('fecha', ''),
+                    str(mov.get('fecha', '') or ''),
                     referencia_par,
-                    mov.get('tipo_movimiento', ''),
-                    mov.get('entrada', ''),
-                    mov.get('precio_unitario', ''),
-                    mov.get('valor_total', ''),
-                    mov.get('lote') or "N/A",
-                    mov.get('fecha_vencimiento', ''),
-                    mov.get('salida', ''),
-                    mov.get('reajuste', ''),
-                    mov.get('cantidad_col', ''),
-                    mov.get('saldo', ''),
+                    str(mov.get('tipo_movimiento', '') or ''),
+                    str(mov.get('entrada', '') or ''),
+                    str(mov.get('precio_unitario', '') or ''),
+                    str(mov.get('valor_total', '') or ''),
+                    str(mov.get('lote') or "N/A"),
+                    str(mov.get('fecha_vencimiento', '') or ''),
+                    str(mov.get('salida', '') or ''),
+                    str(mov.get('reajuste', '') or ''),
+                    str(mov.get('cantidad_col', '') or ''),
+                    str(mov.get('saldo', '') or ''),
                     observaciones_par
                 ]
                 data.append(row)
 
-            # Anchos de columna
             colWidths = [
                 0.8*inch, 0.9*inch, 1.7*inch, 0.7*inch, 0.9*inch, 0.9*inch,
                 0.9*inch, 0.9*inch, 0.7*inch, 0.8*inch, 0.7*inch, 0.8*inch, 1.5*inch
@@ -1502,7 +1379,6 @@ class ReporteKardex:
             elements.append(Spacer(1, 12))
             elements.append(table)
 
-            # HEADER: diferente para páginas pares e impares
             def header(canvas, doc):
                 canvas.saveState()
                 page_num = canvas.getPageNumber()
@@ -1511,53 +1387,39 @@ class ReporteKardex:
                 left = doc.leftMargin
                 right = page_width - doc.rightMargin
 
-                # PÁGINAS IMPARES: títulos + filtros + tabla
                 if page_num % 2 == 1:
-                    # Títulos del encabezado - posiciones más controladas
                     y_titulo_principal = page_height - 50
                     y_area = y_titulo_principal - 14
                     y_tarjeta = y_area - 14
                     y_fecha_generacion = y_tarjeta - 14
-                    
+
                     canvas.setFont('Helvetica-Bold', 11)
-                    canvas.drawCentredString(page_width / 2.0, y_titulo_principal, 
+                    canvas.drawCentredString(page_width / 2.0, y_titulo_principal,
                         "DIRECCIÓN DEPARTAMENTAL DE REDES INTEGRADAS DE SERVICIOS DE SALUD DE GUATEMALA,")
                     canvas.setFont('Helvetica', 9)
                     canvas.drawCentredString(page_width / 2.0, y_area, "ÁREA NOR ORIENTE")
                     canvas.drawCentredString(page_width / 2.0, y_tarjeta, "TARJETA DE CONTROL DE SUMINISTROS")
-                    
-                    # Fecha y hora de generación
+
                     canvas.setFont('Helvetica', 8)
                     fecha_generacion = datetime.now().strftime('%d/%m/%Y %H:%M:%S')
                     canvas.drawCentredString(page_width / 2.0, y_fecha_generacion, f"Generado el: {fecha_generacion}")
 
-                    # --- FILTROS: exactamente una fila de separación después de la fecha ---
-                    y_filtros = y_fecha_generacion - 30  # Una fila de separación (24 puntos)
+                    y_filtros = y_fecha_generacion - 30
 
-                    # Calcular el ancho total de la tabla y posición inicial
                     table_width = sum(colWidths)
                     usable_width = right - left
                     table_start_x = left + (usable_width - table_width) / 2
-                    
-                    # Definir qué columnas abarca cada filtro
+
                     filtros_columnas = [
-                        (0, 1),    # Área: columnas 0-1
-                        (2, 3),    # Distrito: columnas 2-3  
-                        (4, 5),    # Tipo de Servicio: columnas 4-5
-                        (6, 7),    # Servicio: columnas 6-7
-                        (8, 9),    # Insumo: columnas 8-9
-                        (10, 11),  # Presentación: columnas 10-11
-                        (12, 12)   # Saldo anterior: columna 12
+                        (0, 1), (2, 3), (4, 5), (6, 7), (8, 9), (10, 11), (12, 12)
                     ]
-                    
-                    # Calcular posiciones de los filtros
+
                     filtros_info = []
                     for inicio_col, fin_col in filtros_columnas:
                         pos_x = table_start_x + sum(colWidths[:inicio_col])
                         ancho = sum(colWidths[inicio_col:fin_col+1])
                         filtros_info.append((pos_x, ancho))
 
-                    # Texto de filtros
                     filtros_list = [
                         f"Área:\n{self.combo_area.get()}",
                         f"Distrito:\n{self.combo_distrito.get()}",
@@ -1567,7 +1429,6 @@ class ReporteKardex:
                         f"Presentación:\n{self.combo_presentacion.get()}",
                     ]
 
-                    # Calcular saldo anterior para esta página
                     try:
                         usable_table_height = doc.height
                         filas_por_pagina_estimadas = int(usable_table_height // row_height)
@@ -1586,30 +1447,22 @@ class ReporteKardex:
                                 saldo_val = 0
                         else:
                             saldo_val = 0
-
-                    # Agregar saldo anterior
-                    if isinstance(saldo_val, (int, float)):
-                        filtros_list.append(f"Saldo anterior:\n{saldo_val:,.2f}")
                     else:
-                        filtros_list.append(f"Saldo anterior:\n{saldo_val}")
+                        saldo_val = 0
 
-                    # Dibujar cada filtro alineado con las columnas
+                    filtros_list.append(f"Saldo anterior:\n{saldo_val:,.2f}" if isinstance(saldo_val, (int, float)) else f"Saldo anterior:\n{saldo_val}")
+
                     for idx, txt in enumerate(filtros_list):
                         pos_x, ancho = filtros_info[idx]
                         p = Paragraph(txt, filtro_style)
                         max_h = filtro_style.leading * 2 + 2
                         w_par, h_par = p.wrap(ancho, max_h)
-                        # Alinear a la izquierda con pequeño padding
                         x_draw = pos_x + 4
                         y_draw = y_filtros - (h_par / 2.0)
                         p.drawOn(canvas, x_draw, y_draw)
 
-                # PÁGINAS PARES: solo tabla (sin títulos ni filtros)
-                # No se dibuja nada adicional, solo la tabla se renderiza automáticamente
-
                 canvas.restoreState()
 
-            # Construir PDF
             doc.build(elements, onFirstPage=header, onLaterPages=header)
 
             if not es_vista_previa:
@@ -1617,14 +1470,13 @@ class ReporteKardex:
 
         except Exception as e:
             messagebox.showerror("Error", f"Error al generar PDF: {str(e)}")
-        
+
     def generar_kardex(self):
         try:
-            # Obtener fechas según el modo seleccionado
             if self.modo_fecha_var.get() == "rango":
                 fecha_ini = datetime.strptime(self.fecha_inicial.get(), '%d/%m/%Y')
                 fecha_fin = datetime.strptime(self.fecha_final.get(), '%d/%m/%Y')
-                periodo = f"{fecha_ini.strftime('%d%m%Y')}_{fecha_fin.strftime('%d%m%Y')}"  # Formato para rango
+                periodo = f"{fecha_ini.strftime('%d%m%Y')}_{fecha_fin.strftime('%d%m%Y')}"
             else:
                 anio = self.anio_var.get()
                 mes_inicio = self.mes_inicio_var.get()
@@ -1634,24 +1486,19 @@ class ReporteKardex:
                     messagebox.showerror("Error", "Debe seleccionar Año, Mes Inicio y Mes Final")
                     return
 
-                fecha_ini_str, fecha_fin_str = self.calcular_rango_corte_logistico(
-                    anio, mes_inicio, mes_final
-                )
+                fecha_ini_str, fecha_fin_str = self.calcular_rango_corte_logistico(anio, mes_inicio, mes_final)
                 fecha_ini = datetime.strptime(fecha_ini_str, '%d/%m/%Y')
                 fecha_fin = datetime.strptime(fecha_fin_str, '%d/%m/%Y')
-                periodo = f"{mes_inicio}_{mes_final}_{anio}"  # Formato para corte
+                periodo = f"{mes_inicio}_{mes_final}_{anio}"
 
-            # Validar fechas
             if fecha_fin < fecha_ini:
                 messagebox.showerror("Error", "La fecha final debe ser mayor a la inicial")
                 return
 
-            # Validar selección de insumo
             if not self.combo_insumo.get():
                 messagebox.showerror("Error", "Debe seleccionar un insumo")
                 return
 
-            # Obtener datos para el reporte
             movimientos_raw = obtener_movimientos_kardex(
                 fecha_ini.strftime('%Y-%m-%d'),
                 fecha_fin.strftime('%Y-%m-%d'),
@@ -1661,48 +1508,35 @@ class ReporteKardex:
                 self.combo_tipo_insumo.get() if self.combo_tipo_insumo.get().strip() else None,
                 self.combo_insumo.get() if self.combo_insumo.get().strip() else None,
                 self.combo_presentacion.get() if self.combo_presentacion.get().strip() else None,
-                self.combo_area.get() if self.combo_area.get().strip() else None  # NUEVO PARÁMETRO
+                self.combo_area.get() if self.combo_area.get().strip() else None
             )
 
             if not movimientos_raw:
                 messagebox.showinfo("Info", "No hay datos para mostrar")
                 return
 
-            # Filtrar movimientos por nivel jerárquico - NUEVA LÍNEA
             movimientos_filtrados = self.filtrar_movimientos_por_nivel(movimientos_raw)
-
-            # VALIDAR SI HAY DATOS DESPUÉS DEL FILTRADO
             if not movimientos_filtrados:
                 messagebox.showwarning(
-                    "Sin datos", 
+                    "Sin datos",
                     "No hay movimientos para mostrar con los filtros seleccionados.\n\n"
                     "Verifique que:\n"
                     "• Existan movimientos en el rango de fechas seleccionado\n"
                     "• Los movimientos estén guardados en el nivel jerárquico seleccionado\n"
                     "• Los filtros de insumo sean correctos"
                 )
-                return  # No generar el reporte si no hay datos
+                return
 
-            # Ordenar movimientos y calcular saldo - USAR MOVIMIENTOS FILTRADOS
             movimientos_ordenados = self.ordenar_movimientos(movimientos_filtrados)
             movimientos = self.calcular_saldo_acumulado(movimientos_ordenados)
 
-            # VALIDAR NUEVAMENTE DESPUÉS DEL PROCESAMIENTO
             if not movimientos:
-                messagebox.showwarning(
-                    "Sin datos", 
-                    "No se pudieron procesar los datos para el reporte.\n"
-                    "Verifique los filtros seleccionados."
-                )
+                messagebox.showwarning("Sin datos", "No se pudieron procesar los datos para el reporte.\nVerifique los filtros seleccionados.")
                 return
 
-            # Crear DataFrame y generar Excel
             full_path = self.generar_excel(movimientos, periodo)
 
-            # Preguntar si desea abrir el Excel
-            if messagebox.askyesno("Excel Generado", "Reporte guardado exitosamente.\n¿Desea abrirlo ahora?"):
-                import os
-                import sys
+            if full_path and messagebox.askyesno("Excel Generado", "Reporte guardado exitosamente.\n¿Desea abrirlo ahora?"):
                 try:
                     if sys.platform.startswith('win'):
                         os.startfile(full_path)
@@ -1721,90 +1555,26 @@ class ReporteKardex:
             import os
             from datetime import datetime
 
-            # Dividir movimientos en hojas (máximo 1000 filas por hoja)
             filas_por_hoja = 1000
             total_movimientos = len(movimientos)
 
-            # Generar nombre de archivo con fecha y hora
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             file_name = f"Reporte_Kardex_{periodo}_{timestamp}.xlsx"
 
-            # Ruta a la carpeta Descargas
             downloads_path = os.path.expanduser("~/Downloads")
             full_path = os.path.join(downloads_path, file_name)
 
-            # Crear archivo Excel
             writer = pd.ExcelWriter(full_path, engine='xlsxwriter')
             workbook = writer.book
 
-            # Estilos comunes (títulos y subtítulos mantienen estilo anterior)
-            title_format = workbook.add_format({
-                'bold': True,
-                'align': 'center',
-                'valign': 'vcenter',
-                'font_size': 12,
-                'text_wrap': True
-            })
+            title_format = workbook.add_format({'bold': True, 'align': 'center', 'valign': 'vcenter', 'font_size': 12, 'text_wrap': True})
+            subtitle_format = workbook.add_format({'bold': True, 'align': 'center', 'valign': 'vcenter', 'font_size': 10, 'text_wrap': True})
+            saldo_filter_format = workbook.add_format({'bold': True, 'align': 'right', 'valign': 'vcenter', 'font_size': 10, 'text_wrap': True})
+            header_format = workbook.add_format({'bold': True, 'align': 'center', 'valign': 'vcenter', 'font_size': 8, 'bg_color': '#ADD8E6', 'text_wrap': True, 'border': 1, 'border_color': '#808080'})
+            saldo_anterior_format = workbook.add_format({'bold': True, 'align': 'center', 'valign': 'vcenter', 'font_size': 9, 'bg_color': '#FFFFE0', 'border': 1, 'border_color': '#808080'})
+            data_format_center = workbook.add_format({'align': 'center', 'valign': 'vcenter', 'font_size': 9, 'border': 1, 'border_color': '#808080', 'text_wrap': True})
+            data_format_center_text = workbook.add_format({'align': 'center', 'valign': 'vcenter', 'font_size': 9, 'border': 1, 'border_color': '#808080', 'text_wrap': True})
 
-            subtitle_format = workbook.add_format({
-                'bold': True,
-                'align': 'center',
-                'valign': 'vcenter',
-                'font_size': 10,
-                'text_wrap': True
-            })
-
-            # Formato especial para el "Saldo anterior" en filtros: mismo estilo pero alineado a la derecha
-            saldo_filter_format = workbook.add_format({
-                'bold': True,
-                'align': 'right',    # alineado a la derecha en la celda M6
-                'valign': 'vcenter',
-                'font_size': 10,
-                'text_wrap': True
-            })
-
-            # Encabezado de tabla con borde (ajustado)
-            header_format = workbook.add_format({
-                'bold': True,
-                'align': 'center',
-                'valign': 'vcenter',
-                'font_size': 8,
-                'bg_color': '#ADD8E6',
-                'text_wrap': True,
-                'border': 1,
-                'border_color': '#808080'
-            })
-
-            saldo_anterior_format = workbook.add_format({
-                'bold': True,
-                'align': 'center',
-                'valign': 'vcenter',
-                'font_size': 9,
-                'bg_color': '#FFFFE0',
-                'border': 1,
-                'border_color': '#808080'
-            })
-
-            # Formatos de datos
-            data_format_center = workbook.add_format({
-                'align': 'center',
-                'valign': 'vcenter',
-                'font_size': 9,
-                'border': 1,
-                'border_color': '#808080',
-                'text_wrap': True
-            })
-
-            data_format_center_text = workbook.add_format({
-                'align': 'center',
-                'valign': 'vcenter',
-                'font_size': 9,
-                'border': 1,
-                'border_color': '#808080',
-                'text_wrap': True
-            })
-
-            # Procesar cada hoja
             for hoja_num in range(0, total_movimientos, filas_por_hoja):
                 nombre_hoja = f"Kardex_{hoja_num // filas_por_hoja + 1}"
 
@@ -1819,7 +1589,6 @@ class ReporteKardex:
 
                 df = pd.DataFrame(movimientos_hoja)[columnas_relevantes]
 
-                # Nombres de columnas (compactos)
                 df.columns = [
                     'Fecha',
                     'No.\nReferencia',
@@ -1836,17 +1605,14 @@ class ReporteKardex:
                     'Observaciones'
                 ]
 
-                # Calcular saldo anterior para la etiqueta del filtro (último saldo de la hoja anterior)
                 if hoja_num > 0:
                     raw_saldo = movimientos[hoja_num - 1].get('saldo', 0)
                     saldo_para_filtro = raw_saldo if raw_saldo not in (None, '') else 0
                 else:
                     saldo_para_filtro = 0
 
-                # Escribir datos comenzando en fila 8
                 fila_inicio = 8
 
-                # Si no es la primera hoja, agregar fila de saldo anterior (visible en la hoja)
                 if hoja_num > 0:
                     saldo_anterior = movimientos[hoja_num - 1].get('saldo', 0)
                     saldo_df = pd.DataFrame([{
@@ -1864,17 +1630,12 @@ class ReporteKardex:
                         'Saldo': saldo_anterior,
                         'Observaciones': ''
                     }])
-
                     saldo_df.to_excel(writer, sheet_name=nombre_hoja, startrow=fila_inicio, index=False, header=False)
                     fila_inicio += 1
 
-                # Escribir datos principales
                 df.to_excel(writer, sheet_name=nombre_hoja, startrow=fila_inicio, index=False, header=False)
-
-                # Obtener worksheet
                 worksheet = writer.sheets[nombre_hoja]
 
-                # Llamar a la configuración pasando el saldo_para_filtro y el formato saldo_filter_format
                 self.configurar_hoja_excel(
                     worksheet, workbook,
                     title_format, subtitle_format,
@@ -1884,7 +1645,6 @@ class ReporteKardex:
                     saldo_para_filtro, saldo_filter_format
                 )
 
-            # Guardar archivo
             writer.close()
             messagebox.showinfo("Éxito", f"Reporte guardado en:\n{full_path}")
             return full_path
@@ -1894,44 +1654,26 @@ class ReporteKardex:
             return None
 
     def configurar_hoja_excel(self, worksheet, workbook, title_format, subtitle_format,
-                            header_format, saldo_anterior_format, df, tiene_saldo_anterior, fila_inicio,
-                            data_format_center, data_format_center_text,
-                            saldo_para_filtro, saldo_filter_format):
+                              header_format, saldo_anterior_format, df, tiene_saldo_anterior, fila_inicio,
+                              data_format_center, data_format_center_text,
+                              saldo_para_filtro, saldo_filter_format):
         """Configura la hoja Excel: mayor separación encabezado/filtros, filtros centrados en 2 líneas e incluye Saldo anterior."""
         from datetime import datetime
 
-        # Altos (ajustados para dar espacio y permitir 2 líneas en filtros)
         row_height = 30
         header_row_height = 36
 
-        # Aumentar separación entre títulos y filtros
-        worksheet.set_row(0, 36)  # Título principal (A1)
-        worksheet.set_row(1, 30)  # Área
-        worksheet.set_row(2, 30)  # Tarjeta
-        worksheet.set_row(3, 24)  # Fecha generación (más espacio)
-        worksheet.set_row(4, 8)   # fila intermedia opcional
-        # FILTROS: reservar altura para 2 líneas
-        worksheet.set_row(5, 40)  # fila de filtros (A6..M6) -> 40 pts para 2 líneas cómodas
+        worksheet.set_row(0, 36)
+        worksheet.set_row(1, 30)
+        worksheet.set_row(2, 30)
+        worksheet.set_row(3, 24)
+        worksheet.set_row(4, 8)
+        worksheet.set_row(5, 40)
 
-        # Títulos principales (centrados y SIN bordes)
-        worksheet.merge_range('A1:M1',
-            'DIRECCIÓN DEPARTAMENTAL DE REDES INTEGRADAS DE SERVICIOS DE SALUD DE GUATEMALA,',
-            title_format)
+        worksheet.merge_range('A1:M1', 'DIRECCIÓN DEPARTAMENTAL DE REDES INTEGRADAS DE SERVICIOS DE SALUD DE GUATEMALA,', title_format)
         worksheet.merge_range('A2:M2', 'ÁREA NOR ORIENTE', subtitle_format)
         worksheet.merge_range('A3:M3', 'TARJETA DE CONTROL DE SUMINISTROS', subtitle_format)
-        worksheet.merge_range('A4:M4',
-            f"Generado el: {datetime.now().strftime('%d/%m/%Y %H:%M:%S')}",
-            subtitle_format)
-
-        # --- FILTROS: mantenemos merges A6:B6, C6:D6, E6:F6, G6:H6, I6:J6, K6:L6 para que
-        # correspondan exactamente al ancho de la tabla (dos columnas cada bloque) ---
-        # Para que ocupen 2 líneas centradas, usamos subtitle_format con text_wrap=True y centrado.
-
-        # Asegúrate de que subtitle_format tenga 'text_wrap': True y 'align': 'center'
-        # (si no, puedes crear uno local con esas propiedades)
-
-        # Ejemplo (si quieres definir localmente):
-        # subtitle_format = workbook.add_format({'bold': True, 'align': 'center', 'valign': 'vcenter', 'font_size': 9, 'text_wrap': True})
+        worksheet.merge_range('A4:M4', f"Generado el: {datetime.now().strftime('%d/%m/%Y %H:%M:%S')}", subtitle_format)
 
         worksheet.merge_range('A6:B6', f"Área:\n{self.combo_area.get()}", subtitle_format)
         worksheet.merge_range('C6:D6', f"Distrito:\n{self.combo_distrito.get()}", subtitle_format)
@@ -1940,35 +1682,25 @@ class ReporteKardex:
         worksheet.merge_range('I6:J6', f"Insumo:\n{self.combo_insumo.get()}", subtitle_format)
         worksheet.merge_range('K6:L6', f"Presentación:\n{self.combo_presentacion.get()}", subtitle_format)
 
-        # SALDO ANTERIOR: colocarlo en M6 pero también centrado y en 2 líneas (se adapta al alto de fila)
         saldo_val = saldo_para_filtro if saldo_para_filtro not in (None, '') else 0
-        # Usamos el mismo estilo de filtros (centrado y con wrap) para mantener el estilo coherente
         worksheet.write('M6', f"Saldo anterior:\n{saldo_val}", subtitle_format)
 
-        # Encabezado de la tabla (con borde) y altura fija para el encabezado
         worksheet.set_row(fila_inicio - 1, header_row_height)
         for col_num, value in enumerate(df.columns.values):
             worksheet.write(fila_inicio - 1, col_num, value, header_format)
 
-        # Si existe saldo anterior (fila visible), fijar su altura y formatearla
         if tiene_saldo_anterior:
             saldo_row = fila_inicio
             worksheet.set_row(saldo_row, row_height)
             for col_idx in range(len(df.columns)):
-                try:
-                    existing = worksheet.table.get((saldo_row, col_idx), None) if hasattr(worksheet, 'table') else None
-                except Exception:
-                    existing = None
-                worksheet.write(saldo_row, col_idx, existing if existing is not None else '', saldo_anterior_format)
+                worksheet.write(saldo_row, col_idx, '', saldo_anterior_format)
 
-        # Configuración de página y márgenes (igual que antes)
         worksheet.set_landscape()
         worksheet.set_paper(5)
         worksheet.fit_to_pages(1, 1)
         worksheet.center_horizontally()
         worksheet.set_margins(left=0.5, right=0.5, top=0.5, bottom=0.5)
 
-        # Ajustar anchos de columna (mantener como lo tenías; ejemplo ajustado)
         worksheet.set_column('A:A', 10)
         worksheet.set_column('B:B', 15)
         worksheet.set_column('C:C', 20)
@@ -1983,16 +1715,12 @@ class ReporteKardex:
         worksheet.set_column('L:L', 10)
         worksheet.set_column('M:M', 18)
 
-        # Reescribir y aplicar formato a todas las filas de datos con altura fija
         data_start_row = fila_inicio + (1 if tiene_saldo_anterior else 0)
         for row_idx in range(len(df)):
             worksheet.set_row(data_start_row + row_idx, row_height)
             for col_idx in range(len(df.columns)):
                 value = df.iloc[row_idx, col_idx]
-                if col_idx == 1 or col_idx == 12:
-                    formato = data_format_center_text
-                else:
-                    formato = data_format_center
+                formato = data_format_center_text if (col_idx == 1 or col_idx == 12) else data_format_center
                 worksheet.write(data_start_row + row_idx, col_idx, value, formato)
 
     def cerrar_ventana(self):
@@ -2000,115 +1728,78 @@ class ReporteKardex:
         Cierra la ventana del reporte, limpia recursos y muestra la pantalla de bienvenida.
         """
         if not messagebox.askyesno("Confirmar", "¿Está seguro que desea cerrar esta ventana?"):
-            return  # Si el usuario cancela, no hace nada
+            return
 
         try:
-            # Limpiar archivo temporal si existe
             if hasattr(self, 'temp_pdf_path') and os.path.exists(self.temp_pdf_path):
                 try:
                     os.remove(self.temp_pdf_path)
                 except Exception:
                     pass
 
-            # Desvincular el evento del mouse wheel antes de cerrar (si existe self.canvas)
             try:
                 if hasattr(self, "canvas"):
                     self.canvas.unbind_all("<MouseWheel>")
             except Exception:
                 pass
 
-            # Limpiar el frame principal
             if hasattr(self, 'parent') and self.parent:
                 for widget in self.parent.winfo_children():
                     widget.destroy()
 
-            # Mostrar la pantalla de bienvenida si existe
             if hasattr(self, "main_window") and self.main_window:
                 self.main_window.show_welcome_screen()
 
         except Exception as e:
             print(f"Error al cerrar ventana: {e}")
-            # Forzar cierre si hay error
             try:
-                import sys
                 if hasattr(self, 'parent') and self.parent:
                     self.parent.quit()
                 else:
                     sys.exit()
             except Exception:
                 pass
-    
+
     def filtrar_movimientos_por_nivel(self, movimientos):
         """
         Filtra los movimientos según el nivel jerárquico seleccionado.
         Solo muestra movimientos que fueron guardados exactamente en el nivel seleccionado.
         """
-        # Obtener valores seleccionados
         area_seleccionada = self.combo_area.get().strip()
         distrito_seleccionado = self.combo_distrito.get().strip()
         tipo_servicio_seleccionado = self.combo_tipo_servicio.get().strip()
         servicio_seleccionado = self.combo_servicio.get().strip()
-        
-        # Si no hay ningún filtro de ubicación, devolver todos los movimientos
+
         if not any([area_seleccionada, distrito_seleccionado, tipo_servicio_seleccionado, servicio_seleccionado]):
             return movimientos
-        
+
         movimientos_filtrados = []
-        
+
+        def es_nulo_o_vacio(valor):
+            return valor is None or valor == '' or str(valor).strip() == '' or str(valor).lower() in ['null', 'none']
+
         for mov in movimientos:
-            # Obtener datos del movimiento - manejar NULL/None correctamente
             mov_area = mov.get('area_nombre')
             mov_distrito = mov.get('distrito_nombre')
             mov_tipo_servicio = mov.get('tipo_servicio_desc')
             mov_servicio = mov.get('servicio_nombre')
-            
-            # Función auxiliar para verificar si un campo está vacío/nulo
-            def es_nulo_o_vacio(valor):
-                return valor is None or valor == '' or str(valor).strip() == '' or str(valor).lower() in ['null', 'none']
-            
+
             incluir_movimiento = False
-            
-            # CASO 1: Solo se seleccionó ÁREA
+
             if area_seleccionada and not distrito_seleccionado and not tipo_servicio_seleccionado and not servicio_seleccionado:
-                # Incluir si: área coincide Y distrito/tipo_servicio/servicio son NULL/None/vacío
-                if (mov_area == area_seleccionada and 
-                    es_nulo_o_vacio(mov_distrito) and 
-                    es_nulo_o_vacio(mov_tipo_servicio) and 
-                    es_nulo_o_vacio(mov_servicio)):
+                if (mov_area == area_seleccionada and es_nulo_o_vacio(mov_distrito) and es_nulo_o_vacio(mov_tipo_servicio) and es_nulo_o_vacio(mov_servicio)):
                     incluir_movimiento = True
-            
-            # CASO 2: Se seleccionó ÁREA + DISTRITO
             elif area_seleccionada and distrito_seleccionado and not tipo_servicio_seleccionado and not servicio_seleccionado:
-                # Incluir si: área y distrito coinciden Y tipo_servicio/servicio son NULL/None/vacío
-                if (mov_area == area_seleccionada and 
-                    mov_distrito == distrito_seleccionado and 
-                    es_nulo_o_vacio(mov_tipo_servicio) and 
-                    es_nulo_o_vacio(mov_servicio)):
+                if (mov_area == area_seleccionada and mov_distrito == distrito_seleccionado and es_nulo_o_vacio(mov_tipo_servicio) and es_nulo_o_vacio(mov_servicio)):
                     incluir_movimiento = True
-            
-            # CASO 3: Se seleccionó ÁREA + DISTRITO + TIPO DE SERVICIO
             elif area_seleccionada and distrito_seleccionado and tipo_servicio_seleccionado and not servicio_seleccionado:
-                # Incluir si: área, distrito y tipo_servicio coinciden Y servicio es NULL/None/vacío
-                if (mov_area == area_seleccionada and 
-                    mov_distrito == distrito_seleccionado and 
-                    mov_tipo_servicio == tipo_servicio_seleccionado and 
-                    es_nulo_o_vacio(mov_servicio)):
+                if (mov_area == area_seleccionada and mov_distrito == distrito_seleccionado and mov_tipo_servicio == tipo_servicio_seleccionado and es_nulo_o_vacio(mov_servicio)):
                     incluir_movimiento = True
-            
-            # CASO 4: Se seleccionó ÁREA + DISTRITO + TIPO DE SERVICIO + SERVICIO
             elif area_seleccionada and distrito_seleccionado and tipo_servicio_seleccionado and servicio_seleccionado:
-                # Incluir si: todos los niveles coinciden exactamente
-                if (mov_area == area_seleccionada and 
-                    mov_distrito == distrito_seleccionado and 
-                    mov_tipo_servicio == tipo_servicio_seleccionado and 
-                    mov_servicio == servicio_seleccionado):
+                if (mov_area == area_seleccionada and mov_distrito == distrito_seleccionado and mov_tipo_servicio == tipo_servicio_seleccionado and mov_servicio == servicio_seleccionado):
                     incluir_movimiento = True
-            
+
             if incluir_movimiento:
                 movimientos_filtrados.append(mov)
-        
+
         return movimientos_filtrados
-    
-    def destroy(self):
-        if hasattr(self, 'frame_principal'):
-            self.frame_principal.destroy()
