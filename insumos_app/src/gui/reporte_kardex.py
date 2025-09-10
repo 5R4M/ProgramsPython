@@ -99,21 +99,21 @@ class ReporteKardex:
             pass
 
         # Frames base
-        style.configure('White.TFrame', background=self.COLORS['white'])
+        style.configure('White.TFrame', background=self.COLORS['light'])
         style.configure('Enabled.TFrame', background=self.COLORS['white'])
         style.configure('Disabled.TFrame', background='#f0f0f0')
 
         # Labels y botones base
         style.configure(
             'White.TLabel',
-            background=self.COLORS['white'],
+            background=self.COLORS['light'],
             foreground=self.COLORS['text_dark'],
             font=('Segoe UI', 9)
         )
 
         style.configure(
             'White.TButton',
-            background=self.COLORS['white'],
+            background=self.COLORS['light'],
             foreground=self.COLORS['text_dark'],
             font=('Segoe UI', 9),
             relief='flat',
@@ -169,11 +169,11 @@ class ReporteKardex:
             root.option_add('*Listbox.font', '{Segoe UI} 9')
 
         # Entradas y Combobox
-        style.configure('TCombobox', fieldbackground=self.COLORS['white'], background=self.COLORS['white'], foreground=self.COLORS['text_dark'])
+        style.configure('TCombobox', fieldbackground=self.COLORS['white'], background=self.COLORS['light'], foreground=self.COLORS['text_dark'])
         style.configure('TEntry', selectbackground=self.COLORS['accent'], selectforeground='#ffff')
 
     def create_titled_frame(self, parent, title):
-        container = tk.Frame(parent, bg=self.COLORS['white'], relief='solid', borderwidth=1)
+        container = tk.Frame(parent, bg=self.COLORS['light'], relief='solid', borderwidth=1)
 
         header = tk.Frame(container, bg=self.COLORS['primary'], height=20)
         header.pack(fill='x')
@@ -182,7 +182,7 @@ class ReporteKardex:
         label = tk.Label(header, text=title, font=('Segoe UI', 8, 'bold'), fg=self.COLORS['white'], bg=self.COLORS['primary'])
         label.pack(side='left', padx=10, pady=2)
 
-        content = tk.Frame(container, bg=self.COLORS['white'])
+        content = tk.Frame(container, bg=self.COLORS['light'])
         content.pack(fill='both', expand=True, padx=10, pady=10)
 
         return container, content
@@ -417,8 +417,8 @@ class ReporteKardex:
 
         # Frame para fechas con título personalizado
         self.frame_fechas_container, self.frame_fechas = self.create_titled_frame(self.main_container, "📅 Selección de Fechas/Corte Logístico")
-        self.frame_fechas_container.config(bg=self.COLORS['white'])
-        self.frame_fechas.config(bg=self.COLORS['white'])
+        self.frame_fechas_container.config(bg=self.COLORS['light'])
+        self.frame_fechas.config(bg=self.COLORS['light'])
         self.frame_fechas_container.pack(fill="x", expand=False, padx=5, pady=5)
 
         # Modo de selección de fechas
@@ -434,18 +434,18 @@ class ReporteKardex:
             variable=self.modo_fecha_var,
             value="rango",
             command=self.actualizar_visibilidad_fechas,
-            bg=self.COLORS['white'],
+            bg=self.COLORS['light'],
             fg=self.COLORS['text_dark'],
             font=('Segoe UI', 9),
             selectcolor=self.COLORS['white']
         )
         self.radio_rango.grid(row=0, column=0, padx=5, sticky='w')
 
-        tk.Label(self.frame_fechas, text="Fecha Inicial:", bg=self.COLORS['white'], fg=self.COLORS['text_dark'], font=('Segoe UI', 9)).grid(row=0, column=1, padx=5, sticky='w')
+        tk.Label(self.frame_fechas, text="Fecha Inicial:", bg=self.COLORS['light'], fg=self.COLORS['text_dark'], font=('Segoe UI', 9)).grid(row=0, column=1, padx=5, sticky='w')
         self.fecha_inicial = DateEntry(self.frame_fechas, width=12, date_pattern='dd/mm/yyyy', state='normal')
         self.fecha_inicial.grid(row=0, column=2, padx=5, sticky='ew')
 
-        tk.Label(self.frame_fechas, text="Fecha Final:", bg=self.COLORS['white'], fg=self.COLORS['text_dark'], font=('Segoe UI', 9)).grid(row=0, column=3, padx=5, sticky='w')
+        tk.Label(self.frame_fechas, text="Fecha Final:", bg=self.COLORS['light'], fg=self.COLORS['text_dark'], font=('Segoe UI', 9)).grid(row=0, column=3, padx=5, sticky='w')
         self.fecha_final = DateEntry(self.frame_fechas, width=12, date_pattern='dd/mm/yyyy', state='normal')
         self.fecha_final.grid(row=0, column=4, padx=5, sticky='ew')
 
@@ -457,27 +457,27 @@ class ReporteKardex:
             variable=self.modo_fecha_var,
             value="corte",
             command=self.actualizar_visibilidad_fechas,
-            bg=self.COLORS['white'],
+            bg=self.COLORS['light'],
             fg=self.COLORS['text_dark'],
             font=('Segoe UI', 9),
             selectcolor=self.COLORS['white']
         )
         self.radio_corte.grid(row=1, column=0, padx=5, sticky='w')
 
-        tk.Label(self.frame_fechas, text="Año:", bg=self.COLORS['white'], fg=self.COLORS['text_dark'], font=('Segoe UI', 9)).grid(row=1, column=1, padx=5, sticky='w')
+        tk.Label(self.frame_fechas, text="Año:", bg=self.COLORS['light'], fg=self.COLORS['text_dark'], font=('Segoe UI', 9)).grid(row=1, column=1, padx=5, sticky='w')
         self.anio_var = tk.StringVar()
         anios = [str(a) for a in range(datetime.now().year - 5, datetime.now().year + 2)]
         self.combo_anio = ttk.Combobox(self.frame_fechas, textvariable=self.anio_var, values=anios, width=8)
         self.combo_anio.grid(row=1, column=2, padx=5, sticky='ew')
         self.combo_anio.set(str(datetime.now().year))
 
-        tk.Label(self.frame_fechas, text="Mes Inicio:", bg=self.COLORS['white'], fg=self.COLORS['text_dark'], font=('Segoe UI', 9)).grid(row=1, column=3, padx=5, sticky='w')
+        tk.Label(self.frame_fechas, text="Mes Inicio:", bg=self.COLORS['light'], fg=self.COLORS['text_dark'], font=('Segoe UI', 9)).grid(row=1, column=3, padx=5, sticky='w')
         self.mes_inicio_var = tk.StringVar()
         meses = [datetime(2024, m, 1).strftime("%B").capitalize() for m in range(1, 13)]
         self.combo_mes_inicio = ttk.Combobox(self.frame_fechas, textvariable=self.mes_inicio_var, values=meses, width=12)
         self.combo_mes_inicio.grid(row=1, column=4, padx=5, sticky='ew')
 
-        tk.Label(self.frame_fechas, text="Mes Final:", bg=self.COLORS['white'], fg=self.COLORS['text_dark'], font=('Segoe UI', 9)).grid(row=1, column=5, padx=5, sticky='w')
+        tk.Label(self.frame_fechas, text="Mes Final:", bg=self.COLORS['light'], fg=self.COLORS['text_dark'], font=('Segoe UI', 9)).grid(row=1, column=5, padx=5, sticky='w')
         self.mes_final_var = tk.StringVar()
         self.combo_mes_final = ttk.Combobox(self.frame_fechas, textvariable=self.mes_final_var, values=meses, width=12)
         self.combo_mes_final.grid(row=1, column=6, padx=5, sticky='ew')
@@ -496,8 +496,8 @@ class ReporteKardex:
 
         # Primera fila de combos
         self.frame_ubicacion_container, self.frame_ubicacion_content = self.create_titled_frame(self.frame_combos, "📍 Ubicación")
-        self.frame_ubicacion_container.config(bg=self.COLORS['white'])
-        self.frame_ubicacion_content.config(bg=self.COLORS['white'])
+        self.frame_ubicacion_container.config(bg=self.COLORS['light'])
+        self.frame_ubicacion_content.config(bg=self.COLORS['light'])
         self.frame_ubicacion_container.pack(fill="x", expand=False, pady=5)
 
         self.frame_ubicacion_content.grid_columnconfigure(1, weight=1)
@@ -528,8 +528,8 @@ class ReporteKardex:
 
         # Segunda fila de combos
         self.frame_insumo_container, self.frame_insumo_content = self.create_titled_frame(self.frame_combos, "💊 Insumo")
-        self.frame_insumo_container.config(bg=self.COLORS['white'])
-        self.frame_insumo_content.config(bg=self.COLORS['white'])
+        self.frame_insumo_container.config(bg=self.COLORS['light'])
+        self.frame_insumo_content.config(bg=self.COLORS['light'])
         self.frame_insumo_container.pack(fill="x", expand=False, pady=5)
 
         self.frame_insumo_content.grid_columnconfigure(1, weight=1)
@@ -552,10 +552,10 @@ class ReporteKardex:
         self.combo_presentacion.grid(row=0, column=5, padx=5, sticky='ew')
 
         # --- Visor PDF con encabezado, borde y ancho alineado ---
-        self.pdf_outer = tk.Frame(self.frame_combos, bg=self.COLORS['white'])
+        self.pdf_outer = tk.Frame(self.frame_combos, bg=self.COLORS['light'])
         self.pdf_outer.pack(fill="x", expand=False, pady=5)
 
-        self.pdf_frame = tk.Frame(self.pdf_outer, bg=self.COLORS['white'], relief="solid", bd=1, highlightthickness=0)
+        self.pdf_frame = tk.Frame(self.pdf_outer, bg=self.COLORS['light'], relief="solid", bd=1, highlightthickness=0)
         self.pdf_frame.pack(fill="x")
         self.pdf_frame.configure(height=350)
         self.pdf_frame.pack_propagate(False)
@@ -580,7 +580,7 @@ class ReporteKardex:
         self.frame_botones.pack(fill="x", side="bottom", pady=(20, 10))
 
         btn_font = ('Segoe UI', 9, 'bold')
-        btn_bg = self.COLORS['white']
+        btn_bg = self.COLORS['light']
         btn_fg = self.COLORS['text_dark']
 
         btn_preview = tk.Button(

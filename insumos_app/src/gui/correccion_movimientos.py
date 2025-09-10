@@ -324,7 +324,7 @@ class CorreccionMovimientos:
             self.icon_limpiar = None
 
     def create_titled_frame(self, parent, title, content_padx=10, content_pady=10):
-        container = tk.Frame(parent, bg=self.COLORS['white'], relief='solid', borderwidth=1)
+        container = tk.Frame(parent, bg=self.COLORS['light'], relief='solid', borderwidth=1)
 
         header = tk.Frame(container, bg=self.COLORS['primary'], height=20)
         header.pack(fill='x')
@@ -334,7 +334,7 @@ class CorreccionMovimientos:
                         fg=self.COLORS['white'], bg=self.COLORS['primary'])
         label.pack(side='left', padx=10, pady=2)
 
-        content = tk.Frame(container, bg=self.COLORS['white'])
+        content = tk.Frame(container, bg=self.COLORS['light'])
         content.pack(fill='both', expand=True, padx=content_padx, pady=content_pady)
 
         return container, content
@@ -362,14 +362,14 @@ class CorreccionMovimientos:
             pass
 
         # Estilos base usados por esta pantalla
-        style.configure('White.TFrame', background=self.COLORS['white'])
+        style.configure('White.TFrame', background=self.COLORS['light'])
         style.configure('White.TLabel',
-            background=self.COLORS['white'],
+            background=self.COLORS['light'],
             foreground=self.COLORS['text_dark'],
             font=('Segoe UI', 9)
         )
         style.configure('White.TButton',
-            background=self.COLORS['white'],
+            background=self.COLORS['light'],
             foreground=self.COLORS['text_dark'],
             font=('Segoe UI', 9),
             relief='flat',
@@ -380,7 +380,7 @@ class CorreccionMovimientos:
         )
 
         style.configure('Card.TLabelframe',
-            background=self.COLORS['white'],
+            background=self.COLORS['light'],
             relief='solid',
             borderwidth=1,
             labeloutside=False
@@ -489,21 +489,21 @@ class CorreccionMovimientos:
                 bg=self.COLORS['primary']).pack(anchor='w', pady=(2, 0))
 
         # CONTENIDO SIN SCROLL VERTICAL
-        content_frame = tk.Frame(main_container, bg=self.COLORS['white'])
+        content_frame = tk.Frame(main_container, bg=self.COLORS['light'])
         content_frame.pack(fill="both", expand=True, padx=10, pady=5)
 
         # Mantén el mismo nombre de variable que usas después
         self.scrollable_frame = content_frame
 
-        self.frame_principal = tk.Frame(self.scrollable_frame, bg=self.COLORS['white'])
+        self.frame_principal = tk.Frame(self.scrollable_frame, bg=self.COLORS['light'])
         self.frame_principal.pack(fill="x", expand=False, pady=5)
 
         # Frame para fechas con título personalizado (menos padding)
         self.frame_fechas_container, self.frame_fechas = self.create_titled_frame(
             self.frame_principal, "📅 Selección de Fechas", content_padx=5, content_pady=5
         )
-        self.frame_fechas_container.config(bg=self.COLORS['white'])
-        self.frame_fechas.config(bg=self.COLORS['white'])
+        self.frame_fechas_container.config(bg=self.COLORS['light'])
+        self.frame_fechas.config(bg=self.COLORS['light'])
         self.frame_fechas_container.pack(fill="x", expand=False, pady=5, padx=5)
 
         # Frame para rango de fechas con márgenes simétricos
@@ -571,8 +571,8 @@ class CorreccionMovimientos:
         self.frame_combos1_container, self.frame_combos1 = self.create_titled_frame(
             self.frame_combos, "📍 Selección de Ubicación", content_padx=5, content_pady=5
         )
-        self.frame_combos1_container.config(bg=self.COLORS['white'])
-        self.frame_combos1.config(bg=self.COLORS['white'])
+        self.frame_combos1_container.config(bg=self.COLORS['light'])
+        self.frame_combos1.config(bg=self.COLORS['light'])
         self.frame_combos1_container.pack(fill="x", expand=False, padx=0, pady=5)
 
         # Configurar grid para distribución geométrica uniforme con márgenes simétricos
@@ -617,8 +617,8 @@ class CorreccionMovimientos:
         self.frame_combos2_container, self.frame_combos2 = self.create_titled_frame(
             self.frame_combos, "💊 Insumos / Tipo Movimiento", content_padx=5, content_pady=5
         )
-        self.frame_combos2_container.config(bg=self.COLORS['white'])
-        self.frame_combos2.config(bg=self.COLORS['white'])
+        self.frame_combos2_container.config(bg=self.COLORS['light'])
+        self.frame_combos2.config(bg=self.COLORS['light'])
         self.frame_combos2_container.pack(fill="x", expand=False, padx=0, pady=5)
 
         # Configurar grid idéntico para simetría
@@ -679,7 +679,7 @@ class CorreccionMovimientos:
             compound='left',
             command=self.buscar_movimientos,
             font=('Segoe UI', 9, 'bold'),
-            bg=self.COLORS['white'],
+            bg=self.COLORS['light'],
             fg=self.COLORS['text_dark'],
             relief='flat',
             borderwidth=0,
@@ -695,7 +695,7 @@ class CorreccionMovimientos:
             compound='left',
             command=self.limpiar_filtros,
             font=('Segoe UI', 9, 'bold'),
-            bg=self.COLORS['white'],
+            bg=self.COLORS['light'],
             fg=self.COLORS['text_dark'],
             relief='flat',
             borderwidth=0,
@@ -712,7 +712,7 @@ class CorreccionMovimientos:
         self.frame_treeview_container.pack(fill="x", expand=False, padx=5, pady=5)
 
         # Frame para Treeview compacto
-        self.tree_frame = tk.Frame(self.frame_treeview, bg=self.COLORS['white'], relief='solid', borderwidth=1)
+        self.tree_frame = tk.Frame(self.frame_treeview, bg=self.COLORS['light'], relief='solid', borderwidth=1)
         self.tree_frame.pack(fill="x", expand=False, padx=5, pady=5)
         self.tree_frame.pack_propagate(True)
         self.tree_frame.config(height=5 * 25 + 30)  # 5 filas * rowheight + espacio encabezado
@@ -825,13 +825,13 @@ class CorreccionMovimientos:
         self.tree_scroll_x.config(command=self.tree.xview)
 
         # Frame para botones de acción
-        self.frame_botones_accion = tk.Frame(self.frame_principal, bg=self.COLORS['white'])
+        self.frame_botones_accion = tk.Frame(self.frame_principal, bg=self.COLORS['light'])
         self.frame_botones_accion.pack(fill="x", pady=10)
 
         btn_padx = 10
         btn_pady = 6
         btn_font = ('Segoe UI', 9, 'bold')
-        btn_bg = self.COLORS['white']
+        btn_bg = self.COLORS['light']
         btn_fg = self.COLORS['text_dark']
 
         self.btn_editar = tk.Button(self.frame_botones_accion,
