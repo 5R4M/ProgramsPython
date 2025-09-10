@@ -119,7 +119,7 @@ class ReporteDemandaReal:
 
         # Tarjetas
         style.configure('Card.TFrame', background=self.COLORS['white'], relief='solid', borderwidth=1)
-        style.configure('White.TFrame', background=self.COLORS['white'])
+        style.configure('White.TFrame', background=self.COLORS['light'])
 
         # Encabezados de sección
         style.configure('Header.TFrame', background=self.COLORS['primary'])
@@ -139,41 +139,32 @@ class ReporteDemandaReal:
         style.configure('White.TCombobox', fieldbackground=self.COLORS['white'], background=self.COLORS['white'], foreground=self.COLORS['text_dark'])
     
     def create_titled_frame(self, parent, title, header_icon=None):
-        # Contenedor gris claro como fondo
-        container_outer = tk.Frame(parent, bg=self.COLORS['light'])
-        container_outer.pack(fill="x", padx=self.SPACING['section_padx'], pady=self.SPACING['section_pady'])
-
-        # Tarjeta blanca
-        container = tk.Frame(container_outer, bg=self.COLORS['white'], relief='solid', borderwidth=1)
-        container.pack(fill="x", padx=self.SPACING['card_padx'], pady=self.SPACING['card_pady'])
+        # Contenedor tipo tarjeta (igual patrón que Kardex)
+        container = tk.Frame(parent, bg=self.COLORS['light'], relief='solid', borderwidth=1)
 
         # Header compacto
         header = tk.Frame(container, bg=self.COLORS['primary'], height=self.SPACING['header_height'])
         header.pack(fill='x')
         header.pack_propagate(False)
 
-        # Etiqueta con "mini icono" de texto (emoji/símbolo)
+        # Mini-ícono opcional
         if header_icon:
             tk.Label(
-                header,
-                text=header_icon,
-                font=('Segoe UI Emoji', 9),  # usa fuente compatible con emoji
-                fg=self.COLORS['white'],
-                bg=self.COLORS['primary']
+                header, text=header_icon,
+                font=('Segoe UI Emoji', 9),
+                fg=self.COLORS['white'], bg=self.COLORS['primary']
             ).pack(side='left', padx=(10, 4))
 
         # Título
         tk.Label(
-            header,
-            text=title,
+            header, text=title,
             font=('Segoe UI', 8, 'bold'),
-            fg=self.COLORS['white'],
-            bg=self.COLORS['primary']
+            fg=self.COLORS['white'], bg=self.COLORS['primary']
         ).pack(side='left', padx=2, pady=2)
 
         # Contenido
-        content = tk.Frame(container, bg=self.COLORS['white'])
-        content.pack(fill='x', padx=self.SPACING['content_padx'], pady=self.SPACING['content_pady'])
+        content = tk.Frame(container, bg=self.COLORS['light'])
+        content.pack(fill='both', expand=True, padx=10, pady=10)
 
         return container, content
   
@@ -196,97 +187,79 @@ class ReporteDemandaReal:
             self.icon_close = None
   
     def setup_ui(self):
-        # --- Frame principal que contendrá todo ---
-        main_container = ttk.Frame(self.parent, style='MainArea.TFrame')
-        main_container.pack(fill="both", expand=True)
+        # Contenedor principal
+        self.main_container = tk.Frame(self.parent, bg=self.COLORS['light'])
+        self.main_container.pack(fill="both", expand=True)
 
-        # --- Header principal compacto (como IngresoInsumos) ---
-        title_frame = tk.Frame(main_container, bg=self.COLORS['primary'], height=55)
-        title_frame.pack(fill='x', padx=0, pady=(6, 6))
+        # Header principal (alineado a Kardex)
+        title_frame = tk.Frame(self.main_container, bg=self.COLORS['primary'], height=70)
+        title_frame.pack(fill='x', padx=0, pady=(10, 5))
         title_frame.pack_propagate(False)
 
         title_inner = tk.Frame(title_frame, bg=self.COLORS['primary'])
-        title_inner.pack(fill='both', expand=True, padx=15, pady=4)
+        title_inner.pack(fill='both', expand=True, padx=15, pady=8)
 
-        tk.Label(title_inner, text="📑 Reporte Demanda Real por Servicio de Salud", font=('Segoe UI', 11, 'bold'), fg=self.COLORS['white'], bg=self.COLORS['primary']).pack(anchor='w')
-        tk.Label(title_inner, text="Consulte demanda de los movimientos de los insumos", font=('Segoe UI', 8), fg=self.COLORS['white'], bg=self.COLORS['primary']).pack(anchor='w', pady=(1, 0))
+        tk.Label(
+            title_inner,
+            text="📑 Reporte Demanda Real por Servicio de Salud",
+            font=('Segoe UI', 12, 'bold'),
+            fg=self.COLORS['white'], bg=self.COLORS['primary']
+        ).pack(anchor='w')
 
-        # Frame principal con título personalizado
-        # Base blanca para el contenido (no otra tarjeta con título)
-        self.frame_principal = tk.Frame(main_container, bg=self.COLORS['light'])
-        self.frame_principal.pack(fill="both", expand=True)
+        tk.Label(
+            title_inner,
+            text="Consulte demanda de los movimientos de los insumos",
+            font=('Segoe UI', 8),
+            fg=self.COLORS['white'], bg=self.COLORS['primary']
+        ).pack(anchor='w', pady=(2, 0))
+
+        # Un único contenedor para secciones (igual que Kardex), controla el ancho
+        self.frame_combos = ttk.Frame(self.main_container, style='White.TFrame')
+        self.frame_combos.pack(fill="x", expand=False, padx=5, pady=5)
 
         # Corte Logístico
         self.frame_corte_container, self.frame_corte_content = self.create_titled_frame(
-            self.frame_principal, "Corte Logístico", header_icon="🗓️"
+            self.frame_combos, "🗓️ Corte Logístico", header_icon=None
         )
-        self.frame_corte_container.config(bg=self.COLORS['light'])
-        self.frame_corte_content.config(bg=self.COLORS['light'])
+        # Empaquetar igual que Kardex
+        self.frame_corte_container.pack(fill="x", expand=False, pady=5)
 
-        # Configurar grid EXACTAMENTE IGUAL que ubicación (solo columnas expandibles específicas)
+        # Grid de corte
         self.frame_corte_content.grid_columnconfigure(1, weight=1)  # Año
         self.frame_corte_content.grid_columnconfigure(3, weight=1)  # Mes Inicio
         self.frame_corte_content.grid_columnconfigure(5, weight=1)  # Mes Final
-        # NO configurar las demás columnas para que no se expandan
 
-        # Distribuir elementos - Año, Mes Inicio, Mes Final
         ttk.Label(self.frame_corte_content, text="Año:", style='White.TLabel').grid(row=0, column=0, padx=5, pady=2, sticky='w')
         self.anio_var = tk.StringVar()
         anios = [str(a) for a in range(datetime.now().year - 5, datetime.now().year + 2)]
-        self.combo_anio = ttk.Combobox(
-            self.frame_corte_content,
-            textvariable=self.anio_var,
-            values=anios,
-            width=8,
-            state="readonly"
-        )
+        self.combo_anio = ttk.Combobox(self.frame_corte_content, textvariable=self.anio_var, values=anios, width=8, state="readonly")
         self.combo_anio.grid(row=0, column=1, padx=5, pady=2, sticky='ew')
         self.combo_anio.set(str(datetime.now().year))
 
-        ttk.Label(self.frame_corte_content, text="Mes Inicio:", style='White.TLabel').grid(row=0, column=2, padx=5, sticky='w')
+        ttk.Label(self.frame_corte_content, text="Mes Inicio:", style='White.TLabel').grid(row=0, column=2, padx=5, pady=2, sticky='w')
         self.mes_inicio_var = tk.StringVar()
-      
-        # Obtener nombres de meses en español
         self._meses_es = [datetime(2024, m, 1).strftime("%B").capitalize() for m in range(1, 13)]
-      
-        self.combo_mes_inicio = ttk.Combobox(
-            self.frame_corte_content,
-            textvariable=self.mes_inicio_var,
-            values=self._meses_es,
-            width=12,
-            state="readonly"
-        )
-        self.combo_mes_inicio.grid(row=0, column=3, padx=5, sticky='ew')
+        self.combo_mes_inicio = ttk.Combobox(self.frame_corte_content, textvariable=self.mes_inicio_var, values=self._meses_es, width=12, state="readonly")
+        self.combo_mes_inicio.grid(row=0, column=3, padx=5, pady=2, sticky='ew')
         self.combo_mes_inicio.set(datetime.now().strftime("%B").capitalize())
 
-        ttk.Label(self.frame_corte_content, text="Mes Final:", style='White.TLabel').grid(row=0, column=4, padx=5, sticky='w')
+        ttk.Label(self.frame_corte_content, text="Mes Final:", style='White.TLabel').grid(row=0, column=4, padx=5, pady=2, sticky='w')
         self.mes_final_var = tk.StringVar()
-      
-        self.combo_mes_final = ttk.Combobox(
-            self.frame_corte_content,
-            textvariable=self.mes_final_var,
-            values=self._meses_es,
-            width=12,
-            state="readonly"
-        )
-        self.combo_mes_final.grid(row=0, column=5, padx=5, sticky='ew')
+        self.combo_mes_final = ttk.Combobox(self.frame_corte_content, textvariable=self.mes_final_var, values=self._meses_es, width=12, state="readonly")
+        self.combo_mes_final.grid(row=0, column=5, padx=5, pady=2, sticky='ew')
         self.combo_mes_final.set(datetime.now().strftime("%B").capitalize())
 
-        # NO agregar labels vacíos en columnas 6 y 7 para mantener el ancho correcto
-
-        # Eventos para actualizar fechas
+        # Eventos
         self.parent.after_idle(lambda: self.combo_anio.bind('<<ComboboxSelected>>', self.actualizar_fechas_por_corte))
         self.parent.after_idle(lambda: self.combo_mes_inicio.bind('<<ComboboxSelected>>', self.actualizar_fechas_por_corte))
         self.parent.after_idle(lambda: self.combo_mes_final.bind('<<ComboboxSelected>>', self.actualizar_fechas_por_corte))
 
-        # Ubicación
+        # Ubicación (igual empaque que Kardex)
         self.frame_ubicacion_container, self.frame_ubicacion_content = self.create_titled_frame(
-            self.frame_principal, "Ubicación", header_icon="📍"
+            self.frame_combos, "📍 Ubicación", header_icon=None
         )
-        self.frame_ubicacion_container.config(bg=self.COLORS['light'])
-        self.frame_ubicacion_content.config(bg=self.COLORS['light'])
+        self.frame_ubicacion_container.pack(fill="x", expand=False, pady=5)
 
-        # Configurar grid para distribución uniforme
         self.frame_ubicacion_content.grid_columnconfigure(1, weight=1)
         self.frame_ubicacion_content.grid_columnconfigure(3, weight=1)
         self.frame_ubicacion_content.grid_columnconfigure(5, weight=1)
@@ -297,7 +270,7 @@ class ReporteDemandaReal:
         self.area_var = tk.StringVar()
         self.combo_area = AutocompleteCombobox(self.frame_ubicacion_content, textvariable=self.area_var, state="normal", font=('Segoe UI', 9))
         self.combo_area.grid(row=0, column=1, padx=5, pady=2, sticky='ew')
-      
+
         ttk.Label(self.frame_ubicacion_content, text="Distrito:", **label_style).grid(row=0, column=2, padx=5, pady=2, sticky='w')
         self.distrito_var = tk.StringVar()
         self.combo_distrito = AutocompleteCombobox(self.frame_ubicacion_content, textvariable=self.distrito_var, state="normal", font=('Segoe UI', 9))
@@ -307,20 +280,18 @@ class ReporteDemandaReal:
         self.tipo_servicio_var = tk.StringVar()
         self.combo_tipo_servicio = AutocompleteCombobox(self.frame_ubicacion_content, textvariable=self.tipo_servicio_var, state="normal", font=('Segoe UI', 9))
         self.combo_tipo_servicio.grid(row=0, column=5, padx=5, pady=2, sticky='ew')
-      
+
         ttk.Label(self.frame_ubicacion_content, text="Servicio:", **label_style).grid(row=0, column=6, padx=5, pady=2, sticky='w')
         self.servicio_var = tk.StringVar()
         self.combo_servicio = AutocompleteCombobox(self.frame_ubicacion_content, textvariable=self.servicio_var, state="normal", font=('Segoe UI', 9))
         self.combo_servicio.grid(row=0, column=7, padx=5, pady=2, sticky='ew')
 
-        # Insumo
+        # Insumo (igual empaque que Kardex)
         self.frame_insumo_container, self.frame_insumo_content = self.create_titled_frame(
-            self.frame_principal, "Insumo", header_icon="💊"
+            self.frame_combos, "💊 Insumo", header_icon=None
         )
-        self.frame_insumo_container.config(bg=self.COLORS['light'])
-        self.frame_insumo_content.config(bg=self.COLORS['light'])
+        self.frame_insumo_container.pack(fill="x", expand=False, pady=5)
 
-        # Configurar grid para distribución uniforme
         self.frame_insumo_content.grid_columnconfigure(1, weight=1)
         self.frame_insumo_content.grid_columnconfigure(3, weight=1)
         self.frame_insumo_content.grid_columnconfigure(5, weight=1)
@@ -329,38 +300,55 @@ class ReporteDemandaReal:
         self.tipo_insumo_var = tk.StringVar()
         self.combo_tipo_insumo = AutocompleteCombobox(self.frame_insumo_content, textvariable=self.tipo_insumo_var, state="normal", font=('Segoe UI', 9))
         self.combo_tipo_insumo.grid(row=0, column=1, padx=5, pady=2, sticky='ew')
-      
+
         ttk.Label(self.frame_insumo_content, text="Insumo:", **label_style).grid(row=0, column=2, padx=5, pady=2, sticky='w')
         self.insumo_var = tk.StringVar()
         self.combo_insumo = AutocompleteCombobox(self.frame_insumo_content, textvariable=self.insumo_var, state="normal", font=('Segoe UI', 9))
         self.combo_insumo.grid(row=0, column=3, padx=5, pady=2, sticky='ew')
-      
+
         ttk.Label(self.frame_insumo_content, text="Presentación:", **label_style).grid(row=0, column=4, padx=5, pady=2, sticky='w')
         self.presentacion_var = tk.StringVar()
         self.combo_presentacion = AutocompleteCombobox(self.frame_insumo_content, textvariable=self.presentacion_var, state="normal", font=('Segoe UI', 9))
         self.combo_presentacion.grid(row=0, column=5, padx=5, pady=2, sticky='ew')
 
-        # --- Frame para el visor PDF (ALTURA FIJA) ---
-        self.pdf_container, pdf_content = self.create_titled_frame(
-            self.frame_principal, "Vista previa del PDF", header_icon="📄"
-        )
-        self.pdf_container.config(bg=self.COLORS['light'])
-        self.pdf_frame = tk.Frame(pdf_content, bg=self.COLORS['white'], height=350)
+        # Visor PDF alineado al ancho y con header como Kardex
+        self.pdf_outer = tk.Frame(self.frame_combos, bg=self.COLORS['white'])
+        self.pdf_outer.pack(fill="x", expand=False, pady=5)
+
+        self.pdf_frame = tk.Frame(self.pdf_outer, bg=self.COLORS['white'], relief="solid", bd=1, highlightthickness=0)
         self.pdf_frame.pack(fill="x")
+        self.pdf_frame.configure(height=350)
         self.pdf_frame.pack_propagate(False)
 
-        # --- Frame para botones (fuera del frame principal, pegado abajo) ---
-        self.frame_botones = tk.Frame(main_container, bg=self.COLORS['light'])
-        self.frame_botones.pack(fill="x", side="bottom", pady=(10, 10))
+        self.pdf_header = tk.Frame(self.pdf_frame, bg=self.COLORS['primary'], height=26)
+        self.pdf_header.pack(fill="x")
+        self.pdf_header.pack_propagate(False)
+
+        tk.Label(
+            self.pdf_header,
+            text="📄 Vista previa del PDF",
+            font=('Segoe UI', 9, 'bold'),
+            fg=self.COLORS['white'], bg=self.COLORS['primary']
+        ).pack(side="left", padx=10, pady=2)
+
+        # Cuerpo del visor
+        self.pdf_body = tk.Frame(self.pdf_frame, bg=self.COLORS['white'])
+        self.pdf_body.pack(fill="both", expand=True, padx=8, pady=8)
+
+        # Botones abajo, mismo ancho
+        self.frame_botones = ttk.Frame(self.main_container, style='White.TFrame')
+        self.frame_botones.pack(fill="x", side="bottom", pady=(20, 10))
 
         btn_font = ('Segoe UI', 9, 'bold')
         btn_bg = self.COLORS['light']
         btn_fg = self.COLORS['text_dark']
 
         def make_btn(parent, text, cmd, img=None):
-            return tk.Button(parent, text=text, command=cmd, font=btn_font, bg=btn_bg, fg=btn_fg,
-                            relief='flat', borderwidth=0, highlightthickness=0, padx=12, pady=6,
-                            cursor='hand2', image=img, compound='left')
+            return tk.Button(
+                parent, text=text, command=cmd, font=btn_font, bg=btn_bg, fg=btn_fg,
+                relief='flat', borderwidth=0, highlightthickness=0, padx=12, pady=6,
+                cursor='hand2', image=img, compound='left'
+            )
 
         btn_preview = make_btn(self.frame_botones, "Generar Vista Previa", self.generar_reporte, self.icon_preview)
         btn_preview.pack(side="left", padx=5)
@@ -377,14 +365,14 @@ class ReporteDemandaReal:
         btn_close = make_btn(self.frame_botones, "Cerrar", self.cerrar_ventana, self.icon_close)
         btn_close.pack(side="right", padx=5)
 
-        # Vincular eventos de cambio
+        # Eventos Combos
         self.combo_area.bind('<<ComboboxSelected>>', self.cargar_distritos_por_area)
         self.combo_distrito.bind('<<ComboboxSelected>>', self.cargar_tipos_servicio)
         self.combo_tipo_servicio.bind('<<ComboboxSelected>>', self.cargar_servicios)
         self.combo_tipo_insumo.bind('<<ComboboxSelected>>', self.cargar_insumos)
         self.combo_insumo.bind('<<ComboboxSelected>>', self.actualizar_presentacion)
 
-        # Cargar datos iniciales
+        # Cargar datos
         self.cargar_areas()
         self.distritos = []
         self.combo_distrito.set_completion_list([''])
@@ -1531,8 +1519,10 @@ class ReporteDemandaReal:
     def generar_vista_previa_pdf(self):
         try:
             # --- Limpiar visor PDF ---
-            for widget in self.pdf_frame.winfo_children():
+            body_target = getattr(self, 'pdf_body', self.pdf_frame)
+            for widget in body_target.winfo_children():
                 widget.destroy()
+            contenedor = tk.Frame(body_target, bg=self.COLORS['white'])
 
             # --- Contenedor principal para visor y controles ---
             contenedor = tk.Frame(self.pdf_frame, bg=self.COLORS['white'])

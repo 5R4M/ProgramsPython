@@ -552,10 +552,10 @@ class ReporteKardex:
         self.combo_presentacion.grid(row=0, column=5, padx=5, sticky='ew')
 
         # --- Visor PDF con encabezado, borde y ancho alineado ---
-        self.pdf_outer = tk.Frame(self.frame_combos, bg=self.COLORS['light'])
+        self.pdf_outer = tk.Frame(self.frame_combos, bg=self.COLORS['white'])
         self.pdf_outer.pack(fill="x", expand=False, pady=5)
 
-        self.pdf_frame = tk.Frame(self.pdf_outer, bg=self.COLORS['light'], relief="solid", bd=1, highlightthickness=0)
+        self.pdf_frame = tk.Frame(self.pdf_outer, bg=self.COLORS['white'], relief="solid", bd=1, highlightthickness=0)
         self.pdf_frame.pack(fill="x")
         self.pdf_frame.configure(height=350)
         self.pdf_frame.pack_propagate(False)

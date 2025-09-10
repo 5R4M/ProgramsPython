@@ -852,7 +852,7 @@ class ReporteBalanceBodega:
             contenedor = tk.Frame(self.pdf_body, bg=self.COLORS['white'])
             contenedor.pack(fill="both", expand=True)
 
-            control_frame = tk.Frame(contenedor, bg=self.COLORS['light'])
+            control_frame = tk.Frame(contenedor, bg=self.COLORS['white'])
             control_frame.pack(fill="x", side="bottom", pady=5)
 
             canvas_frame = tk.Frame(contenedor, bg=self.COLORS['white'])
@@ -1016,35 +1016,35 @@ class ReporteBalanceBodega:
                             print(f"Error en fit_to_page_max: {e}")
 
                     btn_prev_max = tk.Button(control_max_frame, text="◀◀ Anterior", command=lambda: change_page_max(-1),
-                                             bg=self.COLORS['light'], fg=self.COLORS['text_dark'],
+                                             bg=self.COLORS['white'], fg=self.COLORS['text_dark'],
                                              font=('Segoe UI', 11, 'bold'), relief='flat', borderwidth=1, cursor='hand2',
                                              pady=5, padx=15)
                     btn_prev_max.pack(side="left", padx=5)
 
                     page_label_max = tk.Label(control_max_frame, text=f"Página 1 de {self.total_pages}",
-                                              bg=self.COLORS['light'], fg=self.COLORS['text_dark'],
+                                              bg=self.COLORS['white'], fg=self.COLORS['text_dark'],
                                               font=('Segoe UI', 11, 'bold'))
                     page_label_max.pack(side="left", padx=10)
 
                     btn_next_max = tk.Button(control_max_frame, text="Siguiente ▶▶", command=lambda: change_page_max(1),
-                                             bg=self.COLORS['light'], fg=self.COLORS['text_dark'],
+                                             bg=self.COLORS['white'], fg=self.COLORS['text_dark'],
                                              font=('Segoe UI', 11, 'bold'), relief='flat', borderwidth=1, cursor='hand2',
                                              pady=5, padx=15)
                     btn_next_max.pack(side="left", padx=5)
 
                     btn_zoom_out_max = tk.Button(control_max_frame, text="🔍− Alejar", command=lambda: change_zoom_max(-0.25),
-                                                 bg=self.COLORS['light'], fg=self.COLORS['text_dark'],
+                                                 bg=self.COLORS['white'], fg=self.COLORS['text_dark'],
                                                  font=('Segoe UI', 10, 'bold'), relief='flat', borderwidth=1, cursor='hand2',
                                                  pady=5, padx=10)
                     btn_zoom_out_max.pack(side="left", padx=5)
 
                     zoom_label_max = tk.Label(control_max_frame, text=f"Zoom: {int(zoom_level_max[0] * 100)}%",
-                                              bg=self.COLORS['light'], fg=self.COLORS['text_dark'],
+                                              bg=self.COLORS['white'], fg=self.COLORS['text_dark'],
                                               font=('Segoe UI', 10, 'bold'))
                     zoom_label_max.pack(side="left", padx=5)
 
                     btn_zoom_in_max = tk.Button(control_max_frame, text="🔍+ Acercar", command=lambda: change_zoom_max(0.25),
-                                                bg=self.COLORS['light'], fg=self.COLORS['text_dark'],
+                                                bg=self.COLORS['white'], fg=self.COLORS['text_dark'],
                                                 font=('Segoe UI', 10, 'bold'), relief='flat', borderwidth=1, cursor='hand2',
                                                 pady=5, padx=10)
                     btn_zoom_in_max.pack(side="left", padx=5)
@@ -1062,54 +1062,54 @@ class ReporteBalanceBodega:
 
             # Controles normales
             btn_anterior = tk.Button(control_frame, text="◀", command=lambda: change_page(-1),
-                                     bg=self.COLORS['light'], fg=self.COLORS['text_dark'],
+                                     bg=self.COLORS['white'], fg=self.COLORS['text_dark'],
                                      font=('Segoe UI', 10, 'bold'), relief='flat', borderwidth=0, cursor='hand2',
                                      activebackground=self.COLORS['white'], activeforeground=self.COLORS['text_dark'])
             btn_anterior.pack(side="left", padx=(10, 2), pady=2)
 
             page_label = tk.Label(control_frame, text=f"Página 1 de {self.total_pages}",
-                                  bg=self.COLORS['light'], fg=self.COLORS['text_dark'],
+                                  bg=self.COLORS['white'], fg=self.COLORS['text_dark'],
                                   font=('Segoe UI', 10, 'bold'))
             page_label.pack(side="left", padx=2, pady=2)
 
             btn_siguiente = tk.Button(control_frame, text="▶", command=lambda: change_page(1),
-                                      bg=self.COLORS['light'], fg=self.COLORS['text_dark'],
+                                      bg=self.COLORS['white'], fg=self.COLORS['text_dark'],
                                       font=('Segoe UI', 10, 'bold'), relief='flat', borderwidth=0, cursor='hand2',
                                       activebackground=self.COLORS['white'], activeforeground=self.COLORS['text_dark'])
             btn_siguiente.pack(side="left", padx=2, pady=2)
 
             separator = tk.Label(control_frame, text="|",
-                                 bg=self.COLORS['light'], fg=self.COLORS['text_dark'],
+                                 bg=self.COLORS['white'], fg=self.COLORS['text_dark'],
                                  font=('Segoe UI', 12, 'bold'))
             separator.pack(side="left", padx=5, pady=2)
 
             btn_zoom_out = tk.Button(control_frame, text="🔍−", command=lambda: change_zoom(-0.25),
-                                     bg=self.COLORS['light'], fg=self.COLORS['text_dark'],
+                                     bg=self.COLORS['white'], fg=self.COLORS['text_dark'],
                                      font=('Segoe UI', 9, 'bold'), relief='flat', borderwidth=0, cursor='hand2')
             btn_zoom_out.pack(side="left", padx=2, pady=2)
 
             zoom_label = tk.Label(control_frame, text=f"Zoom: {int(self.zoom_level * 100)}%",
-                                  bg=self.COLORS['light'], fg=self.COLORS['text_dark'],
+                                  bg=self.COLORS['white'], fg=self.COLORS['text_dark'],
                                   font=('Segoe UI', 9, 'bold'))
             zoom_label.pack(side="left", padx=2, pady=2)
 
             btn_zoom_in = tk.Button(control_frame, text="🔍+", command=lambda: change_zoom(0.25),
-                                    bg=self.COLORS['light'], fg=self.COLORS['text_dark'],
+                                    bg=self.COLORS['white'], fg=self.COLORS['text_dark'],
                                     font=('Segoe UI', 9, 'bold'), relief='flat', borderwidth=0, cursor='hand2')
             btn_zoom_in.pack(side="left", padx=2, pady=2)
 
             separator2 = tk.Label(control_frame, text="|",
-                                  bg=self.COLORS['light'], fg=self.COLORS['text_dark'],
+                                  bg=self.COLORS['white'], fg=self.COLORS['text_dark'],
                                   font=('Segoe UI', 12, 'bold'))
             separator2.pack(side="left", padx=5, pady=2)
 
             btn_fit_width = tk.Button(control_frame, text="↔ Ajustar Ancho", command=fit_to_width,
-                                      bg=self.COLORS['light'], fg=self.COLORS['text_dark'],
+                                      bg=self.COLORS['white'], fg=self.COLORS['text_dark'],
                                       font=('Segoe UI', 9, 'bold'), relief='flat', borderwidth=0, cursor='hand2')
             btn_fit_width.pack(side="left", padx=2, pady=2)
 
             btn_fit_page = tk.Button(control_frame, text="⛶ Ajustar Página", command=fit_to_page,
-                                     bg=self.COLORS['light'], fg=self.COLORS['text_dark'],
+                                     bg=self.COLORS['white'], fg=self.COLORS['text_dark'],
                                      font=('Segoe UI', 9, 'bold'), relief='flat', borderwidth=0, cursor='hand2')
             btn_fit_page.pack(side="left", padx=2, pady=2)
 
