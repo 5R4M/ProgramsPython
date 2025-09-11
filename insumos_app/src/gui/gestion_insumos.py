@@ -32,19 +32,125 @@ from src.database import (
 )
 
 def resource_path(relative_path):
-    import sys, os
     if getattr(sys, 'frozen', False):
         base_path = os.path.dirname(os.path.abspath(sys.executable))
     else:
-        base_path = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))  # subir desde src/gui a src
+        base_path = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     return os.path.join(base_path, relative_path)
 
-class GestionInsumos:
 
+# ================= Estilos unificados (igual a otros módulos) =================
+def setup_styles(root):
+    COLORS = {
+        'primary':   '#2c3e50',
+        'secondary': '#34495e',
+        'accent':    '#3498db',
+        'success':   '#27ae60',
+        'warning':   '#f39c12',
+        'danger':    '#e74c3c',
+        'light':     '#ecf0f1',
+        'white':     '#ffffff',
+        'text_dark': '#2c3e50',
+        'text_light':'#7f8c8d',
+        'border':    '#d1d5db'
+    }
+
+    style = ttk.Style(root)
+    try:
+        style.theme_use('clam')
+    except Exception:
+        pass
+
+    try:
+        root.configure(bg=COLORS['light'])
+    except Exception:
+        pass
+
+    style.configure('.', font=('Segoe UI', 9))
+
+    # Frames
+    style.configure('Light.TFrame', background=COLORS['light'])
+    style.configure('Card.TFrame', background=COLORS['white'], relief='solid', borderwidth=1)
+
+    # Header de card
+    style.configure('Header.TFrame', background=COLORS['primary'])
+    style.configure('Header.TLabel', background=COLORS['primary'], foreground=COLORS['white'], font=('Segoe UI', 10, 'bold'))
+
+    # Labels
+    style.configure('Light.TLabel', background=COLORS['light'], foreground=COLORS['text_dark'], font=('Segoe UI', 9))
+    style.configure('Card.TLabel', background=COLORS['white'], foreground=COLORS['text_dark'], font=('Segoe UI', 9))
+
+    # Botón primario
+    style.configure('Primary.TButton',
+                    font=('Segoe UI', 9, 'bold'),
+                    padding=(10, 5),
+                    relief='flat',
+                    borderwidth=0,
+                    background=COLORS['accent'],
+                    foreground=COLORS['white'])
+    style.map('Primary.TButton',
+              background=[('active', '#2980b9'), ('pressed', '#117a8b')],
+              foreground=[('active', '#ffffff'), ('pressed', '#ffffff')])
+
+    # Entry/Combobox
+    style.configure('TCombobox',
+                    fieldbackground=COLORS['white'],
+                    background=COLORS['white'],
+                    foreground=COLORS['text_dark'])
+    style.configure('TEntry',
+                    fieldbackground=COLORS['white'],
+                    foreground=COLORS['text_dark'])
+
+    root.option_add('*TCombobox*Listbox.background', COLORS['white'])
+    root.option_add('*TCombobox*Listbox.foreground', COLORS['text_dark'])
+    root.option_add('*TCombobox*Listbox.selectBackground', COLORS['accent'])
+    root.option_add('*TCombobox*Listbox.selectForeground', COLORS['white'])
+    root.option_add('*TCombobox*Listbox.font', '{Segoe UI} 9')
+
+    # Treeview
+    style.configure("Custom.Treeview",
+                    background=COLORS['white'],
+                    foreground=COLORS['text_dark'],
+                    rowheight=22,
+                    fieldbackground=COLORS['white'],
+                    font=('Segoe UI', 9),
+                    borderwidth=1,
+                    relief='solid')
+    HEADER_BG = '#e5e7eb'
+    HEADER_FG = '#111827'
+    style.configure("Custom.Treeview.Heading",
+                    background=HEADER_BG,
+                    foreground=HEADER_FG,
+                    font=('Segoe UI', 8, 'bold'),
+                    relief='flat',
+                    borderwidth=1,
+                    padding=(3, 6, 3, 6),
+                    anchor='center',
+                    justify='center')
+    style.map("Custom.Treeview",
+              background=[('selected', COLORS['accent'])],
+              foreground=[('selected', '#ffffff')])
+
+    # Notebook
+    style.configure('TNotebook', background=COLORS['light'], borderwidth=0)
+    style.configure('TNotebook.Tab',
+                    background=COLORS['light'],
+                    foreground=COLORS['text_dark'],
+                    font=('Segoe UI', 9))
+    style.map('TNotebook.Tab',
+              background=[('selected', COLORS['white'])],
+              foreground=[('selected', COLORS['text_dark'])])
+
+    return COLORS, style
+
+
+class GestionInsumos:
     def __init__(self, parent_frame, main_window):
         self.parent = parent_frame
         self.main_window = main_window
-        self.setup_styles()
+
+        # Estilos/paleta
+        self.COLORS, self._style = setup_styles(self.parent.winfo_toplevel())
 
         if not self.verificar_base_datos():
             messagebox.showerror("Error", "Error en la base de datos. La aplicación no puede continuar.")
@@ -56,114 +162,55 @@ class GestionInsumos:
             self.cerrar_ventana()
             return
 
-        self.cargar_iconos()
         self.setup_ui()
-        
-        # Aplicar estilo solo si es un ttk widget
+
+        # Aplicar estilo si parent es ttk
         if isinstance(self.parent, ttk.Widget):
-            self.parent.configure(style='MainContent.TFrame')
+            self.parent.configure(style='Light.TFrame')
 
-    def setup_styles(self):
-        self.COLORS = {
-            'primary': '#2c3e50',      # Cambiado de '#2E86AB' a '#2c3e50'
-            'secondary': '#34495e',    # Agregado
-            'success': '#27AE60',      # Mantenido
-            'warning': '#F39C12',      # Mantenido
-            'danger': '#E74C3C',       # Mantenido
-            'accent': '#8E44AD',       # Mantenido
-            'light': '#ecf0f1',        # Cambiado de '#F8F9FA' a '#ecf0f1'
-            'white': '#FFFFFF',        # Mantenido
-            'text_dark': '#2C3E50',    # Mantenido
-            'text_light': '#7F8C8D',   # Mantenido
-            'border': '#BDC3C7'        # Mantenido
-        }
+    # ---------- Utilería de UI (header/cards) ----------
+    def _header_title_sub(self, parent, title_text, subtitle_text):
+        header_frame = tk.Frame(parent, bg=self.COLORS['primary'], height=55)
+        header_frame.pack(fill='x', padx=10, pady=(10, 6))
+        header_frame.pack_propagate(False)
 
-        style = ttk.Style()
-        style.theme_use('clam')
+        header_inner = tk.Frame(header_frame, bg=self.COLORS['primary'])
+        header_inner.pack(fill='both', expand=True, padx=10, pady=4)
 
-        # Configurar el estilo del frame principal para que use el color correcto
-        style.configure('MainContent.TFrame', background=self.COLORS['light'])
+        tk.Label(header_inner, text=title_text,
+                 font=('Segoe UI', 12, 'bold'),
+                 fg=self.COLORS['white'], bg=self.COLORS['primary']).pack(anchor='w')
+        tk.Label(header_inner, text=subtitle_text,
+                 font=('Segoe UI', 9),
+                 fg=self.COLORS['white'], bg=self.COLORS['primary']).pack(anchor='w', pady=(1, 0))
 
-        style.configure('Card.TLabelframe',
-                        background=self.COLORS['white'],
-                        relief='solid',
-                        borderwidth=1,
-                        labeloutside=False)
+    def _card_section(self, parent, title, icon):
+        container = ttk.Frame(parent, style='Light.TFrame')
+        container.pack(fill='x', padx=10, pady=6)
 
-        style.configure('Card.TLabelframe.Label',
-                        background=self.COLORS['primary'],
-                        foreground=self.COLORS['white'],
-                        font=('Segoe UI', 9, 'bold'),
-                        padding=(8, 3))
+        card = ttk.Frame(container, style='Card.TFrame')
+        card.pack(fill='both', expand=True)
 
-        style.configure('Primary.TButton',
-                        font=('Segoe UI', 9, 'bold'),
-                        padding=(12, 6),
-                        relief='flat',
-                        borderwidth=0,
-                        background=self.COLORS['primary'],
-                        foreground=self.COLORS['white'])
-
-        style.map('Primary.TButton',
-                background=[('active', '#1F5F8B'),
-                            ('pressed', '#1A4F7A')])
-
-    def create_titled_frame(self, parent, title):
-        # Manejar diferentes tipos de parent widgets
-        if hasattr(parent, 'configure'):
-            try:
-                # Intentar configurar como tk.Widget primero
-                parent.configure(bg=self.COLORS['light'])
-            except tk.TclError:
-                # Si falla, es probablemente un ttk widget, intentar con estilo
-                try:
-                    if isinstance(parent, ttk.Widget):
-                        parent.configure(style='MainContent.TFrame')
-                except:
-                    pass  # Si ambos fallan, continuar sin configurar el fondo
-        
-        container = tk.Frame(parent, bg=self.COLORS['white'], relief='solid', borderwidth=1)
-
-        header = tk.Frame(container, bg=self.COLORS['primary'], height=20)
+        header = ttk.Frame(card, style='Header.TFrame', height=24)
         header.pack(fill='x')
         header.pack_propagate(False)
 
-        label = tk.Label(header, text=title, font=('Segoe UI', 8, 'bold'),
-                        fg=self.COLORS['white'], bg=self.COLORS['primary'])
-        label.pack(side='left', padx=10, pady=2)
+        ttk.Label(header, text=f"{icon} {title}", style='Header.TLabel').pack(side='left', padx=10)
 
-        content = tk.Frame(container, bg=self.COLORS['white'])
-        content.pack(fill='both', expand=True, padx=10, pady=10)
+        content = ttk.Frame(card, style='Card.TFrame')
+        content.pack(fill='both', expand=True, padx=12, pady=8)
 
-        return container, content
-    
-    def cargar_iconos(self):
-        try:
-            icons_path = resource_path(os.path.join("utils", "icons"))
-            self.icon_add    = tk.PhotoImage(file=os.path.join(icons_path, "agregar.png")).subsample(2, 2)
-            self.icon_edit   = tk.PhotoImage(file=os.path.join(icons_path, "editar.png")).subsample(2, 2)
-            self.icon_delete = tk.PhotoImage(file=os.path.join(icons_path, "eliminar.png")).subsample(2, 2)
-            self.icon_excel  = tk.PhotoImage(file=os.path.join(icons_path, "excel.png")).subsample(2, 2)
-            self.icon_close  = tk.PhotoImage(file=os.path.join(icons_path, "cerrar.png")).subsample(2, 2)
-        except Exception as e:
-            print(f"Error cargando iconos: {e}")
-            self.icon_add = self.icon_edit = self.icon_delete = self.icon_excel = self.icon_close = None
-    
+        return content
+
+    # ---------- Verificación DB ----------
     def verificar_base_datos(self):
         try:
-            # Crear base de datos y tablas si no existen
             if not crear_base_datos():
                 raise Exception("No se pudo crear la base de datos")
-            print("Base de datos creada o verificada correctamente")
-
-            # Verificar que las tablas existan
             if not verificar_tablas():
-                print("La estructura de la base de datos es incorrecta. Recreándola...")
-                # En MySQL no hay archivo local que eliminar, solo recrear tablas
+                # Si faltan tablas, intentar recrear
                 if not crear_base_datos():
                     raise Exception("No se pudo recrear la base de datos")
-                print("Base de datos recreada correctamente")
-
             return True
         except Exception as e:
             print(f"Error al verificar la base de datos: {e}")
@@ -187,7 +234,6 @@ class GestionInsumos:
             return False
 
     # --- Utilidades ---
-
     def centrar_ventana(self, ventana):
         ventana.update_idletasks()
         width = ventana.winfo_width()
@@ -218,150 +264,90 @@ class GestionInsumos:
         return None
 
     # --- Configuración UI ---
-
     def setup_ui(self):
-        # Configurar el fondo del parent de manera segura
+        # fondo parent
         try:
             if isinstance(self.parent, ttk.Widget):
-                # Es un widget ttk, usar estilo
-                self.parent.configure(style='MainContent.TFrame')
+                self.parent.configure(style='Light.TFrame')
             else:
-                # Es un widget tk, usar bg directamente
                 self.parent.configure(bg=self.COLORS['light'])
-        except Exception as e:
-            print(f"No se pudo configurar el fondo del parent: {e}")
-        
-        # Título principal con estilo - usando colores consistentes
-        title_frame = tk.Frame(self.parent, bg=self.COLORS['primary'], height=50)
-        title_frame.pack(fill='x', padx=10, pady=(10, 5))
-        title_frame.pack_propagate(False)
+        except Exception:
+            pass
 
-        tk.Label(title_frame, text="Gestión de Insumos del Sistema",
-                font=('Segoe UI', 16, 'bold'),
-                fg=self.COLORS['white'],
-                bg=self.COLORS['primary']).pack(anchor='w', padx=10, pady=10)
+        # Header principal
+        self._header_title_sub(
+            self.parent,
+            "📦 Gestión de Insumos del Sistema",
+            "Administre tipos, insumos y presentaciones"
+        )
 
-        tk.Label(title_frame, text="Administre los insumos",
-                font=('Segoe UI', 10),
-                fg=self.COLORS['white'],
-                bg=self.COLORS['primary']).pack(anchor='w', padx=10)
+        # Notebook
+        nb_container = ttk.Frame(self.parent, style='Light.TFrame')
+        nb_container.pack(fill="both", expand=True, padx=10, pady=5)
 
-        # Separador con color consistente
-        sep_frame = tk.Frame(self.parent, bg=self.COLORS['border'], height=1)
-        sep_frame.pack(fill='x', padx=10, pady=5)
-
-        # Notebook con fondo consistente
-        notebook_frame = tk.Frame(self.parent, bg=self.COLORS['light'])
-        notebook_frame.pack(fill="both", expand=True, padx=10, pady=5)
-        
-        self.notebook = ttk.Notebook(notebook_frame)
+        self.notebook = ttk.Notebook(nb_container)
         self.notebook.pack(fill="both", expand=True)
 
-        # Crear tabs con fondo consistente
-        self.tab_tipos = ttk.Frame(self.notebook)
-        self.tab_insumos = ttk.Frame(self.notebook)
-        self.tab_presentaciones = ttk.Frame(self.notebook)
-        
-        # Configurar fondo de las tabs
-        for tab in [self.tab_tipos, self.tab_insumos, self.tab_presentaciones]:
-            tab.configure(style='Tab.TFrame')
+        # Tabs
+        self.tab_tipos = ttk.Frame(self.notebook, style='Light.TFrame')
+        self.tab_insumos = ttk.Frame(self.notebook, style='Light.TFrame')
+        self.tab_presentaciones = ttk.Frame(self.notebook, style='Light.TFrame')
 
-        self.notebook.add(self.tab_tipos, text="Tipos de Insumo")
-        self.notebook.add(self.tab_insumos, text="Insumos")
-        self.notebook.add(self.tab_presentaciones, text="Presentaciones")
-
-        # Configurar estilo para las tabs
-        style = ttk.Style()
-        style.configure('Tab.TFrame', background=self.COLORS['light'])
+        self.notebook.add(self.tab_tipos, text="📑 Tipos de Insumo")
+        self.notebook.add(self.tab_insumos, text="🧾 Insumos")
+        self.notebook.add(self.tab_presentaciones, text="🏷️ Presentaciones")
 
         self.setup_tipos_tab()
         self.setup_insumos_tab()
         self.setup_presentaciones_tab()
 
-        # Botón cerrar con estilo consistente
-        button_frame = tk.Frame(self.parent, bg=self.COLORS['light'])
+        # Botón cerrar
+        button_frame = ttk.Frame(self.parent, style='Light.TFrame')
         button_frame.pack(fill='x', pady=10, padx=10)
-        
-        btn_close = tk.Button(button_frame,
-                            text="Cerrar",
-                            command=self.cerrar_ventana,
-                            font=('Segoe UI', 10, 'bold'),
-                            bg=self.COLORS['white'],
-                            fg=self.COLORS['text_dark'],
-                            relief='flat',
-                            borderwidth=1,
-                            padx=15, pady=6,
-                            cursor='hand2')
-        btn_close.pack(anchor='e')
+        ttk.Button(button_frame, text="↩️ Cerrar", style='Primary.TButton',
+                   command=self.cerrar_ventana).pack(anchor='e')
 
-        # Efectos hover para el botón cerrar
-        def on_close_enter(e):
-            btn_close.config(bg=self.COLORS['light'])
-        
-        def on_close_leave(e):
-            btn_close.config(bg=self.COLORS['white'])
-        
-        btn_close.bind('<Enter>', on_close_enter)
-        btn_close.bind('<Leave>', on_close_leave)
-
+        # Cargar datos
         self.actualizar_tipos()
         self.actualizar_insumos()
         self.actualizar_presentaciones()
 
     # --- Tipos de Insumo ---
-
     def setup_tipos_tab(self):
-        # Usar create_titled_frame para "Carga desde Excel"
-        frame_excel_container, frame_excel = self.create_titled_frame(self.tab_tipos, "Carga desde Excel")
-        frame_excel_container.pack(fill="x", padx=5, pady=5)
+        # Carga desde Excel
+        frame_excel = self._card_section(self.tab_tipos, "Carga desde Excel", "📥")
+        ttk.Button(frame_excel, text="📂 Cargar Excel", style='Primary.TButton',
+                   command=self.cargar_excel_tipos).pack(side="left", padx=(0, 8), pady=2)
+        ttk.Button(frame_excel, text="📤 Exportar a Excel", style='Primary.TButton',
+                   command=self.exportar_excel_tipos).pack(side="left", padx=(0, 8), pady=2)
 
-        btn_cargar = tk.Button(frame_excel, text="Cargar Excel", command=self.cargar_excel_tipos,
-                            font=('Segoe UI', 9),
-                            bg=self.COLORS['white'], fg=self.COLORS['text_dark'],
-                            relief='flat', borderwidth=1, padx=10, pady=5, cursor='hand2')
-        btn_cargar.pack(side="left", padx=5, pady=5)
+        # Lista de tipos
+        frame_lista = self._card_section(self.tab_tipos, "Tipos de Insumo", "📑")
 
-        btn_exportar = tk.Button(frame_excel, text="Exportar a Excel", command=self.exportar_excel_tipos,
-                                font=('Segoe UI', 9),
-                                bg=self.COLORS['white'], fg=self.COLORS['text_dark'],
-                                relief='flat', borderwidth=1, padx=10, pady=5, cursor='hand2')
-        btn_exportar.pack(side="left", padx=5, pady=5)
+        table_wrap = ttk.Frame(frame_lista, style='Card.TFrame')
+        table_wrap.pack(fill='both', expand=True)
 
-        # Usar create_titled_frame para "Tipos de Insumo"
-        frame_lista_container, frame_lista = self.create_titled_frame(self.tab_tipos, "Tipos de Insumo")
-        frame_lista_container.pack(fill="both", expand=True, padx=5, pady=5)
+        self.tree_tipos = ttk.Treeview(table_wrap, columns=('descripcion',), show='headings', style="Custom.Treeview")
+        self.tree_tipos.heading('descripcion', text='Tipo de Insumo', anchor='w')
+        self.tree_tipos.column('descripcion', anchor='w', width=320)
+        self.tree_tipos.pack(fill='both', expand=True, side='left', padx=(0, 5), pady=2)
 
-        self.tree_tipos = ttk.Treeview(frame_lista, columns=('descripcion',), show='headings')
-        self.tree_tipos.heading('descripcion', text='Tipo Insumo')
-        self.tree_tipos.pack(fill='both', expand=True, side='left', padx=(0,5), pady=5)
-
-        scrolly = ttk.Scrollbar(frame_lista, orient="vertical", command=self.tree_tipos.yview)
+        scrolly = ttk.Scrollbar(table_wrap, orient="vertical", command=self.tree_tipos.yview)
         self.tree_tipos.configure(yscrollcommand=scrolly.set)
-        scrolly.pack(side='left', fill='y', pady=5)
+        scrolly.pack(side='left', fill='y')
 
-        frame_botones = tk.Frame(frame_lista, bg=self.COLORS['white'])
-        frame_botones.pack(side='left', fill='y', padx=5, pady=5)
-
-        btn_agregar = tk.Button(frame_botones, text="Agregar", command=self.agregar_tipo,
-                            font=('Segoe UI', 9),
-                            bg=self.COLORS['white'], fg=self.COLORS['text_dark'],
-                            relief='flat', borderwidth=1, padx=10, pady=6, cursor='hand2')
-        btn_agregar.pack(fill='x', pady=3)
-
-        btn_editar = tk.Button(frame_botones, text="Editar", command=self.editar_tipo,
-                            font=('Segoe UI', 9),
-                            bg=self.COLORS['white'], fg=self.COLORS['text_dark'],
-                            relief='flat', borderwidth=1, padx=10, pady=6, cursor='hand2')
-        btn_editar.pack(fill='x', pady=3)
-
-        btn_eliminar = tk.Button(frame_botones, text="Eliminar", command=self.eliminar_tipo,
-                                font=('Segoe UI', 9),
-                                bg=self.COLORS['white'], fg=self.COLORS['text_dark'],
-                                relief='flat', borderwidth=1, padx=10, pady=6, cursor='hand2')
-        btn_eliminar.pack(fill='x', pady=3)
+        btns = ttk.Frame(frame_lista, style='Card.TFrame')
+        btns.pack(fill='x', padx=0, pady=(6, 0))
+        ttk.Button(btns, text="➕ Agregar", style='Primary.TButton',
+                command=self.agregar_tipo).pack(side='left', padx=(0, 6), pady=0)
+        ttk.Button(btns, text="✏️ Editar", style='Primary.TButton',
+                command=self.editar_tipo).pack(side='left', padx=(0, 6), pady=0)
+        ttk.Button(btns, text="🗑️ Eliminar", style='Primary.TButton',
+                command=self.eliminar_tipo).pack(side='left', padx=(0, 0), pady=0)
 
     def cargar_excel_tipos(self):
-        filename = filedialog.askopenfilename(title="Seleccionar archivo Excel", filetypes=[("Excel files", "*.xlsx *.xls")])
+        filename = filedialog.askopenfilename(title="Seleccionar archivo Excel",
+                                              filetypes=[("Excel files", "*.xlsx *.xls")])
         if not filename:
             return
         try:
@@ -384,7 +370,8 @@ class GestionInsumos:
             messagebox.showerror("Error", f"Error al cargar el archivo: {str(e)}")
 
     def exportar_excel_tipos(self):
-        filename = filedialog.asksaveasfilename(defaultextension=".xlsx", filetypes=[("Excel files", "*.xlsx")])
+        filename = filedialog.asksaveasfilename(defaultextension=".xlsx",
+                                                filetypes=[("Excel files", "*.xlsx")])
         if not filename:
             return
         tipos = obtener_tipos_insumo()
@@ -394,13 +381,15 @@ class GestionInsumos:
 
     def agregar_tipo(self):
         ventana = tk.Toplevel(self.parent)
-        ventana.title("Agregar Tipo de Insumo")
-        ventana.geometry("350x120")
-        self.centrar_ventana(ventana)
+        ventana.title("➕ Agregar Tipo de Insumo")
+        self._estilizar_toplevel(ventana)
 
-        ttk.Label(ventana, text="Descripción:").pack(pady=5)
-        descripcion = ttk.Entry(ventana, width=40)
-        descripcion.pack(pady=5)
+        container = self._dialog_container(ventana, "➕ Agregar Tipo de Insumo", "Ingrese la descripción del tipo")
+        body = container['body']
+
+        ttk.Label(body, text="Descripción:", style='Light.TLabel').pack(pady=(0, 4), anchor='w')
+        descripcion = ttk.Entry(body, width=40)
+        descripcion.pack(fill='x')
 
         def guardar():
             desc = descripcion.get().strip()
@@ -415,10 +404,7 @@ class GestionInsumos:
             ventana.destroy()
             messagebox.showinfo("Éxito", "Tipo de insumo agregado correctamente")
 
-        frame_botones = ttk.Frame(ventana)
-        frame_botones.pack(pady=10)
-        ttk.Button(frame_botones, text="Guardar", command=guardar).pack(side="left", padx=5)
-        ttk.Button(frame_botones, text="Cerrar", command=ventana.destroy).pack(side="left", padx=5)
+        self._dialog_buttons(container['buttons'], guardar, ventana.destroy)
 
     def editar_tipo(self):
         selected = self.tree_tipos.selection()
@@ -426,15 +412,18 @@ class GestionInsumos:
             messagebox.showwarning("Advertencia", "Seleccione un tipo de insumo para editar")
             return
         item = self.tree_tipos.item(selected[0])
-        ventana = tk.Toplevel(self.parent)
-        ventana.title("Editar Tipo de Insumo")
-        ventana.geometry("350x120")
-        self.centrar_ventana(ventana)
 
-        ttk.Label(ventana, text="Nuevo nombre:").pack(pady=5)
-        nuevo_nombre = ttk.Entry(ventana, width=40)
+        ventana = tk.Toplevel(self.parent)
+        ventana.title("✏️ Editar Tipo de Insumo")
+        self._estilizar_toplevel(ventana)
+
+        container = self._dialog_container(ventana, "✏️ Editar Tipo de Insumo", "Modifique la descripción")
+        body = container['body']
+
+        ttk.Label(body, text="Nuevo nombre:", style='Light.TLabel').pack(pady=(0, 4), anchor='w')
+        nuevo_nombre = ttk.Entry(body, width=40)
         nuevo_nombre.insert(0, item['values'][0])
-        nuevo_nombre.pack(pady=5)
+        nuevo_nombre.pack(fill='x')
 
         def guardar():
             nuevo_desc = nuevo_nombre.get().strip()
@@ -454,10 +443,7 @@ class GestionInsumos:
             ventana.destroy()
             messagebox.showinfo("Éxito", "Tipo de insumo actualizado correctamente")
 
-        frame_botones = ttk.Frame(ventana)
-        frame_botones.pack(pady=10)
-        ttk.Button(frame_botones, text="Guardar", command=guardar).pack(side="left", padx=5)
-        ttk.Button(frame_botones, text="Cerrar", command=ventana.destroy).pack(side="left", padx=5)
+        self._dialog_buttons(container['buttons'], guardar, ventana.destroy)
 
     def eliminar_tipo(self):
         selected = self.tree_tipos.selection()
@@ -484,58 +470,41 @@ class GestionInsumos:
             self.tree_tipos.insert('', 'end', values=(tipo['descripcion'],))
 
     # --- Insumos ---
-
     def setup_insumos_tab(self):
-        frame_excel_container, frame_excel = self.create_titled_frame(self.tab_insumos, "Carga desde Excel")
-        frame_excel_container.pack(fill="x", padx=5, pady=5)
+        frame_excel = self._card_section(self.tab_insumos, "Carga desde Excel", "📥")
+        ttk.Button(frame_excel, text="📂 Cargar Excel", style='Primary.TButton',
+                   command=self.cargar_excel_insumos).pack(side="left", padx=(0, 8), pady=2)
+        ttk.Button(frame_excel, text="📤 Exportar a Excel", style='Primary.TButton',
+                   command=self.exportar_excel_insumos).pack(side="left", padx=(0, 8), pady=2)
 
-        btn_cargar = tk.Button(frame_excel, text="Cargar Excel", command=self.cargar_excel_insumos,
-                            font=('Segoe UI', 9),
-                            bg=self.COLORS['white'], fg=self.COLORS['text_dark'],
-                            relief='flat', borderwidth=1, padx=10, pady=5, cursor='hand2')
-        btn_cargar.pack(side="left", padx=5, pady=5)
+        frame_lista = self._card_section(self.tab_insumos, "Insumos", "🧾")
 
-        btn_exportar = tk.Button(frame_excel, text="Exportar a Excel", command=self.exportar_excel_insumos,
-                                font=('Segoe UI', 9),
-                                bg=self.COLORS['white'], fg=self.COLORS['text_dark'],
-                                relief='flat', borderwidth=1, padx=10, pady=5, cursor='hand2')
-        btn_exportar.pack(side="left", padx=5, pady=5)
+        table_wrap = ttk.Frame(frame_lista, style='Card.TFrame')
+        table_wrap.pack(fill='both', expand=True)
 
-        frame_lista_container, frame_lista = self.create_titled_frame(self.tab_insumos, "Insumos")
-        frame_lista_container.pack(fill="both", expand=True, padx=5, pady=5)
+        self.tree_insumos = ttk.Treeview(table_wrap, columns=('tipo', 'nombre'), show='headings', style="Custom.Treeview")
+        self.tree_insumos.heading('tipo', text='Tipo de Insumo', anchor='w')
+        self.tree_insumos.heading('nombre', text='Insumo', anchor='w')
+        self.tree_insumos.column('tipo', width=200, anchor='w')
+        self.tree_insumos.column('nombre', width=260, anchor='w')
+        self.tree_insumos.pack(fill='both', expand=True, side='left', padx=(0, 5), pady=2)
 
-        self.tree_insumos = ttk.Treeview(frame_lista, columns=('tipo', 'nombre'), show='headings')
-        self.tree_insumos.heading('tipo', text='Tipo de Insumo')
-        self.tree_insumos.heading('nombre', text='Insumo')
-        self.tree_insumos.pack(fill='both', expand=True, side='left', padx=(0,5), pady=5)
-
-        scrolly = ttk.Scrollbar(frame_lista, orient="vertical", command=self.tree_insumos.yview)
+        scrolly = ttk.Scrollbar(table_wrap, orient="vertical", command=self.tree_insumos.yview)
         self.tree_insumos.configure(yscrollcommand=scrolly.set)
-        scrolly.pack(side='left', fill='y', pady=5)
+        scrolly.pack(side='left', fill='y')
 
-        frame_botones = tk.Frame(frame_lista, bg=self.COLORS['white'])
-        frame_botones.pack(side='left', fill='y', padx=5, pady=5)
-
-        btn_agregar = tk.Button(frame_botones, text="Agregar", command=self.agregar_insumo,
-                            font=('Segoe UI', 9),
-                            bg=self.COLORS['white'], fg=self.COLORS['text_dark'],
-                            relief='flat', borderwidth=1, padx=10, pady=6, cursor='hand2')
-        btn_agregar.pack(fill='x', pady=3)
-
-        btn_editar = tk.Button(frame_botones, text="Editar", command=self.editar_insumo,
-                            font=('Segoe UI', 9),
-                            bg=self.COLORS['white'], fg=self.COLORS['text_dark'],
-                            relief='flat', borderwidth=1, padx=10, pady=6, cursor='hand2')
-        btn_editar.pack(fill='x', pady=3)
-
-        btn_eliminar = tk.Button(frame_botones, text="Eliminar", command=self.eliminar_insumo,
-                                font=('Segoe UI', 9),
-                                bg=self.COLORS['white'], fg=self.COLORS['text_dark'],
-                                relief='flat', borderwidth=1, padx=10, pady=6, cursor='hand2')
-        btn_eliminar.pack(fill='x', pady=3)
+        btns = ttk.Frame(frame_lista, style='Card.TFrame')
+        btns.pack(fill='x', padx=0, pady=(6, 0))
+        ttk.Button(btns, text="➕ Agregar", style='Primary.TButton',
+                command=self.agregar_insumo).pack(side='left', padx=(0, 6), pady=0)
+        ttk.Button(btns, text="✏️ Editar", style='Primary.TButton',
+                command=self.editar_insumo).pack(side='left', padx=(0, 6), pady=0)
+        ttk.Button(btns, text="🗑️ Eliminar", style='Primary.TButton',
+                command=self.eliminar_insumo).pack(side='left', padx=(0, 0), pady=0)
 
     def cargar_excel_insumos(self):
-        filename = filedialog.askopenfilename(title="Seleccionar archivo Excel", filetypes=[("Excel files", "*.xlsx *.xls")])
+        filename = filedialog.askopenfilename(title="Seleccionar archivo Excel",
+                                              filetypes=[("Excel files", "*.xlsx *.xls")])
         if not filename:
             return
         try:
@@ -585,7 +554,8 @@ class GestionInsumos:
             messagebox.showerror("Error", f"Error al cargar el archivo: {str(e)}")
 
     def exportar_excel_insumos(self):
-        filename = filedialog.asksaveasfilename(defaultextension=".xlsx", filetypes=[("Excel files", "*.xlsx")])
+        filename = filedialog.asksaveasfilename(defaultextension=".xlsx",
+                                                filetypes=[("Excel files", "*.xlsx")])
         if not filename:
             return
         datos = []
@@ -599,22 +569,21 @@ class GestionInsumos:
 
     def agregar_insumo(self):
         ventana = tk.Toplevel(self.parent)
-        ventana.title("Agregar Insumo")
-        ventana.geometry("350x190")
-        self.centrar_ventana(ventana)
+        ventana.title("➕ Agregar Insumo")
+        self._estilizar_toplevel(ventana)
 
-        frame_campos = ttk.Frame(ventana)
-        frame_campos.pack(padx=10, pady=5, fill='x')
+        container = self._dialog_container(ventana, "➕ Agregar Insumo", "Ingrese los datos del insumo")
+        body = container['body']
 
-        ttk.Label(frame_campos, text="Tipo de Insumo:").pack(pady=5)
-        combo_tipo = ttk.Combobox(frame_campos, state="readonly")
+        ttk.Label(body, text="Tipo de Insumo:", style='Light.TLabel').pack(pady=(0, 4), anchor='w')
+        combo_tipo = ttk.Combobox(body, state="readonly")
         tipos = obtener_tipos_insumo()
         combo_tipo['values'] = [t['descripcion'] for t in tipos]
-        combo_tipo.pack(pady=5, fill='x')
+        combo_tipo.pack(fill='x')
 
-        ttk.Label(frame_campos, text="Nombre del Insumo:").pack(pady=5)
-        nombre = ttk.Entry(frame_campos)
-        nombre.pack(pady=5, fill='x')
+        ttk.Label(body, text="Nombre del Insumo:", style='Light.TLabel').pack(pady=(8, 4), anchor='w')
+        nombre = ttk.Entry(body)
+        nombre.pack(fill='x')
 
         def guardar():
             if not combo_tipo.get():
@@ -638,10 +607,7 @@ class GestionInsumos:
             ventana.destroy()
             messagebox.showinfo("Éxito", "Insumo agregado correctamente")
 
-        frame_botones = ttk.Frame(ventana)
-        frame_botones.pack(pady=10)
-        ttk.Button(frame_botones, text="Guardar", command=guardar).pack(side="left", padx=5)
-        ttk.Button(frame_botones, text="Cerrar", command=ventana.destroy).pack(side="left", padx=5)
+        self._dialog_buttons(container['buttons'], guardar, ventana.destroy)
 
     def editar_insumo(self):
         selected = self.tree_insumos.selection()
@@ -650,31 +616,31 @@ class GestionInsumos:
             return
 
         item = self.tree_insumos.item(selected[0])
+
         ventana = tk.Toplevel(self.parent)
-        ventana.title("Editar Insumo")
-        ventana.geometry("350x250")
-        self.centrar_ventana(ventana)
+        ventana.title("✏️ Editar Insumo")
+        self._estilizar_toplevel(ventana)
 
-        frame_campos = ttk.Frame(ventana)
-        frame_campos.pack(padx=10, pady=5, fill='x')
+        container = self._dialog_container(ventana, "✏️ Editar Insumo", "Modifique los campos necesarios")
+        body = container['body']
 
-        ttk.Label(frame_campos, text="Tipo de Insumo:").pack(pady=5)
-        combo_tipo = ttk.Combobox(frame_campos, state="readonly")
+        ttk.Label(body, text="Tipo de Insumo:", style='Light.TLabel').pack(pady=(0, 4), anchor='w')
+        combo_tipo = ttk.Combobox(body, state="readonly")
         tipos = obtener_tipos_insumo()
         combo_tipo['values'] = [t['descripcion'] for t in tipos]
         combo_tipo.set(item['values'][0])
-        combo_tipo.pack(pady=5, fill='x')
+        combo_tipo.pack(fill='x')
 
-        ttk.Label(frame_campos, text="Nombre:").pack(pady=5)
-        nombre = ttk.Entry(frame_campos)
+        ttk.Label(body, text="Nombre:", style='Light.TLabel').pack(pady=(8, 4), anchor='w')
+        nombre = ttk.Entry(body)
         nombre.insert(0, item['values'][1])
-        nombre.pack(pady=5, fill='x')
+        nombre.pack(fill='x')
 
-        ttk.Label(frame_campos, text="Presentación (opcional):").pack(pady=5)
-        combo_presentacion = ttk.Combobox(frame_campos, state="readonly")
+        ttk.Label(body, text="Presentación (opcional):", style='Light.TLabel').pack(pady=(8, 4), anchor='w')
+        combo_presentacion = ttk.Combobox(body, state="readonly")
         presentaciones = obtener_presentaciones()
         combo_presentacion['values'] = [p['nombre'] for p in presentaciones]
-        combo_presentacion.pack(pady=5, fill='x')
+        combo_presentacion.pack(fill='x')
 
         id_tipo = self.obtener_id_tipo_insumo(item['values'][0])
         id_insumo = self.obtener_id_insumo(item['values'][1], id_tipo)
@@ -687,23 +653,20 @@ class GestionInsumos:
                 messagebox.showwarning("Advertencia", "Complete todos los campos")
                 return
 
-            id_tipo = self.obtener_id_tipo_insumo(combo_tipo.get())
+            id_tipo_sel = self.obtener_id_tipo_insumo(combo_tipo.get())
             id_presentacion = self.obtener_id_presentacion(combo_presentacion.get()) if combo_presentacion.get() else None
 
-            insumo_existente = obtener_insumo_por_nombre(nombre.get().strip(), id_tipo)
+            insumo_existente = obtener_insumo_por_nombre(nombre.get().strip(), id_tipo_sel)
             if insumo_existente and insumo_existente['id'] != id_insumo:
                 messagebox.showerror("Error", "Ya existe un insumo con ese nombre para el tipo seleccionado")
                 return
 
-            actualizar_insumo(id_insumo, nombre.get().strip(), None, id_presentacion, None, id_tipo)
+            actualizar_insumo(id_insumo, nombre.get().strip(), None, id_presentacion, None, id_tipo_sel)
             self.actualizar_insumos()
             ventana.destroy()
             messagebox.showinfo("Éxito", "Insumo actualizado correctamente")
 
-        frame_botones = ttk.Frame(ventana)
-        frame_botones.pack(pady=10)
-        ttk.Button(frame_botones, text="Guardar", command=guardar).pack(side="left", padx=5)
-        ttk.Button(frame_botones, text="Cerrar", command=ventana.destroy).pack(side="left", padx=5)
+        self._dialog_buttons(container['buttons'], guardar, ventana.destroy)
 
     def eliminar_insumo(self):
         selected = self.tree_insumos.selection()
@@ -733,60 +696,48 @@ class GestionInsumos:
                 self.tree_insumos.insert('', 'end', values=(tipo['descripcion'], insumo['nombre']))
 
     # --- Presentaciones ---
-
     def setup_presentaciones_tab(self):
-        frame_excel_container, frame_excel = self.create_titled_frame(self.tab_presentaciones, "Carga desde Excel")
-        frame_excel_container.pack(fill="x", padx=5, pady=5)
+        frame_excel = self._card_section(self.tab_presentaciones, "Carga desde Excel", "📥")
+        ttk.Button(frame_excel, text="📂 Cargar Excel", style='Primary.TButton',
+                   command=self.cargar_excel_presentaciones).pack(side="left", padx=(0, 8), pady=2)
+        ttk.Button(frame_excel, text="📤 Exportar a Excel", style='Primary.TButton',
+                   command=self.exportar_excel_presentaciones).pack(side="left", padx=(0, 8), pady=2)
 
-        btn_cargar = tk.Button(frame_excel, text="Cargar Excel", command=self.cargar_excel_presentaciones,
-                            font=('Segoe UI', 9),
-                            bg=self.COLORS['white'], fg=self.COLORS['text_dark'],
-                            relief='flat', borderwidth=1, padx=10, pady=5, cursor='hand2')
-        btn_cargar.pack(side="left", padx=5, pady=5)
+        frame_lista = self._card_section(self.tab_presentaciones, "Presentaciones", "🏷️")
 
-        btn_exportar = tk.Button(frame_excel, text="Exportar a Excel", command=self.exportar_excel_presentaciones,
-                                font=('Segoe UI', 9),
-                                bg=self.COLORS['white'], fg=self.COLORS['text_dark'],
-                                relief='flat', borderwidth=1, padx=10, pady=5, cursor='hand2')
-        btn_exportar.pack(side="left", padx=5, pady=5)
+        table_wrap = ttk.Frame(frame_lista, style='Card.TFrame')
+        table_wrap.pack(fill='both', expand=True)
 
-        frame_lista_container, frame_lista = self.create_titled_frame(self.tab_presentaciones, "Presentaciones")
-        frame_lista_container.pack(fill="both", expand=True, padx=5, pady=5)
+        self.tree_presentaciones = ttk.Treeview(
+            table_wrap,
+            columns=('tipo', 'insumo', 'presentacion'),
+            show='headings',
+            style="Custom.Treeview"
+        )
+        self.tree_presentaciones.heading('tipo', text='Tipo de Insumo', anchor='w')
+        self.tree_presentaciones.heading('insumo', text='Insumo', anchor='w')
+        self.tree_presentaciones.heading('presentacion', text='Presentación', anchor='w')
+        self.tree_presentaciones.column('tipo', width=200, anchor='w')
+        self.tree_presentaciones.column('insumo', width=220, anchor='w')
+        self.tree_presentaciones.column('presentacion', width=200, anchor='w')
+        self.tree_presentaciones.pack(fill='both', expand=True, side='left', padx=(0, 5), pady=2)
 
-        self.tree_presentaciones = ttk.Treeview(frame_lista,
-            columns=('tipo', 'insumo', 'presentacion'), show='headings')
-        self.tree_presentaciones.heading('tipo', text='Tipo de Insumo')
-        self.tree_presentaciones.heading('insumo', text='Insumo')
-        self.tree_presentaciones.heading('presentacion', text='Presentación')
-        self.tree_presentaciones.pack(fill='both', expand=True, side='left', padx=(0,5), pady=5)
-
-        scrolly = ttk.Scrollbar(frame_lista, orient="vertical", command=self.tree_presentaciones.yview)
+        scrolly = ttk.Scrollbar(table_wrap, orient="vertical", command=self.tree_presentaciones.yview)
         self.tree_presentaciones.configure(yscrollcommand=scrolly.set)
-        scrolly.pack(side='left', fill='y', pady=5)
+        scrolly.pack(side='left', fill='y')
 
-        frame_botones = tk.Frame(frame_lista, bg=self.COLORS['white'])
-        frame_botones.pack(side='left', fill='y', padx=5, pady=5)
-
-        btn_agregar = tk.Button(frame_botones, text="Agregar", command=self.agregar_presentacion,
-                            font=('Segoe UI', 9),
-                            bg=self.COLORS['white'], fg=self.COLORS['text_dark'],
-                            relief='flat', borderwidth=1, padx=10, pady=6, cursor='hand2')
-        btn_agregar.pack(fill='x', pady=3)
-
-        btn_editar = tk.Button(frame_botones, text="Editar", command=self.editar_presentacion,
-                            font=('Segoe UI', 9),
-                            bg=self.COLORS['white'], fg=self.COLORS['text_dark'],
-                            relief='flat', borderwidth=1, padx=10, pady=6, cursor='hand2')
-        btn_editar.pack(fill='x', pady=3)
-
-        btn_eliminar = tk.Button(frame_botones, text="Eliminar", command=self.eliminar_presentacion,
-                                font=('Segoe UI', 9),
-                                bg=self.COLORS['white'], fg=self.COLORS['text_dark'],
-                                relief='flat', borderwidth=1, padx=10, pady=6, cursor='hand2')
-        btn_eliminar.pack(fill='x', pady=3)
+        btns = ttk.Frame(frame_lista, style='Card.TFrame')
+        btns.pack(fill='x', padx=0, pady=(6, 0))
+        ttk.Button(btns, text="➕ Agregar", style='Primary.TButton',
+                command=self.agregar_presentacion).pack(side='left', padx=(0, 6), pady=0)
+        ttk.Button(btns, text="✏️ Editar", style='Primary.TButton',
+                command=self.editar_presentacion).pack(side='left', padx=(0, 6), pady=0)
+        ttk.Button(btns, text="🗑️ Eliminar", style='Primary.TButton',
+                command=self.eliminar_presentacion).pack(side='left', padx=(0, 0), pady=0)
 
     def cargar_excel_presentaciones(self):
-        filename = filedialog.askopenfilename(title="Seleccionar archivo Excel", filetypes=[("Excel files", "*.xlsx *.xls")])
+        filename = filedialog.askopenfilename(title="Seleccionar archivo Excel",
+                                              filetypes=[("Excel files", "*.xlsx *.xls")])
         if not filename:
             return
         try:
@@ -809,7 +760,8 @@ class GestionInsumos:
             messagebox.showerror("Error", f"Error al cargar el archivo: {str(e)}")
 
     def exportar_excel_presentaciones(self):
-        filename = filedialog.asksaveasfilename(defaultextension=".xlsx", filetypes=[("Excel files", "*.xlsx")])
+        filename = filedialog.asksaveasfilename(defaultextension=".xlsx",
+                                                filetypes=[("Excel files", "*.xlsx")])
         if not filename:
             return
         presentaciones = obtener_presentaciones()
@@ -819,22 +771,21 @@ class GestionInsumos:
 
     def agregar_presentacion(self):
         ventana = tk.Toplevel(self.parent)
-        ventana.title("Agregar Presentación")
-        ventana.geometry("350x250")
-        self.centrar_ventana(ventana)
+        ventana.title("➕ Agregar Presentación")
+        self._estilizar_toplevel(ventana)
 
-        frame_campos = ttk.Frame(ventana)
-        frame_campos.pack(padx=10, pady=5, fill='x')
+        container = self._dialog_container(ventana, "➕ Agregar Presentación", "Complete los campos")
+        body = container['body']
 
-        ttk.Label(frame_campos, text="Tipo de Insumo:").pack(pady=5)
-        combo_tipo = ttk.Combobox(frame_campos, state="readonly")
+        ttk.Label(body, text="Tipo de Insumo:", style='Light.TLabel').pack(pady=(0, 4), anchor='w')
+        combo_tipo = ttk.Combobox(body, state="readonly")
         tipos = obtener_tipos_insumo()
         combo_tipo['values'] = [t['descripcion'] for t in tipos]
-        combo_tipo.pack(pady=5, fill='x')
+        combo_tipo.pack(fill='x')
 
-        ttk.Label(frame_campos, text="Insumo:").pack(pady=5)
-        combo_insumo = ttk.Combobox(frame_campos, state="readonly")
-        combo_insumo.pack(pady=5, fill='x')
+        ttk.Label(body, text="Insumo:", style='Light.TLabel').pack(pady=(8, 4), anchor='w')
+        combo_insumo = ttk.Combobox(body, state="readonly")
+        combo_insumo.pack(fill='x')
 
         def actualizar_insumos(*args):
             combo_insumo['values'] = []
@@ -845,9 +796,9 @@ class GestionInsumos:
 
         combo_tipo.bind('<<ComboboxSelected>>', actualizar_insumos)
 
-        ttk.Label(frame_campos, text="Descripción de Presentación:").pack(pady=5)
-        nombre = ttk.Entry(frame_campos)
-        nombre.pack(pady=5, fill='x')
+        ttk.Label(body, text="Descripción de Presentación:", style='Light.TLabel').pack(pady=(8, 4), anchor='w')
+        nombre = ttk.Entry(body)
+        nombre.pack(fill='x')
 
         def guardar():
             if not combo_tipo.get() or not combo_insumo.get() or not nombre.get().strip():
@@ -866,10 +817,7 @@ class GestionInsumos:
             ventana.destroy()
             messagebox.showinfo("Éxito", "Presentación agregada correctamente")
 
-        frame_botones = ttk.Frame(ventana)
-        frame_botones.pack(pady=10)
-        ttk.Button(frame_botones, text="Guardar", command=guardar).pack(side="left", padx=5)
-        ttk.Button(frame_botones, text="Cerrar", command=ventana.destroy).pack(side="left", padx=5)
+        self._dialog_buttons(container['buttons'], guardar, ventana.destroy)
 
     def editar_presentacion(self):
         selected = self.tree_presentaciones.selection()
@@ -878,24 +826,24 @@ class GestionInsumos:
             return
 
         item = self.tree_presentaciones.item(selected[0])
+
         ventana = tk.Toplevel(self.parent)
-        ventana.title("Editar Presentación")
-        ventana.geometry("350x250")
-        self.centrar_ventana(ventana)
+        ventana.title("✏️ Editar Presentación")
+        self._estilizar_toplevel(ventana)
 
-        frame_campos = ttk.Frame(ventana)
-        frame_campos.pack(padx=10, pady=5, fill='x')
+        container = self._dialog_container(ventana, "✏️ Editar Presentación", "Actualice los datos necesarios")
+        body = container['body']
 
-        ttk.Label(frame_campos, text="Tipo de Insumo:").pack(pady=5)
-        combo_tipo = ttk.Combobox(frame_campos, state="readonly")
+        ttk.Label(body, text="Tipo de Insumo:", style='Light.TLabel').pack(pady=(0, 4), anchor='w')
+        combo_tipo = ttk.Combobox(body, state="readonly")
         tipos = obtener_tipos_insumo()
         combo_tipo['values'] = [t['descripcion'] for t in tipos]
         combo_tipo.set(item['values'][0])
-        combo_tipo.pack(pady=5, fill='x')
+        combo_tipo.pack(fill='x')
 
-        ttk.Label(frame_campos, text="Insumo:").pack(pady=5)
-        combo_insumo = ttk.Combobox(frame_campos, state="readonly")
-        combo_insumo.pack(pady=5, fill='x')
+        ttk.Label(body, text="Insumo:", style='Light.TLabel').pack(pady=(8, 4), anchor='w')
+        combo_insumo = ttk.Combobox(body, state="readonly")
+        combo_insumo.pack(fill='x')
 
         def actualizar_insumos(*args):
             combo_insumo['values'] = []
@@ -905,14 +853,13 @@ class GestionInsumos:
                 combo_insumo['values'] = [i['nombre'] for i in insumos]
 
         combo_tipo.bind('<<ComboboxSelected>>', actualizar_insumos)
-
         actualizar_insumos()
         combo_insumo.set(item['values'][1])
 
-        ttk.Label(frame_campos, text="Presentación:").pack(pady=5)
-        nuevo_nombre = ttk.Entry(frame_campos)
+        ttk.Label(body, text="Presentación:", style='Light.TLabel').pack(pady=(8, 4), anchor='w')
+        nuevo_nombre = ttk.Entry(body)
         nuevo_nombre.insert(0, item['values'][2])
-        nuevo_nombre.pack(pady=5, fill='x')
+        nuevo_nombre.pack(fill='x')
 
         def guardar():
             if not all([combo_tipo.get(), combo_insumo.get(), nuevo_nombre.get().strip()]):
@@ -934,10 +881,7 @@ class GestionInsumos:
             ventana.destroy()
             messagebox.showinfo("Éxito", "Presentación actualizada correctamente")
 
-        frame_botones = ttk.Frame(ventana)
-        frame_botones.pack(pady=10)
-        ttk.Button(frame_botones, text="Guardar", command=guardar).pack(side="left", padx=5)
-        ttk.Button(frame_botones, text="Cerrar", command=ventana.destroy).pack(side="left", padx=5)
+        self._dialog_buttons(container['buttons'], guardar, ventana.destroy)
 
     def eliminar_presentacion(self):
         selected = self.tree_presentaciones.selection()
@@ -967,8 +911,41 @@ class GestionInsumos:
                 nombre_insumo = insumo['nombre']
                 self.tree_presentaciones.insert('', 'end', values=(tipo['descripcion'], nombre_insumo, presentacion))
 
-    # --- Cierre ---
+    # --- Diálogos y Toplevel estilizados ---
+    def _estilizar_toplevel(self, ventana):
+        try:
+            ventana.configure(bg=self.COLORS['light'])
+        except Exception:
+            pass
+        ventana.geometry("420x260")
+        self.centrar_ventana(ventana)
 
+    def _dialog_container(self, ventana, title_text, subtitle_text):
+        outer = ttk.Frame(ventana, style='Light.TFrame', padding=(10, 10))
+        outer.pack(fill='both', expand=True)
+
+        header = tk.Frame(outer, bg=self.COLORS['primary'])
+        header.pack(fill='x', pady=(0, 8))
+        tk.Label(header, text=title_text, font=('Segoe UI', 10, 'bold'),
+                 fg=self.COLORS['white'], bg=self.COLORS['primary']).pack(side='left', padx=10, pady=4)
+        tk.Label(header, text=subtitle_text, font=('Segoe UI', 8),
+                 fg=self.COLORS['white'], bg=self.COLORS['primary']).pack(side='left', padx=10)
+
+        body = ttk.Frame(outer, style='Light.TFrame')
+        body.pack(fill='both', expand=True)
+
+        buttons = ttk.Frame(outer, style='Light.TFrame')
+        buttons.pack(fill='x', pady=(8, 0), anchor='e')
+
+        return {'outer': outer, 'body': body, 'buttons': buttons}
+
+    def _dialog_buttons(self, container_buttons, on_accept, on_cancel):
+        ttk.Button(container_buttons, text="✔️ Aceptar", style='Primary.TButton',
+                   command=on_accept).pack(side='right', padx=6)
+        ttk.Button(container_buttons, text="✖️ Cancelar", style='Primary.TButton',
+                   command=on_cancel).pack(side='right', padx=6)
+
+    # --- Cierre ---
     def cerrar_ventana(self):
         if messagebox.askyesno("Confirmar", "¿Está seguro que desea cerrar esta ventana?"):
             for widget in self.parent.winfo_children():
@@ -976,4 +953,7 @@ class GestionInsumos:
             if hasattr(self.main_window, 'show_welcome_screen'):
                 self.main_window.show_welcome_screen()
             else:
-                self.parent.destroy()
+                try:
+                    self.parent.destroy()
+                except Exception:
+                    pass

@@ -167,53 +167,59 @@ class MainWindow:
                        foreground=self.COLORS['white'],
                        padding=(10, 5))
 
-    def create_rounded_button(self, parent, text, bg_color, hover_color, command, icon=None):
-        """Crea un botón con apariencia de bordes redondeados"""
+    def create_rounded_button(self, parent, text, bg_color, hover_color, command, icon=None, radius=18):
+        from PIL import Image, ImageDraw, ImageTk
+        if not hasattr(self, "_button_images"):
+            self._button_images = []
 
-        # Frame contenedor para simular bordes redondeados
-        button_frame = tk.Frame(parent, bg=bg_color, relief='flat', bd=0)
-        button_frame.pack(fill="x", padx=20, pady=5)
+        wrapper = tk.Frame(parent, bg=self.COLORS['primary'], highlightthickness=0, bd=0)
+        wrapper.pack(fill="x", padx=16, pady=10)
 
-        # Frame interno para el efecto redondeado
-        inner_frame = tk.Frame(button_frame, bg=bg_color, relief='flat', bd=0)
-        inner_frame.pack(fill="both", expand=True, padx=3, pady=3)
+        pill_height = 46
+        def make_rounded_bg(width, color_hex):
+            width = max(60, int(width))
+            img = Image.new("RGBA", (width, pill_height), (0, 0, 0, 0))
+            ImageDraw.Draw(img).rounded_rectangle([0, 0, width, pill_height], radius=radius, fill=color_hex)
+            return ImageTk.PhotoImage(img)
 
-        # Botón principal
-        btn = tk.Button(inner_frame,
-                       text=text,
-                       font=('Segoe UI', 11, 'bold'),
-                       bg=bg_color,
-                       fg='white',
-                       relief='flat',
-                       borderwidth=0,
-                       padx=20,
-                       pady=12,
-                       cursor='hand2',
-                       command=command)
+        pill = tk.Label(wrapper, bg=self.COLORS['primary'], bd=0, highlightthickness=0)
+        pill.pack(fill="x", padx=2, pady=2)
 
+        btn = tk.Button(
+            pill, text=text, font=('Segoe UI', 11, 'bold'),
+            bg=bg_color, activebackground=bg_color,
+            fg=self.COLORS['white'] if bg_color != self.COLORS['light'] else self.COLORS['text_dark'],
+            relief='flat', borderwidth=0, padx=16, pady=10, cursor='hand2',
+            highlightthickness=0, command=command
+        )
         if icon:
             btn.config(image=icon, compound='left')
+        btn.pack(fill="x")
 
-        btn.pack(fill="both", expand=True)
+        def init_bg():
+            wrapper.update_idletasks()
+            w = pill.winfo_width()
+            if not w or w <= 1:
+                wrapper.after(50, init_bg)
+                return
+            img_normal = make_rounded_bg(w, bg_color)
+            img_hover = make_rounded_bg(w, hover_color)
+            pill._bg_img_normal = img_normal
+            pill._bg_img_hover = img_hover
+            pill.config(image=img_normal)
+            self._button_images.extend([img_normal, img_hover])
 
-        # Efectos hover
-        def on_enter(e):
-            btn.config(bg=hover_color)
-            inner_frame.config(bg=hover_color)
-            button_frame.config(bg=hover_color)
+            def on_enter(_): 
+                if getattr(pill, "_bg_img_hover", None): 
+                    pill.config(image=pill._bg_img_hover)
+            def on_leave(_): 
+                if getattr(pill, "_bg_img_normal", None): 
+                    pill.config(image=pill._bg_img_normal)
+            for wdg in (pill, btn, wrapper):
+                wdg.bind('<Enter>', on_enter)
+                wdg.bind('<Leave>', on_leave)
 
-        def on_leave(e):
-            btn.config(bg=bg_color)
-            inner_frame.config(bg=bg_color)
-            button_frame.config(bg=bg_color)
-
-        btn.bind('<Enter>', on_enter)
-        btn.bind('<Leave>', on_leave)
-        button_frame.bind('<Enter>', on_enter)
-        button_frame.bind('<Leave>', on_leave)
-        inner_frame.bind('<Enter>', on_enter)
-        inner_frame.bind('<Leave>', on_leave)
-
+        wrapper.after(50, init_bg)
         return btn
 
     def load_icons(self):
@@ -276,108 +282,7 @@ class MainWindow:
         self.root.grid_columnconfigure(1, weight=1)
         self.root.grid_rowconfigure(1, weight=0)  # Barra de estado
 
-    def create_layout(self):
-        """Crea el layout principal de la aplicación"""
-        # **SIDEBAR (MENÚ LATERAL)** - Ancho aumentado para acomodar texto completo
-        self.sidebar = ttk.Frame(self.root, style='Sidebar.TFrame', width=380)  # Aumentado a 380px
-        self.sidebar.grid(row=0, column=0, sticky="nsew", padx=0, pady=0)
-        self.sidebar.grid_propagate(False)  # Mantener ancho fijo - CRÍTICO
-        self.sidebar.pack_propagate(False)   # También prevenir expansión con pack
-
-        # **ÁREA PRINCIPAL**
-        self.main_area = ttk.Frame(self.root, style='MainArea.TFrame')
-        self.main_area.grid(row=0, column=1, sticky="nsew", padx=0, pady=0)
-
-        # **BARRA DE ESTADO**
-        self.status_bar = ttk.Frame(self.root, style='StatusBar.TFrame')
-        self.status_bar.grid(row=1, column=0, columnspan=2, sticky="ew")
-
-        # Crear contenido del sidebar
-        self.create_sidebar()
-
-        # Crear área de contenido principal
-        self.create_main_content_area()
-
-        # Crear barra de estado
-        self.create_status_bar()
-
-    def create_sidebar(self):
-        """Crea el menú lateral con ancho fijo"""
-        # **HEADER DEL SIDEBAR**
-        header_frame = tk.Frame(self.sidebar, bg=self.COLORS['primary'], height=140)
-        header_frame.pack(fill="x", pady=0)
-        header_frame.pack_propagate(False)
-
-        # Logo (si existe)
-        if self.icons.get('logo'):
-            logo_label = tk.Label(header_frame, 
-                                image=self.icons['logo'],
-                                bg=self.COLORS['primary'])
-            logo_label.pack(pady=(25, 8))
-        else:
-            # Si no hay logo, agregar espacio equivalente
-            spacer = tk.Frame(header_frame, bg=self.COLORS['primary'], height=30)
-            spacer.pack()
-
-        # Título del sistema
-        title_label = tk.Label(header_frame,
-                            text="SISTEMA DE GESTIÓN",
-                            font=('Segoe UI', 12, 'bold'),
-                            fg=self.COLORS['white'],
-                            bg=self.COLORS['primary'])
-        title_label.pack(pady=(5, 2))
-
-        subtitle_label = tk.Label(header_frame,
-                                text="DE INSUMOS",
-                                font=('Segoe UI', 12, 'bold'),
-                                fg=self.COLORS['white'],
-                                bg=self.COLORS['primary'])
-        subtitle_label.pack(pady=(0, 15))
-
-        # **SEPARADOR**
-        separator = tk.Frame(self.sidebar, bg=self.COLORS['accent'], height=2)
-        separator.pack(fill="x", pady=0)
-
-        # **MENÚ DE NAVEGACIÓN CON SCROLLBAR**
-        nav_container = tk.Frame(self.sidebar, bg=self.COLORS['primary'])
-        nav_container.pack(fill="both", expand=True, padx=0, pady=10)
-
-        # Canvas para scroll si es necesario
-        canvas = tk.Canvas(nav_container, bg=self.COLORS['primary'], highlightthickness=0)
-        scrollbar = ttk.Scrollbar(nav_container, orient="vertical", command=canvas.yview)
-        nav_frame = tk.Frame(canvas, bg=self.COLORS['primary'])
-
-        # Configurar scroll
-        nav_frame.bind(
-            "<Configure>",
-            lambda e: canvas.configure(scrollregion=canvas.bbox("all"))
-        )
-
-        canvas.create_window((0, 0), window=nav_frame, anchor="nw")
-        canvas.configure(yscrollcommand=scrollbar.set)
-
-        # Pack canvas y scrollbar
-        canvas.pack(side="left", fill="both", expand=True)
-        # Solo mostrar scrollbar si es necesario
-        
-        # Crear botones según rol
-        self.create_navigation_menu(nav_frame)
-
-        # **BOTÓN DE SALIR (EN LA PARTE INFERIOR)**
-        exit_frame = tk.Frame(self.sidebar, bg=self.COLORS['primary'], height=70)
-        exit_frame.pack(fill="x", side="bottom", pady=(0, 20))
-        exit_frame.pack_propagate(False)
-
-        # Usar la función de botón redondeado con color celeste
-        exit_btn = self.create_rounded_button(
-            exit_frame,
-            "  Salir del Sistema",
-            self.COLORS['exit_btn'],
-            self.COLORS['exit_hover'],
-            self.on_closing,
-            self.icons.get('salir')
-        )
-
+  
     def create_navigation_menu(self, parent):
         """Crea el menú de navegación con estructura de árbol colapsable"""
         rol = self.usuario['rol']
@@ -436,73 +341,6 @@ class MainWindow:
         
         return menu_structure
 
-    def create_menu_category(self, parent, category_name, items):
-        """Crea una categoría del menú con sus elementos hijo - efectos hover simplificados"""
-        # Frame principal de la categoría
-        category_frame = tk.Frame(parent, bg=self.COLORS['primary'])
-        category_frame.pack(fill="x", pady=2)
-        
-        # Inicializar estado colapsado
-        self.menu_expanded[category_name] = False
-        
-        # Frame para el header de la categoría (clickeable)
-        header_frame = tk.Frame(category_frame, bg=self.COLORS['primary'], cursor='hand2')
-        header_frame.pack(fill="x")
-        
-        # Crear el botón de expansión/colapso
-        expand_button = tk.Label(header_frame, 
-                            text="▶", 
-                            font=('Segoe UI', 10),
-                            fg=self.COLORS['white'],
-                            bg=self.COLORS['primary'],
-                            width=2,
-                            cursor='hand2')
-        expand_button.pack(side="left", padx=(15, 5))
-        
-        # Label del título de la categoría
-        category_label = tk.Label(header_frame,
-                                text=category_name,
-                                font=('Segoe UI', 10, 'bold'),
-                                fg=self.COLORS['white'],
-                                bg=self.COLORS['primary'],
-                                anchor='w',
-                                cursor='hand2')
-        category_label.pack(side="left", fill="x", expand=True, padx=(0, 15))
-        
-        # Frame para los elementos hijo (inicialmente oculto)
-        submenu_frame = tk.Frame(category_frame, bg=self.COLORS['secondary'])
-        self.submenu_frames[category_name] = submenu_frame
-        
-        # Agregar elementos hijo
-        for item_text, item_command, icon_key in items:
-            self.create_tree_menu_item(submenu_frame, item_text, item_command, icon_key)
-        
-        # Función para alternar expansión/colapso
-        def toggle_category():
-            self.toggle_menu_category(category_name, expand_button, submenu_frame)
-        
-        # Vincular eventos de clic a todos los elementos del header
-        header_frame.bind('<Button-1>', lambda e: toggle_category())
-        expand_button.bind('<Button-1>', lambda e: toggle_category())
-        category_label.bind('<Button-1>', lambda e: toggle_category())
-        
-        # EFECTOS HOVER SIMPLIFICADOS para el header - solo cuando está colapsado
-        def on_header_enter(e):
-            if not self.menu_expanded[category_name]:
-                header_frame.config(bg=self.COLORS['secondary'])
-                expand_button.config(bg=self.COLORS['secondary'])
-                category_label.config(bg=self.COLORS['secondary'])
-        
-        def on_header_leave(e):
-            if not self.menu_expanded[category_name]:
-                header_frame.config(bg=self.COLORS['primary'])
-                expand_button.config(bg=self.COLORS['primary'])
-                category_label.config(bg=self.COLORS['primary'])
-        
-        # Vincular solo los eventos hover necesarios
-        header_frame.bind('<Enter>', on_header_enter)
-        header_frame.bind('<Leave>', on_header_leave)
-
     def create_layout(self):
         """Crea el layout principal de la aplicación"""
         # **SIDEBAR (MENÚ LATERAL)** - Ancho aumentado para acomodar texto completo
@@ -529,73 +367,26 @@ class MainWindow:
         self.create_status_bar()
 
     def create_sidebar(self):
-        """Crea el menú lateral con ancho fijo"""
-        # **HEADER DEL SIDEBAR**
+        """Crea el menú lateral con botón Salir siempre visible"""
+        # Header
         header_frame = tk.Frame(self.sidebar, bg=self.COLORS['primary'], height=140)
         header_frame.pack(fill="x", pady=0)
         header_frame.pack_propagate(False)
 
-        # Logo (si existe)
         if self.icons.get('logo'):
-            logo_label = tk.Label(header_frame, 
-                                image=self.icons['logo'],
-                                bg=self.COLORS['primary'])
-            logo_label.pack(pady=(25, 8))
+            tk.Label(header_frame, image=self.icons['logo'], bg=self.COLORS['primary']).pack(pady=(25, 8))
         else:
-            # Si no hay logo, agregar espacio equivalente
-            spacer = tk.Frame(header_frame, bg=self.COLORS['primary'], height=30)
-            spacer.pack()
+            tk.Frame(header_frame, bg=self.COLORS['primary'], height=30).pack()
 
-        # Título del sistema
-        title_label = tk.Label(header_frame,
-                            text="SISTEMA DE GESTIÓN",
-                            font=('Segoe UI', 12, 'bold'),
-                            fg=self.COLORS['white'],
-                            bg=self.COLORS['primary'])
-        title_label.pack(pady=(5, 2))
+        tk.Label(header_frame, text="SISTEMA DE GESTIÓN", font=('Segoe UI', 12, 'bold'),
+                fg=self.COLORS['white'], bg=self.COLORS['primary']).pack(pady=(5, 2))
+        tk.Label(header_frame, text="DE INSUMOS", font=('Segoe UI', 12, 'bold'),
+                fg=self.COLORS['white'], bg=self.COLORS['primary']).pack(pady=(0, 15))
 
-        subtitle_label = tk.Label(header_frame,
-                                text="DE INSUMOS",
-                                font=('Segoe UI', 12, 'bold'),
-                                fg=self.COLORS['white'],
-                                bg=self.COLORS['primary'])
-        subtitle_label.pack(pady=(0, 15))
-
-        # **SEPARADOR**
-        separator = tk.Frame(self.sidebar, bg=self.COLORS['accent'], height=2)
-        separator.pack(fill="x", pady=0)
-
-        # **MENÚ DE NAVEGACIÓN CON SCROLLBAR**
-        nav_container = tk.Frame(self.sidebar, bg=self.COLORS['primary'])
-        nav_container.pack(fill="both", expand=True, padx=0, pady=10)
-
-        # Canvas para scroll si es necesario
-        canvas = tk.Canvas(nav_container, bg=self.COLORS['primary'], highlightthickness=0)
-        scrollbar = ttk.Scrollbar(nav_container, orient="vertical", command=canvas.yview)
-        nav_frame = tk.Frame(canvas, bg=self.COLORS['primary'])
-
-        # Configurar scroll
-        nav_frame.bind(
-            "<Configure>",
-            lambda e: canvas.configure(scrollregion=canvas.bbox("all"))
-        )
-
-        canvas.create_window((0, 0), window=nav_frame, anchor="nw")
-        canvas.configure(yscrollcommand=scrollbar.set)
-
-        # Pack canvas y scrollbar
-        canvas.pack(side="left", fill="both", expand=True)
-        # Solo mostrar scrollbar si es necesario
-        
-        # Crear botones según rol
-        self.create_navigation_menu(nav_frame)
-
-        # **BOTÓN DE SALIR (EN LA PARTE INFERIOR)**
-        exit_frame = tk.Frame(self.sidebar, bg=self.COLORS['primary'], height=70)
+        # Botón Salir ABAJO (primero) para reservar espacio
+        exit_frame = tk.Frame(self.sidebar, bg=self.COLORS['primary'])
         exit_frame.pack(fill="x", side="bottom", pady=(0, 20))
-        exit_frame.pack_propagate(False)
 
-        # Usar la función de botón redondeado con color celeste
         exit_btn = self.create_rounded_button(
             exit_frame,
             "  Salir del Sistema",
@@ -604,6 +395,23 @@ class MainWindow:
             self.on_closing,
             self.icons.get('salir')
         )
+
+        # Contenedor del menú con scroll (ocupa el espacio restante)
+        nav_container = tk.Frame(self.sidebar, bg=self.COLORS['primary'])
+        nav_container.pack(fill="both", expand=True, padx=0, pady=10)
+
+        canvas = tk.Canvas(nav_container, bg=self.COLORS['primary'], highlightthickness=0, bd=0)
+        scrollbar = ttk.Scrollbar(nav_container, orient="vertical", command=canvas.yview)
+        nav_frame = tk.Frame(canvas, bg=self.COLORS['primary'])
+
+        nav_frame.bind("<Configure>", lambda e: canvas.configure(scrollregion=canvas.bbox("all")))
+        canvas.create_window((0, 0), window=nav_frame, anchor="nw")
+        canvas.configure(yscrollcommand=scrollbar.set)
+
+        canvas.pack(side="left", fill="both", expand=True)
+        scrollbar.pack(side="right", fill="y")
+
+        self.create_navigation_menu(nav_frame)
 
     def create_menu_category(self, parent, category_name, items):
         """Crea una categoría del menú con sus elementos hijo - ancho controlado"""
@@ -868,8 +676,7 @@ class MainWindow:
 
     def create_main_content_area(self):
         """Crea el área de contenido principal"""
-        # Frame contenedor con padding
-        self.main_content_frame = ttk.Frame(self.main_area, style='Card.TFrame')
+        self.main_content_frame = ttk.Frame(self.main_area, style='MainArea.TFrame')
         self.main_content_frame.pack(fill="both", expand=True, padx=20, pady=20)
 
     def create_status_bar(self):
@@ -906,91 +713,98 @@ class MainWindow:
         self.clear_content_frame()
         self.reset_window_size()
 
-        # Forzar fondo blanco en el frame principal
-        try:
-            self.main_content_frame.configure(style='Card.TFrame')
-        except:
-            pass
-        try:
-            self.main_content_frame.configure(bg=self.COLORS['white'])
-        except:
-            pass
-        
+        # No fuerces blanco en el contenedor principal; mantenlo con estilo MainArea (light)
         # Frame principal de bienvenida
-        welcome_frame = tk.Frame(self.main_content_frame, bg=self.COLORS['white'])
-        welcome_frame.pack(fill="both", expand=True, padx=40, pady=40)
+        welcome_frame = tk.Frame(self.main_content_frame, bg=self.COLORS['light'])
+        welcome_frame.pack(fill="both", expand=True, padx=0, pady=0)
 
-        # **HEADER DE BIENVENIDA**
-        header_frame = tk.Frame(welcome_frame, bg=self.COLORS['white'])
-        header_frame.pack(fill="x", pady=(0, 30))
+        # Header blanco como tarjeta
+        header_card = tk.Frame(welcome_frame, bg=self.COLORS['white'], relief='solid', bd=1)
+        header_card.pack(fill="x", padx=40, pady=(40, 20))
+        header = tk.Frame(header_card, bg=self.COLORS['white'])
+        header.pack(fill="x", padx=20, pady=20)
 
         # Título principal
-        title_label = tk.Label(header_frame,
-                              text="¡Bienvenido al Sistema!",
-                              font=('Segoe UI', 28, 'bold'),
-                              fg=self.COLORS['primary'],
-                              bg=self.COLORS['white'])
+        title_label = tk.Label(
+            header,
+            text="¡Bienvenido al Sistema!",
+            font=('Segoe UI', 28, 'bold'),
+            fg=self.COLORS['primary'],
+            bg=self.COLORS['white']
+        )
         title_label.pack()
 
         # Subtítulo
-        subtitle_label = tk.Label(header_frame,
-                                 text="DIRECCIÓN DEPARTAMENTAL DE REDES INTEGRADAS\n" +
-                                      "DE SERVICIOS DE SALUD DE GUATEMALA\n" +
-                                      "ÁREA NOR ORIENTE",
-                                 font=('Segoe UI', 14),
-                                 fg=self.COLORS['text_light'],
-                                 bg=self.COLORS['white'],
-                                 justify='center')
+        subtitle_label = tk.Label(
+            header,
+            text=(
+                "DIRECCIÓN DEPARTAMENTAL DE REDES INTEGRADAS\n"
+                "DE SERVICIOS DE SALUD DE GUATEMALA\n"
+                "ÁREA NOR ORIENTE"
+            ),
+            font=('Segoe UI', 14),
+            fg=self.COLORS['text_light'],
+            bg=self.COLORS['white'],
+            justify='center'
+        )
         subtitle_label.pack(pady=(10, 0))
 
-        # **SEPARADOR DECORATIVO**
-        separator_frame = tk.Frame(welcome_frame, bg=self.COLORS['white'], height=40)
-        separator_frame.pack(fill="x")
+        # Separación visual sin contornos ni líneas
+        spacer = tk.Frame(welcome_frame, bg=self.COLORS['light'], height=20)
+        spacer.pack(fill="x", padx=40, pady=(0, 10))
 
-        separator_line = tk.Frame(separator_frame, bg=self.COLORS['accent'], height=3)
-        separator_line.pack(expand=True, fill="x", padx=100)
+        # Tarjetas de información sobre lienzo light
+        cards_area = tk.Frame(welcome_frame, bg=self.COLORS['light'])
+        cards_area.pack(fill="both", expand=True, padx=40, pady=(0, 20))
 
-        # **TARJETAS DE INFORMACIÓN**
-        cards_frame = tk.Frame(welcome_frame, bg=self.COLORS['white'])
-        cards_frame.pack(fill="both", expand=True, pady=20)
+        cards_frame = tk.Frame(cards_area, bg=self.COLORS['light'])
+        cards_frame.pack(fill="both", expand=True)
 
-        # Configurar grid para las tarjetas
+        # Grid para las tarjetas
         cards_frame.grid_columnconfigure(0, weight=1)
         cards_frame.grid_columnconfigure(1, weight=1)
 
         # Tarjeta de funcionalidades
-        self.create_info_card(cards_frame, 
-                             "🎯 Funcionalidades Principales",
-                             [
-                                 "• Gestión completa de insumos médicos",
-                                 "• Control de inventarios en tiempo real",
-                                 "• Generación de reportes especializados",
-                                 "• Seguimiento de movimientos detallado",
-                                 "• Administración de usuarios y permisos"
-                             ], 0, 0)
+        self.create_info_card(
+            cards_frame,
+            "🎯 Funcionalidades Principales",
+            [
+                "• Gestión completa de insumos médicos",
+                "• Control de inventarios en tiempo real",
+                "• Generación de reportes especializados",
+                "• Seguimiento de movimientos detallado",
+                "• Administración de usuarios y permisos"
+            ],
+            0, 0
+        )
 
         # Tarjeta de inicio rápido
-        self.create_info_card(cards_frame,
-                             "🚀 Inicio Rápido",
-                             [
-                                 "• Seleccione una opción del menú lateral",
-                                 "• Use 'Ingreso de Insumos' para registrar",
-                                 "• Genere reportes desde el menú",
-                                 "• Consulte el Kardex para seguimiento",
-                                 "• Configure el sistema en Gestión"
-                             ], 0, 1)
+        self.create_info_card(
+            cards_frame,
+            "🚀 Inicio Rápido",
+            [
+                "• Seleccione una opción del menú lateral",
+                "• Use 'Ingreso de Insumos' para registrar",
+                "• Genere reportes desde el menú",
+                "• Consulte el Kardex para seguimiento",
+                "• Configure el sistema en Gestión"
+            ],
+            0, 1
+        )
 
-        # **FOOTER CON INFORMACIÓN DEL USUARIO**
+        # Footer con info de usuario (sobre light)
         footer_frame = tk.Frame(welcome_frame, bg=self.COLORS['light'], height=60)
-        footer_frame.pack(fill="x", side="bottom", pady=(30, 0))
+        footer_frame.pack(fill="x", side="bottom", pady=(10, 0))
         footer_frame.pack_propagate(False)
 
         user_info = f"Sesión iniciada como: {self.usuario.get('nombre_completo', 'Usuario')} ({self.usuario.get('rol', '')})"
-        footer_label = tk.Label(footer_frame,
-                               text=user_info,
-                               font=('Segoe UI', 10),
-                               fg=self.COLORS['text_dark'],
-                               bg=self.COLORS['light'])
+        footer_label = tk.Label(
+            footer_frame,
+            text=user_info,
+            font=('Segoe UI', 10),
+            fg=self.COLORS['text_dark'],
+            bg=self.COLORS['light']
+        )
         footer_label.pack(expand=True)
 
     def create_info_card(self, parent, title, items, row, col):

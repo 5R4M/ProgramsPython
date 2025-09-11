@@ -28,21 +28,160 @@ from src.database.db_manager import (
     eliminar_servicio
 )
 
-def resource_path(relative_path):
-    """Obtiene la ruta absoluta al recurso, funciona en dev y en PyInstaller."""
-    try:
-        base_path = sys._MEIPASS  # PyInstaller crea esta carpeta temporal
-    except Exception:
-        base_path = os.path.abspath(".")
+# ================= Estilos unificados =================
+def setup_styles(root):
+    COLORS = {
+        'primary':   '#2c3e50',
+        'secondary': '#34495e',
+        'accent':    '#3498db',
+        'success':   '#27ae60',
+        'warning':   '#f39c12',
+        'danger':    '#e74c3c',
+        'light':     '#ecf0f1',
+        'white':     '#ffffff',
+        'text_dark': '#2c3e50',
+        'text_light':'#7f8c8d',
+        'border':    '#d1d5db'
+    }
 
-    return os.path.join(base_path, relative_path)
+    style = ttk.Style(root)
+    try:
+        style.theme_use('clam')
+    except Exception:
+        pass
+
+    try:
+        root.configure(bg=COLORS['light'])
+    except Exception:
+        pass
+
+    style.configure('.', font=('Segoe UI', 9))
+
+    # Frames
+    style.configure('Light.TFrame', background=COLORS['light'])
+    style.configure('Card.TFrame', background=COLORS['white'], relief='solid', borderwidth=1)
+
+    # Header de card
+    style.configure('Header.TFrame', background=COLORS['primary'])
+    style.configure('Header.TLabel', background=COLORS['primary'], foreground=COLORS['white'], font=('Segoe UI', 10, 'bold'))
+
+    # Labels
+    style.configure('Light.TLabel', background=COLORS['light'], foreground=COLORS['text_dark'], font=('Segoe UI', 9))
+    style.configure('Card.TLabel', background=COLORS['white'], foreground=COLORS['text_dark'], font=('Segoe UI', 9))
+
+    # Botón primario
+    style.configure('Primary.TButton',
+                    font=('Segoe UI', 9, 'bold'),
+                    padding=(10, 5),
+                    relief='flat',
+                    borderwidth=0,
+                    background=COLORS['accent'],
+                    foreground=COLORS['white'])
+    style.map('Primary.TButton',
+              background=[('active', '#2980b9'), ('pressed', '#117a8b')],
+              foreground=[('active', '#ffffff'), ('pressed', '#ffffff')])
+
+    # Entry/Combobox
+    style.configure('TCombobox',
+                    fieldbackground=COLORS['white'],
+                    background=COLORS['white'],
+                    foreground=COLORS['text_dark'])
+    style.configure('TEntry',
+                    fieldbackground=COLORS['white'],
+                    foreground=COLORS['text_dark'])
+
+    root.option_add('*TCombobox*Listbox.background', COLORS['white'])
+    root.option_add('*TCombobox*Listbox.foreground', COLORS['text_dark'])
+    root.option_add('*TCombobox*Listbox.selectBackground', COLORS['accent'])
+    root.option_add('*TCombobox*Listbox.selectForeground', COLORS['white'])
+    root.option_add('*TCombobox*Listbox.font', '{Segoe UI} 9')
+
+    # Treeview
+    style.configure("Custom.Treeview",
+                    background=COLORS['white'],
+                    foreground=COLORS['text_dark'],
+                    rowheight=22,
+                    fieldbackground=COLORS['white'],
+                    font=('Segoe UI', 9),
+                    borderwidth=1,
+                    relief='solid')
+    HEADER_BG = '#e5e7eb'
+    HEADER_FG = '#111827'
+    style.configure("Custom.Treeview.Heading",
+                    background=HEADER_BG,
+                    foreground=HEADER_FG,
+                    font=('Segoe UI', 8, 'bold'),
+                    relief='flat',
+                    borderwidth=1,
+                    padding=(3, 6, 3, 6),
+                    anchor='center',
+                    justify='center')
+    style.map("Custom.Treeview",
+              background=[('selected', COLORS['accent'])],
+              foreground=[('selected', '#ffffff')])
+
+    # Notebook
+    style.configure('TNotebook', background=COLORS['light'], borderwidth=0)
+    style.configure('TNotebook.Tab',
+                    background=COLORS['light'],
+                    foreground=COLORS['text_dark'],
+                    font=('Segoe UI', 9))
+    style.map('TNotebook.Tab',
+              background=[('selected', COLORS['white'])],
+              foreground=[('selected', COLORS['text_dark'])])
+
+    return COLORS, style
+
 
 class GestionServicios:
     def __init__(self, parent_frame, main_window):
         self.parent = parent_frame
         self.main_window = main_window
+
+        # Estilos
+        self.COLORS, self._style = setup_styles(self.parent.winfo_toplevel())
+
         self.setup_ui()
 
+        # Aplicar estilo al contenedor raíz si es ttk
+        if isinstance(self.parent, ttk.Widget):
+            self.parent.configure(style='Light.TFrame')
+
+    # ---------- Utilería de UI ----------
+    def _header_title_sub(self, parent, title_text, subtitle_text):
+        header_frame = tk.Frame(parent, bg=self.COLORS['primary'], height=55)
+        header_frame.pack(fill='x', padx=10, pady=(10, 6))
+        header_frame.pack_propagate(False)
+
+        header_inner = tk.Frame(header_frame, bg=self.COLORS['primary'])
+        header_inner.pack(fill='both', expand=True, padx=10, pady=4)
+
+        tk.Label(header_inner, text=title_text,
+                 font=('Segoe UI', 12, 'bold'),
+                 fg=self.COLORS['white'], bg=self.COLORS['primary']).pack(anchor='w')
+        tk.Label(header_inner, text=subtitle_text,
+                 font=('Segoe UI', 9),
+                 fg=self.COLORS['white'], bg=self.COLORS['primary']).pack(anchor='w', pady=(1, 0))
+
+    def _card_section(self, parent, title, icon):
+        container = ttk.Frame(parent, style='Light.TFrame')
+        container.pack(fill='x', padx=10, pady=6)
+
+        card = ttk.Frame(container, style='Card.TFrame')
+        card.pack(fill='both', expand=True)
+
+        header = ttk.Frame(card, style='Header.TFrame', height=24)
+        header.pack(fill='x')
+        header.pack_propagate(False)
+
+        ttk.Label(header, text=f"{icon} {title}", style='Header.TLabel').pack(side='left', padx=10)
+
+        content = ttk.Frame(card, style='Card.TFrame')
+        content.pack(fill='both', expand=True, padx=12, pady=8)
+
+        return content
+
+    # ---------- Utilidades ----------
     def centrar_ventana(self, ventana):
         ventana.update_idletasks()
         width = ventana.winfo_width()
@@ -88,69 +227,87 @@ class GestionServicios:
 
     # --- Configuración UI ---
     def setup_ui(self):
-        
-        # Agregar título principal
-        title_frame = ttk.Frame(self.parent)
-        title_frame.pack(fill='x', padx=10, pady=(10, 5))
+        # fondo parent
+        try:
+            if isinstance(self.parent, ttk.Widget):
+                self.parent.configure(style='Light.TFrame')
+            else:
+                self.parent.configure(bg=self.COLORS['light'])
+        except Exception:
+            pass
 
-        ttk.Label(title_frame, text="Gestión de Servicios del Sistema",
-                font=('Segoe UI', 16, 'bold')).pack(anchor='w')
+        # Header principal
+        self._header_title_sub(
+            self.parent,
+            "🛠️ Gestión de Servicios del Sistema",
+            "Administre áreas, distritos, tipos y servicios"
+        )
 
-        ttk.Label(title_frame, text="Administre los servicios",
-                font=('Segoe UI', 10)).pack(anchor='w', pady=(2, 0))
+        # Notebook
+        nb_container = ttk.Frame(self.parent, style='Light.TFrame')
+        nb_container.pack(fill="both", expand=True, padx=10, pady=5)
 
-        # Separador
-        ttk.Separator(self.parent, orient='horizontal').pack(fill='x', padx=10, pady=5)
-        
-        self.notebook = ttk.Notebook(self.parent)
-        self.notebook.pack(fill="both", expand=True, padx=10, pady=5)
+        self.notebook = ttk.Notebook(nb_container)
+        self.notebook.pack(fill="both", expand=True)
 
-        self.tab_areas = ttk.Frame(self.notebook)
-        self.tab_distritos = ttk.Frame(self.notebook)
-        self.tab_tipos = ttk.Frame(self.notebook)
-        self.tab_servicios = ttk.Frame(self.notebook)
+        self.tab_areas = ttk.Frame(self.notebook, style='Light.TFrame')
+        self.tab_distritos = ttk.Frame(self.notebook, style='Light.TFrame')
+        self.tab_tipos = ttk.Frame(self.notebook, style='Light.TFrame')
+        self.tab_servicios = ttk.Frame(self.notebook, style='Light.TFrame')
 
-        self.notebook.add(self.tab_areas, text="Áreas")
-        self.notebook.add(self.tab_distritos, text="Distritos")
-        self.notebook.add(self.tab_tipos, text="Tipos de Servicio")
-        self.notebook.add(self.tab_servicios, text="Servicios")
+        self.notebook.add(self.tab_areas, text="🏢 Áreas")
+        self.notebook.add(self.tab_distritos, text="🗺️ Distritos")
+        self.notebook.add(self.tab_tipos, text="🧾 Tipos de Servicio")
+        self.notebook.add(self.tab_servicios, text="🛎️ Servicios")
 
         self.setup_areas_tab()
         self.setup_distritos_tab()
         self.setup_tipos_tab()
         self.setup_servicios_tab()
 
-        ttk.Button(self.parent, text="Cerrar", command=self.cerrar_ventana).pack(pady=10)
+        # Botón cerrar
+        button_frame = ttk.Frame(self.parent, style='Light.TFrame')
+        button_frame.pack(fill='x', pady=10, padx=10)
+        ttk.Button(button_frame, text="↩️ Cerrar", style='Primary.TButton',
+                   command=self.cerrar_ventana).pack(anchor='e')
 
+        # Cargar datos
         self.actualizar_areas()
         self.actualizar_distritos()
         self.actualizar_tipos()
         self.actualizar_servicios()
 
-    # --- ÁREAS ---
+    # ================== ÁREAS ==================
     def setup_areas_tab(self):
-        frame_excel = ttk.LabelFrame(self.tab_areas, text="Carga desde Excel")
-        frame_excel.pack(fill="x", padx=5, pady=5)
-        ttk.Button(frame_excel, text="Cargar Excel", command=self.cargar_excel_areas).pack(side="left", padx=5, pady=5)
-        ttk.Button(frame_excel, text="Exportar a Excel", command=self.exportar_excel_areas).pack(side="left", padx=5, pady=5)
+        frame_excel = self._card_section(self.tab_areas, "Carga desde Excel", "📥")
+        ttk.Button(frame_excel, text="📂 Cargar Excel", style='Primary.TButton',
+                   command=self.cargar_excel_areas).pack(side="left", padx=(0, 8), pady=2)
+        ttk.Button(frame_excel, text="📤 Exportar a Excel", style='Primary.TButton',
+                   command=self.exportar_excel_areas).pack(side="left", padx=(0, 8), pady=2)
 
-        frame_lista = ttk.LabelFrame(self.tab_areas, text="Áreas")
-        frame_lista.pack(fill="both", expand=True, padx=5, pady=5)
+        frame_lista = self._card_section(self.tab_areas, "Áreas", "🏢")
 
-        self.tree_areas = ttk.Treeview(frame_lista, columns=('nombre',), show='headings')
-        self.tree_areas.heading('nombre', text='Área')
-        self.tree_areas.grid(row=0, column=0, sticky="nsew")
-        scrolly = ttk.Scrollbar(frame_lista, orient="vertical", command=self.tree_areas.yview)
+        table_wrap = ttk.Frame(frame_lista, style='Card.TFrame')
+        table_wrap.pack(fill='both', expand=True)
+
+        self.tree_areas = ttk.Treeview(table_wrap, columns=('nombre',), show='headings', style="Custom.Treeview")
+        self.tree_areas.heading('nombre', text='Área', anchor='w')
+        self.tree_areas.column('nombre', anchor='w', width=320)
+        self.tree_areas.pack(fill='both', expand=True, side='left', padx=(0, 5), pady=2)
+
+        scrolly = ttk.Scrollbar(table_wrap, orient="vertical", command=self.tree_areas.yview)
         self.tree_areas.configure(yscrollcommand=scrolly.set)
-        scrolly.grid(row=0, column=1, sticky="ns")
-        frame_lista.grid_rowconfigure(0, weight=1)
-        frame_lista.grid_columnconfigure(0, weight=1)
+        scrolly.pack(side='left', fill='y')
 
-        frame_botones = ttk.Frame(frame_lista)
-        frame_botones.grid(row=1, column=0, columnspan=2, pady=5)
-        ttk.Button(frame_botones, text="Agregar", command=self.agregar_area).pack(side="left", padx=5)
-        ttk.Button(frame_botones, text="Editar", command=self.editar_area).pack(side="left", padx=5)
-        ttk.Button(frame_botones, text="Eliminar", command=self.eliminar_area).pack(side="left", padx=5)
+        # Botonera horizontal
+        btns = ttk.Frame(frame_lista, style='Card.TFrame')
+        btns.pack(fill='x', padx=0, pady=(6, 0))
+        ttk.Button(btns, text="➕ Agregar", style='Primary.TButton',
+                   command=self.agregar_area).pack(side='left', padx=(0, 6))
+        ttk.Button(btns, text="✏️ Editar", style='Primary.TButton',
+                   command=self.editar_area).pack(side='left', padx=(0, 6))
+        ttk.Button(btns, text="🗑️ Eliminar", style='Primary.TButton',
+                   command=self.eliminar_area).pack(side='left')
 
     def cargar_excel_areas(self):
         filename = filedialog.askopenfilename(title="Seleccionar archivo Excel de Áreas", filetypes=[("Excel files", "*.xlsx *.xls")])
@@ -161,7 +318,12 @@ class GestionServicios:
             messagebox.showerror("Error", "El archivo debe tener la columna: Área")
             return
         for area in df['Área'].dropna().unique():
-            agregar_area(str(area).strip())
+            nombre = str(area).strip()
+            if nombre:
+                try:
+                    agregar_area(nombre)
+                except Exception:
+                    pass
         messagebox.showinfo("Éxito", "Áreas cargadas correctamente")
         self.actualizar_areas()
 
@@ -176,16 +338,15 @@ class GestionServicios:
 
     def agregar_area(self):
         ventana = tk.Toplevel(self.parent)
-        ventana.title("Agregar Área")
-        ventana.geometry("350x120")
-        self.centrar_ventana(ventana)
+        ventana.title("➕ Agregar Área")
+        self._estilizar_toplevel(ventana)
 
-        frame_campos = ttk.Frame(ventana)
-        frame_campos.pack(padx=10, pady=5, fill='x')
+        container = self._dialog_container(ventana, "➕ Agregar Área", "Ingrese el nombre del área")
+        body = container['body']
 
-        ttk.Label(frame_campos, text="Nombre:").pack(pady=5)
-        nombre = ttk.Entry(frame_campos, width=40)
-        nombre.pack(pady=5, fill='x')
+        ttk.Label(body, text="Nombre:", style='Light.TLabel').pack(pady=(0, 4), anchor='w')
+        nombre = ttk.Entry(body, width=40)
+        nombre.pack(fill='x')
 
         def guardar():
             if nombre.get().strip():
@@ -196,10 +357,7 @@ class GestionServicios:
             else:
                 messagebox.showwarning("Advertencia", "Ingrese un nombre")
 
-        frame_botones = ttk.Frame(ventana)
-        frame_botones.pack(pady=10)
-        ttk.Button(frame_botones, text="Guardar", command=guardar).pack(side="left", padx=5)
-        ttk.Button(frame_botones, text="Cerrar", command=ventana.destroy).pack(side="left", padx=5)
+        self._dialog_buttons(container['buttons'], guardar, ventana.destroy)
 
     def editar_area(self):
         selected = self.tree_areas.selection()
@@ -209,29 +367,25 @@ class GestionServicios:
 
         item = self.tree_areas.item(selected[0])
         ventana = tk.Toplevel(self.parent)
-        ventana.title("Editar Área")
-        ventana.geometry("350x120")
-        self.centrar_ventana(ventana)
+        ventana.title("✏️ Editar Área")
+        self._estilizar_toplevel(ventana)
 
-        frame_campos = ttk.Frame(ventana)
-        frame_campos.pack(padx=10, pady=5, fill='x')
+        container = self._dialog_container(ventana, "✏️ Editar Área", "Modifique el nombre del área")
+        body = container['body']
 
-        ttk.Label(frame_campos, text="Nuevo nombre:").pack(pady=5)
-        nuevo_nombre = ttk.Entry(frame_campos, width=40)
+        ttk.Label(body, text="Nuevo nombre:", style='Light.TLabel').pack(pady=(0, 4), anchor='w')
+        nuevo_nombre = ttk.Entry(body, width=40)
         nuevo_nombre.insert(0, item['values'][0])
-        nuevo_nombre.pack(pady=5, fill='x')
+        nuevo_nombre.pack(fill='x')
 
         def guardar():
             id_area = self.obtener_id_area(item['values'][0])
-            actualizar_area(id_area, nuevo_nombre.get())
+            actualizar_area(id_area, nuevo_nombre.get().strip())
             self.actualizar_areas()
             ventana.destroy()
             messagebox.showinfo("Éxito", "Área actualizada correctamente")
 
-        frame_botones = ttk.Frame(ventana)
-        frame_botones.pack(pady=10)
-        ttk.Button(frame_botones, text="Guardar", command=guardar).pack(side="left", padx=5)
-        ttk.Button(frame_botones, text="Cerrar", command=ventana.destroy).pack(side="left", padx=5)
+        self._dialog_buttons(container['buttons'], guardar, ventana.destroy)
 
     def eliminar_area(self):
         selected = self.tree_areas.selection()
@@ -252,31 +406,38 @@ class GestionServicios:
             for area in areas:
                 self.tree_areas.insert('', 'end', values=(area['nombre'],))
 
-    # --- DISTRITOS ---
+    # ================== DISTRITOS ==================
     def setup_distritos_tab(self):
-        frame_excel = ttk.LabelFrame(self.tab_distritos, text="Carga desde Excel")
-        frame_excel.pack(fill="x", padx=5, pady=5)
-        ttk.Button(frame_excel, text="Cargar Excel", command=self.cargar_excel_distritos).pack(side="left", padx=5, pady=5)
-        ttk.Button(frame_excel, text="Exportar a Excel", command=self.exportar_excel_distritos).pack(side="left", padx=5, pady=5)
+        frame_excel = self._card_section(self.tab_distritos, "Carga desde Excel", "📥")
+        ttk.Button(frame_excel, text="📂 Cargar Excel", style='Primary.TButton',
+                   command=self.cargar_excel_distritos).pack(side="left", padx=(0, 8), pady=2)
+        ttk.Button(frame_excel, text="📤 Exportar a Excel", style='Primary.TButton',
+                   command=self.exportar_excel_distritos).pack(side="left", padx=(0, 8), pady=2)
 
-        frame_lista = ttk.LabelFrame(self.tab_distritos, text="Distritos")
-        frame_lista.pack(fill="both", expand=True, padx=5, pady=5)
+        frame_lista = self._card_section(self.tab_distritos, "Distritos", "🗺️")
 
-        self.tree_distritos = ttk.Treeview(frame_lista, columns=('nombre','area'), show='headings')
-        self.tree_distritos.heading('nombre', text='Distrito')
-        self.tree_distritos.heading('area', text='Área')
-        self.tree_distritos.grid(row=0, column=0, sticky="nsew")
-        scrolly = ttk.Scrollbar(frame_lista, orient="vertical", command=self.tree_distritos.yview)
+        table_wrap = ttk.Frame(frame_lista, style='Card.TFrame')
+        table_wrap.pack(fill='both', expand=True)
+
+        self.tree_distritos = ttk.Treeview(table_wrap, columns=('nombre','area'), show='headings', style="Custom.Treeview")
+        self.tree_distritos.heading('nombre', text='Distrito', anchor='w')
+        self.tree_distritos.heading('area', text='Área', anchor='w')
+        self.tree_distritos.column('nombre', width=240, anchor='w')
+        self.tree_distritos.column('area', width=220, anchor='w')
+        self.tree_distritos.pack(fill='both', expand=True, side='left', padx=(0, 5), pady=2)
+
+        scrolly = ttk.Scrollbar(table_wrap, orient="vertical", command=self.tree_distritos.yview)
         self.tree_distritos.configure(yscrollcommand=scrolly.set)
-        scrolly.grid(row=0, column=1, sticky="ns")
-        frame_lista.grid_rowconfigure(0, weight=1)
-        frame_lista.grid_columnconfigure(0, weight=1)
+        scrolly.pack(side='left', fill='y')
 
-        frame_botones = ttk.Frame(frame_lista)
-        frame_botones.grid(row=1, column=0, columnspan=2, pady=5)
-        ttk.Button(frame_botones, text="Agregar", command=self.agregar_distrito).pack(side="left", padx=5)
-        ttk.Button(frame_botones, text="Editar", command=self.editar_distrito).pack(side="left", padx=5)
-        ttk.Button(frame_botones, text="Eliminar", command=self.eliminar_distrito).pack(side="left", padx=5)
+        btns = ttk.Frame(frame_lista, style='Card.TFrame')
+        btns.pack(fill='x', padx=0, pady=(6, 0))
+        ttk.Button(btns, text="➕ Agregar", style='Primary.TButton',
+                   command=self.agregar_distrito).pack(side='left', padx=(0, 6))
+        ttk.Button(btns, text="✏️ Editar", style='Primary.TButton',
+                   command=self.editar_distrito).pack(side='left', padx=(0, 6))
+        ttk.Button(btns, text="🗑️ Eliminar", style='Primary.TButton',
+                   command=self.eliminar_distrito).pack(side='left')
 
     def cargar_excel_distritos(self):
         filename = filedialog.askopenfilename(title="Seleccionar archivo Excel de Distritos", filetypes=[("Excel files", "*.xlsx *.xls")])
@@ -290,7 +451,11 @@ class GestionServicios:
             distrito = str(row['Distrito']).strip()
             area_nombre = str(row['Área']).strip()
             id_area = self.obtener_id_area(area_nombre) if area_nombre else None
-            agregar_distrito(distrito, id_area)
+            if distrito:
+                try:
+                    agregar_distrito(distrito, id_area)
+                except Exception:
+                    pass
         messagebox.showinfo("Éxito", "Distritos cargados correctamente")
         self.actualizar_distritos()
 
@@ -305,21 +470,20 @@ class GestionServicios:
 
     def agregar_distrito(self):
         ventana = tk.Toplevel(self.parent)
-        ventana.title("Agregar Distrito")
-        ventana.geometry("350x190")
-        self.centrar_ventana(ventana)
+        ventana.title("➕ Agregar Distrito")
+        self._estilizar_toplevel(ventana)
 
-        frame_campos = ttk.Frame(ventana)
-        frame_campos.pack(padx=10, pady=5, fill='x')
+        container = self._dialog_container(ventana, "➕ Agregar Distrito", "Complete los campos")
+        body = container['body']
 
-        ttk.Label(frame_campos, text="Área:").pack(pady=5)
-        combo_area = ttk.Combobox(frame_campos, state="readonly", width=38)
+        ttk.Label(body, text="Área:", style='Light.TLabel').pack(pady=(0, 4), anchor='w')
+        combo_area = ttk.Combobox(body, state="readonly")
         combo_area['values'] = [a['nombre'] for a in obtener_areas()]
-        combo_area.pack(pady=5, fill='x')
+        combo_area.pack(fill='x')
 
-        ttk.Label(frame_campos, text="Nombre:").pack(pady=5)
-        nombre = ttk.Entry(frame_campos, width=40)
-        nombre.pack(pady=5, fill='x')
+        ttk.Label(body, text="Nombre:", style='Light.TLabel').pack(pady=(8, 4), anchor='w')
+        nombre = ttk.Entry(body, width=40)
+        nombre.pack(fill='x')
 
         def guardar():
             if nombre.get().strip() and combo_area.get():
@@ -332,10 +496,7 @@ class GestionServicios:
             else:
                 messagebox.showwarning("Advertencia", "Complete todos los campos")
 
-        frame_botones = ttk.Frame(ventana)
-        frame_botones.pack(pady=10)
-        ttk.Button(frame_botones, text="Guardar", command=guardar).pack(side="left", padx=5)
-        ttk.Button(frame_botones, text="Cerrar", command=ventana.destroy).pack(side="left", padx=5)
+        self._dialog_buttons(container['buttons'], guardar, ventana.destroy)
 
     def editar_distrito(self):
         selected = self.tree_distritos.selection()
@@ -345,25 +506,24 @@ class GestionServicios:
 
         item = self.tree_distritos.item(selected[0])
         ventana = tk.Toplevel(self.parent)
-        ventana.title("Editar Distrito")
-        ventana.geometry("350x190")
-        self.centrar_ventana(ventana)
+        ventana.title("✏️ Editar Distrito")
+        self._estilizar_toplevel(ventana)
 
-        frame_campos = ttk.Frame(ventana)
-        frame_campos.pack(padx=10, pady=5, fill='x')
+        container = self._dialog_container(ventana, "✏️ Editar Distrito", "Modifique los datos del distrito")
+        body = container['body']
 
-        ttk.Label(frame_campos, text="Área:").pack(pady=5)
-        combo_area = ttk.Combobox(frame_campos, state="readonly", width=38)
+        ttk.Label(body, text="Área:", style='Light.TLabel').pack(pady=(0, 4), anchor='w')
+        combo_area = ttk.Combobox(body, state="readonly")
         areas = obtener_areas()
         combo_area['values'] = [a['nombre'] for a in areas]
         current_area = item['values'][1] if len(item['values']) > 1 else ''
         combo_area.set(current_area)
-        combo_area.pack(pady=5, fill='x')
+        combo_area.pack(fill='x')
 
-        ttk.Label(frame_campos, text="Nuevo nombre:").pack(pady=5)
-        nuevo_nombre = ttk.Entry(frame_campos, width=40)
+        ttk.Label(body, text="Nuevo nombre:", style='Light.TLabel').pack(pady=(8, 4), anchor='w')
+        nuevo_nombre = ttk.Entry(body, width=40)
         nuevo_nombre.insert(0, item['values'][0])
-        nuevo_nombre.pack(pady=5, fill='x')
+        nuevo_nombre.pack(fill='x')
 
         def guardar():
             id_distrito = self.obtener_id_distrito(item['values'][0])
@@ -374,10 +534,7 @@ class GestionServicios:
             ventana.destroy()
             messagebox.showinfo("Éxito", "Distrito actualizado correctamente")
 
-        frame_botones = ttk.Frame(ventana)
-        frame_botones.pack(pady=10)
-        ttk.Button(frame_botones, text="Guardar", command=guardar).pack(side="left", padx=5)
-        ttk.Button(frame_botones, text="Cerrar", command=ventana.destroy).pack(side="left", padx=5)
+        self._dialog_buttons(container['buttons'], guardar, ventana.destroy)
 
     def eliminar_distrito(self):
         selected = self.tree_distritos.selection()
@@ -398,31 +555,38 @@ class GestionServicios:
             for d in distritos:
                 self.tree_distritos.insert('', 'end', values=(d['nombre'], d['area_nombre']))
 
-    # --- TIPOS DE SERVICIO ---
+    # ================== TIPOS DE SERVICIO ==================
     def setup_tipos_tab(self):
-        frame_excel = ttk.LabelFrame(self.tab_tipos, text="Carga desde Excel")
-        frame_excel.pack(fill="x", padx=5, pady=5)
-        ttk.Button(frame_excel, text="Cargar Excel", command=self.cargar_excel_tipos).pack(side="left", padx=5, pady=5)
-        ttk.Button(frame_excel, text="Exportar a Excel", command=self.exportar_excel_tipos).pack(side="left", padx=5, pady=5)
+        frame_excel = self._card_section(self.tab_tipos, "Carga desde Excel", "📥")
+        ttk.Button(frame_excel, text="📂 Cargar Excel", style='Primary.TButton',
+                   command=self.cargar_excel_tipos).pack(side="left", padx=(0, 8), pady=2)
+        ttk.Button(frame_excel, text="📤 Exportar a Excel", style='Primary.TButton',
+                   command=self.exportar_excel_tipos).pack(side="left", padx=(0, 8), pady=2)
 
-        frame_lista = ttk.LabelFrame(self.tab_tipos, text="Tipos de Servicio")
-        frame_lista.pack(fill="both", expand=True, padx=5, pady=5)
+        frame_lista = self._card_section(self.tab_tipos, "Tipos de Servicio", "🧾")
 
-        self.tree_tipos = ttk.Treeview(frame_lista, columns=('distrito', 'descripcion'), show='headings')
-        self.tree_tipos.heading('distrito', text='Distrito')
-        self.tree_tipos.heading('descripcion', text='Tipo de Servicio')
-        self.tree_tipos.grid(row=0, column=0, sticky="nsew")
-        scrolly = ttk.Scrollbar(frame_lista, orient="vertical", command=self.tree_tipos.yview)
+        table_wrap = ttk.Frame(frame_lista, style='Card.TFrame')
+        table_wrap.pack(fill='both', expand=True)
+
+        self.tree_tipos = ttk.Treeview(table_wrap, columns=('distrito', 'descripcion'), show='headings', style="Custom.Treeview")
+        self.tree_tipos.heading('distrito', text='Distrito', anchor='w')
+        self.tree_tipos.heading('descripcion', text='Tipo de Servicio', anchor='w')
+        self.tree_tipos.column('distrito', width=240, anchor='w')
+        self.tree_tipos.column('descripcion', width=280, anchor='w')
+        self.tree_tipos.pack(fill='both', expand=True, side='left', padx=(0, 5), pady=2)
+
+        scrolly = ttk.Scrollbar(table_wrap, orient="vertical", command=self.tree_tipos.yview)
         self.tree_tipos.configure(yscrollcommand=scrolly.set)
-        scrolly.grid(row=0, column=1, sticky="ns")
-        frame_lista.grid_rowconfigure(0, weight=1)
-        frame_lista.grid_columnconfigure(0, weight=1)
+        scrolly.pack(side='left', fill='y')
 
-        frame_botones = ttk.Frame(frame_lista)
-        frame_botones.grid(row=1, column=0, columnspan=2, pady=5)
-        ttk.Button(frame_botones, text="Agregar", command=self.agregar_tipo).pack(side="left", padx=5)
-        ttk.Button(frame_botones, text="Editar", command=self.editar_tipo).pack(side="left", padx=5)
-        ttk.Button(frame_botones, text="Eliminar", command=self.eliminar_tipo).pack(side="left", padx=5)
+        btns = ttk.Frame(frame_lista, style='Card.TFrame')
+        btns.pack(fill='x', padx=0, pady=(6, 0))
+        ttk.Button(btns, text="➕ Agregar", style='Primary.TButton',
+                   command=self.agregar_tipo).pack(side='left', padx=(0, 6))
+        ttk.Button(btns, text="✏️ Editar", style='Primary.TButton',
+                   command=self.editar_tipo).pack(side='left', padx=(0, 6))
+        ttk.Button(btns, text="🗑️ Eliminar", style='Primary.TButton',
+                   command=self.eliminar_tipo).pack(side='left')
 
     def cargar_excel_tipos(self):
         filename = filedialog.askopenfilename(
@@ -436,8 +600,7 @@ class GestionServicios:
             df = pd.read_excel(filename)
             required_columns = ['Distrito', 'Tipo de Servicio']
             if not all(col in df.columns for col in required_columns):
-                messagebox.showerror("Error",
-                    "El archivo debe tener las columnas: Distrito, Tipo de Servicio")
+                messagebox.showerror("Error", "El archivo debe tener las columnas: Distrito, Tipo de Servicio")
                 return
 
             registros_procesados = 0
@@ -447,7 +610,6 @@ class GestionServicios:
                 try:
                     distrito = str(row['Distrito']).strip()
                     tipo = str(row['Tipo de Servicio']).strip()
-
                     if not distrito or not tipo:
                         continue
 
@@ -462,12 +624,10 @@ class GestionServicios:
 
                     agregar_tipo_servicio(id_distrito, tipo)
                     registros_procesados += 1
-
                 except Exception:
                     continue
 
             self.actualizar_tipos()
-
             mensaje = f"Proceso completado:\n- Registros nuevos agregados: {registros_procesados}\n- Registros existentes omitidos: {registros_existentes}"
             messagebox.showinfo("Éxito", mensaje)
 
@@ -488,24 +648,23 @@ class GestionServicios:
 
     def agregar_tipo(self):
         ventana = tk.Toplevel(self.parent)
-        ventana.title("Agregar Tipo de Servicio")
-        ventana.geometry("400x250")  # Más alto para los nuevos campos
-        self.centrar_ventana(ventana)
+        ventana.title("➕ Agregar Tipo de Servicio")
+        self._estilizar_toplevel(ventana)
 
-        frame_campos = ttk.Frame(ventana)
-        frame_campos.pack(padx=10, pady=5, fill='x')
+        container = self._dialog_container(ventana, "➕ Agregar Tipo de Servicio", "Complete los campos")
+        body = container['body']
 
-        ttk.Label(frame_campos, text="Área:").pack(pady=5)
-        combo_area = ttk.Combobox(frame_campos, state="readonly", width=38)
+        ttk.Label(body, text="Área:", style='Light.TLabel').pack(pady=(0, 4), anchor='w')
+        combo_area = ttk.Combobox(body, state="readonly")
         areas = obtener_areas()
         combo_area['values'] = [a['nombre'] for a in areas]
-        combo_area.pack(pady=5, fill='x')
+        combo_area.pack(fill='x')
 
-        ttk.Label(frame_campos, text="Distrito:").pack(pady=5)
-        combo_distrito = ttk.Combobox(frame_campos, state="readonly", width=38)
-        combo_distrito.pack(pady=5, fill='x')
+        ttk.Label(body, text="Distrito:", style='Light.TLabel').pack(pady=(8, 4), anchor='w')
+        combo_distrito = ttk.Combobox(body, state="readonly")
+        combo_distrito.pack(fill='x')
 
-        def actualizar_distritos(event):
+        def actualizar_distritos(event=None):
             area_nombre = combo_area.get()
             id_area = next((a['id'] for a in areas if a['nombre'] == area_nombre), None)
             if id_area:
@@ -518,9 +677,9 @@ class GestionServicios:
 
         combo_area.bind("<<ComboboxSelected>>", actualizar_distritos)
 
-        ttk.Label(frame_campos, text="Tipo de Servicio:").pack(pady=5)
-        descripcion = ttk.Entry(frame_campos, width=40)
-        descripcion.pack(pady=5, fill='x')
+        ttk.Label(body, text="Tipo de Servicio:", style='Light.TLabel').pack(pady=(8, 4), anchor='w')
+        descripcion = ttk.Entry(body, width=40)
+        descripcion.pack(fill='x')
 
         def guardar():
             if not combo_area.get() or not combo_distrito.get() or not descripcion.get().strip():
@@ -540,10 +699,7 @@ class GestionServicios:
             ventana.destroy()
             messagebox.showinfo("Éxito", "Tipo de servicio agregado correctamente")
 
-        frame_botones = ttk.Frame(ventana)
-        frame_botones.pack(pady=10)
-        ttk.Button(frame_botones, text="Guardar", command=guardar).pack(side="left", padx=5)
-        ttk.Button(frame_botones, text="Cerrar", command=ventana.destroy).pack(side="left", padx=5)
+        self._dialog_buttons(container['buttons'], guardar, ventana.destroy)
 
     def editar_tipo(self):
         selected = self.tree_tipos.selection()
@@ -551,25 +707,25 @@ class GestionServicios:
             messagebox.showwarning("Advertencia", "Seleccione un tipo de servicio para editar")
             return
         item = self.tree_tipos.item(selected[0])
+
         ventana = tk.Toplevel(self.parent)
-        ventana.title("Editar Tipo de Servicio")
-        ventana.geometry("400x260")
-        self.centrar_ventana(ventana)
+        ventana.title("✏️ Editar Tipo de Servicio")
+        self._estilizar_toplevel(ventana)
 
-        frame_campos = ttk.Frame(ventana)
-        frame_campos.pack(padx=10, pady=5, fill='x')
+        container = self._dialog_container(ventana, "✏️ Editar Tipo de Servicio", "Actualice los datos")
+        body = container['body']
 
-        ttk.Label(frame_campos, text="Área:").pack(pady=5)
-        combo_area = ttk.Combobox(frame_campos, state="readonly", width=38)
+        ttk.Label(body, text="Área:", style='Light.TLabel').pack(pady=(0, 4), anchor='w')
+        combo_area = ttk.Combobox(body, state="readonly")
         areas = obtener_areas()
         combo_area['values'] = [a['nombre'] for a in areas]
-        combo_area.pack(pady=5, fill='x')
+        combo_area.pack(fill='x')
 
-        ttk.Label(frame_campos, text="Distrito:").pack(pady=5)
-        combo_distrito = ttk.Combobox(frame_campos, state="readonly", width=38)
-        combo_distrito.pack(pady=5, fill='x')
+        ttk.Label(body, text="Distrito:", style='Light.TLabel').pack(pady=(8, 4), anchor='w')
+        combo_distrito = ttk.Combobox(body, state="readonly")
+        combo_distrito.pack(fill='x')
 
-        def actualizar_distritos(event):
+        def actualizar_distritos(event=None):
             area_nombre = combo_area.get()
             id_area = next((a['id'] for a in areas if a['nombre'] == area_nombre), None)
             if id_area:
@@ -580,42 +736,37 @@ class GestionServicios:
 
         combo_area.bind("<<ComboboxSelected>>", actualizar_distritos)
 
-        # Establecer valores iniciales
+        # Establecer valores iniciales desde item
         distrito_actual = item['values'][0]
-        # Obtener área del distrito actual
         distritos = obtener_distritos()
         area_actual = ''
         for d in distritos:
             if d['nombre'] == distrito_actual:
-                area_actual = d['area_nombre'] if 'area_nombre' in d.keys() else ''
+                area_actual = d.get('area_nombre', '')
                 break
 
         combo_area.set(area_actual)
         actualizar_distritos(None)
         combo_distrito.set(distrito_actual)
 
-        ttk.Label(frame_campos, text="Tipo de Servicio:").pack(pady=5)
-        descripcion = ttk.Entry(frame_campos, width=40)
+        ttk.Label(body, text="Tipo de Servicio:", style='Light.TLabel').pack(pady=(8, 4), anchor='w')
+        descripcion = ttk.Entry(body, width=40)
         descripcion.insert(0, item['values'][1])
-        descripcion.pack(pady=5, fill='x')
+        descripcion.pack(fill='x')
 
         def guardar():
             if not combo_area.get() or not combo_distrito.get() or not descripcion.get().strip():
                 messagebox.showwarning("Advertencia", "Complete todos los campos")
                 return
 
-            id_distrito = self.obtener_id_distrito(combo_distrito.get())
             id_tipo = self.obtener_id_tipo_servicio(item['values'][1], item['values'][0])
             actualizar_tipo_servicio(id_tipo, descripcion.get().strip())
             self.actualizar_tipos()
             ventana.destroy()
             messagebox.showinfo("Éxito", "Tipo de servicio actualizado correctamente")
 
-        frame_botones = ttk.Frame(ventana)
-        frame_botones.pack(pady=10)
-        ttk.Button(frame_botones, text="Guardar", command=guardar).pack(side="left", padx=5)
-        ttk.Button(frame_botones, text="Cerrar", command=ventana.destroy).pack(side="left", padx=5)
-    
+        self._dialog_buttons(container['buttons'], guardar, ventana.destroy)
+
     def eliminar_tipo(self):
         selected = self.tree_tipos.selection()
         if not selected:
@@ -634,32 +785,40 @@ class GestionServicios:
             for t in obtener_tipos_servicio_por_distrito(d['id']):
                 self.tree_tipos.insert('', 'end', values=(d['nombre'], t['descripcion']))
 
-    # --- SERVICIOS ---
+    # ================== SERVICIOS ==================
     def setup_servicios_tab(self):
-        frame_excel = ttk.LabelFrame(self.tab_servicios, text="Carga desde Excel")
-        frame_excel.pack(fill="x", padx=5, pady=5)
-        ttk.Button(frame_excel, text="Cargar Excel", command=self.cargar_excel_servicios).pack(side="left", padx=5, pady=5)
-        ttk.Button(frame_excel, text="Exportar a Excel", command=self.exportar_excel_servicios).pack(side="left", padx=5, pady=5)
+        frame_excel = self._card_section(self.tab_servicios, "Carga desde Excel", "📥")
+        ttk.Button(frame_excel, text="📂 Cargar Excel", style='Primary.TButton',
+                   command=self.cargar_excel_servicios).pack(side="left", padx=(0, 8), pady=2)
+        ttk.Button(frame_excel, text="📤 Exportar a Excel", style='Primary.TButton',
+                   command=self.exportar_excel_servicios).pack(side="left", padx=(0, 8), pady=2)
 
-        frame_lista = ttk.LabelFrame(self.tab_servicios, text="Servicios")
-        frame_lista.pack(fill="both", expand=True, padx=5, pady=5)
+        frame_lista = self._card_section(self.tab_servicios, "Servicios", "🛎️")
 
-        self.tree_servicios = ttk.Treeview(frame_lista, columns=('distrito', 'tipo', 'nombre'), show='headings')
-        self.tree_servicios.heading('distrito', text='Distrito')
-        self.tree_servicios.heading('tipo', text='Tipo de Servicio')
-        self.tree_servicios.heading('nombre', text='Servicio')
-        self.tree_servicios.grid(row=0, column=0, sticky="nsew")
-        scrolly = ttk.Scrollbar(frame_lista, orient="vertical", command=self.tree_servicios.yview)
+        table_wrap = ttk.Frame(frame_lista, style='Card.TFrame')
+        table_wrap.pack(fill='both', expand=True)
+
+        self.tree_servicios = ttk.Treeview(table_wrap, columns=('distrito', 'tipo', 'nombre'), show='headings', style="Custom.Treeview")
+        self.tree_servicios.heading('distrito', text='Distrito', anchor='w')
+        self.tree_servicios.heading('tipo', text='Tipo de Servicio', anchor='w')
+        self.tree_servicios.heading('nombre', text='Servicio', anchor='w')
+        self.tree_servicios.column('distrito', width=220, anchor='w')
+        self.tree_servicios.column('tipo', width=260, anchor='w')
+        self.tree_servicios.column('nombre', width=260, anchor='w')
+        self.tree_servicios.pack(fill='both', expand=True, side='left', padx=(0, 5), pady=2)
+
+        scrolly = ttk.Scrollbar(table_wrap, orient="vertical", command=self.tree_servicios.yview)
         self.tree_servicios.configure(yscrollcommand=scrolly.set)
-        scrolly.grid(row=0, column=1, sticky="ns")
-        frame_lista.grid_rowconfigure(0, weight=1)
-        frame_lista.grid_columnconfigure(0, weight=1)
+        scrolly.pack(side='left', fill='y')
 
-        frame_botones = ttk.Frame(frame_lista)
-        frame_botones.grid(row=1, column=0, columnspan=2, pady=5)
-        ttk.Button(frame_botones, text="Agregar", command=self.agregar_servicio).pack(side="left", padx=5)
-        ttk.Button(frame_botones, text="Editar", command=self.editar_servicio).pack(side="left", padx=5)
-        ttk.Button(frame_botones, text="Eliminar", command=self.eliminar_servicio).pack(side="left", padx=5)
+        btns = ttk.Frame(frame_lista, style='Card.TFrame')
+        btns.pack(fill='x', padx=0, pady=(6, 0))
+        ttk.Button(btns, text="➕ Agregar", style='Primary.TButton',
+                   command=self.agregar_servicio).pack(side='left', padx=(0, 6))
+        ttk.Button(btns, text="✏️ Editar", style='Primary.TButton',
+                   command=self.editar_servicio).pack(side='left', padx=(0, 6))
+        ttk.Button(btns, text="🗑️ Eliminar", style='Primary.TButton',
+                   command=self.eliminar_servicio).pack(side='left')
 
     def cargar_excel_servicios(self):
         filename = filedialog.askopenfilename(title="Seleccionar archivo Excel de Servicios", filetypes=[("Excel files", "*.xlsx *.xls")])
@@ -674,13 +833,18 @@ class GestionServicios:
             distrito = str(row['Distrito']).strip()
             tipo = str(row['Tipo de Servicio']).strip()
             servicio = str(row['Servicio']).strip()
+            if not (distrito and tipo and servicio):
+                continue
             id_distrito = self.obtener_id_distrito(distrito)
             if not id_distrito:
                 id_distrito = agregar_distrito(distrito)
             id_tipo = self.obtener_id_tipo_servicio(tipo, distrito)
             if not id_tipo:
                 id_tipo = agregar_tipo_servicio(id_distrito, tipo)
-            agregar_servicio(id_tipo, servicio)
+            try:
+                agregar_servicio(id_tipo, servicio)
+            except Exception:
+                pass
         messagebox.showinfo("Éxito", "Servicios cargados correctamente")
         self.actualizar_servicios()
 
@@ -699,28 +863,27 @@ class GestionServicios:
 
     def agregar_servicio(self):
         ventana = tk.Toplevel(self.parent)
-        ventana.title("Agregar Servicio")
-        ventana.geometry("400x320")
-        self.centrar_ventana(ventana)
+        ventana.title("➕ Agregar Servicio")
+        self._estilizar_toplevel(ventana)
 
-        frame_campos = ttk.Frame(ventana)
-        frame_campos.pack(padx=10, pady=5, fill='x')
+        container = self._dialog_container(ventana, "➕ Agregar Servicio", "Complete los campos")
+        body = container['body']
 
-        ttk.Label(frame_campos, text="Área:").pack(pady=5)
-        combo_area = ttk.Combobox(frame_campos, state="readonly", width=38)
+        ttk.Label(body, text="Área:", style='Light.TLabel').pack(pady=(0, 4), anchor='w')
+        combo_area = ttk.Combobox(body, state="readonly")
         areas = obtener_areas()
         combo_area['values'] = [a['nombre'] for a in areas]
-        combo_area.pack(pady=5, fill='x')
+        combo_area.pack(fill='x')
 
-        ttk.Label(frame_campos, text="Distrito:").pack(pady=5)
-        combo_distrito = ttk.Combobox(frame_campos, state="readonly", width=38)
-        combo_distrito.pack(pady=5, fill='x')
+        ttk.Label(body, text="Distrito:", style='Light.TLabel').pack(pady=(8, 4), anchor='w')
+        combo_distrito = ttk.Combobox(body, state="readonly")
+        combo_distrito.pack(fill='x')
 
-        ttk.Label(frame_campos, text="Tipo de Servicio:").pack(pady=5)
-        combo_tipo = ttk.Combobox(frame_campos, state="readonly", width=38)
-        combo_tipo.pack(pady=5, fill='x')
+        ttk.Label(body, text="Tipo de Servicio:", style='Light.TLabel').pack(pady=(8, 4), anchor='w')
+        combo_tipo = ttk.Combobox(body, state="readonly")
+        combo_tipo.pack(fill='x')
 
-        def actualizar_distritos(event):
+        def actualizar_distritos(event=None):
             area_nombre = combo_area.get()
             id_area = next((a['id'] for a in areas if a['nombre'] == area_nombre), None)
             if id_area:
@@ -735,7 +898,7 @@ class GestionServicios:
                 combo_tipo['values'] = []
                 combo_tipo.set('')
 
-        def actualizar_tipos(event):
+        def actualizar_tipos(event=None):
             id_distrito = self.obtener_id_distrito(combo_distrito.get())
             tipos = obtener_tipos_servicio_por_distrito(id_distrito) if id_distrito else []
             combo_tipo['values'] = [t['descripcion'] for t in tipos]
@@ -744,9 +907,9 @@ class GestionServicios:
         combo_area.bind("<<ComboboxSelected>>", actualizar_distritos)
         combo_distrito.bind("<<ComboboxSelected>>", actualizar_tipos)
 
-        ttk.Label(frame_campos, text="Servicio:").pack(pady=5)
-        nombre = ttk.Entry(frame_campos, width=40)
-        nombre.pack(pady=5, fill='x')
+        ttk.Label(body, text="Servicio:", style='Light.TLabel').pack(pady=(8, 4), anchor='w')
+        nombre = ttk.Entry(body, width=40)
+        nombre.pack(fill='x')
 
         def guardar():
             if not combo_area.get() or not combo_distrito.get() or not combo_tipo.get() or not nombre.get().strip():
@@ -759,10 +922,7 @@ class GestionServicios:
             ventana.destroy()
             messagebox.showinfo("Éxito", "Servicio agregado correctamente")
 
-        frame_botones = ttk.Frame(ventana)
-        frame_botones.pack(pady=10)
-        ttk.Button(frame_botones, text="Guardar", command=guardar).pack(side="left", padx=5)
-        ttk.Button(frame_botones, text="Cerrar", command=ventana.destroy).pack(side="left", padx=5)
+        self._dialog_buttons(container['buttons'], guardar, ventana.destroy)
 
     def editar_servicio(self):
         selected = self.tree_servicios.selection()
@@ -770,46 +930,44 @@ class GestionServicios:
             messagebox.showwarning("Advertencia", "Seleccione un servicio para editar")
             return
         item = self.tree_servicios.item(selected[0])
+
         ventana = tk.Toplevel(self.parent)
-        ventana.title("Editar Servicio")
-        ventana.geometry("400x330")
-        self.centrar_ventana(ventana)
+        ventana.title("✏️ Editar Servicio")
+        self._estilizar_toplevel(ventana)
 
-        frame_campos = ttk.Frame(ventana)
-        frame_campos.pack(padx=10, pady=5, fill='x')
+        container = self._dialog_container(ventana, "✏️ Editar Servicio", "Actualice los datos")
+        body = container['body']
 
-        ttk.Label(frame_campos, text="Área:").pack(pady=5)
-        combo_area = ttk.Combobox(frame_campos, state="readonly", width=38)
+        ttk.Label(body, text="Área:", style='Light.TLabel').pack(pady=(0, 4), anchor='w')
+        combo_area = ttk.Combobox(body, state="readonly")
         areas = obtener_areas()
         combo_area['values'] = [a['nombre'] for a in areas]
-        combo_area.pack(pady=5, fill='x')
+        combo_area.pack(fill='x')
 
-        ttk.Label(frame_campos, text="Distrito:").pack(pady=5)
-        combo_distrito = ttk.Combobox(frame_campos, state="readonly", width=38)
-        combo_distrito.pack(pady=5, fill='x')
+        ttk.Label(body, text="Distrito:", style='Light.TLabel').pack(pady=(8, 4), anchor='w')
+        combo_distrito = ttk.Combobox(body, state="readonly")
+        combo_distrito.pack(fill='x')
 
-        ttk.Label(frame_campos, text="Tipo de Servicio:").pack(pady=5)
-        combo_tipo = ttk.Combobox(frame_campos, state="readonly", width=38)
-        combo_tipo.pack(pady=5, fill='x')
+        ttk.Label(body, text="Tipo de Servicio:", style='Light.TLabel').pack(pady=(8, 4), anchor='w')
+        combo_tipo = ttk.Combobox(body, state="readonly")
+        combo_tipo.pack(fill='x')
 
-        def actualizar_distritos(event):
+        def actualizar_distritos(event=None):
             area_nombre = combo_area.get()
             id_area = next((a['id'] for a in areas if a['nombre'] == area_nombre), None)
             if id_area:
                 distritos = obtener_distritos_por_area(id_area)
                 combo_distrito['values'] = [d['nombre'] for d in distritos]
-                # Si el distrito actual no está en la lista, limpiar selección
                 if item['values'][0] not in [d['nombre'] for d in distritos]:
                     combo_distrito.set('')
             else:
                 combo_distrito['values'] = []
                 combo_distrito.set('')
 
-        def actualizar_tipos(event):
+        def actualizar_tipos(event=None):
             id_distrito = self.obtener_id_distrito(combo_distrito.get())
             tipos = obtener_tipos_servicio_por_distrito(id_distrito) if id_distrito else []
             combo_tipo['values'] = [t['descripcion'] for t in tipos]
-            # Si el tipo actual no está en la lista, limpiar selección
             if item['values'][1] not in [t['descripcion'] for t in tipos]:
                 combo_tipo.set('')
 
@@ -817,12 +975,11 @@ class GestionServicios:
         combo_distrito.bind("<<ComboboxSelected>>", actualizar_tipos)
 
         # Establecer valores iniciales
-        # Obtener área del distrito actual
         distritos = obtener_distritos()
         area_actual = ''
         for d in distritos:
             if d['nombre'] == item['values'][0]:
-                area_actual = d['area_nombre'] if 'area_nombre' in d.keys() else ''
+                area_actual = d.get('area_nombre', '')
                 break
 
         combo_area.set(area_actual)
@@ -831,27 +988,23 @@ class GestionServicios:
         actualizar_tipos(None)
         combo_tipo.set(item['values'][1])
 
-        ttk.Label(frame_campos, text="Servicio:").pack(pady=5)
-        nombre = ttk.Entry(frame_campos, width=40)
+        ttk.Label(body, text="Servicio:", style='Light.TLabel').pack(pady=(8, 4), anchor='w')
+        nombre = ttk.Entry(body, width=40)
         nombre.insert(0, item['values'][2])
-        nombre.pack(pady=5, fill='x')
+        nombre.pack(fill='x')
 
         def guardar():
             if not combo_area.get() or not combo_distrito.get() or not combo_tipo.get() or not nombre.get().strip():
                 messagebox.showwarning("Advertencia", "Complete todos los campos")
                 return
 
-            id_tipo = self.obtener_id_tipo_servicio(combo_tipo.get(), combo_distrito.get())
             id_servicio = self.obtener_id_servicio(item['values'][2], item['values'][1], item['values'][0])
             actualizar_servicio(id_servicio, nombre.get().strip())
             self.actualizar_servicios()
             ventana.destroy()
             messagebox.showinfo("Éxito", "Servicio actualizado correctamente")
 
-        frame_botones = ttk.Frame(ventana)
-        frame_botones.pack(pady=10)
-        ttk.Button(frame_botones, text="Guardar", command=guardar).pack(side="left", padx=5)
-        ttk.Button(frame_botones, text="Cerrar", command=ventana.destroy).pack(side="left", padx=5)
+        self._dialog_buttons(container['buttons'], guardar, ventana.destroy)
 
     def eliminar_servicio(self):
         selected = self.tree_servicios.selection()
@@ -872,8 +1025,49 @@ class GestionServicios:
                 for s in obtener_servicios_por_tipo(t['id']):
                     self.tree_servicios.insert('', 'end', values=(d['nombre'], t['descripcion'], s['nombre']))
 
+    # ---------- Diálogos y Toplevel estilizados ----------
+    def _estilizar_toplevel(self, ventana):
+        try:
+            ventana.configure(bg=self.COLORS['light'])
+        except Exception:
+            pass
+        ventana.geometry("420x260")
+        self.centrar_ventana(ventana)
+
+    def _dialog_container(self, ventana, title_text, subtitle_text):
+        outer = ttk.Frame(ventana, style='Light.TFrame', padding=(10, 10))
+        outer.pack(fill='both', expand=True)
+
+        header = tk.Frame(outer, bg=self.COLORS['primary'])
+        header.pack(fill='x', pady=(0, 8))
+        tk.Label(header, text=title_text, font=('Segoe UI', 10, 'bold'),
+                 fg=self.COLORS['white'], bg=self.COLORS['primary']).pack(side='left', padx=10, pady=4)
+        tk.Label(header, text=subtitle_text, font=('Segoe UI', 8),
+                 fg=self.COLORS['white'], bg=self.COLORS['primary']).pack(side='left', padx=10)
+
+        body = ttk.Frame(outer, style='Light.TFrame')
+        body.pack(fill='both', expand=True)
+
+        buttons = ttk.Frame(outer, style='Light.TFrame')
+        buttons.pack(fill='x', pady=(8, 0), anchor='e')
+
+        return {'outer': outer, 'body': body, 'buttons': buttons}
+
+    def _dialog_buttons(self, container_buttons, on_accept, on_cancel):
+        ttk.Button(container_buttons, text="✔️ Aceptar", style='Primary.TButton',
+                   command=on_accept).pack(side='right', padx=6)
+        ttk.Button(container_buttons, text="✖️ Cancelar", style='Primary.TButton',
+                   command=on_cancel).pack(side='right', padx=6)
+
+    # ---------- Cierre ----------
     def cerrar_ventana(self):
         if messagebox.askyesno("Confirmar", "¿Está seguro que desea cerrar esta ventana?"):
             for widget in self.parent.winfo_children():
                 widget.destroy()
-            self.main_window.show_welcome_screen()
+            if hasattr(self.main_window, 'show_welcome_screen'):
+                self.main_window.show_welcome_screen()
+            else:
+                try:
+                    self.parent.destroy()
+                except Exception:
+                    pass
