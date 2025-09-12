@@ -47,6 +47,7 @@ def setup_styles(root):
     # Frames
     style.configure('Light.TFrame', background=COLORS['light'])
     style.configure('Card.TFrame', background=COLORS['white'], relief='solid', borderwidth=1)
+    style.configure('NoBorder.TFrame', background=COLORS['white'], relief='flat', borderwidth=0)
 
     # Header de card
     style.configure('Header.TFrame', background=COLORS['primary'])
@@ -83,15 +84,15 @@ def setup_styles(root):
     root.option_add('*TCombobox*Listbox.selectForeground', COLORS['white'])
     root.option_add('*TCombobox*Listbox.font', '{Segoe UI} 9')
 
-    # Treeview
+    # Treeview sin borde
     style.configure("Custom.Treeview",
                     background=COLORS['white'],
                     foreground=COLORS['text_dark'],
                     rowheight=22,
                     fieldbackground=COLORS['white'],
                     font=('Segoe UI', 9),
-                    borderwidth=1,
-                    relief='solid')
+                    borderwidth=0,
+                    relief='flat')
     HEADER_BG = '#e5e7eb'
     HEADER_FG = '#111827'
     style.configure("Custom.Treeview.Heading",
@@ -99,13 +100,33 @@ def setup_styles(root):
                     foreground=HEADER_FG,
                     font=('Segoe UI', 8, 'bold'),
                     relief='flat',
-                    borderwidth=1,
+                    borderwidth=0,
                     padding=(3, 6, 3, 6),
                     anchor='center',
                     justify='center')
     style.map("Custom.Treeview",
               background=[('selected', COLORS['accent'])],
               foreground=[('selected', '#ffffff')])
+
+    # Scrollbars planos (sin contorno)
+    style.configure('Vertical.TScrollbar',
+                    gripcount=0,
+                    troughcolor=COLORS['white'],
+                    background=COLORS['white'],
+                    bordercolor=COLORS['white'],
+                    lightcolor=COLORS['white'],
+                    darkcolor=COLORS['white'],
+                    arrowsize=12,
+                    relief='flat')
+    style.configure('Horizontal.TScrollbar',
+                    gripcount=0,
+                    troughcolor=COLORS['white'],
+                    background=COLORS['white'],
+                    bordercolor=COLORS['white'],
+                    lightcolor=COLORS['white'],
+                    darkcolor=COLORS['white'],
+                    arrowsize=12,
+                    relief='flat')
 
     # Notebook
     style.configure('TNotebook', background=COLORS['light'], borderwidth=0)
@@ -162,7 +183,8 @@ class GestionMovimientos:
 
         ttk.Label(header, text=f"{icon} {title}", style='Header.TLabel').pack(side='left', padx=10)
 
-        content = ttk.Frame(card, style='Card.TFrame')
+        # Contenido sin borde interno
+        content = ttk.Frame(card, style='NoBorder.TFrame')
         content.pack(fill='both', expand=True, padx=12, pady=8)
 
         return content
@@ -224,20 +246,29 @@ class GestionMovimientos:
         # Card: Lista
         frame_lista = self._card_section(self.tab_tipos, "Tipos de Movimiento", "🧾")
 
-        table_wrap = ttk.Frame(frame_lista, style='Card.TFrame')
+        table_wrap = ttk.Frame(frame_lista, style='NoBorder.TFrame')
         table_wrap.pack(fill='both', expand=True)
 
-        self.tree_tipos = ttk.Treeview(table_wrap, columns=('descripcion',), show='headings', style="Custom.Treeview")
+        # Treeview plano, alineado a la izquierda
+        self.tree_tipos = ttk.Treeview(
+            table_wrap,
+            columns=('descripcion',),
+            show='headings',
+            style="Custom.Treeview"
+        )
         self.tree_tipos.heading('descripcion', text='Tipo de Movimiento', anchor='w')
-        self.tree_tipos.column('descripcion', anchor='w', width=380)
+        self.tree_tipos.column('descripcion', anchor='w', width=420)
+        # Quitar contornos residuales
+        self.tree_tipos.configure(selectmode='browse')
         self.tree_tipos.pack(fill='both', expand=True, side='left', padx=(0, 5), pady=2)
 
-        scrolly = ttk.Scrollbar(table_wrap, orient="vertical", command=self.tree_tipos.yview)
+        # Scrollbar sin borde
+        scrolly = ttk.Scrollbar(table_wrap, orient="vertical", command=self.tree_tipos.yview, style='Vertical.TScrollbar')
         self.tree_tipos.configure(yscrollcommand=scrolly.set)
         scrolly.pack(side='left', fill='y')
 
-        # Botonera horizontal
-        btns = ttk.Frame(frame_lista, style='Card.TFrame')
+        # Botonera horizontal sin marco
+        btns = ttk.Frame(frame_lista, style='NoBorder.TFrame')
         btns.pack(fill='x', padx=0, pady=(6, 0))
         ttk.Button(btns, text="➕ Agregar", style='Primary.TButton',
                    command=self.agregar_tipo).pack(side='left', padx=(0, 6))
@@ -295,6 +326,15 @@ class GestionMovimientos:
         except Exception as e:
             messagebox.showerror("Error", f"No se pudo exportar el archivo: {str(e)}")
 
+    # ---------- Diálogos ----------
+    def _estilizar_toplevel(self, ventana, w=420, h=200):
+        try:
+            ventana.configure(bg=self.COLORS['light'])
+        except Exception:
+            pass
+        ventana.geometry(f"{w}x{h}")
+        self.centrar_ventana(ventana)
+
     def _dialog_container(self, ventana, title_text, subtitle_text):
         outer = ttk.Frame(ventana, style='Light.TFrame', padding=(10, 10))
         outer.pack(fill='both', expand=True)
@@ -323,12 +363,7 @@ class GestionMovimientos:
     def agregar_tipo(self):
         ventana = tk.Toplevel(self.parent)
         ventana.title("➕ Agregar Tipo de Movimiento")
-        try:
-            ventana.configure(bg=self.COLORS['light'])
-        except Exception:
-            pass
-        ventana.geometry("420x200")
-        self.centrar_ventana(ventana)
+        self._estilizar_toplevel(ventana)
 
         container = self._dialog_container(ventana, "➕ Agregar Tipo de Movimiento", "Ingrese la descripción")
         body = container['body']
@@ -338,11 +373,12 @@ class GestionMovimientos:
         descripcion.pack(fill='x')
 
         def guardar():
-            if not descripcion.get().strip():
+            texto = descripcion.get().strip()
+            if not texto:
                 messagebox.showwarning("Advertencia", "Ingrese la descripción")
                 return
             try:
-                agregar_tipo_movimiento(descripcion.get().strip())
+                agregar_tipo_movimiento(texto)
                 self.actualizar_tipos()
                 ventana.destroy()
                 messagebox.showinfo("Éxito", "Tipo de movimiento agregado correctamente")
@@ -360,12 +396,7 @@ class GestionMovimientos:
 
         ventana = tk.Toplevel(self.parent)
         ventana.title("✏️ Editar Tipo de Movimiento")
-        try:
-            ventana.configure(bg=self.COLORS['light'])
-        except Exception:
-            pass
-        ventana.geometry("420x200")
-        self.centrar_ventana(ventana)
+        self._estilizar_toplevel(ventana)
 
         container = self._dialog_container(ventana, "✏️ Editar Tipo de Movimiento", "Actualice la descripción")
         body = container['body']
@@ -412,12 +443,13 @@ class GestionMovimientos:
 
     def actualizar_tipos(self):
         try:
+            # Optimización: ocultar columnas y bloquear dibujo durante la inserción
+            self.tree_tipos.configure(displaycolumns=())
             self.tree_tipos.delete(*self.tree_tipos.get_children())
-            tipos = obtener_tipos_movimiento()
-            if not tipos:
-                return
+            tipos = obtener_tipos_movimiento() or []
             for tipo in tipos:
                 self.tree_tipos.insert('', 'end', values=(tipo['descripcion'],))
+            self.tree_tipos.configure(displaycolumns=('descripcion',))
         except Exception as e:
             messagebox.showerror("Error", f"Error al actualizar tipos de movimiento: {str(e)}")
 

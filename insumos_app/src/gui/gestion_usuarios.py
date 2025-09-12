@@ -2,11 +2,13 @@ import os
 import sys
 import tkinter as tk
 from tkinter import ttk, messagebox, simpledialog
+
 from src.database.db_manager import (
-    obtener_usuarios, crear_usuario, actualizar_usuario, cambiar_password_usuario, eliminar_usuario, existe_usuario
+    obtener_usuarios, crear_usuario, actualizar_usuario,
+    cambiar_password_usuario, eliminar_usuario, existe_usuario
 )
 
-# ================= Estilos unificados (igual que en Importar/Exportar) =================
+# ================= Estilos unificados =================
 def setup_styles(root):
     COLORS = {
         'primary':   '#2c3e50',
@@ -36,6 +38,8 @@ def setup_styles(root):
 
     # Frames
     style.configure('Light.TFrame', background=COLORS['light'])
+
+    # Card EXTERIOR con borde (si quieres ver solo el header y el borde externo)
     style.configure('Card.TFrame', background=COLORS['white'], relief='solid', borderwidth=1)
 
     # Header de card
@@ -73,15 +77,15 @@ def setup_styles(root):
     root.option_add('*TCombobox*Listbox.selectForeground', COLORS['white'])
     root.option_add('*TCombobox*Listbox.font', '{Segoe UI} 9')
 
-    # Treeview
+    # Treeview totalmente plano (sin contornos)
     style.configure("Custom.Treeview",
                     background=COLORS['white'],
                     foreground=COLORS['text_dark'],
                     rowheight=22,
                     fieldbackground=COLORS['white'],
                     font=('Segoe UI', 9),
-                    borderwidth=1,
-                    relief='solid')
+                    borderwidth=0,
+                    relief='flat')
     HEADER_BG = '#e5e7eb'
     HEADER_FG = '#111827'
     style.configure("Custom.Treeview.Heading",
@@ -89,7 +93,7 @@ def setup_styles(root):
                     foreground=HEADER_FG,
                     font=('Segoe UI', 8, 'bold'),
                     relief='flat',
-                    borderwidth=1,
+                    borderwidth=0,
                     padding=(3, 6, 3, 6),
                     anchor='center',
                     justify='center')
@@ -97,15 +101,28 @@ def setup_styles(root):
               background=[('selected', COLORS['accent'])],
               foreground=[('selected', '#ffffff')])
 
-    # Notebook (por si se muestra dentro de pestañas)
-    style.configure('TNotebook', background=COLORS['light'], borderwidth=0)
-    style.configure('TNotebook.Tab',
-                    background=COLORS['light'],
-                    foreground=COLORS['text_dark'],
-                    font=('Segoe UI', 9))
-    style.map('TNotebook.Tab',
-              background=[('selected', COLORS['white'])],
-              foreground=[('selected', COLORS['text_dark'])])
+    # Scrollbars planos (sin contorno)
+    style.configure('Vertical.TScrollbar',
+                    gripcount=0,
+                    troughcolor=COLORS['white'],
+                    background=COLORS['white'],
+                    bordercolor=COLORS['white'],
+                    lightcolor=COLORS['white'],
+                    darkcolor=COLORS['white'],
+                    arrowsize=12,
+                    relief='flat')
+    style.configure('Horizontal.TScrollbar',
+                    gripcount=0,
+                    troughcolor=COLORS['white'],
+                    background=COLORS['white'],
+                    bordercolor=COLORS['white'],
+                    lightcolor=COLORS['white'],
+                    darkcolor=COLORS['white'],
+                    arrowsize=12,
+                    relief='flat')
+
+    # Frame sin contorno (para contenedores internos y botoneras)
+    style.configure('NoBorder.TFrame', background=COLORS['white'], relief='flat', borderwidth=0)
 
     return COLORS, style
 
@@ -123,13 +140,16 @@ class GestionUsuarios:
         self.parent = parent_frame
         self.main_window = main_window
 
-        # Estilos/paleta compartidos
         self.COLORS, self._style = setup_styles(self.parent.winfo_toplevel())
 
+        # Cache en memoria para minimizar lecturas repetidas
+        self._usuarios_cache = []
+
+        self._build_once = False
         self.setup_ui()
         self.cargar_usuarios()
 
-    # Header (título + subtítulo) igual al usado en otros módulos
+    # Header (título + subtítulo)
     def _header_title_sub(self, parent, title_text, subtitle_text):
         header_frame = tk.Frame(parent, bg=self.COLORS['primary'], height=55)
         header_frame.pack(fill='x', padx=0, pady=(6, 6))
@@ -138,19 +158,10 @@ class GestionUsuarios:
         header_inner = tk.Frame(header_frame, bg=self.COLORS['primary'])
         header_inner.pack(fill='both', expand=True, padx=15, pady=4)
 
-        title_label = tk.Label(header_inner,
-                               text=title_text,
-                               font=('Segoe UI', 11, 'bold'),
-                               fg=self.COLORS['white'],
-                               bg=self.COLORS['primary'])
-        title_label.pack(anchor='w')
-
-        subtitle_label = tk.Label(header_inner,
-                                  text=subtitle_text,
-                                  font=('Segoe UI', 8),
-                                  fg=self.COLORS['white'],
-                                  bg=self.COLORS['primary'])
-        subtitle_label.pack(anchor='w', pady=(1, 0))
+        tk.Label(header_inner, text=title_text, font=('Segoe UI', 11, 'bold'),
+                 fg=self.COLORS['white'], bg=self.COLORS['primary']).pack(anchor='w')
+        tk.Label(header_inner, text=subtitle_text, font=('Segoe UI', 8),
+                 fg=self.COLORS['white'], bg=self.COLORS['primary']).pack(anchor='w', pady=(1, 0))
 
     # Card con header azul e icono
     def _card_section(self, parent, title, icon):
@@ -166,119 +177,163 @@ class GestionUsuarios:
 
         ttk.Label(header, text=f"{icon} {title}", style='Header.TLabel').pack(side='left', padx=10)
 
-        content = ttk.Frame(card, style='Card.TFrame')
+        # El contenido AHORA ES SIN BORDE para que no haya recuadro gris interno
+        content = ttk.Frame(card, style='NoBorder.TFrame')
         content.pack(fill='both', expand=True, padx=12, pady=8)
 
         return content
 
     def setup_ui(self):
-        for widget in self.parent.winfo_children():
-            widget.destroy()
+        if not self._build_once:
+            for widget in self.parent.winfo_children():
+                widget.destroy()
 
-        root_light = ttk.Frame(self.parent, style='Light.TFrame')
-        root_light.pack(fill='both', expand=True)
+            self.root_light = ttk.Frame(self.parent, style='Light.TFrame')
+            self.root_light.pack(fill='both', expand=True)
 
-        # Header principal
-        self._header_title_sub(
-            root_light,
-            "👥 Gestión de Usuarios del Sistema",
-            "Administre los usuarios y sus permisos de acceso"
-        )
-
-        # Card principal para la tabla y acciones
-        frame = self._card_section(root_light, "📋 Gestión de Usuarios", "📋")
-
-        # Tabla de usuarios
-        columns = ("id", "username", "nombre", "rol", "activo")
-
-        self.tree_frame = ttk.Frame(frame, style='Card.TFrame')
-        self.tree_frame.pack(fill="both", expand=True, pady=(4, 8))
-
-        self.tree_scroll_y = ttk.Scrollbar(self.tree_frame, orient="vertical")
-        self.tree_scroll_x = ttk.Scrollbar(self.tree_frame, orient="horizontal")
-
-        self.tree = ttk.Treeview(
-            self.tree_frame,
-            columns=columns,
-            show="headings",
-            yscrollcommand=self.tree_scroll_y.set,
-            xscrollcommand=self.tree_scroll_x.set,
-            style="Custom.Treeview"
-        )
-
-        self.tree_scroll_y.config(command=self.tree.yview)
-        self.tree_scroll_x.config(command=self.tree.xview)
-
-        self.tree_scroll_y.pack(side="right", fill="y")
-        self.tree_scroll_x.pack(side="bottom", fill="x")
-
-        headings = {
-            "id": "ID",
-            "username": "Usuario",
-            "nombre": "Nombre",
-            "rol": "Rol",
-            "activo": "Activo"
-        }
-        for col in columns:
-            self.tree.heading(col, text=headings.get(col, col.capitalize()), anchor="center")
-            if col in ("id", "rol", "activo"):
-                width = 80
-            elif col == "username":
-                width = 160
-            else:
-                width = 220
-            self.tree.column(col, width=width, anchor="center")
-        self.tree.pack(fill="both", expand=True)
-
-        # Botones
-        btn_frame = ttk.Frame(frame, style='Card.TFrame')
-        btn_frame.pack(pady=4, anchor='w')
-
-        ttk.Button(btn_frame, text="➕ Crear Usuario", style="Primary.TButton",
-                   command=self.crear_usuario).pack(side="left", padx=(0, 8))
-        ttk.Button(btn_frame, text="✏️ Editar Usuario", style="Primary.TButton",
-                   command=self.editar_usuario).pack(side="left", padx=(0, 8))
-        ttk.Button(btn_frame, text="🔐 Cambiar Contraseña", style="Primary.TButton",
-                   command=self.cambiar_password).pack(side="left", padx=(0, 8))
-        ttk.Button(btn_frame, text="🗑️ Eliminar Usuario", style="Primary.TButton",
-                   command=self.eliminar_usuario).pack(side="left", padx=(0, 8))
-        ttk.Button(btn_frame, text="↩️ Volver", style="Primary.TButton",
-                   command=self.volver).pack(side="left", padx=(0, 8))
-
-    def cargar_usuarios(self):
-        for row in self.tree.get_children():
-            self.tree.delete(row)
-        for usuario in obtener_usuarios():
-            values = (
-                usuario['id'],
-                usuario['username'],
-                usuario['nombre_completo'],
-                usuario['rol'],
-                'Sí' if int(usuario['activo']) == 1 else 'No'
+            # Header principal
+            self._header_title_sub(
+                self.root_light,
+                "👥 Gestión de Usuarios del Sistema",
+                "Administre los usuarios y sus permisos de acceso"
             )
-            self.tree.insert("", "end", values=values)
 
+            # Card principal
+            frame = self._card_section(self.root_light, "Gestión de Usuarios", "📋")
+
+            # Tabla de usuarios
+            columns = ("id", "username", "nombre", "rol", "activo")
+
+            # Contenedor de la tabla: SIN borde (el único borde debe ser el del card exterior)
+            self.table_outer = ttk.Frame(frame, style='NoBorder.TFrame')
+            self.table_outer.pack(fill="both", expand=True, pady=(4, 8))
+
+            # Wrapper interior SIN borde y con padding simétrico
+            self.table_wrap = ttk.Frame(self.table_outer, style='NoBorder.TFrame')
+            self.table_wrap.pack(fill="both", expand=True, padx=12, pady=8)
+
+            # Grid interno
+            self.table_wrap.grid_columnconfigure(0, weight=1)
+            self.table_wrap.grid_rowconfigure(0, weight=1)
+
+            self.tree = ttk.Treeview(
+                self.table_wrap,
+                columns=columns,
+                show="headings",
+                style="Custom.Treeview"
+            )
+            # Quitar contornos/foco nativo del Treeview (por si el tema agrega filetes)
+            try:
+                self.tree['highlightthickness'] = 0
+            except Exception:
+                pass
+            try:
+                self.tree['borderwidth'] = 0
+            except Exception:
+                pass
+            try:
+                self.tree['relief'] = 'flat'
+            except Exception:
+                pass
+
+            scrolly = ttk.Scrollbar(self.table_wrap, orient="vertical", command=self.tree.yview, style='Vertical.TScrollbar')
+            scrollx = ttk.Scrollbar(self.table_wrap, orient="horizontal", command=self.tree.xview, style='Horizontal.TScrollbar')
+            self.tree.configure(yscrollcommand=scrolly.set, xscrollcommand=scrollx.set)
+
+            self.tree.grid(row=0, column=0, sticky="nsew")
+            scrolly.grid(row=0, column=1, sticky="ns")
+            scrollx.grid(row=1, column=0, sticky="ew")
+
+            # Encabezados y columnas
+            headings = {
+                "id": "ID",
+                "username": "Usuario",
+                "nombre": "Nombre",
+                "rol": "Rol",
+                "activo": "Activo"
+            }
+            for col in columns:
+                self.tree.heading(col, text=headings.get(col, col.capitalize()), anchor="w")
+                if col == "id":
+                    width = 60
+                elif col in ("rol", "activo"):
+                    width = 100
+                elif col == "username":
+                    width = 160
+                else:
+                    width = 220
+                self.tree.column(col, width=width, anchor="w", stretch=True)
+
+            # Botones (en frame sin contorno)
+            btn_frame = ttk.Frame(frame, style='NoBorder.TFrame')
+            btn_frame.pack(pady=4, anchor='w')
+
+            ttk.Button(btn_frame, text="➕ Crear Usuario", style="Primary.TButton",
+                       command=self.crear_usuario).pack(side="left", padx=(0, 8))
+            ttk.Button(btn_frame, text="✏️ Editar Usuario", style="Primary.TButton",
+                       command=self.editar_usuario).pack(side="left", padx=(0, 8))
+            ttk.Button(btn_frame, text="🔐 Cambiar Contraseña", style="Primary.TButton",
+                       command=self.cambiar_password).pack(side="left", padx=(0, 8))
+            ttk.Button(btn_frame, text="🗑️ Eliminar Usuario", style="Primary.TButton",
+                       command=self.eliminar_usuario).pack(side="left", padx=(0, 8))
+            ttk.Button(btn_frame, text="↩️ Volver", style="Primary.TButton",
+                       command=self.volver).pack(side="left", padx=(0, 8))
+
+            self._build_once = True
+
+    # =============== Rendimiento: carga eficiente ===============
+    def cargar_usuarios(self):
+        # Traer de DB una sola vez y cachear
+        try:
+            data = obtener_usuarios() or []
+        except Exception as e:
+            messagebox.showerror("Error", f"No se pudieron obtener usuarios: {e}")
+            data = []
+
+        self._usuarios_cache = data
+
+        # Congelar el tree para minimizar repaints
+        self.tree.configure(displaycolumns=())  # ocultar durante la carga
+        self.tree.delete(*self.tree.get_children())
+
+        rows = []
+        for usuario in data:
+            values = (
+                usuario.get('id', ''),
+                usuario.get('username', ''),
+                usuario.get('nombre_completo', ''),
+                usuario.get('rol', ''),
+                'Sí' if int(usuario.get('activo', 0)) == 1 else 'No'
+            )
+            rows.append(values)
+
+        for vals in rows:
+            self.tree.insert("", "end", values=vals)
+
+        self.tree.configure(displaycolumns=("id", "username", "nombre", "rol", "activo"))
+
+    # =============== Acciones ===============
     def crear_usuario(self):
         dialog = UsuarioDialog(self.parent, "➕ Crear Usuario", modo="crear")
         if dialog.result:
             username, password, nombre, rol, activo = dialog.result
-
-            if existe_usuario(username):
-                messagebox.showerror("Error", "El nombre de usuario ya existe")
-                return
-
-            if crear_usuario(username, password, nombre, rol, activo):
+            try:
+                if existe_usuario(username):
+                    messagebox.showerror("Error", "El nombre de usuario ya existe")
+                    return
+                ok = crear_usuario(username, password, nombre, rol, activo)
+            except Exception as e:
+                ok = False
+                messagebox.showerror("Error", f"No se pudo crear el usuario: {e}")
+            if ok:
                 messagebox.showinfo("Éxito", "Usuario creado correctamente")
                 self.cargar_usuarios()
-            else:
-                messagebox.showerror("Error", "No se pudo crear el usuario")
 
     def editar_usuario(self):
         selected = self.tree.selection()
         if not selected:
             messagebox.showwarning("Seleccione", "Seleccione un usuario para editar")
             return
-
         item = self.tree.item(selected[0])["values"]
         id_usuario, username, nombre, rol, activo_txt = item
         activo_val = 1 if str(activo_txt).lower().startswith('s') else 0
@@ -295,15 +350,16 @@ class GestionUsuarios:
 
         if dialog.result:
             _, password, nombre, rol, activo = dialog.result
-
-            if password:
-                cambiar_password_usuario(id_usuario, password)
-
-            if actualizar_usuario(id_usuario, nombre, rol, int(activo)):
+            try:
+                if password:
+                    cambiar_password_usuario(id_usuario, password)
+                ok = actualizar_usuario(id_usuario, nombre, rol, int(activo))
+            except Exception as e:
+                ok = False
+                messagebox.showerror("Error", f"No se pudo actualizar: {e}")
+            if ok:
                 messagebox.showinfo("Éxito", "Usuario actualizado correctamente")
                 self.cargar_usuarios()
-            else:
-                messagebox.showerror("Error", "No se pudo actualizar el usuario")
 
     def cambiar_password(self):
         selected = self.tree.selection()
@@ -314,10 +370,13 @@ class GestionUsuarios:
         id_usuario = item[0]
         new_pass = simpledialog.askstring("🔐 Nueva Contraseña", "Ingrese la nueva contraseña:", show="*")
         if new_pass:
-            if cambiar_password_usuario(id_usuario, new_pass):
+            try:
+                ok = cambiar_password_usuario(id_usuario, new_pass)
+            except Exception as e:
+                ok = False
+                messagebox.showerror("Error", f"No se pudo cambiar la contraseña: {e}")
+            if ok:
                 messagebox.showinfo("Éxito", "Contraseña actualizada")
-            else:
-                messagebox.showerror("Error", "No se pudo cambiar la contraseña")
 
     def eliminar_usuario(self):
         selected = self.tree.selection()
@@ -327,17 +386,20 @@ class GestionUsuarios:
         item = self.tree.item(selected[0])["values"]
         id_usuario = item[0]
         if messagebox.askyesno("Confirmar", "¿Eliminar este usuario?"):
-            if eliminar_usuario(id_usuario):
+            try:
+                ok = eliminar_usuario(id_usuario)
+            except Exception as e:
+                ok = False
+                messagebox.showerror("Error", f"No se pudo eliminar el usuario: {e}")
+            if ok:
                 messagebox.showinfo("Éxito", "Usuario eliminado")
                 self.cargar_usuarios()
-            else:
-                messagebox.showerror("Error", "No se pudo eliminar el usuario")
 
     def volver(self):
-        if self.main_window:
+        if self.main_window and hasattr(self.main_window, "show_welcome_screen"):
             self.main_window.show_welcome_screen()
 
-
+# =============== Diálogo optimizado ===============
 class UsuarioDialog(simpledialog.Dialog):
     def __init__(self, parent, title, username="", password=None, nombre="", rol="usuario", activo=1, modo="crear"):
         self.parent_ref = parent
@@ -349,13 +411,10 @@ class UsuarioDialog(simpledialog.Dialog):
         self.modo = modo
         self.result = None
 
-        # adoptar estilos/paleta del toplevel actual
         self.COLORS, self._style = setup_styles(parent.winfo_toplevel())
-
         super().__init__(parent, title)
 
     def body(self, master):
-        # Fondo del diálogo
         try:
             self.configure(bg=self.COLORS['light'])
         except Exception:
@@ -372,46 +431,44 @@ class UsuarioDialog(simpledialog.Dialog):
         tk.Label(header, text=("➕ Crear Usuario" if self.modo == "crear" else "✏️ Editar Usuario"),
                  font=('Segoe UI', 10, 'bold'),
                  fg=self.COLORS['white'], bg=self.COLORS['primary']).pack(side='left', padx=10, pady=4)
-        tk.Label(header, text=("Complete los campos y confirme"),
+        tk.Label(header, text="Complete los campos y confirme",
                  font=('Segoe UI', 8),
                  fg=self.COLORS['white'], bg=self.COLORS['primary']).pack(side='left', padx=10)
 
         # Grid
         container.grid_columnconfigure(0, weight=1, minsize=140)
         container.grid_columnconfigure(1, weight=2, minsize=220)
-
-        row_idx = 1
+        r = 1
 
         # Usuario
-        ttk.Label(container, text="Usuario:", style='Light.TLabel').grid(row=row_idx, column=0, sticky="w", pady=(0, 5))
+        ttk.Label(container, text="Usuario:", style='Light.TLabel').grid(row=r, column=0, sticky="w", pady=(0, 5))
         self.username_entry = ttk.Entry(container, width=30)
-        self.username_entry.grid(row=row_idx, column=1, sticky="ew", pady=(0, 5))
+        self.username_entry.grid(row=r, column=1, sticky="ew", pady=(0, 5))
         self.username_entry.insert(0, self.username)
         if self.modo == "editar":
             self.username_entry.config(state="disabled")
-
-        row_idx += 1
+        r += 1
 
         # Sección de contraseña
         if self.modo == "crear":
-            ttk.Label(container, text="Contraseña:", style='Light.TLabel').grid(row=row_idx, column=0, sticky="w", pady=(0, 5))
+            ttk.Label(container, text="Contraseña:", style='Light.TLabel').grid(row=r, column=0, sticky="w", pady=(0, 5))
             self.password_entry = ttk.Entry(container, show="•", width=30)
-            self.password_entry.grid(row=row_idx, column=1, sticky="ew", pady=(0, 5))
-            row_idx += 1
+            self.password_entry.grid(row=r, column=1, sticky="ew", pady=(0, 5))
+            r += 1
 
-            ttk.Label(container, text="Confirmar contraseña:", style='Light.TLabel').grid(row=row_idx, column=0, sticky="w", pady=(0, 5))
+            ttk.Label(container, text="Confirmar contraseña:", style='Light.TLabel').grid(row=r, column=0, sticky="w", pady=(0, 5))
             self.confirm_password_entry = ttk.Entry(container, show="•", width=30)
-            self.confirm_password_entry.grid(row=row_idx, column=1, sticky="ew", pady=(0, 5))
-            row_idx += 1
+            self.confirm_password_entry.grid(row=r, column=1, sticky="ew", pady=(0, 5))
+            r += 1
         else:
             self.cambiar_password_var = tk.BooleanVar(value=False)
             chk = ttk.Checkbutton(container, text="Cambiar contraseña", variable=self.cambiar_password_var,
                                   command=self.toggle_password_fields)
-            chk.grid(row=row_idx, column=0, columnspan=2, sticky="w", pady=(0, 5))
-            row_idx += 1
+            chk.grid(row=r, column=0, columnspan=2, sticky="w", pady=(0, 5))
+            r += 1
 
             self.password_frame = ttk.Frame(container, style='Light.TFrame')
-            self.password_frame.grid(row=row_idx, column=0, columnspan=2, sticky="ew")
+            self.password_frame.grid(row=r, column=0, columnspan=2, sticky="ew")
             self.password_frame.grid_columnconfigure(0, weight=1, minsize=140)
             self.password_frame.grid_columnconfigure(1, weight=2, minsize=220)
 
@@ -424,32 +481,33 @@ class UsuarioDialog(simpledialog.Dialog):
             self.confirm_password_entry.grid(row=1, column=1, sticky="ew", pady=(0, 5))
 
             self.password_frame.grid_remove()
-            row_idx += 1
+            r += 1
 
         # Nombre completo
-        ttk.Label(container, text="Nombre completo:", style='Light.TLabel').grid(row=row_idx, column=0, sticky="w", pady=(0, 5))
+        ttk.Label(container, text="Nombre completo:", style='Light.TLabel').grid(row=r, column=0, sticky="w", pady=(0, 5))
         self.nombre_entry = ttk.Entry(container, width=30)
-        self.nombre_entry.grid(row=row_idx, column=1, sticky="ew", pady=(0, 5))
+        self.nombre_entry.grid(row=r, column=1, sticky="ew", pady=(0, 5))
         self.nombre_entry.insert(0, self.nombre)
-        row_idx += 1
+        r += 1
 
         # Rol
-        ttk.Label(container, text="Rol:", style='Light.TLabel').grid(row=row_idx, column=0, sticky="w", pady=(0, 5))
+        ttk.Label(container, text="Rol:", style='Light.TLabel').grid(row=r, column=0, sticky="w", pady=(0, 5))
         self.rol_var = tk.StringVar(value=self.rol)
-        self.rol_combo = ttk.Combobox(container, textvariable=self.rol_var, values=["admin", "usuario"], state="readonly", width=28)
-        self.rol_combo.grid(row=row_idx, column=1, sticky="ew", pady=(0, 5))
-        row_idx += 1
+        self.rol_combo = ttk.Combobox(container, textvariable=self.rol_var,
+                                      values=["admin", "usuario"], state="readonly", width=28)
+        self.rol_combo.grid(row=r, column=1, sticky="ew", pady=(0, 5))
+        r += 1
 
         # Activo
-        ttk.Label(container, text="Activo:", style='Light.TLabel').grid(row=row_idx, column=0, sticky="w", pady=(0, 5))
+        ttk.Label(container, text="Activo:", style='Light.TLabel').grid(row=r, column=0, sticky="w", pady=(0, 5))
         self.activo_var = tk.IntVar(value=int(self.activo))
-        ttk.Checkbutton(container, variable=self.activo_var).grid(row=row_idx, column=1, sticky="w", pady=(0, 5))
-        row_idx += 1
+        ttk.Checkbutton(container, variable=self.activo_var).grid(row=r, column=1, sticky="w", pady=(0, 5))
+        r += 1
 
         return self.username_entry
 
     def toggle_password_fields(self):
-        if self.cambiar_password_var.get():
+        if getattr(self, 'cambiar_password_var', None) and self.cambiar_password_var.get():
             self.password_frame.grid()
         else:
             self.password_frame.grid_remove()
@@ -460,6 +518,7 @@ class UsuarioDialog(simpledialog.Dialog):
             messagebox.showerror("Error", "El nombre de usuario es obligatorio")
             return False
 
+        # Validación de contraseña cuando corresponde
         if self.modo == "crear" or (self.modo == "editar" and getattr(self, 'cambiar_password_var', tk.BooleanVar(value=False)).get()):
             password = self.password_entry.get()
             confirm_password = self.confirm_password_entry.get()
@@ -467,11 +526,9 @@ class UsuarioDialog(simpledialog.Dialog):
             if not password:
                 messagebox.showerror("Error", "La contraseña es obligatoria")
                 return False
-
             if password != confirm_password:
                 messagebox.showerror("Error", "Las contraseñas no coinciden")
                 return False
-
             if len(password) < 6:
                 messagebox.showerror("Error", "La contraseña debe tener al menos 6 caracteres")
                 return False
@@ -479,7 +536,8 @@ class UsuarioDialog(simpledialog.Dialog):
         return True
 
     def buttonbox(self):
-        box = ttk.Frame(self, style='Light.TFrame')
+        # Usar un frame sin bordes para quitar el contorno donde están los botones
+        box = ttk.Frame(self, style='NoBorder.TFrame')
         box.pack(pady=10)
 
         ttk.Button(box, text="✔️ Aceptar", width=12, style='Primary.TButton',
@@ -502,4 +560,5 @@ class UsuarioDialog(simpledialog.Dialog):
         elif self.modo == "editar" and getattr(self, 'cambiar_password_var', tk.BooleanVar(value=False)).get():
             password = self.password_entry.get()
 
+        # Devolver la tupla limpia (sin coma extra ni texto)
         self.result = (username, password, nombre, rol, activo)

@@ -59,7 +59,10 @@ def setup_styles(root):
 
     # Frames
     style.configure('Light.TFrame', background=COLORS['light'])
+    # Card exterior con borde fino
     style.configure('Card.TFrame', background=COLORS['white'], relief='solid', borderwidth=1)
+    # Frame interno sin bordes
+    style.configure('NoBorder.TFrame', background=COLORS['white'], relief='flat', borderwidth=0)
 
     # Header de card
     style.configure('Header.TFrame', background=COLORS['primary'])
@@ -96,15 +99,15 @@ def setup_styles(root):
     root.option_add('*TCombobox*Listbox.selectForeground', COLORS['white'])
     root.option_add('*TCombobox*Listbox.font', '{Segoe UI} 9')
 
-    # Treeview
+    # Treeview sin borde
     style.configure("Custom.Treeview",
                     background=COLORS['white'],
                     foreground=COLORS['text_dark'],
                     rowheight=22,
                     fieldbackground=COLORS['white'],
                     font=('Segoe UI', 9),
-                    borderwidth=1,
-                    relief='solid')
+                    borderwidth=0,
+                    relief='flat')
     HEADER_BG = '#e5e7eb'
     HEADER_FG = '#111827'
     style.configure("Custom.Treeview.Heading",
@@ -112,13 +115,33 @@ def setup_styles(root):
                     foreground=HEADER_FG,
                     font=('Segoe UI', 8, 'bold'),
                     relief='flat',
-                    borderwidth=1,
+                    borderwidth=0,
                     padding=(3, 6, 3, 6),
                     anchor='center',
                     justify='center')
     style.map("Custom.Treeview",
               background=[('selected', COLORS['accent'])],
               foreground=[('selected', '#ffffff')])
+
+    # Scrollbars planos (sin contorno)
+    style.configure('Vertical.TScrollbar',
+                    gripcount=0,
+                    troughcolor=COLORS['white'],
+                    background=COLORS['white'],
+                    bordercolor=COLORS['white'],
+                    lightcolor=COLORS['white'],
+                    darkcolor=COLORS['white'],
+                    arrowsize=12,
+                    relief='flat')
+    style.configure('Horizontal.TScrollbar',
+                    gripcount=0,
+                    troughcolor=COLORS['white'],
+                    background=COLORS['white'],
+                    bordercolor=COLORS['white'],
+                    lightcolor=COLORS['white'],
+                    darkcolor=COLORS['white'],
+                    arrowsize=12,
+                    relief='flat')
 
     # Notebook
     style.configure('TNotebook', background=COLORS['light'], borderwidth=0)
@@ -176,7 +199,8 @@ class GestionServicios:
 
         ttk.Label(header, text=f"{icon} {title}", style='Header.TLabel').pack(side='left', padx=10)
 
-        content = ttk.Frame(card, style='Card.TFrame')
+        # Contenido sin borde interno
+        content = ttk.Frame(card, style='NoBorder.TFrame')
         content.pack(fill='both', expand=True, padx=12, pady=8)
 
         return content
@@ -287,7 +311,7 @@ class GestionServicios:
 
         frame_lista = self._card_section(self.tab_areas, "Áreas", "🏢")
 
-        table_wrap = ttk.Frame(frame_lista, style='Card.TFrame')
+        table_wrap = ttk.Frame(frame_lista, style='NoBorder.TFrame')
         table_wrap.pack(fill='both', expand=True)
 
         self.tree_areas = ttk.Treeview(table_wrap, columns=('nombre',), show='headings', style="Custom.Treeview")
@@ -295,12 +319,12 @@ class GestionServicios:
         self.tree_areas.column('nombre', anchor='w', width=320)
         self.tree_areas.pack(fill='both', expand=True, side='left', padx=(0, 5), pady=2)
 
-        scrolly = ttk.Scrollbar(table_wrap, orient="vertical", command=self.tree_areas.yview)
+        scrolly = ttk.Scrollbar(table_wrap, orient="vertical", command=self.tree_areas.yview, style='Vertical.TScrollbar')
         self.tree_areas.configure(yscrollcommand=scrolly.set)
         scrolly.pack(side='left', fill='y')
 
-        # Botonera horizontal
-        btns = ttk.Frame(frame_lista, style='Card.TFrame')
+        # Botonera horizontal sin marco
+        btns = ttk.Frame(frame_lista, style='NoBorder.TFrame')
         btns.pack(fill='x', padx=0, pady=(6, 0))
         ttk.Button(btns, text="➕ Agregar", style='Primary.TButton',
                    command=self.agregar_area).pack(side='left', padx=(0, 6))
@@ -400,11 +424,14 @@ class GestionServicios:
             messagebox.showinfo("Éxito", "Área eliminada correctamente")
 
     def actualizar_areas(self):
+        # Optimización: ocultar columnas durante inserción (aunque hay una)
+        self.tree_areas.configure(displaycolumns=())
         self.tree_areas.delete(*self.tree_areas.get_children())
         areas = obtener_areas()
         if areas:
             for area in areas:
                 self.tree_areas.insert('', 'end', values=(area['nombre'],))
+        self.tree_areas.configure(displaycolumns=('nombre',))
 
     # ================== DISTRITOS ==================
     def setup_distritos_tab(self):
@@ -416,7 +443,7 @@ class GestionServicios:
 
         frame_lista = self._card_section(self.tab_distritos, "Distritos", "🗺️")
 
-        table_wrap = ttk.Frame(frame_lista, style='Card.TFrame')
+        table_wrap = ttk.Frame(frame_lista, style='NoBorder.TFrame')
         table_wrap.pack(fill='both', expand=True)
 
         self.tree_distritos = ttk.Treeview(table_wrap, columns=('nombre','area'), show='headings', style="Custom.Treeview")
@@ -426,11 +453,11 @@ class GestionServicios:
         self.tree_distritos.column('area', width=220, anchor='w')
         self.tree_distritos.pack(fill='both', expand=True, side='left', padx=(0, 5), pady=2)
 
-        scrolly = ttk.Scrollbar(table_wrap, orient="vertical", command=self.tree_distritos.yview)
+        scrolly = ttk.Scrollbar(table_wrap, orient="vertical", command=self.tree_distritos.yview, style='Vertical.TScrollbar')
         self.tree_distritos.configure(yscrollcommand=scrolly.set)
         scrolly.pack(side='left', fill='y')
 
-        btns = ttk.Frame(frame_lista, style='Card.TFrame')
+        btns = ttk.Frame(frame_lista, style='NoBorder.TFrame')
         btns.pack(fill='x', padx=0, pady=(6, 0))
         ttk.Button(btns, text="➕ Agregar", style='Primary.TButton',
                    command=self.agregar_distrito).pack(side='left', padx=(0, 6))
@@ -549,11 +576,13 @@ class GestionServicios:
             messagebox.showinfo("Éxito", "Distrito eliminado correctamente")
 
     def actualizar_distritos(self):
+        self.tree_distritos.configure(displaycolumns=())
         self.tree_distritos.delete(*self.tree_distritos.get_children())
         distritos = obtener_distritos()
         if distritos:
             for d in distritos:
                 self.tree_distritos.insert('', 'end', values=(d['nombre'], d['area_nombre']))
+        self.tree_distritos.configure(displaycolumns=('nombre', 'area'))
 
     # ================== TIPOS DE SERVICIO ==================
     def setup_tipos_tab(self):
@@ -565,7 +594,7 @@ class GestionServicios:
 
         frame_lista = self._card_section(self.tab_tipos, "Tipos de Servicio", "🧾")
 
-        table_wrap = ttk.Frame(frame_lista, style='Card.TFrame')
+        table_wrap = ttk.Frame(frame_lista, style='NoBorder.TFrame')
         table_wrap.pack(fill='both', expand=True)
 
         self.tree_tipos = ttk.Treeview(table_wrap, columns=('distrito', 'descripcion'), show='headings', style="Custom.Treeview")
@@ -575,11 +604,11 @@ class GestionServicios:
         self.tree_tipos.column('descripcion', width=280, anchor='w')
         self.tree_tipos.pack(fill='both', expand=True, side='left', padx=(0, 5), pady=2)
 
-        scrolly = ttk.Scrollbar(table_wrap, orient="vertical", command=self.tree_tipos.yview)
+        scrolly = ttk.Scrollbar(table_wrap, orient="vertical", command=self.tree_tipos.yview, style='Vertical.TScrollbar')
         self.tree_tipos.configure(yscrollcommand=scrolly.set)
         scrolly.pack(side='left', fill='y')
 
-        btns = ttk.Frame(frame_lista, style='Card.TFrame')
+        btns = ttk.Frame(frame_lista, style='NoBorder.TFrame')
         btns.pack(fill='x', padx=0, pady=(6, 0))
         ttk.Button(btns, text="➕ Agregar", style='Primary.TButton',
                    command=self.agregar_tipo).pack(side='left', padx=(0, 6))
@@ -780,10 +809,12 @@ class GestionServicios:
             messagebox.showinfo("Éxito", "Tipo de servicio eliminado correctamente")
 
     def actualizar_tipos(self):
+        self.tree_tipos.configure(displaycolumns=())
         self.tree_tipos.delete(*self.tree_tipos.get_children())
         for d in obtener_distritos():
             for t in obtener_tipos_servicio_por_distrito(d['id']):
                 self.tree_tipos.insert('', 'end', values=(d['nombre'], t['descripcion']))
+        self.tree_tipos.configure(displaycolumns=('distrito', 'descripcion'))
 
     # ================== SERVICIOS ==================
     def setup_servicios_tab(self):
@@ -795,7 +826,7 @@ class GestionServicios:
 
         frame_lista = self._card_section(self.tab_servicios, "Servicios", "🛎️")
 
-        table_wrap = ttk.Frame(frame_lista, style='Card.TFrame')
+        table_wrap = ttk.Frame(frame_lista, style='NoBorder.TFrame')
         table_wrap.pack(fill='both', expand=True)
 
         self.tree_servicios = ttk.Treeview(table_wrap, columns=('distrito', 'tipo', 'nombre'), show='headings', style="Custom.Treeview")
@@ -807,11 +838,11 @@ class GestionServicios:
         self.tree_servicios.column('nombre', width=260, anchor='w')
         self.tree_servicios.pack(fill='both', expand=True, side='left', padx=(0, 5), pady=2)
 
-        scrolly = ttk.Scrollbar(table_wrap, orient="vertical", command=self.tree_servicios.yview)
+        scrolly = ttk.Scrollbar(table_wrap, orient="vertical", command=self.tree_servicios.yview, style='Vertical.TScrollbar')
         self.tree_servicios.configure(yscrollcommand=scrolly.set)
         scrolly.pack(side='left', fill='y')
 
-        btns = ttk.Frame(frame_lista, style='Card.TFrame')
+        btns = ttk.Frame(frame_lista, style='NoBorder.TFrame')
         btns.pack(fill='x', padx=0, pady=(6, 0))
         ttk.Button(btns, text="➕ Agregar", style='Primary.TButton',
                    command=self.agregar_servicio).pack(side='left', padx=(0, 6))
@@ -1019,11 +1050,13 @@ class GestionServicios:
             messagebox.showinfo("Éxito", "Servicio eliminado correctamente")
 
     def actualizar_servicios(self):
+        self.tree_servicios.configure(displaycolumns=())
         self.tree_servicios.delete(*self.tree_servicios.get_children())
         for d in obtener_distritos():
             for t in obtener_tipos_servicio_por_distrito(d['id']):
                 for s in obtener_servicios_por_tipo(t['id']):
                     self.tree_servicios.insert('', 'end', values=(d['nombre'], t['descripcion'], s['nombre']))
+        self.tree_servicios.configure(displaycolumns=('distrito', 'tipo', 'nombre'))
 
     # ---------- Diálogos y Toplevel estilizados ----------
     def _estilizar_toplevel(self, ventana):

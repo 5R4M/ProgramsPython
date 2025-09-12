@@ -70,7 +70,10 @@ def setup_styles(root):
 
     # Frames
     style.configure('Light.TFrame', background=COLORS['light'])
+    # Card exterior con borde (si quieres mantener solo el borde del card y el header)
     style.configure('Card.TFrame', background=COLORS['white'], relief='solid', borderwidth=1)
+    # Frame sin bordes (para contenidos internos)
+    style.configure('NoBorder.TFrame', background=COLORS['white'], relief='flat', borderwidth=0)
 
     # Header de card
     style.configure('Header.TFrame', background=COLORS['primary'])
@@ -107,15 +110,15 @@ def setup_styles(root):
     root.option_add('*TCombobox*Listbox.selectForeground', COLORS['white'])
     root.option_add('*TCombobox*Listbox.font', '{Segoe UI} 9')
 
-    # Treeview
+    # Treeview SIN borde
     style.configure("Custom.Treeview",
                     background=COLORS['white'],
                     foreground=COLORS['text_dark'],
                     rowheight=22,
                     fieldbackground=COLORS['white'],
                     font=('Segoe UI', 9),
-                    borderwidth=1,
-                    relief='solid')
+                    borderwidth=0,
+                    relief='flat')
     HEADER_BG = '#e5e7eb'
     HEADER_FG = '#111827'
     style.configure("Custom.Treeview.Heading",
@@ -123,13 +126,33 @@ def setup_styles(root):
                     foreground=HEADER_FG,
                     font=('Segoe UI', 8, 'bold'),
                     relief='flat',
-                    borderwidth=1,
+                    borderwidth=0,
                     padding=(3, 6, 3, 6),
                     anchor='center',
                     justify='center')
     style.map("Custom.Treeview",
               background=[('selected', COLORS['accent'])],
               foreground=[('selected', '#ffffff')])
+
+    # Scrollbars planos (sin contorno)
+    style.configure('Vertical.TScrollbar',
+                    gripcount=0,
+                    troughcolor=COLORS['white'],
+                    background=COLORS['white'],
+                    bordercolor=COLORS['white'],
+                    lightcolor=COLORS['white'],
+                    darkcolor=COLORS['white'],
+                    arrowsize=12,
+                    relief='flat')
+    style.configure('Horizontal.TScrollbar',
+                    gripcount=0,
+                    troughcolor=COLORS['white'],
+                    background=COLORS['white'],
+                    bordercolor=COLORS['white'],
+                    lightcolor=COLORS['white'],
+                    darkcolor=COLORS['white'],
+                    arrowsize=12,
+                    relief='flat')
 
     # Notebook
     style.configure('TNotebook', background=COLORS['light'], borderwidth=0)
@@ -197,7 +220,8 @@ class GestionInsumos:
 
         ttk.Label(header, text=f"{icon} {title}", style='Header.TLabel').pack(side='left', padx=10)
 
-        content = ttk.Frame(card, style='Card.TFrame')
+        # Contenido SIN borde interno para que no se vea recuadro gris
+        content = ttk.Frame(card, style='NoBorder.TFrame')
         content.pack(fill='both', expand=True, padx=12, pady=8)
 
         return content
@@ -208,7 +232,6 @@ class GestionInsumos:
             if not crear_base_datos():
                 raise Exception("No se pudo crear la base de datos")
             if not verificar_tablas():
-                # Si faltan tablas, intentar recrear
                 if not crear_base_datos():
                     raise Exception("No se pudo recrear la base de datos")
             return True
@@ -324,7 +347,8 @@ class GestionInsumos:
         # Lista de tipos
         frame_lista = self._card_section(self.tab_tipos, "Tipos de Insumo", "📑")
 
-        table_wrap = ttk.Frame(frame_lista, style='Card.TFrame')
+        # Contenedor SIN borde
+        table_wrap = ttk.Frame(frame_lista, style='NoBorder.TFrame')
         table_wrap.pack(fill='both', expand=True)
 
         self.tree_tipos = ttk.Treeview(table_wrap, columns=('descripcion',), show='headings', style="Custom.Treeview")
@@ -332,11 +356,12 @@ class GestionInsumos:
         self.tree_tipos.column('descripcion', anchor='w', width=320)
         self.tree_tipos.pack(fill='both', expand=True, side='left', padx=(0, 5), pady=2)
 
-        scrolly = ttk.Scrollbar(table_wrap, orient="vertical", command=self.tree_tipos.yview)
+        scrolly = ttk.Scrollbar(table_wrap, orient="vertical", command=self.tree_tipos.yview, style='Vertical.TScrollbar')
         self.tree_tipos.configure(yscrollcommand=scrolly.set)
         scrolly.pack(side='left', fill='y')
 
-        btns = ttk.Frame(frame_lista, style='Card.TFrame')
+        # Botonera SIN borde
+        btns = ttk.Frame(frame_lista, style='NoBorder.TFrame')
         btns.pack(fill='x', padx=0, pady=(6, 0))
         ttk.Button(btns, text="➕ Agregar", style='Primary.TButton',
                 command=self.agregar_tipo).pack(side='left', padx=(0, 6), pady=0)
@@ -464,10 +489,12 @@ class GestionInsumos:
                 messagebox.showerror("Error", "Tipo de insumo no encontrado")
 
     def actualizar_tipos(self):
+        # Optimización: ocultar columnas mientras insertamos (aunque hay solo 1)
+        self.tree_tipos.configure(displaycolumns=())
         self.tree_tipos.delete(*self.tree_tipos.get_children())
-        tipos = obtener_tipos_insumo()
-        for tipo in tipos:
+        for tipo in obtener_tipos_insumo():
             self.tree_tipos.insert('', 'end', values=(tipo['descripcion'],))
+        self.tree_tipos.configure(displaycolumns=('descripcion',))
 
     # --- Insumos ---
     def setup_insumos_tab(self):
@@ -479,7 +506,8 @@ class GestionInsumos:
 
         frame_lista = self._card_section(self.tab_insumos, "Insumos", "🧾")
 
-        table_wrap = ttk.Frame(frame_lista, style='Card.TFrame')
+        # Contenedor SIN borde
+        table_wrap = ttk.Frame(frame_lista, style='NoBorder.TFrame')
         table_wrap.pack(fill='both', expand=True)
 
         self.tree_insumos = ttk.Treeview(table_wrap, columns=('tipo', 'nombre'), show='headings', style="Custom.Treeview")
@@ -489,11 +517,11 @@ class GestionInsumos:
         self.tree_insumos.column('nombre', width=260, anchor='w')
         self.tree_insumos.pack(fill='both', expand=True, side='left', padx=(0, 5), pady=2)
 
-        scrolly = ttk.Scrollbar(table_wrap, orient="vertical", command=self.tree_insumos.yview)
+        scrolly = ttk.Scrollbar(table_wrap, orient="vertical", command=self.tree_insumos.yview, style='Vertical.TScrollbar')
         self.tree_insumos.configure(yscrollcommand=scrolly.set)
         scrolly.pack(side='left', fill='y')
 
-        btns = ttk.Frame(frame_lista, style='Card.TFrame')
+        btns = ttk.Frame(frame_lista, style='NoBorder.TFrame')
         btns.pack(fill='x', padx=0, pady=(6, 0))
         ttk.Button(btns, text="➕ Agregar", style='Primary.TButton',
                 command=self.agregar_insumo).pack(side='left', padx=(0, 6), pady=0)
@@ -688,12 +716,14 @@ class GestionInsumos:
                 messagebox.showerror("Error", "Insumo no encontrado")
 
     def actualizar_insumos(self):
+        # Optimización: ocultar columnas durante la inserción
+        self.tree_insumos.configure(displaycolumns=())
         self.tree_insumos.delete(*self.tree_insumos.get_children())
-        tipos = obtener_tipos_insumo()
-        for tipo in tipos:
+        for tipo in obtener_tipos_insumo():
             insumos = obtener_insumos_por_tipo(tipo['id'])
             for insumo in insumos:
                 self.tree_insumos.insert('', 'end', values=(tipo['descripcion'], insumo['nombre']))
+        self.tree_insumos.configure(displaycolumns=('tipo', 'nombre'))
 
     # --- Presentaciones ---
     def setup_presentaciones_tab(self):
@@ -705,7 +735,8 @@ class GestionInsumos:
 
         frame_lista = self._card_section(self.tab_presentaciones, "Presentaciones", "🏷️")
 
-        table_wrap = ttk.Frame(frame_lista, style='Card.TFrame')
+        # Contenedor SIN borde
+        table_wrap = ttk.Frame(frame_lista, style='NoBorder.TFrame')
         table_wrap.pack(fill='both', expand=True)
 
         self.tree_presentaciones = ttk.Treeview(
@@ -722,11 +753,11 @@ class GestionInsumos:
         self.tree_presentaciones.column('presentacion', width=200, anchor='w')
         self.tree_presentaciones.pack(fill='both', expand=True, side='left', padx=(0, 5), pady=2)
 
-        scrolly = ttk.Scrollbar(table_wrap, orient="vertical", command=self.tree_presentaciones.yview)
+        scrolly = ttk.Scrollbar(table_wrap, orient="vertical", command=self.tree_presentaciones.yview, style='Vertical.TScrollbar')
         self.tree_presentaciones.configure(yscrollcommand=scrolly.set)
         scrolly.pack(side='left', fill='y')
 
-        btns = ttk.Frame(frame_lista, style='Card.TFrame')
+        btns = ttk.Frame(frame_lista, style='NoBorder.TFrame')
         btns.pack(fill='x', padx=0, pady=(6, 0))
         ttk.Button(btns, text="➕ Agregar", style='Primary.TButton',
                 command=self.agregar_presentacion).pack(side='left', padx=(0, 6), pady=0)
@@ -902,14 +933,16 @@ class GestionInsumos:
                 messagebox.showerror("Error", "No se encontró la presentación seleccionada")
 
     def actualizar_presentaciones(self):
+        # Optimización: ocultar columnas durante la inserción
+        self.tree_presentaciones.configure(displaycolumns=())
         self.tree_presentaciones.delete(*self.tree_presentaciones.get_children())
-        tipos = obtener_tipos_insumo()
-        for tipo in tipos:
+        for tipo in obtener_tipos_insumo():
             insumos = obtener_insumos_por_tipo(tipo['id'])
             for insumo in insumos:
                 presentacion = insumo['nombre_presentacion'] if insumo['nombre_presentacion'] else 'N/A'
                 nombre_insumo = insumo['nombre']
                 self.tree_presentaciones.insert('', 'end', values=(tipo['descripcion'], nombre_insumo, presentacion))
+        self.tree_presentaciones.configure(displaycolumns=('tipo', 'insumo', 'presentacion'))
 
     # --- Diálogos y Toplevel estilizados ---
     def _estilizar_toplevel(self, ventana):
