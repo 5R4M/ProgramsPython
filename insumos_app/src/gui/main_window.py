@@ -383,18 +383,38 @@ class MainWindow:
         tk.Label(header_frame, text="DE INSUMOS", font=('Segoe UI', 12, 'bold'),
                 fg=self.COLORS['white'], bg=self.COLORS['primary']).pack(pady=(0, 15))
 
-        # Botón Salir ABAJO (primero) para reservar espacio
+        # Botón Salir ABAJO (estilo plano, sin fondo ni borde)
         exit_frame = tk.Frame(self.sidebar, bg=self.COLORS['primary'])
         exit_frame.pack(fill="x", side="bottom", pady=(0, 20))
 
-        exit_btn = self.create_rounded_button(
+        exit_btn = tk.Button(
             exit_frame,
-            "  Salir del Sistema",
-            self.COLORS['exit_btn'],
-            self.COLORS['exit_hover'],
-            self.on_closing,
-            self.icons.get('salir')
+            text="  Salir del Sistema",
+            font=('Segoe UI', 11, 'bold'),
+            bg=self.COLORS['primary'],          # mismo que el sidebar
+            fg=self.COLORS['white'],
+            activebackground=self.COLORS['primary'],
+            activeforeground=self.COLORS['white'],
+            relief='flat',
+            borderwidth=0,
+            highlightthickness=0,
+            cursor='hand2',
+            command=self.on_closing
         )
+        if self.icons.get('salir'):
+            exit_btn.config(image=self.icons['salir'], compound='left')
+
+        # ocupar ancho sin marco
+        exit_btn.pack(fill="x", padx=16, pady=10)
+
+        # Hover: solo cambiar ligeramente el fondo para indicar interactivo
+        def _exit_enter(e):
+            exit_btn.config(bg=self.COLORS['hover'])
+        def _exit_leave(e):
+            exit_btn.config(bg=self.COLORS['primary'])
+
+        exit_btn.bind('<Enter>', _exit_enter)
+        exit_btn.bind('<Leave>', _exit_leave)
 
         # Contenedor del menú con scroll (ocupa el espacio restante)
         nav_container = tk.Frame(self.sidebar, bg=self.COLORS['primary'])

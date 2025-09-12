@@ -1222,7 +1222,7 @@ class IngresoInsumos:
 
         # No redimensionamos la ventana principal desde aquí
         ancho_ventana = 1075
-        alto_ventana = 475
+        alto_ventana = 525
         screen_width = editar_ventana.winfo_screenwidth()
         screen_height = editar_ventana.winfo_screenheight()
         x = (screen_width // 2) - (ancho_ventana // 2)
@@ -1380,24 +1380,35 @@ class IngresoInsumos:
         insumos_content = tk.Frame(self.frame_insumos_edit, bg=self.COLORS['light'])
         insumos_content.pack(fill="x", padx=10, pady=3)
 
-        for col in range(6):
-            insumos_content.columnconfigure(col, weight=1)
+        # Reconfiguramos la grilla para controlar anchos relativos
+        # Usaremos 8 columnas para mayor control
+        for col in range(8):
+            insumos_content.columnconfigure(col, weight=1, uniform="insumos_edit")
 
+        # Etiquetas
         tk.Label(insumos_content, text="Tipo de Insumo:", font=('Segoe UI', 8, 'bold'),
-                bg=self.COLORS['light'], fg=self.COLORS['text_dark']).grid(row=0, column=0, padx=4, pady=(1,1), sticky="w")
-        tipo_insumo_cb = AutocompleteCombobox(insumos_content, textvariable=edit_tipo_insumo_var, width=25, state="normal", font=('Segoe UI', 8))
-        tipo_insumo_cb.set_completion_list([ti['descripcion'] for ti in obtener_tipos_insumo() or []])
-        tipo_insumo_cb.grid(row=0, column=1, padx=4, pady=(1,2), sticky="ew")
-
+                bg=self.COLORS['light'], fg=self.COLORS['text_dark']).grid(row=0, column=0, columnspan=2, padx=4, pady=(1,1), sticky="w")
         tk.Label(insumos_content, text="Insumo:", font=('Segoe UI', 8, 'bold'),
-                bg=self.COLORS['light'], fg=self.COLORS['text_dark']).grid(row=0, column=2, padx=4, pady=(1,1), sticky="w")
-        insumo_cb = AutocompleteCombobox(insumos_content, textvariable=edit_insumo_var, width=25, state="normal", font=('Segoe UI', 8))
-        insumo_cb.grid(row=0, column=3, padx=4, pady=(1,2), sticky="ew")
-
+                bg=self.COLORS['light'], fg=self.COLORS['text_dark']).grid(row=0, column=2, columnspan=4, padx=4, pady=(1,1), sticky="w")
         tk.Label(insumos_content, text="Presentación:", font=('Segoe UI', 8, 'bold'),
-                bg=self.COLORS['light'], fg=self.COLORS['text_dark']).grid(row=0, column=4, padx=4, pady=(1,1), sticky="w")
-        presentacion_cb = AutocompleteCombobox(insumos_content, textvariable=edit_presentacion_var, width=25, state="normal", font=('Segoe UI', 8))
-        presentacion_cb.grid(row=0, column=5, padx=4, pady=(1,2), sticky="ew")
+                bg=self.COLORS['light'], fg=self.COLORS['text_dark']).grid(row=0, column=6, columnspan=2, padx=4, pady=(1,1), sticky="w")
+
+        # Controles
+        # Tipo de Insumo (reducido): ocupa 2/8 columnas
+        tipo_insumo_cb = AutocompleteCombobox(insumos_content, textvariable=edit_tipo_insumo_var,
+                                            width=18, state="normal", font=('Segoe UI', 8))
+        tipo_insumo_cb.set_completion_list([ti['descripcion'] for ti in obtener_tipos_insumo() or []])
+        tipo_insumo_cb.grid(row=1, column=0, columnspan=2, padx=4, pady=(1,2), sticky="ew")
+
+        # Insumo (ampliado): ocupa 4/8 columnas
+        insumo_cb = AutocompleteCombobox(insumos_content, textvariable=edit_insumo_var,
+                                        width=38, state="normal", font=('Segoe UI', 8))
+        insumo_cb.grid(row=1, column=2, columnspan=4, padx=4, pady=(1,2), sticky="ew")
+
+        # Presentación (reducido): ocupa 2/8 columnas
+        presentacion_cb = AutocompleteCombobox(insumos_content, textvariable=edit_presentacion_var,
+                                            width=18, state="normal", font=('Segoe UI', 8))
+        presentacion_cb.grid(row=1, column=6, columnspan=2, padx=4, pady=(1,2), sticky="ew")
 
         # Detalles del Movimiento (compacto)
         self.frame_detalles_edit = tk.Frame(scrollable_frame, bg=self.COLORS['light'], relief='solid', borderwidth=1)
