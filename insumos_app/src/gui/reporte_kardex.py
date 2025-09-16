@@ -62,7 +62,7 @@ class ReporteKardex:
         self.cargar_iconos()
         self.movimientos_data = None
 
-        # Crear estilos para los frames
+        # Crear estilos locales de TFrame (no globales)
         style = ttk.Style()
         style.configure('Enabled.TFrame', background='white')
         style.configure('Disabled.TFrame', background='#f0f0f0')
@@ -77,6 +77,7 @@ class ReporteKardex:
         self.setup_ui()
 
     def setup_styles(self):
+        # Paleta local (no altera sidebar/panel derecho)
         self.COLORS = {
             'primary':   '#2c3e50',
             'secondary': '#34495e',
@@ -92,25 +93,22 @@ class ReporteKardex:
             'header_dark': '#1f2937'
         }
 
+        # Solo estilos locales, sin imponer tema global
         style = ttk.Style(self.parent if hasattr(self, 'parent') else None)
-        try:
-            style.theme_use('clam')
-        except Exception:
-            pass
+        # No forzamos theme_use globalmente
 
         # Frames base
         style.configure('White.TFrame', background=self.COLORS['light'])
         style.configure('Enabled.TFrame', background=self.COLORS['white'])
         style.configure('Disabled.TFrame', background='#f0f0f0')
 
-        # Labels y botones base
+        # Labels y botones base (opcionales, no cambian globales)
         style.configure(
             'White.TLabel',
             background=self.COLORS['light'],
             foreground=self.COLORS['text_dark'],
             font=('Segoe UI', 9)
         )
-
         style.configure(
             'White.TButton',
             background=self.COLORS['light'],
@@ -124,11 +122,7 @@ class ReporteKardex:
             background=[('active', self.COLORS['light']), ('pressed', self.COLORS['light'])]
         )
 
-        # Títulos de tarjetas
-        style.configure('Card.TLabelframe', background=self.COLORS['white'], relief='solid', borderwidth=1, labeloutside=False)
-        style.configure('Card.TLabelframe.Label', background=self.COLORS['primary'], foreground=self.COLORS['white'], font=('Segoe UI', 9, 'bold'), padding=(8, 3))
-
-        # Botón primario
+        # Botón primario local
         style.configure(
             'Primary.TButton',
             font=('Segoe UI', 9, 'bold'),
@@ -144,16 +138,7 @@ class ReporteKardex:
             foreground=[('active', '#ffff'), ('pressed', '#ffff')]
         )
 
-        # Cabeceras compactas
-        style.configure('Header.TFrame', background=self.COLORS['primary'])
-        style.configure(
-            'Header.TLabel',
-            background=self.COLORS['primary'],
-            foreground=self.COLORS['white'],
-            font=('Segoe UI', 8, 'bold')
-        )
-
-        # Popup del ttk.Combobox y listas (si usas Autocomplete)
+        # Popups de lista (opcional, no invasivo)
         root = self.parent.winfo_toplevel() if hasattr(self, 'parent') else None
         if root:
             root.option_add('*TCombobox*Listbox.background', self.COLORS['white'])
@@ -168,7 +153,6 @@ class ReporteKardex:
             root.option_add('*Listbox.selectForeground', self.COLORS['white'])
             root.option_add('*Listbox.font', '{Segoe UI} 9')
 
-        # Entradas y Combobox
         style.configure('TCombobox', fieldbackground=self.COLORS['white'], background=self.COLORS['light'], foreground=self.COLORS['text_dark'])
         style.configure('TEntry', selectbackground=self.COLORS['accent'], selectforeground='#ffff')
 
@@ -191,7 +175,6 @@ class ReporteKardex:
         try:
             icons_path = resource_path(os.path.join('utils', 'icons'))
 
-            # Ajusta la ruta según tu proyecto
             self.icon_preview = tk.PhotoImage(file=os.path.join(icons_path, "vista_previa.png")).subsample(2, 2)
             self.icon_print   = tk.PhotoImage(file=os.path.join(icons_path, "imprimir.png")).subsample(2, 2)
             self.icon_pdf     = tk.PhotoImage(file=os.path.join(icons_path, "pdf.png")).subsample(2, 2)
@@ -882,7 +865,7 @@ class ReporteKardex:
             h_scrollbar = ttk.Scrollbar(canvas_frame, orient="horizontal")
             h_scrollbar.pack(side="bottom", fill="x")
 
-            canvas = tk.Canvas(canvas_frame, bg=self.COLORS['white'], yscrollcommand=v_scrollbar.set, xscrollcommand=h_scrollbar.set)
+            canvas = tk.Canvas(canvas_frame, bg=self.COLORS['white'], yscrollcommand=v_scrollbar.set, xscrollcommand=h_scrollbar.set, highlightthickness=0, bd=0)
             canvas.pack(side="left", fill="both", expand=True)
             v_scrollbar.config(command=canvas.yview)
             h_scrollbar.config(command=canvas.xview)
@@ -953,7 +936,10 @@ class ReporteKardex:
                     ventana_max = tk.Toplevel(self.parent)
                     ventana_max.title("Reporte Kardex - Vista Maximizada")
                     ventana_max.configure(bg=self.COLORS['white'])
-                    ventana_max.state('zoomed')
+                    try:
+                        ventana_max.state('zoomed')
+                    except Exception:
+                        ventana_max.attributes('-zoomed', True)
                     ventana_max.resizable(True, True)
 
                     main_frame = tk.Frame(ventana_max, bg=self.COLORS['white'])
@@ -1764,6 +1750,7 @@ class ReporteKardex:
         """
         Filtra los movimientos según el nivel jerárquico seleccionado.
         Solo muestra movimientos que fueron guardados exactamente en el nivel seleccionado.
+        Retorna una lista de movimientos (no tupla), alineado con Reporte Demanda Real.
         """
         area_seleccionada = self.combo_area.get().strip()
         distrito_seleccionado = self.combo_distrito.get().strip()
@@ -1786,15 +1773,19 @@ class ReporteKardex:
 
             incluir_movimiento = False
 
+            # Nivel Área
             if area_seleccionada and not distrito_seleccionado and not tipo_servicio_seleccionado and not servicio_seleccionado:
                 if (mov_area == area_seleccionada and es_nulo_o_vacio(mov_distrito) and es_nulo_o_vacio(mov_tipo_servicio) and es_nulo_o_vacio(mov_servicio)):
                     incluir_movimiento = True
+            # Nivel Distrito
             elif area_seleccionada and distrito_seleccionado and not tipo_servicio_seleccionado and not servicio_seleccionado:
                 if (mov_area == area_seleccionada and mov_distrito == distrito_seleccionado and es_nulo_o_vacio(mov_tipo_servicio) and es_nulo_o_vacio(mov_servicio)):
                     incluir_movimiento = True
+            # Nivel Tipo Servicio
             elif area_seleccionada and distrito_seleccionado and tipo_servicio_seleccionado and not servicio_seleccionado:
                 if (mov_area == area_seleccionada and mov_distrito == distrito_seleccionado and mov_tipo_servicio == tipo_servicio_seleccionado and es_nulo_o_vacio(mov_servicio)):
                     incluir_movimiento = True
+            # Nivel Servicio
             elif area_seleccionada and distrito_seleccionado and tipo_servicio_seleccionado and servicio_seleccionado:
                 if (mov_area == area_seleccionada and mov_distrito == distrito_seleccionado and mov_tipo_servicio == tipo_servicio_seleccionado and mov_servicio == servicio_seleccionado):
                     incluir_movimiento = True

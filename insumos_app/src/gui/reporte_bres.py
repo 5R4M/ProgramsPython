@@ -54,21 +54,25 @@ class ReporteBres:
     def formato_float(self, valor):
         try:
             num = float(valor)
-            return f"{num:.2f}"  # Siempre mostrar formato con 2 decimales
+            return f"{num:.2f}"
         except (ValueError, TypeError):
-            return "0.00"  # Mostrar 0.00 en lugar de cadena vacía
+            return "0.00"
 
     def __init__(self, parent_frame, main_window=None):
         self.parent = parent_frame
         self.main_window = main_window
-        self.setup_styles()
         self.cargar_iconos()
         self.movimientos_data = None
 
-        # Crear estilos para los frames
-        style = ttk.Style()
-        style.configure('Enabled.TFrame', background=self.COLORS['white'])
-        style.configure('Disabled.TFrame', background='#f0f0f0')
+        # Paleta local (solo variables, no estilos globales)
+        self.COLORS = {
+            'primary':   '#2c3e50',
+            'accent':    '#3498db',
+            'danger':    '#e74c3c',
+            'white':     '#ffffff',
+            'light':     '#f7f7f7',
+            'text_dark': '#2c3e50'
+        }
 
         self.areas = []
         self.distritos = []
@@ -79,112 +83,9 @@ class ReporteBres:
 
         self.setup_ui()
 
-    def setup_styles(self):
-        # Paleta unificada con valores válidos (#ffffff)
-        self.COLORS = {
-            'primary':   '#2c3e50',
-            'secondary': '#34495e',
-            'accent':    '#3498db',
-            'success':   '#27ae60',
-            'warning':   '#f39c12',
-            'danger':    '#e74c3c',
-            'light':     '#ecf0f1',
-            'white':     '#ffffff',
-            'text_dark': '#2c3e50',
-            'text_light':'#7f8c8d',
-            'border':    '#bdc3c7',
-            'header_dark': '#1f2937'
-        }
-
-        style = ttk.Style(self.parent if hasattr(self, 'parent') else None)
-        try:
-            style.theme_use('clam')
-        except Exception:
-            pass
-
-        # Frames base
-        style.configure('White.TFrame', background=self.COLORS['white'])
-        style.configure('Enabled.TFrame', background=self.COLORS['white'])
-        style.configure('Disabled.TFrame', background='#f0f0f0')
-
-        # Labels y botones base
-        style.configure('White.TLabel',
-                        background=self.COLORS['light'],
-                        foreground=self.COLORS['text_dark'],
-                        font=('Segoe UI', 9))
-
-        style.configure('White.TButton',
-                        background=self.COLORS['white'],
-                        foreground=self.COLORS['text_dark'],
-                        font=('Segoe UI', 9),
-                        relief='flat',
-                        borderwidth=0)
-        style.map('White.TButton',
-                  background=[('active', self.COLORS['light']),
-                              ('pressed', self.COLORS['light'])])
-
-        # Títulos de tarjetas
-        style.configure('Card.TLabelframe',
-                        background=self.COLORS['white'],
-                        relief='solid',
-                        borderwidth=1,
-                        labeloutside=False)
-
-        style.configure('Card.TLabelframe.Label',
-                        background=self.COLORS['primary'],
-                        foreground=self.COLORS['white'],
-                        font=('Segoe UI', 9, 'bold'),
-                        padding=(8, 3))
-
-        # Botón primario
-        style.configure('Primary.TButton',
-                        font=('Segoe UI', 9, 'bold'),
-                        padding=(12, 6),
-                        relief='flat',
-                        borderwidth=0,
-                        background=self.COLORS['accent'],
-                        foreground=self.COLORS['white'])
-        style.map('Primary.TButton',
-                  background=[('active', '#2980b9'), ('pressed', '#117a8b')],
-                  foreground=[('active', '#ffffff'), ('pressed', '#ffffff')])
-
-        # Cabeceras compactas
-        style.configure('Header.TFrame', background=self.COLORS['primary'])
-        style.configure('Header.TLabel',
-                        background=self.COLORS['primary'],
-                        foreground=self.COLORS['white'],
-                        font=('Segoe UI', 8, 'bold'))
-
-        # Popup del ttk.Combobox y listas
-        root = self.parent.winfo_toplevel() if hasattr(self, 'parent') else None
-        if root:
-            root.option_add('*TCombobox*Listbox.background', self.COLORS['white'])
-            root.option_add('*TCombobox*Listbox.foreground', self.COLORS['text_dark'])
-            root.option_add('*TCombobox*Listbox.selectBackground', self.COLORS['accent'])
-            root.option_add('*TCombobox*Listbox.selectForeground', self.COLORS['white'])
-            root.option_add('*TCombobox*Listbox.font', '{Segoe UI} 9')
-
-            root.option_add('*Listbox.background', self.COLORS['white'])
-            root.option_add('*Listbox.foreground', self.COLORS['text_dark'])
-            root.option_add('*Listbox.selectBackground', self.COLORS['accent'])
-            root.option_add('*Listbox.selectForeground', self.COLORS['white'])
-            root.option_add('*Listbox.font', '{Segoe UI} 9')
-
-        # Entradas y Combobox
-        style.configure('TCombobox',
-                        fieldbackground=self.COLORS['white'],
-                        background=self.COLORS['white'],
-                        foreground=self.COLORS['text_dark'])
-        style.configure('TEntry',
-                        selectbackground=self.COLORS['accent'],
-                        selectforeground='#ffffff')
-
-        style.configure('White.TRadiobutton', background=self.COLORS['light'], foreground=self.COLORS['text_dark'], font=('Segoe UI', 9))
-        style.configure('White.TFrame', background=self.COLORS['light'])
-        
     def create_titled_frame(self, parent, title):
-        # Mini iconos en frames: usar emoji en el título
-        container = tk.Frame(parent, bg=self.COLORS['white'], relief='solid', borderwidth=1)
+        # Contenedor con encabezado local (sin estilos globales)
+        container = tk.Frame(parent, bg=self.COLORS['white'], relief='solid', bd=1)
 
         header = tk.Frame(container, bg=self.COLORS['primary'], height=26)
         header.pack(fill='x')
@@ -200,7 +101,6 @@ class ReporteBres:
         return container, content
 
     def cargar_iconos(self):
-        # Mantener uso de íconos en botones si existen, pero no en frames
         try:
             icons_path = resource_path(os.path.join('utils', 'icons'))
             self.icon_preview = tk.PhotoImage(file=os.path.join(icons_path, "vista_previa.png")).subsample(2, 2)
@@ -218,9 +118,8 @@ class ReporteBres:
 
     def generar_codigo_insumo(self, movimientos_raw):
         """
-        VERSIÓN OPTIMIZADA: Genera códigos únicos basados en posición relativa dentro de cada tipo
+        Genera códigos únicos basados en posición relativa dentro de cada tipo (no afecta UI).
         """
-        # Obtener insumos únicos
         insumos_unicos = {}
         for mov in movimientos_raw:
             insumo_id = mov.get('codigo_insumo')
@@ -238,8 +137,6 @@ class ReporteBres:
                 return {}
 
             cursor = conn.cursor(dictionary=True)
-
-            # CONSULTA PRINCIPAL: Obtener insumos del reporte y sus tipos
             insumo_ids = list(insumos_unicos.keys())
             placeholders = ','.join(['%s'] * len(insumo_ids))
             query_principal = f"""
@@ -259,7 +156,7 @@ class ReporteBres:
             for resultado in resultados_principales:
                 insumo_id = resultado['insumo_id']
                 tipo_id = resultado['tipo_id']
-                tipo_descripcion = resultado['tipo_insumo_descripcion'].strip().upper()
+                tipo_descripcion = (resultado['tipo_insumo_descripcion'] or '').strip().upper()
 
                 if tipo_id not in insumos_por_tipo:
                     insumos_por_tipo[tipo_id] = {
@@ -268,13 +165,11 @@ class ReporteBres:
                     }
                 insumos_por_tipo[tipo_id]['insumos'].append(insumo_id)
 
-            # Generar códigos por tipo
             codigos_insumos = {}
             for tipo_id, info_tipo in insumos_por_tipo.items():
                 tipo_descripcion = info_tipo['descripcion']
                 insumos_del_reporte = info_tipo['insumos']
 
-                # Consultar TODOS los insumos de este tipo para obtener posiciones relativas
                 cursor.execute("""
                     SELECT i.id as insumo_id
                     FROM insumo i
@@ -307,8 +202,12 @@ class ReporteBres:
 
     def procesar_datos_bres(self, movimientos_raw, fecha_ini, fecha_fin):
         """
-        VERSIÓN OPTIMIZADA del método procesar_datos_bres
+        Lógica de datos (no toca estilos).
         """
+        for m in movimientos_raw:
+            if 'tipo_servicio_desc' in m and 'tipo_servicio_descripcion' not in m:
+                m['tipo_servicio_descripcion'] = m['tipo_servicio_desc']
+
         codigos_insumos = self.generar_codigo_insumo(movimientos_raw)
         if not codigos_insumos:
             return []
@@ -413,7 +312,6 @@ class ReporteBres:
                 elif es_nivel_servicio:
                     datos_agrupados[codigo]['reajustes_servicios'] -= cantidad
 
-        # Promedios batch
         insumo_ids = [datos['insumo_id'] for datos in datos_agrupados.values() if datos['insumo_id'] is not None]
         promedios_batch = self.calcular_promedio_demanda_real(insumo_ids, fecha_ini, fecha_fin)
 
@@ -456,7 +354,10 @@ class ReporteBres:
 
             promedio_mensual = promedios_batch.get(datos['insumo_id'], 0.0)
             meses_existencia = saldo_mes_siguiente / promedio_mensual if promedio_mensual > 0 else 0
-            nivel_maximo = float(self.nivel_maximo_var.get()) if self.nivel_maximo_var.get() else 6
+            try:
+                nivel_maximo = float(self.nivel_maximo_var.get()) if self.nivel_maximo_var.get() else 6
+            except Exception:
+                nivel_maximo = 6
             cantidad_maxima = promedio_mensual * nivel_maximo
             cantidad_solicitar = cantidad_maxima - saldo_mes_siguiente
 
@@ -481,9 +382,6 @@ class ReporteBres:
         return datos_procesados
 
     def calcular_promedio_demanda_real(self, insumo_ids, fecha_ini, fecha_fin):
-        """
-        VERSIÓN OPTIMIZADA: Calcula promedios de demanda para múltiples insumos
-        """
         if not insumo_ids:
             return {}
         try:
@@ -492,10 +390,8 @@ class ReporteBres:
                 return {}
             cursor = conn.cursor(dictionary=True)
 
-            # Rango últimos 3 meses aprox.
             fecha_inicio_calculo = fecha_fin - timedelta(days=90)
 
-            # Filtros
             area_sel = self.combo_area.get().strip() or None
             distrito_sel = self.combo_distrito.get().strip() or None
             tipo_serv_sel = self.combo_tipo_servicio.get().strip() or None
@@ -538,7 +434,6 @@ class ReporteBres:
             resultados = cursor.fetchall()
             conn.close()
 
-            # Procesar promedios
             demandas_por_insumo = {}
             for r in resultados:
                 ins = r['insumo_id']
@@ -562,10 +457,6 @@ class ReporteBres:
             return {}
 
     def obtener_demanda_mes(self, insumo_id, fecha_inicio, fecha_fin):
-        """
-        Obtiene la demanda total de un insumo en un período específico
-        aplicando filtro de nivel seleccionado
-        """
         conn = None
         cursor = None
         try:
@@ -657,9 +548,6 @@ class ReporteBres:
                 conn.close()
 
     def calcular_promedio_periodo_actual(self, codigo_insumo, fecha_inicio, fecha_fin):
-        """
-        Promedio basado en datos del período actual (fallback)
-        """
         try:
             from src.database.db_manager import obtener_movimientos_historicos
             movimientos_actuales = obtener_movimientos_historicos(
@@ -687,9 +575,6 @@ class ReporteBres:
             return 0.0
 
     def obtener_saldo_mes_anterior(self, codigo_insumo, fecha_corte):
-        """
-        Saldo del mes anterior como fallback si no hay inventario inicial
-        """
         try:
             fecha_mes_anterior = fecha_corte - timedelta(days=90)
             movimientos = obtener_movimientos_bres(
@@ -719,11 +604,11 @@ class ReporteBres:
             return 0.0
 
     def setup_ui(self):
-        # Contenedor principal (no frame principal de filtros: eliminado)
-        self.main_container = tk.Frame(self.parent, bg=self.COLORS['light'])
+        # Contenedor principal local, sin tocar estilos globales
+        self.main_container = tk.Frame(self.parent, bg=self.COLORS['white'])
         self.main_container.pack(fill="both", expand=True)
 
-        # Título principal
+        # Título principal (local)
         title_frame = tk.Frame(self.main_container, bg=self.COLORS['primary'], height=70)
         title_frame.pack(fill='x', padx=0, pady=(10, 5))
         title_frame.pack_propagate(False)
@@ -746,14 +631,12 @@ class ReporteBres:
         self.frame_fechas_container, self.frame_fechas = self.create_titled_frame(
             self.main_container, "📅 Selección de Fechas/Corte Logístico"
         )
-        self.frame_fechas_container.config(bg=self.COLORS['light'])
-        self.frame_fechas.config(bg=self.COLORS['light'])
         self.frame_fechas_container.pack(fill="x", padx=5, pady=5)
 
         self.modo_fecha_var = tk.StringVar(value="rango")
 
         # Rango
-        self.frame_rango = tk.Frame(self.frame_fechas, bg=self.COLORS['light'])
+        self.frame_rango = tk.Frame(self.frame_fechas, bg=self.COLORS['white'])
         self.frame_rango.pack(fill="x", padx=5, pady=2)
         for i in range(5):
             self.frame_rango.grid_columnconfigure(i, weight=1)
@@ -764,21 +647,20 @@ class ReporteBres:
             variable=self.modo_fecha_var,
             value="rango",
             command=self.actualizar_visibilidad_fechas,
-            style='White.TRadiobutton'
         ).grid(row=0, column=0, padx=5, sticky='w')
 
-        ttk.Label(self.frame_rango, text="Fecha Inicial:", style='White.TLabel') \
+        ttk.Label(self.frame_rango, text="Fecha Inicial:") \
             .grid(row=0, column=1, padx=5, sticky='e')
         self.fecha_inicial = DateEntry(self.frame_rango, width=16, date_pattern='dd/mm/yyyy', state='normal')
         self.fecha_inicial.grid(row=0, column=2, padx=5, sticky='ew')
 
-        ttk.Label(self.frame_rango, text="Fecha Final:", style='White.TLabel') \
+        ttk.Label(self.frame_rango, text="Fecha Final:") \
             .grid(row=0, column=3, padx=5, sticky='e')
         self.fecha_final = DateEntry(self.frame_rango, width=16, date_pattern='dd/mm/yyyy', state='normal')
         self.fecha_final.grid(row=0, column=4, padx=5, sticky='ew')
 
         # Corte
-        self.frame_corte = tk.Frame(self.frame_fechas, bg=self.COLORS['light'])
+        self.frame_corte = tk.Frame(self.frame_fechas, bg=self.COLORS['white'])
         self.frame_corte.pack(fill="x", padx=5, pady=2)
         self.frame_corte.grid_columnconfigure(2, weight=1)
         self.frame_corte.grid_columnconfigure(4, weight=1)
@@ -790,28 +672,27 @@ class ReporteBres:
             variable=self.modo_fecha_var,
             value="corte",
             command=self.actualizar_visibilidad_fechas,
-            style='White.TRadiobutton'
         ).grid(row=0, column=0, padx=5, sticky='w')
 
-        ttk.Label(self.frame_corte, text="Año:", style='White.TLabel') \
+        ttk.Label(self.frame_corte, text="Año:") \
             .grid(row=0, column=1, padx=5, sticky='w')
         self.anio_var = tk.StringVar()
         anios = [str(a) for a in range(datetime.now().year - 5, datetime.now().year + 2)]
-        self.combo_anio = ttk.Combobox(self.frame_corte, textvariable=self.anio_var, values=anios, width=8)
+        self.combo_anio = ttk.Combobox(self.frame_corte, textvariable=self.anio_var, values=anios, width=8, state="readonly")
         self.combo_anio.grid(row=0, column=2, padx=5, sticky='ew')
         self.combo_anio.set(str(datetime.now().year))
 
-        ttk.Label(self.frame_corte, text="Mes Inicio:", style='White.TLabel') \
+        ttk.Label(self.frame_corte, text="Mes Inicio:") \
             .grid(row=0, column=3, padx=5, sticky='w')
         self.mes_inicio_var = tk.StringVar()
         meses = [datetime(2024, m, 1).strftime("%B").capitalize() for m in range(1, 13)]
-        self.combo_mes_inicio = ttk.Combobox(self.frame_corte, textvariable=self.mes_inicio_var, values=meses, width=12)
+        self.combo_mes_inicio = ttk.Combobox(self.frame_corte, textvariable=self.mes_inicio_var, values=meses, width=12, state="readonly")
         self.combo_mes_inicio.grid(row=0, column=4, padx=5, sticky='ew')
 
-        ttk.Label(self.frame_corte, text="Mes Final:", style='White.TLabel') \
+        ttk.Label(self.frame_corte, text="Mes Final:") \
             .grid(row=0, column=5, padx=5, sticky='w')
         self.mes_final_var = tk.StringVar()
-        self.combo_mes_final = ttk.Combobox(self.frame_corte, textvariable=self.mes_final_var, values=meses, width=12)
+        self.combo_mes_final = ttk.Combobox(self.frame_corte, textvariable=self.mes_final_var, values=meses, width=12, state="readonly")
         self.combo_mes_final.grid(row=0, column=6, padx=5, sticky='ew')
 
         self.combo_anio.bind('<<ComboboxSelected>>', self.actualizar_fechas_por_corte)
@@ -822,8 +703,6 @@ class ReporteBres:
 
         # Ubicación
         self.frame_ubicacion_container, frame_ubicacion_content = self.create_titled_frame(self.main_container, "📍 Ubicación")
-        self.frame_ubicacion_container.config(bg=self.COLORS['light'])
-        frame_ubicacion_content.config(bg=self.COLORS['light'])
         self.frame_ubicacion_container.pack(fill="x", padx=5, pady=5)
 
         frame_ubicacion_content.grid_columnconfigure(1, weight=1)
@@ -831,66 +710,62 @@ class ReporteBres:
         frame_ubicacion_content.grid_columnconfigure(5, weight=1)
         frame_ubicacion_content.grid_columnconfigure(7, weight=1)
 
-        ttk.Label(frame_ubicacion_content, text="Área:", style='White.TLabel').grid(row=0, column=0, padx=5, sticky='w')
+        ttk.Label(frame_ubicacion_content, text="Área:").grid(row=0, column=0, padx=5, sticky='w')
         self.area_var = tk.StringVar()
         self.combo_area = AutocompleteCombobox(frame_ubicacion_content, textvariable=self.area_var, state="normal", font=('Segoe UI', 9))
         self.combo_area.grid(row=0, column=1, padx=5, sticky='ew')
 
-        ttk.Label(frame_ubicacion_content, text="Distrito:", style='White.TLabel').grid(row=0, column=2, padx=5, sticky='w')
+        ttk.Label(frame_ubicacion_content, text="Distrito:").grid(row=0, column=2, padx=5, sticky='w')
         self.distrito_var = tk.StringVar()
         self.combo_distrito = AutocompleteCombobox(frame_ubicacion_content, textvariable=self.distrito_var, state="normal", font=('Segoe UI', 9))
         self.combo_distrito.grid(row=0, column=3, padx=5, sticky='ew')
 
-        ttk.Label(frame_ubicacion_content, text="Tipo de Servicio:", style='White.TLabel').grid(row=0, column=4, padx=5, sticky='w')
+        ttk.Label(frame_ubicacion_content, text="Tipo de Servicio:").grid(row=0, column=4, padx=5, sticky='w')
         self.tipo_servicio_var = tk.StringVar()
         self.combo_tipo_servicio = AutocompleteCombobox(frame_ubicacion_content, textvariable=self.tipo_servicio_var, state="normal", font=('Segoe UI', 9))
         self.combo_tipo_servicio.grid(row=0, column=5, padx=5, sticky='ew')
 
-        ttk.Label(frame_ubicacion_content, text="Servicio:", style='White.TLabel').grid(row=0, column=6, padx=5, sticky='w')
+        ttk.Label(frame_ubicacion_content, text="Servicio:").grid(row=0, column=6, padx=5, sticky='w')
         self.servicio_var = tk.StringVar()
         self.combo_servicio = AutocompleteCombobox(frame_ubicacion_content, textvariable=self.servicio_var, state="normal", font=('Segoe UI', 9))
         self.combo_servicio.grid(row=0, column=7, padx=5, sticky='ew')
 
         # Insumo
         self.frame_insumo_container, frame_insumo_content = self.create_titled_frame(self.main_container, "💊 Insumo")
-        self.frame_insumo_container.config(bg=self.COLORS['light'])
-        frame_insumo_content.config(bg=self.COLORS['light'])
         self.frame_insumo_container.pack(fill="x", padx=5, pady=5)
 
         frame_insumo_content.grid_columnconfigure(1, weight=1)
         frame_insumo_content.grid_columnconfigure(3, weight=1)
         frame_insumo_content.grid_columnconfigure(5, weight=1)
 
-        ttk.Label(frame_insumo_content, text="Tipo de Insumo:", style='White.TLabel').grid(row=0, column=0, padx=5, sticky='w')
+        ttk.Label(frame_insumo_content, text="Tipo de Insumo:").grid(row=0, column=0, padx=5, sticky='w')
         self.tipo_insumo_var = tk.StringVar()
         self.combo_tipo_insumo = AutocompleteCombobox(frame_insumo_content, textvariable=self.tipo_insumo_var, state="normal", font=('Segoe UI', 9))
         self.combo_tipo_insumo.grid(row=0, column=1, padx=5, sticky='ew')
 
-        ttk.Label(frame_insumo_content, text="Insumo:", style='White.TLabel').grid(row=0, column=2, padx=5, sticky='w')
+        ttk.Label(frame_insumo_content, text="Insumo:").grid(row=0, column=2, padx=5, sticky='w')
         self.insumo_var = tk.StringVar()
         self.combo_insumo = AutocompleteCombobox(frame_insumo_content, textvariable=self.insumo_var, state="normal", font=('Segoe UI', 9))
         self.combo_insumo.grid(row=0, column=3, padx=5, sticky='ew')
 
-        ttk.Label(frame_insumo_content, text="Presentación:", style='White.TLabel').grid(row=0, column=4, padx=5, sticky='w')
+        ttk.Label(frame_insumo_content, text="Presentación:").grid(row=0, column=4, padx=5, sticky='w')
         self.presentacion_var = tk.StringVar()
         self.combo_presentacion = AutocompleteCombobox(frame_insumo_content, textvariable=self.presentacion_var, state="normal", font=('Segoe UI', 9))
         self.combo_presentacion.grid(row=0, column=5, padx=5, sticky='ew')
 
         # Nivel Máximo
         self.frame_nivel_container, frame_nivel_content = self.create_titled_frame(self.main_container, "📈 Nivel Máximo")
-        self.frame_nivel_container.config(bg=self.COLORS['light'])
-        frame_nivel_content.config(bg=self.COLORS['light'])
         self.frame_nivel_container.pack(fill="x", padx=5, pady=(10, 10))
 
-        ttk.Label(frame_nivel_content, text="Nivel Máximo:", style='White.TLabel').grid(row=0, column=0, padx=5, sticky='w')
+        ttk.Label(frame_nivel_content, text="Nivel Máximo:").grid(row=0, column=0, padx=5, sticky='w')
         self.nivel_maximo_var = tk.StringVar()
         niveles = [str(i) for i in range(1, 13)]
         self.combo_nivel_maximo = ttk.Combobox(frame_nivel_content, textvariable=self.nivel_maximo_var, values=niveles, width=10, state="readonly")
         self.combo_nivel_maximo.grid(row=0, column=1, padx=5, sticky='w')
         self.combo_nivel_maximo.set("6")
 
-        # Visor PDF con encabezado y borde (igual a Kardex)
-        self.pdf_outer = tk.Frame(self.main_container, bg=self.COLORS['light'])
+        # Visor PDF
+        self.pdf_outer = tk.Frame(self.main_container, bg=self.COLORS['white'])
         self.pdf_outer.pack(fill="x", expand=False, padx=5, pady=5)
 
         self.pdf_frame = tk.Frame(self.pdf_outer, bg=self.COLORS['white'], relief="solid", bd=1, highlightthickness=0)
@@ -911,12 +786,12 @@ class ReporteBres:
         self.pdf_body = tk.Frame(self.pdf_frame, bg=self.COLORS['white'])
         self.pdf_body.pack(fill="both", expand=False, padx=8, pady=8)
 
-        # Botones
-        self.frame_botones = ttk.Frame(self.main_container, style='White.TFrame')
+        # Botones inferiores (tk.Button locales)
+        self.frame_botones = tk.Frame(self.main_container, bg=self.COLORS['white'])
         self.frame_botones.pack(fill="x", side="bottom", pady=(20, 10))
 
         btn_font = ('Segoe UI', 9, 'bold')
-        btn_bg = self.COLORS['light']
+        btn_bg = self.COLORS['white']
         btn_fg = self.COLORS['text_dark']
 
         btn_report = tk.Button(self.frame_botones,
@@ -1121,11 +996,7 @@ class ReporteBres:
             self.combo_presentacion.set_completion_list(opciones)
 
     def generar_vista_previa(self):
-        """
-        VERSIÓN OPTIMIZADA de generar_vista_previa()
-        """
         try:
-            # Fechas
             if self.modo_fecha_var.get() == "rango":
                 fecha_ini = datetime.strptime(self.fecha_inicial.get(), '%d/%m/%Y')
                 fecha_fin = datetime.strptime(self.fecha_final.get(), '%d/%m/%Y')
@@ -1144,7 +1015,6 @@ class ReporteBres:
                 messagebox.showerror("Error", "La fecha final debe ser mayor a la inicial")
                 return
 
-            # Datos
             movimientos_raw = obtener_movimientos_bres(
                 fecha_ini.strftime('%Y-%m-%d'),
                 fecha_fin.strftime('%Y-%m-%d'),
@@ -1166,17 +1036,14 @@ class ReporteBres:
                 messagebox.showwarning("Sin datos", "No hay datos procesados para mostrar")
                 return
 
-            # PDF temporal
             import tempfile
             temp_dir = tempfile.gettempdir()
             self.temp_pdf_path = os.path.join(temp_dir, "vista_previa_bres.pdf")
             self.generar_pdf(self.temp_pdf_path, es_vista_previa=True)
 
-            # Limpiar visor
             for w in self.pdf_body.winfo_children():
                 w.destroy()
 
-            # Visor
             contenedor = tk.Frame(self.pdf_body, bg=self.COLORS['white'])
             contenedor.pack(fill="both", expand=True)
 
@@ -1260,7 +1127,10 @@ class ReporteBres:
                     ventana_max = tk.Toplevel(self.parent)
                     ventana_max.title("Reporte BRES - Vista Maximizada")
                     ventana_max.configure(bg=self.COLORS['white'])
-                    ventana_max.state('zoomed')
+                    try:
+                        ventana_max.state('zoomed')
+                    except Exception:
+                        ventana_max.attributes('-zoomed', True)
                     ventana_max.resizable(True, True)
 
                     main_frame = tk.Frame(ventana_max, bg=self.COLORS['white'])
@@ -1388,7 +1258,6 @@ class ReporteBres:
                 except Exception as e:
                     messagebox.showerror("Error", f"Error al maximizar reporte: {str(e)}")
 
-            # Controles normales
             btn_anterior = tk.Button(control_frame, text="◀", command=lambda: change_page(-1),
                                      bg=self.COLORS['white'], fg=self.COLORS['text_dark'],
                                      font=('Segoe UI', 10, 'bold'), relief='flat', borderwidth=0, cursor='hand2',
@@ -1464,7 +1333,6 @@ class ReporteBres:
             messagebox.showerror("Error", f"Error al generar reporte:\n{str(e)}")
 
     def abrir_pdf_externo(self):
-        """Abre el PDF en una aplicación externa del sistema"""
         try:
             if not hasattr(self, 'temp_pdf_path') or not os.path.exists(self.temp_pdf_path):
                 messagebox.showerror("Error", "No hay un PDF generado para abrir.")
@@ -1498,14 +1366,11 @@ class ReporteBres:
             if not self.movimientos_data:
                 messagebox.showerror("Error", "Primero debe generar el reporte")
                 return
-            # Generar nombre de archivo
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             file_name = f"Reporte_BRES_{timestamp}.pdf"
             downloads_path = os.path.expanduser("~/Downloads")
             full_path = os.path.join(downloads_path, file_name)
-            # Generar el PDF
             self.generar_pdf(full_path, es_vista_previa=False)
-            # Abrir
             if messagebox.askyesno("PDF Generado", "PDF guardado exitosamente.\n¿Desea abrirlo ahora?"):
                 try:
                     if sys.platform.startswith('win'):
@@ -1536,18 +1401,15 @@ class ReporteBres:
             elements = []
             styles = getSampleStyleSheet()
 
-            # Estilos personalizados
             title_style = ParagraphStyle('CustomTitle', parent=styles['Heading1'], alignment=1, spaceAfter=10, fontSize=12)
             subtitle_style = ParagraphStyle('CustomSubtitle', parent=styles['Heading2'], alignment=1, spaceAfter=8, fontSize=10)
             timestamp_style = ParagraphStyle('TimestampStyle', parent=styles['Normal'], alignment=1, spaceAfter=12, fontSize=9)
 
-            # Títulos
             elements.append(Paragraph("DIRECCIÓN DEPARTAMENTAL DE REDES INTEGRADAS DE SERVICIOS DE SALUD DE GUATEMALA,", title_style))
             elements.append(Paragraph("ÁREA NOR ORIENTE", subtitle_style))
             elements.append(Paragraph("BALANCE, REQUISICIÓN Y ENVÍO DE SUMINISTROS", subtitle_style))
             elements.append(Paragraph(f"Generado el: {datetime.now().strftime('%d/%m/%Y %H:%M:%S')}", timestamp_style))
 
-            # Filtros (alineados a la izquierda)
             left_style = ParagraphStyle(name="LeftAlign", alignment=0, fontSize=9, fontName='Helvetica')
             filtros = [
                 f"Área: {self.combo_area.get()}",
@@ -1784,7 +1646,6 @@ class ReporteBres:
             return None
 
     def dividir_texto_en_lineas(self, texto, max_caracteres_por_linea=30):
-        """Divide el texto en múltiples líneas para mejor ajuste"""
         if not texto:
             return ""
         texto = str(texto).strip()
@@ -1806,15 +1667,11 @@ class ReporteBres:
                 linea_actual = (linea_actual + " " + palabra).strip() if linea_actual else palabra
         if linea_actual:
             lineas.append(linea_actual.strip())
-        # Limitar a máximo 3 líneas
         if len(lineas) > 3:
             lineas = lineas[:2] + [lineas[2][:max_caracteres_por_linea-3] + "..."]
         return "\n".join(lineas)
 
     def cerrar_ventana(self):
-        """
-        Cierra la ventana del reporte, limpia recursos y muestra la pantalla de bienvenida.
-        """
         if not messagebox.askyesno("Confirmar", "¿Está seguro que desea cerrar esta ventana?"):
             return
 
@@ -1861,7 +1718,7 @@ class ReporteBres:
         for mov in movimientos:
             area_mov = mov.get('area_nombre')
             distrito_mov = mov.get('distrito_nombre')
-            tipo_servicio_mov = mov.get('tipo_servicio_desc')
+            tipo_servicio_mov = mov.get('tipo_servicio_descripcion')
             servicio_mov = mov.get('servicio_nombre')
 
             incluir = False
@@ -1892,6 +1749,8 @@ class ReporteBres:
         return movimientos_filtrados
 
     def destroy(self):
-        # Quitar cualquier contenedor principal creado por esta clase
-        if hasattr(self, 'main_container'):
-            self.main_container.destroy()
+        try:
+            if hasattr(self, 'main_container') and self.main_container:
+                self.main_container.destroy()
+        except Exception:
+            pass

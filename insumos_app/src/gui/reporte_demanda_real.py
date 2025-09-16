@@ -63,7 +63,8 @@ class ReporteDemandaReal:
         self.cargar_iconos()
         self.movimientos_data = None
 
-        # Crear estilos para los frames
+        # Eliminar estilos locales que alteren globalmente
+        # (Se mantienen por compatibilidad visual, pero no se usan estilos ttk aquí)
         style = ttk.Style()
         style.configure('Enabled.TFrame', background='white')
         style.configure('Disabled.TFrame', background='#f0f0f0')
@@ -78,7 +79,7 @@ class ReporteDemandaReal:
         self.setup_ui()
 
     def setup_styles(self):
-        # Paleta igual a IngresoInsumos
+        # Paleta igual a IngresoInsumos/MainWindow
         self.COLORS = {
             'primary':   '#2c3e50',
             'secondary': '#34495e',
@@ -107,39 +108,12 @@ class ReporteDemandaReal:
             'widget_pady': 2
         }
 
-        try:
-            ttk.Style().theme_use('clam')
-        except Exception:
-            pass
+        # IMPORTANTE: No forzar temas ni redefinir estilos globales aquí
+        # Eliminado: ttk.Style().theme_use('clam')
+        # Eliminado: style.configure/map de White.*, Card.*, Primary.*, etc.
 
-        style = ttk.Style(self.parent if hasattr(self, 'parent') else None)
-
-        # Fondo general claro
-        style.configure('MainArea.TFrame', background=self.COLORS['light'])
-
-        # Tarjetas
-        style.configure('Card.TFrame', background=self.COLORS['white'], relief='solid', borderwidth=1)
-        style.configure('White.TFrame', background=self.COLORS['light'])
-
-        # Encabezados de sección
-        style.configure('Header.TFrame', background=self.COLORS['primary'])
-        style.configure('Header.TLabel', background=self.COLORS['primary'], foreground=self.COLORS['white'], font=('Segoe UI', 8, 'bold'))
-
-        # Labels y botones blancos
-        style.configure('White.TLabel', background=self.COLORS['light'], foreground=self.COLORS['text_dark'], font=('Segoe UI', 9))
-        style.configure('White.TButton', background=self.COLORS['white'], foreground=self.COLORS['text_dark'], font=('Segoe UI', 9), relief='flat', borderwidth=0)
-        style.map('White.TButton', background=[('active', self.COLORS['light']), ('pressed', self.COLORS['light'])])
-
-        # Botón primario (coherente con IngresoInsumos)
-        style.configure('Primary.TButton', font=('Segoe UI', 9, 'bold'), padding=(10, 4), relief='flat', borderwidth=0, background=self.COLORS['accent'], foreground=self.COLORS['white'])
-        style.map('Primary.TButton', background=[('active', '#2980b9'), ('pressed', '#117a8b')], foreground=[('active', '#ffffff'), ('pressed', '#ffffff')])
-
-        # Radio y combo
-        style.configure('White.TRadiobutton', background=self.COLORS['white'], foreground=self.COLORS['text_dark'], font=('Segoe UI', 9))
-        style.configure('White.TCombobox', fieldbackground=self.COLORS['white'], background=self.COLORS['white'], foreground=self.COLORS['text_dark'])
-    
     def create_titled_frame(self, parent, title, header_icon=None):
-        # Contenedor tipo tarjeta (igual patrón que Kardex)
+        # Contenedor tipo tarjeta sobre fondo Light
         container = tk.Frame(parent, bg=self.COLORS['light'], relief='solid', borderwidth=1)
 
         # Header compacto
@@ -162,7 +136,7 @@ class ReporteDemandaReal:
             fg=self.COLORS['white'], bg=self.COLORS['primary']
         ).pack(side='left', padx=2, pady=2)
 
-        # Contenido
+        # Contenido en Light
         content = tk.Frame(container, bg=self.COLORS['light'])
         content.pack(fill='both', expand=True, padx=10, pady=10)
 
@@ -171,8 +145,6 @@ class ReporteDemandaReal:
     def cargar_iconos(self):
         try:
             icons_path = resource_path(os.path.join('utils', 'icons'))
-          
-            # Ajusta la ruta según tu proyecto
             self.icon_preview = tk.PhotoImage(file=os.path.join(icons_path, "vista_previa.png")).subsample(2, 2)
             self.icon_print = tk.PhotoImage(file=os.path.join(icons_path, "imprimir.png")).subsample(2, 2)
             self.icon_pdf = tk.PhotoImage(file=os.path.join(icons_path, "pdf.png")).subsample(2, 2)
@@ -213,15 +185,14 @@ class ReporteDemandaReal:
             fg=self.COLORS['white'], bg=self.COLORS['primary']
         ).pack(anchor='w', pady=(2, 0))
 
-        # Un único contenedor para secciones (igual que Kardex), controla el ancho
-        self.frame_combos = ttk.Frame(self.main_container, style='White.TFrame')
+        # Contenedor para secciones en Light (no usar estilos ttk locales)
+        self.frame_combos = tk.Frame(self.main_container, bg=self.COLORS['light'])
         self.frame_combos.pack(fill="x", expand=False, padx=5, pady=5)
 
         # Corte Logístico
         self.frame_corte_container, self.frame_corte_content = self.create_titled_frame(
             self.frame_combos, "🗓️ Corte Logístico", header_icon=None
         )
-        # Empaquetar igual que Kardex
         self.frame_corte_container.pack(fill="x", expand=False, pady=5)
 
         # Grid de corte
@@ -229,21 +200,24 @@ class ReporteDemandaReal:
         self.frame_corte_content.grid_columnconfigure(3, weight=1)  # Mes Inicio
         self.frame_corte_content.grid_columnconfigure(5, weight=1)  # Mes Final
 
-        ttk.Label(self.frame_corte_content, text="Año:", style='White.TLabel').grid(row=0, column=0, padx=5, pady=2, sticky='w')
+        # Labels usan estilo global 'Light.TLabel' si existe, si no, igual se verán bien
+        label_style = {'style': 'Light.TLabel'}
+
+        ttk.Label(self.frame_corte_content, text="Año:", **label_style).grid(row=0, column=0, padx=5, pady=2, sticky='w')
         self.anio_var = tk.StringVar()
         anios = [str(a) for a in range(datetime.now().year - 5, datetime.now().year + 2)]
         self.combo_anio = ttk.Combobox(self.frame_corte_content, textvariable=self.anio_var, values=anios, width=8, state="readonly")
         self.combo_anio.grid(row=0, column=1, padx=5, pady=2, sticky='ew')
         self.combo_anio.set(str(datetime.now().year))
 
-        ttk.Label(self.frame_corte_content, text="Mes Inicio:", style='White.TLabel').grid(row=0, column=2, padx=5, pady=2, sticky='w')
+        ttk.Label(self.frame_corte_content, text="Mes Inicio:", **label_style).grid(row=0, column=2, padx=5, pady=2, sticky='w')
         self.mes_inicio_var = tk.StringVar()
         self._meses_es = [datetime(2024, m, 1).strftime("%B").capitalize() for m in range(1, 13)]
         self.combo_mes_inicio = ttk.Combobox(self.frame_corte_content, textvariable=self.mes_inicio_var, values=self._meses_es, width=12, state="readonly")
         self.combo_mes_inicio.grid(row=0, column=3, padx=5, pady=2, sticky='ew')
         self.combo_mes_inicio.set(datetime.now().strftime("%B").capitalize())
 
-        ttk.Label(self.frame_corte_content, text="Mes Final:", style='White.TLabel').grid(row=0, column=4, padx=5, pady=2, sticky='w')
+        ttk.Label(self.frame_corte_content, text="Mes Final:", **label_style).grid(row=0, column=4, padx=5, pady=2, sticky='w')
         self.mes_final_var = tk.StringVar()
         self.combo_mes_final = ttk.Combobox(self.frame_corte_content, textvariable=self.mes_final_var, values=self._meses_es, width=12, state="readonly")
         self.combo_mes_final.grid(row=0, column=5, padx=5, pady=2, sticky='ew')
@@ -254,7 +228,7 @@ class ReporteDemandaReal:
         self.parent.after_idle(lambda: self.combo_mes_inicio.bind('<<ComboboxSelected>>', self.actualizar_fechas_por_corte))
         self.parent.after_idle(lambda: self.combo_mes_final.bind('<<ComboboxSelected>>', self.actualizar_fechas_por_corte))
 
-        # Ubicación (igual empaque que Kardex)
+        # Ubicación
         self.frame_ubicacion_container, self.frame_ubicacion_content = self.create_titled_frame(
             self.frame_combos, "📍 Ubicación", header_icon=None
         )
@@ -265,7 +239,6 @@ class ReporteDemandaReal:
         self.frame_ubicacion_content.grid_columnconfigure(5, weight=1)
         self.frame_ubicacion_content.grid_columnconfigure(7, weight=1)
 
-        label_style = {'style': 'White.TLabel'}
         ttk.Label(self.frame_ubicacion_content, text="Área:", **label_style).grid(row=0, column=0, padx=5, pady=2, sticky='w')
         self.area_var = tk.StringVar()
         self.combo_area = AutocompleteCombobox(self.frame_ubicacion_content, textvariable=self.area_var, state="normal", font=('Segoe UI', 9))
@@ -286,7 +259,7 @@ class ReporteDemandaReal:
         self.combo_servicio = AutocompleteCombobox(self.frame_ubicacion_content, textvariable=self.servicio_var, state="normal", font=('Segoe UI', 9))
         self.combo_servicio.grid(row=0, column=7, padx=5, pady=2, sticky='ew')
 
-        # Insumo (igual empaque que Kardex)
+        # Insumo
         self.frame_insumo_container, self.frame_insumo_content = self.create_titled_frame(
             self.frame_combos, "💊 Insumo", header_icon=None
         )
@@ -311,7 +284,7 @@ class ReporteDemandaReal:
         self.combo_presentacion = AutocompleteCombobox(self.frame_insumo_content, textvariable=self.presentacion_var, state="normal", font=('Segoe UI', 9))
         self.combo_presentacion.grid(row=0, column=5, padx=5, pady=2, sticky='ew')
 
-        # Visor PDF alineado al ancho y con header como Kardex
+        # Visor PDF (fondo blanco)
         self.pdf_outer = tk.Frame(self.frame_combos, bg=self.COLORS['white'])
         self.pdf_outer.pack(fill="x", expand=False, pady=5)
 
@@ -335,8 +308,8 @@ class ReporteDemandaReal:
         self.pdf_body = tk.Frame(self.pdf_frame, bg=self.COLORS['white'])
         self.pdf_body.pack(fill="both", expand=True, padx=8, pady=8)
 
-        # Botones abajo, mismo ancho
-        self.frame_botones = ttk.Frame(self.main_container, style='White.TFrame')
+        # Botones abajo sobre Light
+        self.frame_botones = tk.Frame(self.main_container, bg=self.COLORS['light'])
         self.frame_botones.pack(fill="x", side="bottom", pady=(20, 10))
 
         btn_font = ('Segoe UI', 9, 'bold')
@@ -385,14 +358,12 @@ class ReporteDemandaReal:
         Del 26 del mes anterior al mes inicio hasta el 25 del mes final.
         Retorna (fecha_inicial, fecha_final) en formato dd/mm/yyyy
         """
-        # Diccionario de meses en español a números
         meses_a_numero = {
             'Enero': 1, 'Febrero': 2, 'Marzo': 3, 'Abril': 4,
             'Mayo': 5, 'Junio': 6, 'Julio': 7, 'Agosto': 8,
             'Septiembre': 9, 'Octubre': 10, 'Noviembre': 11, 'Diciembre': 12
         }
 
-        # Convertir nombres de meses a números
         mes_inicio_num = meses_a_numero.get(mes_inicio)
         mes_final_num = meses_a_numero.get(mes_final)
 
@@ -404,21 +375,16 @@ class ReporteDemandaReal:
         except ValueError:
             raise ValueError("Año debe ser un número válido")
 
-        # Calcular fecha inicial (26 del mes anterior al mes inicio)
-        if mes_inicio_num == 1:  # Si es enero, el mes anterior es diciembre del año anterior
+        if mes_inicio_num == 1:
             fecha_ini = datetime(anio - 1, 12, 26)
         else:
             fecha_ini = datetime(anio, mes_inicio_num - 1, 26)
 
-        # Calcular fecha final (25 del mes final)
         fecha_fin = datetime(anio, mes_final_num, 25)
 
         return fecha_ini.strftime('%d/%m/%Y'), fecha_fin.strftime('%d/%m/%Y')
 
     def actualizar_fechas_por_corte(self, event=None):
-        """
-        Actualiza las fechas cuando se selecciona año, mes inicio y mes final
-        """
         try:
             anio = self.anio_var.get()
             mes_inicio = self.mes_inicio_var.get()
@@ -426,7 +392,6 @@ class ReporteDemandaReal:
 
             if anio and mes_inicio and mes_final:
                 fecha_ini, fecha_fin = self.calcular_rango_corte_logistico(anio, mes_inicio, mes_final)
-                # Solo para mostrar información, no necesitamos DateEntry
                 print(f"Período: {fecha_ini} - {fecha_fin}")
         except Exception as e:
             messagebox.showerror("Error", f"Error al calcular fechas: {str(e)}")
@@ -490,7 +455,6 @@ class ReporteDemandaReal:
             tipo_insumo = next((t for t in self.tipos_insumo if t['descripcion'] == tipo_insumo_desc), None)
             if tipo_insumo:
                 insumos_raw = obtener_insumos_por_tipo(tipo_insumo['id'])
-                # Convertir sqlite3.Row a diccionarios
                 self.insumos = [dict(i) for i in insumos_raw] if insumos_raw else []
                 opciones = [''] + [i['nombre'] for i in self.insumos]
                 self.combo_insumo.set_completion_list(opciones)
@@ -510,14 +474,11 @@ class ReporteDemandaReal:
         if insumo_nombre and self.insumos:
             insumo = next((i for i in self.insumos if i['nombre'] == insumo_nombre), None)
             if insumo:
-                # Buscar la presentación del insumo seleccionado
                 presentacion = insumo.get('nombre_presentacion', '')
                 if presentacion:
                     self.combo_presentacion.set(presentacion)
                 else:
-                    # Si no tiene presentación específica, buscar en la lista general
                     if self.presentaciones:
-                        # Tomar la primera presentación disponible como default
                         self.combo_presentacion.set(self.presentaciones[0]['nombre'])
                     else:
                         self.combo_presentacion.set('')
@@ -525,7 +486,6 @@ class ReporteDemandaReal:
                 self.combo_presentacion.set('')
         else:
             self.combo_presentacion.set('')
-
 
     def formato_valor(self, valor):
         """
@@ -540,11 +500,7 @@ class ReporteDemandaReal:
     def generar_codigo_insumo(self, movimientos_raw):
         """
         Genera códigos con prefijo por tipo de insumo.
-        - Normaliza los IDs (int) para evitar misses str/int.
-        - Mantiene 1 consulta por los insumos presentes.
-        - CORREGIDO: Enumera basado en la posición real dentro de cada tipo (empezando en 1)
         """
-        # 1) Extraer insumos únicos normalizando a int
         insumos_unicos = {}
         for mov in movimientos_raw:
             insumo_id_raw = mov.get('codigo_insumo') or mov.get('insumo_id') or mov.get('codigo')
@@ -570,7 +526,6 @@ class ReporteDemandaReal:
 
             cursor = conn.cursor(dictionary=True)
 
-            # 2) NUEVA CONSULTA: Obtener TODOS los insumos por tipo para calcular posición relativa
             query_tipos = """
                 SELECT DISTINCT ti.id as tipo_id, ti.descripcion as tipo_descripcion
                 FROM tipo_insumo ti
@@ -584,12 +539,10 @@ class ReporteDemandaReal:
 
             codigos_insumos = {}
             
-            # 3) Para cada tipo de insumo, obtener TODOS los insumos de ese tipo ordenados por ID
             for tipo_info in tipos_resultado:
                 tipo_id = tipo_info['tipo_id']
                 tipo_descripcion = tipo_info['tipo_descripcion']
                 
-                # Consultar TODOS los insumos de este tipo ordenados por ID
                 query_insumos_tipo = """
                     SELECT i.id AS insumo_id, i.nombre AS insumo_nombre
                     FROM insumo i
@@ -599,12 +552,10 @@ class ReporteDemandaReal:
                 cursor.execute(query_insumos_tipo, (tipo_id,))
                 todos_insumos_tipo = cursor.fetchall()
                 
-                # 4) Crear mapeo de ID a posición relativa (empezando en 1)
                 posicion_en_tipo = {}
                 for indice, insumo in enumerate(todos_insumos_tipo, 1):
                     posicion_en_tipo[insumo['insumo_id']] = indice
                 
-                # 5) Generar códigos solo para los insumos que están en movimientos_raw
                 tipo_limpio = ''.join(c for c in tipo_descripcion.strip().upper() if c.isalnum())
                 prefijo = (tipo_limpio[:4].upper() + 'XXXX')[:4] if tipo_limpio else 'XXXX'
                 
@@ -639,14 +590,11 @@ class ReporteDemandaReal:
   
     def procesar_datos(self, movimientos, fecha_ini, fecha_fin, dias):
         """
-        Versión corregida de procesar_datos que integra correctamente la generación de códigos con prefijos
+        Integra códigos con prefijos y agrupa datos.
         """
-        # 1. Generar códigos de insumos (1 consulta en lugar de N)
         codigos_insumos = self.generar_codigo_insumo(movimientos)
-        
         print(f"DEBUG: Códigos generados para {len(codigos_insumos)} insumos")
         
-        # 2. Procesar datos como antes, pero usando los códigos generados
         insumos = {}
         
         for mov in movimientos:
@@ -657,9 +605,8 @@ class ReporteDemandaReal:
                 insumo_id = None
 
             if insumo_id is None:
-                continue  # no se puede mapear
+                continue
 
-            # CORREGIDO: Usar el código con prefijo generado
             codigo_con_prefijo = codigos_insumos.get(insumo_id)
             if not codigo_con_prefijo:
                 codigo_con_prefijo = f"TEMP-{str(insumo_id).zfill(4)}"
@@ -671,8 +618,8 @@ class ReporteDemandaReal:
             
             if insumo_key not in insumos:
                 insumos[insumo_key] = {
-                    'codigo': codigo_con_prefijo,  # Usar el código con prefijo
-                    'insumo_id': insumo_id,  # AGREGADO: Guardar el ID para referencia
+                    'codigo': codigo_con_prefijo,
+                    'insumo_id': insumo_id,
                     'nombre_insumo': nombre_insumo,
                     'presentacion': presentacion,
                     'entregado': {dia: 0 for dia in dias},
@@ -684,7 +631,6 @@ class ReporteDemandaReal:
                     'reajuste_negativo': 0
                 }
             
-            # Usar get() para obtener valores de manera segura
             fecha_str = mov.get('fecha', '')
             if not fecha_str:
                 continue
@@ -713,45 +659,36 @@ class ReporteDemandaReal:
             elif tipo_mov == 'REAJUSTE NEGATIVO':
                 insumos[insumo_key]['reajuste_negativo'] += cantidad
         
-        # 3. Procesar datos finales manteniendo el formato original
         datos_procesados = {}
         
         for insumo_key, valores in insumos.items():
             fila_datos = {
-                'codigo': valores['codigo'],  # Usar el código con prefijo
-                'insumo_id': valores['insumo_id'],  # AGREGADO: Para referencia
+                'codigo': valores['codigo'],
+                'insumo_id': valores['insumo_id'],
                 'nombre_insumo': valores['nombre_insumo'],
                 'presentacion': valores['presentacion']
             }
             
-            # Agregar días
             for dia in dias:
                 fila_datos[f'Día_{dia}_Entregado'] = self.formato_valor(valores['entregado'].get(dia, 0))
                 fila_datos[f'Día_{dia}_No_Entregado'] = self.formato_valor(valores['no_entregado'].get(dia, 0))
             
-            # Calcular totales
             total_entregado = sum(valores['entregado'].values())
             total_no_entregado = sum(valores['no_entregado'].values())
-            
-            # Calcular reajuste total (positivo - negativo)
             reajuste_total = valores['reajuste_positivo'] - valores['reajuste_negativo']
-            
-            # Calcular existencia según la fórmula
             existencia = (valores['inventario_inicial'] + 
-                        valores['entrada_nivel_superior'] + 
-                        valores['reajuste_positivo'] - 
-                        valores['salida_nivel_inferior'] - 
-                        total_entregado - 
-                        valores['reajuste_negativo'])
+                          valores['entrada_nivel_superior'] + 
+                          valores['reajuste_positivo'] - 
+                          valores['salida_nivel_inferior'] - 
+                          total_entregado - 
+                          valores['reajuste_negativo'])
             
-            # Agregar totales
             fila_datos['Total_Entregado'] = self.formato_valor(total_entregado)
             fila_datos['Total_No_Entregado'] = self.formato_valor(total_no_entregado)
             fila_datos['Demanda'] = self.formato_valor(total_entregado + total_no_entregado)
             fila_datos['Existencia'] = self.formato_valor(existencia)
             fila_datos['Reajuste'] = self.formato_valor(reajuste_total)
             
-            # Guardar valores originales para el PDF
             fila_datos['_valores_originales'] = {
                 'entregado': valores['entregado'],
                 'no_entregado': valores['no_entregado'],
@@ -761,13 +698,10 @@ class ReporteDemandaReal:
                 'reajuste': reajuste_total
             }
             
-            # **USAR EL CÓDIGO CON PREFIJO PARA LA CLAVE Y MOSTRAR**
             nueva_clave = f"{valores['codigo']} - {valores['nombre_insumo']} - {valores['presentacion']}"
             datos_procesados[nueva_clave] = fila_datos
         
-        # AGREGADO: Guardar códigos para uso en Excel
         self.codigos_insumos = codigos_insumos
-        
         return datos_procesados
 
     def exportar_excel(self):
@@ -776,9 +710,7 @@ class ReporteDemandaReal:
             return
 
         try:         
-            # Función para convertir número de columna a letra(s)
             def col_num_to_letter(col_num):
-                """Convierte número de columna (0-based) a letra(s) de Excel"""
                 result = ""
                 while col_num >= 0:
                     result = chr(col_num % 26 + ord('A')) + result
@@ -787,111 +719,75 @@ class ReporteDemandaReal:
                         break
                 return result
             
-            # Obtener período para el nombre del archivo
             anio = self.anio_var.get()
             mes_inicio = self.mes_inicio_var.get()
             mes_final = self.mes_final_var.get()
             periodo_str = f"{mes_inicio}_{mes_final}_{anio}"
 
-            # Generar nombre de archivo con fecha y hora
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             file_name = f"Reporte_Demanda_Real_{periodo_str}_{timestamp}.xlsx"
 
-            # Ruta a la carpeta Descargas
             downloads_path = os.path.expanduser("~/Downloads")
             full_path = os.path.join(downloads_path, file_name)
 
-            # Crear archivo Excel
             writer = pd.ExcelWriter(full_path, engine='xlsxwriter')
             workbook = writer.book
             worksheet = workbook.add_worksheet('Demanda_Real')
 
-            # CALCULAR NÚMERO TOTAL DE COLUMNAS PRIMERO
             fecha_ini_str, fecha_fin_str = self.calcular_rango_corte_logistico(anio, mes_inicio, mes_final)
             fecha_inicio = datetime.strptime(fecha_ini_str, '%d/%m/%Y')
             fecha_fin = datetime.strptime(fecha_fin_str, '%d/%m/%Y')
 
-            # Generar lista de días hábiles
             dias = []
             fecha_iter = fecha_inicio
             while fecha_iter <= fecha_fin:
-                if fecha_iter.weekday() < 5:  # 0=lunes, ..., 4=viernes
+                if fecha_iter.weekday() < 5:
                     dias.append(fecha_iter.day)
                 fecha_iter += timedelta(days=1)
 
-            # Calcular columna final (Código + Medicamento + Movimientos + Días + 5 columnas finales)
-            total_columnas = 3 + len(dias) + 5  # A, B, C + días + Total Entregado, Total No Entregado, Demanda, Existencia, Reajuste
-            ultima_columna = col_num_to_letter(total_columnas - 1)  # Convertir a letra de columna
+            total_columnas = 3 + len(dias) + 5
+            ultima_columna = col_num_to_letter(total_columnas - 1)
 
-            # ESTILOS
             title_format = workbook.add_format({
-                'bold': True,
-                'align': 'center',
-                'valign': 'vcenter',
-                'font_size': 12,
-                'text_wrap': True,
-                'font_name': 'Arial'
+                'bold': True, 'align': 'center', 'valign': 'vcenter',
+                'font_size': 12, 'text_wrap': True, 'font_name': 'Arial'
             })
 
             subtitle_format = workbook.add_format({
-                'bold': True,
-                'align': 'center',
-                'valign': 'vcenter',
-                'font_size': 10,
-                'text_wrap': True,
-                'font_name': 'Arial'
+                'bold': True, 'align': 'center', 'valign': 'vcenter',
+                'font_size': 10, 'text_wrap': True, 'font_name': 'Arial'
             })
 
             timestamp_format = workbook.add_format({
-                'align': 'center',
-                'valign': 'vcenter',
-                'font_size': 9,
-                'text_wrap': True,
-                'font_name': 'Arial'
+                'align': 'center', 'valign': 'vcenter',
+                'font_size': 9, 'text_wrap': True, 'font_name': 'Arial'
             })
 
             filter_format = workbook.add_format({
-                'align': 'left',
-                'valign': 'vcenter',
-                'font_size': 9,
-                'text_wrap': True,
-                'font_name': 'Arial'
+                'align': 'left', 'valign': 'vcenter',
+                'font_size': 9, 'text_wrap': True, 'font_name': 'Arial'
             })
 
             header_format = workbook.add_format({
-                'bold': True,
-                'align': 'center',
-                'valign': 'vcenter',
-                'font_size': 8,
-                'text_wrap': True,
-                'font_name': 'Arial',
-                'bg_color': '#ADD8E6',  # Azul claro
-                'font_color': 'black',
-                'border': 1,
-                'border_color': 'black'
+                'bold': True, 'align': 'center', 'valign': 'vcenter',
+                'font_size': 8, 'text_wrap': True, 'font_name': 'Arial',
+                'bg_color': '#ADD8E6', 'font_color': 'black',
+                'border': 1, 'border_color': 'black'
             })
 
             data_format = workbook.add_format({
-                'align': 'center',
-                'valign': 'vcenter',  # Cambié de 'top' a 'vcenter' para centrado vertical
-                'font_size': 8,
-                'font_name': 'Arial',
-                'border': 1,
-                'border_color': 'black'
+                'align': 'center', 'valign': 'vcenter',
+                'font_size': 8, 'font_name': 'Arial',
+                'border': 1, 'border_color': 'black'
             })
 
-            # NUEVO: Formato específico para texto de medicamentos centrado
             text_format = workbook.add_format({
-                'align': 'center',      # Centrado horizontal
-                'valign': 'vcenter',    # Centrado vertical
-                'font_size': 8,
-                'font_name': 'Arial',
-                'border': 1,
-                'border_color': 'black',
-                'text_wrap': True       # Habilitar ajuste automático de texto
+                'align': 'center', 'valign': 'vcenter',
+                'font_size': 8, 'font_name': 'Arial',
+                'border': 1, 'border_color': 'black',
+                'text_wrap': True
             })
 
-            # TÍTULOS PRINCIPALES - ABARCAN HASTA LA ÚLTIMA COLUMNA
             worksheet.merge_range(f'A1:{ultima_columna}1', 
                 'DIRECCIÓN DEPARTAMENTAL DE REDES INTEGRADAS DE SERVICIOS DE SALUD DE GUATEMALA,', 
                 title_format)
@@ -901,7 +797,6 @@ class ReporteDemandaReal:
                 f"Generado el: {datetime.now().strftime('%d/%m/%Y %H:%M:%S')}", 
                 timestamp_format)
 
-            # FILTROS EN UNA SOLA FILA (fila 6)
             filtros = [
                 f"Área: {self.combo_area.get()}",
                 f"Distrito: {self.combo_distrito.get()}",
@@ -909,17 +804,15 @@ class ReporteDemandaReal:
                 f"Servicio: {self.combo_servicio.get()}"
             ]
 
-            # Calcular ancho de cada filtro
             ancho_filtro = max(1, total_columnas // 4)
             col_actual = 0
 
             for i, filtro in enumerate(filtros):
-                if i == 3:  # Último filtro, usar todas las columnas restantes
+                if i == 3:
                     col_fin = total_columnas - 1
                 else:
                     col_fin = min(col_actual + ancho_filtro - 1, total_columnas - 1)
                 
-                # Evitar merge de una sola celda
                 if col_actual != col_fin:
                     col_inicio_letra = col_num_to_letter(col_actual)
                     col_fin_letra = col_num_to_letter(col_fin)
@@ -930,121 +823,93 @@ class ReporteDemandaReal:
                 
                 col_actual = col_fin + 1
 
-            # ENCABEZADOS DE LA TABLA (filas 8 y 9) - TODOS EN LAS MISMAS FILAS
             fila_encabezado_1 = 8
             fila_encabezado_2 = 9
 
-            # COLUMNAS BÁSICAS (A, B, C)
             worksheet.merge_range(f'A{fila_encabezado_1}:A{fila_encabezado_2}', 'Código', header_format)
             worksheet.merge_range(f'B{fila_encabezado_1}:B{fila_encabezado_2}', 'MEDICAMENTO\nNombre, Concentración\ny Presentación', header_format)
             worksheet.merge_range(f'C{fila_encabezado_1}:C{fila_encabezado_2}', 'DIA DEL MES', header_format)
 
-            # DÍAS DEL MES
-            col_inicio_dias = 3  # Columna D (índice 3)
+            col_inicio_dias = 3
             col_fin_dias = col_inicio_dias + len(dias) - 1
             
-            # Título "DÍA DEL MES" que abarca todos los días (FILA 8)
             if len(dias) > 1:
                 col_inicio_dias_letra = col_num_to_letter(col_inicio_dias)
                 col_fin_dias_letra = col_num_to_letter(col_fin_dias)
                 worksheet.merge_range(f'{col_inicio_dias_letra}{fila_encabezado_1}:{col_fin_dias_letra}{fila_encabezado_1}', 
-                                    'CANTIDAD DE MEDICAMENTOS Y/O PRODUCTOS A FIN', header_format)
+                                      'CANTIDAD DE MEDICAMENTOS Y/O PRODUCTOS A FIN', header_format)
             else:
                 col_letra = col_num_to_letter(col_inicio_dias)
                 worksheet.write(f'{col_letra}{fila_encabezado_1}', 'CANTIDAD DE MEDICAMENTOS Y/O PRODUCTOS A FIN', header_format)
 
-            # Escribir números de días en la segunda fila (FILA 9)
             for i, dia in enumerate(dias):
                 col_letra = col_num_to_letter(col_inicio_dias + i)
                 worksheet.write(f'{col_letra}{fila_encabezado_2}', str(dia), header_format)
 
-            # COLUMNAS FINALES - CORREGIDO: TODAS EN LAS MISMAS FILAS 8 Y 9
             col_total_entregado = col_fin_dias + 1
             col_total_no_entregado = col_total_entregado + 1
             col_demanda = col_total_no_entregado + 1
             col_existencia = col_demanda + 1
             col_reajuste = col_existencia + 1
 
-            # ESCRIBIR TÍTULOS DE COLUMNAS FINALES EN LAS MISMAS FILAS QUE LOS DÍAS
             worksheet.merge_range(fila_encabezado_1-1, col_total_entregado, fila_encabezado_2-1, col_total_entregado, 
-                                'Total\nEntregado', header_format)
+                                  'Total\nEntregado', header_format)
             worksheet.merge_range(fila_encabezado_1-1, col_total_no_entregado, fila_encabezado_2-1, col_total_no_entregado, 
-                                'Total\nNo\nEntregado', header_format)
+                                  'Total\nNo\nEntregado', header_format)
             worksheet.merge_range(fila_encabezado_1-1, col_demanda, fila_encabezado_2-1, col_demanda, 
-                                'Demanda', header_format)
+                                  'Demanda', header_format)
             worksheet.merge_range(fila_encabezado_1-1, col_existencia, fila_encabezado_2-1, col_existencia, 
-                                'Existencia', header_format)
+                                  'Existencia', header_format)
             worksheet.merge_range(fila_encabezado_1-1, col_reajuste, fila_encabezado_2-1, col_reajuste, 
-                                'Reajuste (+) (-)', header_format)
+                                  'Reajuste (+) (-)', header_format)
 
-            # DATOS DE LA TABLA - Empezar en fila 10 (sin línea en blanco)
-            fila_actual = 9  # Directamente después de los encabezados
+            fila_actual = 9
 
-            # **PROCESAR DATOS DE INSUMOS CON CÓDIGOS CON PREFIJOS CORRECTOS**
             for insumo_key, valores in self.datos.items():
-                # CORREGIDO: Usar el código con prefijo que ya está en valores['codigo']
                 codigo_con_prefijo = valores.get('codigo', '')
-                
-                # Mantener el nombre/presentación sin el número secuencial
                 nombre_presentacion = f"{valores.get('nombre_insumo', '')} {valores.get('presentacion', '')}".strip()
-
-                # Aplicar división de texto
                 nombre_dividido = self.dividir_texto_en_lineas(nombre_presentacion, max_caracteres_por_linea=40)
 
-                # Calcular totales
                 total_entregado = valores.get('Total_Entregado', 0)
                 total_no_entregado = valores.get('Total_No_Entregado', 0)
                 demanda = valores.get('Demanda', 0)
                 existencia = valores.get('Existencia', 0)
                 reajuste = valores.get('Reajuste', 0)
 
-                # FILA ENTREGADO
-                # Combinar celdas verticalmente para código y nombre
-                worksheet.merge_range(fila_actual, 0, fila_actual+1, 0, codigo_con_prefijo, data_format)  # **Código con prefijo**
-                worksheet.merge_range(fila_actual, 1, fila_actual+1, 1, nombre_dividido, text_format)  # **Nombre con texto dividido**
+                worksheet.merge_range(fila_actual, 0, fila_actual+1, 0, codigo_con_prefijo, data_format)
+                worksheet.merge_range(fila_actual, 1, fila_actual+1, 1, nombre_dividido, text_format)
 
-                # Movimiento "Entregado"
                 worksheet.write(fila_actual, 2, 'Entregado', data_format)
-
-                # Días - valores entregados
                 for i, dia in enumerate(dias):
                     valor = valores.get(f'Día_{dia}_Entregado', 0)
                     worksheet.write(fila_actual, col_inicio_dias + i, valor, data_format)
 
-                # Totales para fila Entregado (combinar verticalmente)
                 worksheet.merge_range(fila_actual, col_total_entregado, fila_actual+1, col_total_entregado, 
-                                    total_entregado, data_format)
+                                      total_entregado, data_format)
                 worksheet.merge_range(fila_actual, col_total_no_entregado, fila_actual+1, col_total_no_entregado, 
-                                    total_no_entregado, data_format)
+                                      total_no_entregado, data_format)
                 worksheet.merge_range(fila_actual, col_demanda, fila_actual+1, col_demanda, 
-                                    demanda, data_format)
+                                      demanda, data_format)
                 worksheet.merge_range(fila_actual, col_existencia, fila_actual+1, col_existencia, 
-                                    existencia, data_format)
+                                      existencia, data_format)
                 worksheet.merge_range(fila_actual, col_reajuste, fila_actual+1, col_reajuste, 
-                                    reajuste, data_format)
+                                      reajuste, data_format)
 
-                # FILA NO ENTREGADO
-                # Movimiento "No Entregado"
                 worksheet.write(fila_actual+1, 2, 'No Entregado', data_format)
-
-                # Días - valores no entregados
                 for i, dia in enumerate(dias):
                     valor = valores.get(f'Día_{dia}_No_Entregado', 0)
                     worksheet.write(fila_actual+1, col_inicio_dias + i, valor, data_format)
 
-                fila_actual += 2  # Avanzar 2 filas para el siguiente insumo
+                fila_actual += 2
 
-            # CONFIGURACIÓN DE COLUMNAS - AUMENTAR ANCHO DE COLUMNA B Y AJUSTAR ALTURA DE FILAS
-            worksheet.set_column('A:A', 12)   # Código - AUMENTADO para códigos con prefijos
-            worksheet.set_column('B:B', 35)  # Medicamento
-            worksheet.set_column('C:C', 12)  # Movimientos
+            worksheet.set_column('A:A', 12)
+            worksheet.set_column('B:B', 35)
+            worksheet.set_column('C:C', 12)
             
-            # Días (columnas más estrechas)
             for i in range(len(dias)):
                 col_letter = col_num_to_letter(col_inicio_dias + i)
                 worksheet.set_column(f'{col_letter}:{col_letter}', 4)
             
-            # Columnas finales
             col_total_entregado_letra = col_num_to_letter(col_total_entregado)
             col_total_no_entregado_letra = col_num_to_letter(col_total_no_entregado)
             col_demanda_letra = col_num_to_letter(col_demanda)
@@ -1057,26 +922,19 @@ class ReporteDemandaReal:
             worksheet.set_column(f'{col_existencia_letra}:{col_existencia_letra}', 8)
             worksheet.set_column(f'{col_reajuste_letra}:{col_reajuste_letra}', 10)
 
-            # **AJUSTAR ALTURA UNIFORME DE LAS FILAS DE DATOS**
-            fila_inicio_datos = 9   # Empezamos en fila 9 (índice base-0), que es fila 10 en Excel
-            fila_fin_datos = fila_actual - 1  # Última fila con datos
-
-            altura_fila_uniforme = 25  # Altura en píxeles
-
-            # Aplicar altura uniforme a todas las filas de datos
+            fila_inicio_datos = 9
+            fila_fin_datos = fila_actual - 1
+            altura_fila_uniforme = 25
             for fila in range(fila_inicio_datos, fila_fin_datos + 1):
                 worksheet.set_row(fila, altura_fila_uniforme)
 
-            # CONFIGURACIÓN DE PÁGINA - TAMAÑO LEGAL
             worksheet.set_landscape()
-            worksheet.set_paper(5)  # 5 = Legal (8.5 x 14 pulgadas)
+            worksheet.set_paper(5)
             worksheet.set_margins(0.5, 0.5, 0.5, 0.5)
-            worksheet.fit_to_pages(1, 0)  # 1 página de ancho, altura automática
+            worksheet.fit_to_pages(1, 0)
 
-            # Cerrar archivo
             writer.close()
             
-            # Mensaje con opción de abrir archivo
             respuesta = messagebox.askyesno(
                 "Éxito", 
                 f"Reporte exportado exitosamente a:\n{full_path}\n\n¿Desea abrir el archivo?"
@@ -1104,7 +962,6 @@ class ReporteDemandaReal:
 
         downloads_path = os.path.expanduser("~/Downloads")
       
-        # Generar nombre con timestamp
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         file_name = f"Reporte_Demanda_Real_{self.periodo_str}_{timestamp}.pdf"
         full_path = os.path.join(downloads_path, file_name)
@@ -1113,7 +970,6 @@ class ReporteDemandaReal:
             import shutil
             shutil.copy2(self.temp_pdf_path, full_path)
           
-            # Mensaje con opción de abrir archivo
             respuesta = messagebox.askyesno(
                 "Éxito", 
                 f"Reporte exportado exitosamente a:\n{full_path}\n\n¿Desea abrir el archivo?"
@@ -1165,7 +1021,6 @@ class ReporteDemandaReal:
         fecha_inicio = datetime.strptime(fecha_ini_str, '%d/%m/%Y')
         fecha_fin = datetime.strptime(fecha_fin_str, '%d/%m/%Y')
 
-        # Días hábiles
         dias = []
         fecha_iter = fecha_inicio
         while fecha_iter <= fecha_fin:
@@ -1173,10 +1028,8 @@ class ReporteDemandaReal:
                 dias.append(fecha_iter.day)
             fecha_iter += timedelta(days=1)
 
-        # Códigos con prefijo
         codigos_insumos = self.generar_codigo_insumo(datos_movimientos)
 
-        # Agrupar
         insumos = {}
         for mov in datos_movimientos:
             insumo_id_raw = mov.get('codigo_insumo') or mov.get('insumo_id') or mov.get('codigo')
@@ -1228,7 +1081,6 @@ class ReporteDemandaReal:
             elif tipo == 'REAJUSTE NEGATIVO':
                 insumos[key]['reajuste_negativo'] += cantidad
 
-        # Documento
         doc = SimpleDocTemplate(
             ruta_pdf,
             pagesize=landscape(legal),
@@ -1238,43 +1090,31 @@ class ReporteDemandaReal:
         elementos = []
         estilos = getSampleStyleSheet()
 
-        # Títulos superiores
         title_style = ParagraphStyle('CustomTitle', parent=estilos['Heading1'], alignment=1, spaceAfter=12, fontSize=12)
         subtitle_style = ParagraphStyle('CustomSubtitle', parent=estilos['Heading2'], alignment=1, spaceAfter=8, fontSize=10)
         timestamp_style = ParagraphStyle('TimestampStyle', parent=estilos['Normal'], alignment=1, spaceAfter=12, fontSize=9)
 
-        # Estilos tabla
         header_title_style = ParagraphStyle('HeaderTitle', parent=estilos['Normal'], fontName='Helvetica-Bold', fontSize=6.2, leading=6.6, alignment=1, wordWrap='CJK')
         header_subtitle_style = ParagraphStyle('HeaderSubtitle', parent=estilos['Normal'], fontName='Helvetica-Bold', fontSize=6.0, leading=6.4, alignment=1, wordWrap='CJK')
 
-        # Títulos de “Total Entregado/No Entregado” muy compactos
         header_totals_xxs = ParagraphStyle(
             'HeaderTotalsXXS', parent=estilos['Normal'],
             fontName='Helvetica-Bold', fontSize=4.7, leading=5.3, alignment=1, wordWrap='CJK'
         )
-        # Truco de tracking: agregamos hair spaces para compactar sin romper palabras
         def compact(title):
-            # inserta espacios finos entre palabras para permitir mejor ajuste
             return title.replace(' ', '\u2009')
 
-        # Código pequeño
         cell_code_style = ParagraphStyle('CellCodeStyle', parent=estilos['Normal'], fontName='Helvetica', fontSize=5.2, leading=6.8, alignment=1, wordWrap='CJK')
-        # Movimientos
         cell_mov_style = ParagraphStyle('CellMovStyle', parent=estilos['Normal'], fontName='Helvetica-Bold', fontSize=5.6, leading=6.8, alignment=1)
-        # Días
         cell_day_style = ParagraphStyle('CellDayStyle', parent=estilos['Normal'], fontName='Helvetica', fontSize=5.4, leading=6.8, alignment=1)
-        # Totales (contenido)
         cell_total_small = ParagraphStyle('CellTotalSmall', parent=estilos['Normal'], fontName='Helvetica-Bold', fontSize=5.2, leading=6.8, alignment=1)
-        # Nombre de medicamento
         cell_text_style = ParagraphStyle('CellTextStyle', parent=estilos['Normal'], fontName='Helvetica', fontSize=6.0, leading=6.8, alignment=1)
 
-        # Encabezado del documento
         elementos.append(Paragraph("DIRECCIÓN DEPARTAMENTAL DE REDES INTEGRADAS DE SERVICIOS DE SALUD DE GUATEMALA,", title_style))
         elementos.append(Paragraph("ÁREA NOR ORIENTE", subtitle_style))
         elementos.append(Paragraph("REGISTRO DIARIO DE CONSUMO Y DEMANDA REAL", subtitle_style))
         elementos.append(Paragraph(f"Generado el: {datetime.now().strftime('%d/%m/%Y %H:%M:%S')}", timestamp_style))
 
-        # Filtros
         left_style = ParagraphStyle('LeftAlign', alignment=0, fontSize=9, fontName='Helvetica')
         filtros = [
             f"Área: {self.combo_area.get()}",
@@ -1293,7 +1133,6 @@ class ReporteDemandaReal:
         elementos.append(table_filtros)
         elementos.append(Spacer(1, 18))
 
-        # Encabezados de tabla
         encabezado1 = [
             Paragraph('Código', header_title_style),
             Paragraph('MEDICAMENTO', header_title_style),
@@ -1303,7 +1142,7 @@ class ReporteDemandaReal:
             Paragraph(compact('Total Entregado'), header_totals_xxs),
             Paragraph(compact('Total No Entregado'), header_totals_xxs),
             Paragraph('Demanda', header_title_style),
-            Paragraph('Existencia', header_subtitle_style),  # se mantiene pequeño medio
+            Paragraph('Existencia', header_subtitle_style),
             Paragraph('Reajuste (+) (-)', header_title_style)
         ]
         encabezado2 = [
@@ -1319,17 +1158,16 @@ class ReporteDemandaReal:
         ]
         data = [encabezado1, encabezado2]
 
-        # Filas de datos
         for (codigo_con_prefijo, nombre_pres), valores in insumos.items():
             total_entregado = sum(valores['entregado'].get(d, 0) for d in dias)
             total_no_entregado = sum(valores['no_entregado'].get(d, 0) for d in dias)
             reajuste_total = valores['reajuste_positivo'] - valores['reajuste_negativo']
             existencia = (valores['inventario_inicial'] +
-                        valores['entrada_nivel_superior'] +
-                        valores['reajuste_positivo'] -
-                        valores['salida_nivel_inferior'] -
-                        total_entregado -
-                        valores['reajuste_negativo'])
+                          valores['entrada_nivel_superior'] +
+                          valores['reajuste_positivo'] -
+                          valores['salida_nivel_inferior'] -
+                          total_entregado -
+                          valores['reajuste_negativo'])
 
             codigo_paragraph = Paragraph(str(codigo_con_prefijo), cell_code_style)
             nombre_paragraph = Paragraph(str(nombre_pres), cell_text_style)
@@ -1356,7 +1194,6 @@ class ReporteDemandaReal:
             data.append(fila_entregado)
             data.append(fila_no_entregado)
 
-        # Anchos dinámicos: damos más aire a "Total Entregado" y "Total No Entregado"
         page_width, _ = landscape(legal)
         left_margin = doc.leftMargin
         right_margin = doc.rightMargin
@@ -1364,10 +1201,9 @@ class ReporteDemandaReal:
 
         num_dias = len(dias)
         base_codigo = 0.58 * inch
-        base_medicamento = 2.45 * inch  # compactamos un poco más para ceder espacio a totales
+        base_medicamento = 2.45 * inch
         base_mov = 0.74 * inch
         base_dia = 0.22 * inch
-        # base_totales: [Total Entregado, Total No Entregado, Demanda, Existencia, Reajuste]
         base_totales = [0.56 * inch, 0.56 * inch, 0.56 * inch, 0.58 * inch, 0.68 * inch]
 
         ancho_base = base_codigo + base_medicamento + base_mov + (base_dia * max(0, num_dias)) + sum(base_totales)
@@ -1385,12 +1221,9 @@ class ReporteDemandaReal:
             factor_final = ancho_util / suma_col
             col_widths = [w * factor_final for w in col_widths]
 
-        # Tabla
         tabla = Table(data, repeatRows=2, colWidths=col_widths)
 
-        # Estilos de tabla
         estilos_tabla = [
-            # Spans de encabezado
             ('SPAN', (0, 0), (0, 1)),
             ('SPAN', (2, 0), (2, 1)),
             ('SPAN', (3, 0), (2 + num_dias, 0)),
@@ -1413,17 +1246,14 @@ class ReporteDemandaReal:
             ('ALIGN', (1, 2), (1, -1), 'CENTER'),
             ('VALIGN', (1, 2), (1, -1), 'MIDDLE'),
 
-            # Padding y alto homogéneo
             ('LEFTPADDING', (0, 0), (-1, -1), 2),
             ('RIGHTPADDING', (0, 0), (-1, -1), 2),
             ('TOPPADDING', (0, 0), (-1, -1), 2.3),
             ('BOTTOMPADDING', (0, 0), (-1, -1), 2.3),
 
-            # Altura uniforme (ajusta 14->15 si lo deseas más alto)
             ('ROWHEIGHT', (0, 0), (-1, -1), 15),
         ]
 
-        # Spans verticales por par de filas
         fila_inicio = 2
         while fila_inicio < len(data):
             fila_fin = fila_inicio + 1
@@ -1441,12 +1271,10 @@ class ReporteDemandaReal:
         doc.build(elementos)
       
     def generar_reporte(self):
-        # Validar que al menos el área esté seleccionada
         if not self.combo_area.get():
             messagebox.showerror("Error", "Debe seleccionar al menos el Área")
             return
 
-        # Obtener fechas del corte logístico
         anio = self.anio_var.get()
         mes_inicio = self.mes_inicio_var.get()
         mes_final = self.mes_final_var.get()
@@ -1463,15 +1291,13 @@ class ReporteDemandaReal:
             messagebox.showerror("Error", "La fecha final debe ser mayor a la inicial")
             return
 
-        # DEFINIR self.dias ANTES de llamar a procesar_datos
         self.dias = []
         fecha_iter = fecha_ini
         while fecha_iter <= fecha_fin:
-            if fecha_iter.weekday() < 5:  # 0=lunes, ..., 4=viernes
+            if fecha_iter.weekday() < 5:
                 self.dias.append(fecha_iter.day)
             fecha_iter += timedelta(days=1)
 
-        # Obtener nombres de los combos (pueden estar vacíos)
         distrito_nombre = self.combo_distrito.get().strip()
         tipo_servicio_desc = self.combo_tipo_servicio.get().strip()
         servicio_nombre = self.combo_servicio.get().strip()
@@ -1479,8 +1305,6 @@ class ReporteDemandaReal:
         insumo_nombre = self.combo_insumo.get().strip()
         presentacion_nombre = self.combo_presentacion.get().strip()
 
-        # Obtener movimientos sin filtrar tipo movimiento
-        # Pasar None o el valor según si está vacío
         movimientos_raw = obtener_movimientos_kardex(
             fecha_ini.strftime('%Y-%m-%d'),
             fecha_fin.strftime('%Y-%m-%d'),
@@ -1496,12 +1320,10 @@ class ReporteDemandaReal:
             messagebox.showinfo("Info", "No hay datos para mostrar")
             return
 
-        # Filtrar movimientos relevantes para demanda real
         movimientos_filtrados = [m for m in movimientos_raw if m.get('tipo_movimiento', '').upper() in [
             'ENTREGADO', 'NO ENTREGADO', 'REAJUSTE POSITIVO', 'REAJUSTE NEGATIVO', 'INVENTARIO INICIAL', 'ENTRADA NIVEL SUPERIOR', 'SALDO ANTERIOR'
         ]]
 
-        # **USAR EL NUEVO MÉTODO CON CÓDIGOS CON PREFIJOS**
         self.datos = self.procesar_datos(movimientos_filtrados, fecha_ini, fecha_fin, self.dias)
 
         periodo_str = f"{fecha_ini.strftime('%d%m%Y')}_{fecha_fin.strftime('%d%m%Y')}"
@@ -1511,38 +1333,30 @@ class ReporteDemandaReal:
         temp_dir = tempfile.gettempdir()
         self.temp_pdf_path = os.path.join(temp_dir, f"vista_previa_demanda_real_{periodo_str}.pdf")
       
-        # **MODIFICAR generar_pdf para usar los códigos con prefijos**
         self.generar_pdf(movimientos_filtrados, self.temp_pdf_path)
-
         self.generar_vista_previa_pdf()
 
     def generar_vista_previa_pdf(self):
         try:
-            # --- Limpiar visor PDF ---
+            # Limpiar visor
             body_target = getattr(self, 'pdf_body', self.pdf_frame)
             for widget in body_target.winfo_children():
                 widget.destroy()
-            contenedor = tk.Frame(body_target, bg=self.COLORS['white'])
 
-            # --- Contenedor principal para visor y controles ---
             contenedor = tk.Frame(self.pdf_frame, bg=self.COLORS['white'])
             contenedor.pack(fill="both", expand=True)
 
-            # --- Frame para controles de navegación (abajo, fondo blanco) ---
             control_frame = tk.Frame(contenedor, bg=self.COLORS['white'])
             control_frame.pack(fill="x", side="bottom", pady=5)
 
-            # --- Frame del visor PDF (canvas + scrollbars) ---
             canvas_frame = tk.Frame(contenedor, bg=self.COLORS['white'])
             canvas_frame.pack(side="top", fill="both", expand=True)
 
-            # Scrollbars
             v_scrollbar = ttk.Scrollbar(canvas_frame, orient="vertical")
             v_scrollbar.pack(side="right", fill="y")
             h_scrollbar = ttk.Scrollbar(canvas_frame, orient="horizontal")
             h_scrollbar.pack(side="bottom", fill="x")
 
-            # Canvas
             canvas = tk.Canvas(
                 canvas_frame,
                 bg=self.COLORS['white'],
@@ -1554,7 +1368,6 @@ class ReporteDemandaReal:
             v_scrollbar.config(command=canvas.yview)
             h_scrollbar.config(command=canvas.xview)
 
-            # Abrir PDF y preparar navegación
             doc = fitz.open(self.temp_pdf_path)
             self.current_page = 0
             self.total_pages = len(doc)
@@ -1765,7 +1578,6 @@ class ReporteDemandaReal:
                     ventana_max.bind("<Configure>", lambda e: fit_to_page_max())
 
                     display_page_max()
-
                     canvas_max.bind("<MouseWheel>", lambda e: canvas_max.yview_scroll(int(-1*(e.delta/120)), "units"))
 
                     ventana_max.focus_force()
@@ -1773,8 +1585,6 @@ class ReporteDemandaReal:
 
                 except Exception as e:
                     messagebox.showerror("Error", f"Error al maximizar reporte: {str(e)}")
-
-            # Controles normales
 
             btn_anterior = tk.Button(
                 control_frame, text="◀", command=lambda: change_page(-1),
@@ -1856,7 +1666,6 @@ class ReporteDemandaReal:
             )
             btn_maximizar.pack(side="left", padx=5, pady=2)
 
-            # Inicializar estado botones
             btn_anterior.config(state="disabled")
             btn_siguiente.config(state="normal" if self.total_pages > 1 else "disabled")
 
@@ -1885,9 +1694,9 @@ class ReporteDemandaReal:
           
             if sys.platform.startswith('win'):
                 os.startfile(self.temp_pdf_path)
-            elif sys.platform.startswith('darwin'):  # macOS
+            elif sys.platform.startswith('darwin'):
                 subprocess.run(['open', self.temp_pdf_path], check=True)
-            else:  # Linux
+            else:
                 subprocess.run(['xdg-open', self.temp_pdf_path], check=True)
               
         except Exception as e:
@@ -1923,7 +1732,6 @@ class ReporteDemandaReal:
         if linea_actual:
             lineas.append(linea_actual.strip())
       
-        # Limitar a máximo 3 líneas
         if len(lineas) > 3:
             lineas = lineas[:2] + [lineas[2][:max_caracteres_por_linea-3] + "..."]
       
@@ -1934,42 +1742,36 @@ class ReporteDemandaReal:
         Cierra la ventana del reporte, limpia recursos y muestra la pantalla de bienvenida.
         """
         if not messagebox.askyesno("Confirmar", "¿Está seguro que desea cerrar esta ventana?"):
-            return  # Si el usuario cancela, no hace nada
+            return
 
         try:
-            # Limpiar archivo temporal si existe
             if hasattr(self, 'temp_pdf_path') and os.path.exists(self.temp_pdf_path):
                 try:
                     os.remove(self.temp_pdf_path)
                 except Exception:
                     pass
 
-            # Cerrar documento PDF si está abierto
             if hasattr(self, 'pdf_document') and self.pdf_document:
                 try:
                     self.pdf_document.close()
                 except Exception:
                     pass
 
-            # Desvincular el evento del mouse wheel antes de cerrar (si existe self.canvas)
             try:
                 if hasattr(self, "canvas"):
                     self.canvas.unbind_all("<MouseWheel>")
             except Exception:
                 pass
 
-            # Limpiar el frame principal
             if hasattr(self, 'parent') and self.parent:
                 for widget in self.parent.winfo_children():
                     widget.destroy()
 
-            # Mostrar la pantalla de bienvenida si existe
             if hasattr(self, "main_window") and self.main_window:
                 self.main_window.show_welcome_screen()
 
         except Exception as e:
             print(f"Error al cerrar ventana: {e}")
-            # Forzar cierre si hay error
             try:
                 import sys
                 if hasattr(self, 'parent') and self.parent:
@@ -1981,7 +1783,6 @@ class ReporteDemandaReal:
               
         except Exception as e:
             print(f"Error al cerrar ventana: {e}")
-            # En caso de error, intentar cerrar la aplicación
             try:
                 self.parent.quit()
             except:
