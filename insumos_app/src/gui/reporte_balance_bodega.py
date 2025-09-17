@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-# Reporte Balance de Bodega (estilo unificado como Reporte BRES)
+# Reporte Balance de Bodega (limpio, sin estilos globales, alineado a Reporte BRES)
 
 from calendar import month_name
 import tkinter as tk
@@ -52,8 +52,17 @@ class ReporteBalanceBodega:
         self.main_window = main_window
         self.movimientos_data = None
 
-        self.setup_styles()
         self.cargar_iconos()
+
+        # Paleta local (solo para contenedores de esta vista)
+        self.COLORS = {
+            'primary':   '#2c3e50',
+            'accent':    '#3498db',
+            'danger':    '#e74c3c',
+            'light':     '#ecf0f1',
+            'white':     '#ffffff',
+            'text_dark': '#2c3e50',
+        }
 
         self.areas = []
         self.distritos = []
@@ -64,118 +73,10 @@ class ReporteBalanceBodega:
         self.setup_ui()
 
     # -----------------------------
-    # Estilos (igualados a BRES)
-    # -----------------------------
-    def setup_styles(self):
-        # Paleta unificada
-        self.COLORS = {
-            'primary':   '#2c3e50',
-            'secondary': '#34495e',
-            'accent':    '#3498db',
-            'success':   '#27ae60',
-            'warning':   '#f39c12',
-            'danger':    '#e74c3c',
-            'light':     '#ecf0f1',
-            'white':     '#ffffff',
-            'text_dark': '#2c3e50',
-            'text_light':'#7f8c8d',
-            'border':    '#bdc3c7',
-            'header_dark': '#1f2937'
-        }
-
-        style = ttk.Style(self.parent if hasattr(self, 'parent') else None)
-        try:
-            style.theme_use('clam')
-        except Exception:
-            pass
-
-        # Frames base
-        style.configure('White.TFrame', background=self.COLORS['light'])
-        style.configure('Enabled.TFrame', background=self.COLORS['light'])
-        style.configure('Disabled.TFrame', background='#f0f0f0')
-
-        # Labels y botones base
-        style.configure('White.TLabel',
-                        background=self.COLORS['light'],
-                        foreground=self.COLORS['text_dark'],
-                        font=('Segoe UI', 9))
-
-        style.configure('White.TButton',
-                        background=self.COLORS['light'],
-                        foreground=self.COLORS['text_dark'],
-                        font=('Segoe UI', 9),
-                        relief='flat',
-                        borderwidth=0)
-        style.map('White.TButton',
-                  background=[('active', self.COLORS['light']),
-                              ('pressed', self.COLORS['light'])])
-
-        # Títulos de tarjetas
-        style.configure('Card.TLabelframe',
-                        background=self.COLORS['white'],
-                        relief='solid',
-                        borderwidth=1,
-                        labeloutside=False)
-
-        style.configure('Card.TLabelframe.Label',
-                        background=self.COLORS['primary'],
-                        foreground=self.COLORS['white'],
-                        font=('Segoe UI', 9, 'bold'),
-                        padding=(8, 3))
-
-        # Botón primario
-        style.configure('Primary.TButton',
-                        font=('Segoe UI', 9, 'bold'),
-                        padding=(12, 6),
-                        relief='flat',
-                        borderwidth=0,
-                        background=self.COLORS['accent'],
-                        foreground=self.COLORS['white'])
-        style.map('Primary.TButton',
-                  background=[('active', '#2980b9'), ('pressed', '#117a8b')],
-                  foreground=[('active', '#ffffff'), ('pressed', '#ffffff')])
-
-        # Cabeceras compactas
-        style.configure('Header.TFrame', background=self.COLORS['primary'])
-        style.configure('Header.TLabel',
-                        background=self.COLORS['primary'],
-                        foreground=self.COLORS['white'],
-                        font=('Segoe UI', 8, 'bold'))
-
-        # Popup Combobox y Listbox
-        root = self.parent.winfo_toplevel() if hasattr(self, 'parent') else None
-        if root:
-            root.option_add('*TCombobox*Listbox.background', self.COLORS['white'])
-            root.option_add('*TCombobox*Listbox.foreground', self.COLORS['text_dark'])
-            root.option_add('*TCombobox*Listbox.selectBackground', self.COLORS['accent'])
-            root.option_add('*TCombobox*Listbox.selectForeground', self.COLORS['white'])
-            root.option_add('*TCombobox*Listbox.font', '{Segoe UI} 9')
-
-            root.option_add('*Listbox.background', self.COLORS['white'])
-            root.option_add('*Listbox.foreground', self.COLORS['text_dark'])
-            root.option_add('*Listbox.selectBackground', self.COLORS['accent'])
-            root.option_add('*Listbox.selectForeground', self.COLORS['white'])
-            root.option_add('*Listbox.font', '{Segoe UI} 9')
-
-        # Entradas y Combobox
-        style.configure('TCombobox',
-                        fieldbackground=self.COLORS['white'],
-                        background=self.COLORS['white'],
-                        foreground=self.COLORS['text_dark'])
-        style.configure('TEntry',
-                        selectbackground=self.COLORS['accent'],
-                        selectforeground='#ffffff')
-
-        style.configure('White.TRadiobutton',
-                        background=self.COLORS['light'],
-                        foreground=self.COLORS['text_dark'],
-                        font=('Segoe UI', 9))
-
-    # -----------------------------
-    # Utilidad: Titled Frame con mini-ícono
+    # Utilidad: Titled Frame con mini-ícono (local, sin estilos globales)
     # -----------------------------
     def create_titled_frame(self, parent, title_text_with_emoji):
-        container = tk.Frame(parent, bg=self.COLORS['white'], relief='solid', borderwidth=1)
+        container = tk.Frame(parent, bg=self.COLORS['white'], bd=1, relief='solid')
 
         header = tk.Frame(container, bg=self.COLORS['primary'], height=26)
         header.pack(fill='x')
@@ -223,14 +124,14 @@ class ReporteBalanceBodega:
             return "0.00"
 
     # -----------------------------
-    # UI principal (sin frame intermedio)
+    # UI principal (sin frame intermedio global, solo local)
     # -----------------------------
     def setup_ui(self):
-        # Contenedor principal con fondo light
+        # Contenedor principal con fondo light (local)
         self.main_container = tk.Frame(self.parent, bg=self.COLORS['light'])
         self.main_container.pack(fill="both", expand=True)
 
-        # Título principal
+        # Título principal (local)
         title_frame = tk.Frame(self.main_container, bg=self.COLORS['primary'], height=70)
         title_frame.pack(fill='x', padx=0, pady=(10, 5))
         title_frame.pack_propagate(False)
@@ -258,6 +159,7 @@ class ReporteBalanceBodega:
         self.frame_fechas_container, self.frame_fechas = self.create_titled_frame(
             self.main_container, "📅 Selección de Fechas/Corte Logístico"
         )
+        # Ajuste de fondo a 'light' para integrarlo con el resto de la pantalla
         self.frame_fechas_container.config(bg=self.COLORS['light'])
         self.frame_fechas.config(bg=self.COLORS['light'])
         self.frame_fechas_container.pack(fill="x", padx=5, pady=5)
@@ -275,15 +177,14 @@ class ReporteBalanceBodega:
             text="Rango de Fechas:",
             variable=self.modo_fecha_var,
             value="rango",
-            command=self.actualizar_visibilidad_fechas,
-            style='White.TRadiobutton'
+            command=self.actualizar_visibilidad_fechas
         ).grid(row=0, column=0, padx=5, sticky='w')
 
-        ttk.Label(self.frame_rango, text="Fecha Inicial:", style='White.TLabel').grid(row=0, column=1, padx=5, sticky='e')
+        ttk.Label(self.frame_rango, text="Fecha Inicial:").grid(row=0, column=1, padx=5, sticky='e')
         self.fecha_inicial = DateEntry(self.frame_rango, width=16, date_pattern='dd/mm/yyyy', state='normal')
         self.fecha_inicial.grid(row=0, column=2, padx=5, sticky='ew')
 
-        ttk.Label(self.frame_rango, text="Fecha Final:", style='White.TLabel').grid(row=0, column=3, padx=5, sticky='e')
+        ttk.Label(self.frame_rango, text="Fecha Final:").grid(row=0, column=3, padx=5, sticky='e')
         self.fecha_final = DateEntry(self.frame_rango, width=16, date_pattern='dd/mm/yyyy', state='normal')
         self.fecha_final.grid(row=0, column=4, padx=5, sticky='ew')
 
@@ -299,26 +200,25 @@ class ReporteBalanceBodega:
             text="Corte Logístico:",
             variable=self.modo_fecha_var,
             value="corte",
-            command=self.actualizar_visibilidad_fechas,
-            style='White.TRadiobutton'
+            command=self.actualizar_visibilidad_fechas
         ).grid(row=0, column=0, padx=5, sticky='w')
 
-        ttk.Label(self.frame_corte, text="Año:", style='White.TLabel').grid(row=0, column=1, padx=5, sticky='w')
+        ttk.Label(self.frame_corte, text="Año:").grid(row=0, column=1, padx=5, sticky='w')
         self.anio_var = tk.StringVar()
         anios = [str(a) for a in range(datetime.now().year - 5, datetime.now().year + 2)]
-        self.combo_anio = ttk.Combobox(self.frame_corte, textvariable=self.anio_var, values=anios, width=8)
+        self.combo_anio = ttk.Combobox(self.frame_corte, textvariable=self.anio_var, values=anios, width=8, state="readonly")
         self.combo_anio.grid(row=0, column=2, padx=5, sticky='ew')
         self.combo_anio.set(str(datetime.now().year))
 
-        ttk.Label(self.frame_corte, text="Mes Inicio:", style='White.TLabel').grid(row=0, column=3, padx=5, sticky='w')
+        ttk.Label(self.frame_corte, text="Mes Inicio:").grid(row=0, column=3, padx=5, sticky='w')
         self.mes_inicio_var = tk.StringVar()
         meses = [datetime(2024, m, 1).strftime("%B").capitalize() for m in range(1, 13)]
-        self.combo_mes_inicio = ttk.Combobox(self.frame_corte, textvariable=self.mes_inicio_var, values=meses, width=12)
+        self.combo_mes_inicio = ttk.Combobox(self.frame_corte, textvariable=self.mes_inicio_var, values=meses, width=12, state="readonly")
         self.combo_mes_inicio.grid(row=0, column=4, padx=5, sticky='ew')
 
-        ttk.Label(self.frame_corte, text="Mes Final:", style='White.TLabel').grid(row=0, column=5, padx=5, sticky='w')
+        ttk.Label(self.frame_corte, text="Mes Final:").grid(row=0, column=5, padx=5, sticky='w')
         self.mes_final_var = tk.StringVar()
-        self.combo_mes_final = ttk.Combobox(self.frame_corte, textvariable=self.mes_final_var, values=meses, width=12)
+        self.combo_mes_final = ttk.Combobox(self.frame_corte, textvariable=self.mes_final_var, values=meses, width=12, state="readonly")
         self.combo_mes_final.grid(row=0, column=6, padx=5, sticky='ew')
 
         self.combo_anio.bind('<<ComboboxSelected>>', self.actualizar_fechas_por_corte)
@@ -337,12 +237,12 @@ class ReporteBalanceBodega:
         frame_ubicacion_content.grid_columnconfigure(1, weight=1)
         frame_ubicacion_content.grid_columnconfigure(3, weight=1)
 
-        ttk.Label(frame_ubicacion_content, text="Área:", style='White.TLabel').grid(row=0, column=0, padx=5, sticky='w')
+        ttk.Label(frame_ubicacion_content, text="Área:").grid(row=0, column=0, padx=5, sticky='w')
         self.area_var = tk.StringVar()
         self.combo_area = AutocompleteCombobox(frame_ubicacion_content, textvariable=self.area_var, state="normal", font=('Segoe UI', 9))
         self.combo_area.grid(row=0, column=1, padx=5, sticky='ew')
 
-        ttk.Label(frame_ubicacion_content, text="Distrito:", style='White.TLabel').grid(row=0, column=2, padx=5, sticky='w')
+        ttk.Label(frame_ubicacion_content, text="Distrito:").grid(row=0, column=2, padx=5, sticky='w')
         self.distrito_var = tk.StringVar()
         self.combo_distrito = AutocompleteCombobox(frame_ubicacion_content, textvariable=self.distrito_var, state="normal", font=('Segoe UI', 9))
         self.combo_distrito.grid(row=0, column=3, padx=5, sticky='ew')
@@ -359,17 +259,17 @@ class ReporteBalanceBodega:
         frame_insumo_content.grid_columnconfigure(3, weight=1)
         frame_insumo_content.grid_columnconfigure(5, weight=1)
 
-        ttk.Label(frame_insumo_content, text="Tipo de Insumo:", style='White.TLabel').grid(row=0, column=0, padx=5, sticky='w')
+        ttk.Label(frame_insumo_content, text="Tipo de Insumo:").grid(row=0, column=0, padx=5, sticky='w')
         self.tipo_insumo_var = tk.StringVar()
         self.combo_tipo_insumo = AutocompleteCombobox(frame_insumo_content, textvariable=self.tipo_insumo_var, state="normal", font=('Segoe UI', 9))
         self.combo_tipo_insumo.grid(row=0, column=1, padx=5, sticky='ew')
 
-        ttk.Label(frame_insumo_content, text="Insumo:", style='White.TLabel').grid(row=0, column=2, padx=5, sticky='w')
+        ttk.Label(frame_insumo_content, text="Insumo:").grid(row=0, column=2, padx=5, sticky='w')
         self.insumo_var = tk.StringVar()
         self.combo_insumo = AutocompleteCombobox(frame_insumo_content, textvariable=self.insumo_var, state="normal", font=('Segoe UI', 9))
         self.combo_insumo.grid(row=0, column=3, padx=5, sticky='ew')
 
-        ttk.Label(frame_insumo_content, text="Presentación:", style='White.TLabel').grid(row=0, column=4, padx=5, sticky='w')
+        ttk.Label(frame_insumo_content, text="Presentación:").grid(row=0, column=4, padx=5, sticky='w')
         self.presentacion_var = tk.StringVar()
         self.combo_presentacion = AutocompleteCombobox(frame_insumo_content, textvariable=self.presentacion_var, state="normal", font=('Segoe UI', 9))
         self.combo_presentacion.grid(row=0, column=5, padx=5, sticky='ew')
@@ -382,7 +282,7 @@ class ReporteBalanceBodega:
         frame_nivel_content.config(bg=self.COLORS['light'])
         self.frame_nivel_container.pack(fill="x", padx=5, pady=(10, 10))
 
-        ttk.Label(frame_nivel_content, text="Nivel Máximo:", style='White.TLabel').grid(row=0, column=0, padx=5, sticky='w')
+        ttk.Label(frame_nivel_content, text="Nivel Máximo:").grid(row=0, column=0, padx=5, sticky='w')
         self.nivel_maximo_var = tk.StringVar()
         niveles = [str(i) for i in range(1, 12 + 1)]
         self.combo_nivel_maximo = ttk.Combobox(frame_nivel_content, textvariable=self.nivel_maximo_var, values=niveles, width=10, state="readonly")
@@ -411,8 +311,8 @@ class ReporteBalanceBodega:
         self.pdf_body = tk.Frame(self.pdf_frame, bg=self.COLORS['white'])
         self.pdf_body.pack(fill="both", expand=False, padx=8, pady=8)
 
-        # Botones
-        self.frame_botones = ttk.Frame(self.main_container, style='White.TFrame')
+        # Botones (locales)
+        self.frame_botones = tk.Frame(self.main_container, bg=self.COLORS['light'])
         self.frame_botones.pack(fill="x", side="bottom", pady=(20, 10))
 
         btn_font = ('Segoe UI', 9, 'bold')
@@ -602,7 +502,7 @@ class ReporteBalanceBodega:
             self.combo_presentacion.set_completion_list(opciones)
 
     # -----------------------------
-    # Códigos de insumo (misma lógica, limpieza menor)
+    # Códigos de insumo
     # -----------------------------
     def generar_codigo_insumo(self, movimientos_raw):
         from src.database.db_manager import conectar_db
@@ -795,7 +695,7 @@ class ReporteBalanceBodega:
             return 0.0
 
     # -----------------------------
-    # Generar Vista Previa (visor unificado)
+    # Generar Vista Previa (visor local)
     # -----------------------------
     def generar_vista_previa(self):
         try:
@@ -1228,7 +1128,6 @@ class ReporteBalanceBodega:
                 f"Nivel Máximo: {self.combo_nivel_maximo.get()}"
             ]
             data_filtros = [[Paragraph(item, left_style) for item in filtros]]
-            # 6 columnas por consistencia visual
             col_widths = [125, 125, 125, 125, 125, 125]
             table_filtros = Table(data_filtros, colWidths=col_widths[:len(filtros)])
             table_filtros.setStyle(TableStyle([
@@ -1519,6 +1418,14 @@ class ReporteBalanceBodega:
                 pass
 
     def destroy(self):
-        # Quitar cualquier contenedor principal creado por esta clase
-        if hasattr(self, 'main_container'):
+        # Destruye el contenedor principal creado por esta vista y limpia temporales
+        try:
+            if hasattr(self, 'temp_pdf_path') and os.path.exists(self.temp_pdf_path):
+                try:
+                    os.remove(self.temp_pdf_path)
+                except Exception:
+                    pass
+        except Exception:
+            pass
+        if hasattr(self, 'main_container') and self.main_container.winfo_exists():
             self.main_container.destroy()

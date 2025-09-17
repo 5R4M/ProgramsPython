@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
 import pandas as pd
@@ -15,144 +16,22 @@ from src.database.db_manager import (
     eliminar_tipo_movimiento,
 )
 
-# ================= Estilos unificados =================
-def setup_styles(root):
-    COLORS = {
-        'primary':   '#2c3e50',
-        'secondary': '#34495e',
-        'accent':    '#3498db',
-        'success':   '#27ae60',
-        'warning':   '#f39c12',
-        'danger':    '#e74c3c',
-        'light':     '#ecf0f1',
-        'white':     '#ffffff',
-        'text_dark': '#2c3e50',
-        'text_light':'#7f8c8d',
-        'border':    '#d1d5db'
-    }
-
-    style = ttk.Style(root)
-    try:
-        style.theme_use('clam')
-    except Exception:
-        pass
-
-    try:
-        root.configure(bg=COLORS['light'])
-    except Exception:
-        pass
-
-    style.configure('.', font=('Segoe UI', 9))
-
-    # Frames
-    style.configure('Light.TFrame', background=COLORS['light'])
-    style.configure('Card.TFrame', background=COLORS['white'], relief='solid', borderwidth=1)
-    style.configure('NoBorder.TFrame', background=COLORS['white'], relief='flat', borderwidth=0)
-
-    # Header de card
-    style.configure('Header.TFrame', background=COLORS['primary'])
-    style.configure('Header.TLabel', background=COLORS['primary'], foreground=COLORS['white'], font=('Segoe UI', 10, 'bold'))
-
-    # Labels
-    style.configure('Light.TLabel', background=COLORS['light'], foreground=COLORS['text_dark'], font=('Segoe UI', 9))
-    style.configure('Card.TLabel', background=COLORS['white'], foreground=COLORS['text_dark'], font=('Segoe UI', 9))
-
-    # Botón primario
-    style.configure('Primary.TButton',
-                    font=('Segoe UI', 9, 'bold'),
-                    padding=(10, 5),
-                    relief='flat',
-                    borderwidth=0,
-                    background=COLORS['accent'],
-                    foreground=COLORS['white'])
-    style.map('Primary.TButton',
-              background=[('active', '#2980b9'), ('pressed', '#117a8b')],
-              foreground=[('active', '#ffffff'), ('pressed', '#ffffff')])
-
-    # Entry/Combobox
-    style.configure('TCombobox',
-                    fieldbackground=COLORS['white'],
-                    background=COLORS['white'],
-                    foreground=COLORS['text_dark'])
-    style.configure('TEntry',
-                    fieldbackground=COLORS['white'],
-                    foreground=COLORS['text_dark'])
-
-    root.option_add('*TCombobox*Listbox.background', COLORS['white'])
-    root.option_add('*TCombobox*Listbox.foreground', COLORS['text_dark'])
-    root.option_add('*TCombobox*Listbox.selectBackground', COLORS['accent'])
-    root.option_add('*TCombobox*Listbox.selectForeground', COLORS['white'])
-    root.option_add('*TCombobox*Listbox.font', '{Segoe UI} 9')
-
-    # Treeview sin borde
-    style.configure("Custom.Treeview",
-                    background=COLORS['white'],
-                    foreground=COLORS['text_dark'],
-                    rowheight=22,
-                    fieldbackground=COLORS['white'],
-                    font=('Segoe UI', 9),
-                    borderwidth=0,
-                    relief='flat')
-    HEADER_BG = '#e5e7eb'
-    HEADER_FG = '#111827'
-    style.configure("Custom.Treeview.Heading",
-                    background=HEADER_BG,
-                    foreground=HEADER_FG,
-                    font=('Segoe UI', 8, 'bold'),
-                    relief='flat',
-                    borderwidth=0,
-                    padding=(3, 6, 3, 6),
-                    anchor='center',
-                    justify='center')
-    style.map("Custom.Treeview",
-              background=[('selected', COLORS['accent'])],
-              foreground=[('selected', '#ffffff')])
-
-    # Scrollbars planos (sin contorno)
-    style.configure('Vertical.TScrollbar',
-                    gripcount=0,
-                    troughcolor=COLORS['white'],
-                    background=COLORS['white'],
-                    bordercolor=COLORS['white'],
-                    lightcolor=COLORS['white'],
-                    darkcolor=COLORS['white'],
-                    arrowsize=12,
-                    relief='flat')
-    style.configure('Horizontal.TScrollbar',
-                    gripcount=0,
-                    troughcolor=COLORS['white'],
-                    background=COLORS['white'],
-                    bordercolor=COLORS['white'],
-                    lightcolor=COLORS['white'],
-                    darkcolor=COLORS['white'],
-                    arrowsize=12,
-                    relief='flat')
-
-    # Notebook
-    style.configure('TNotebook', background=COLORS['light'], borderwidth=0)
-    style.configure('TNotebook.Tab',
-                    background=COLORS['light'],
-                    foreground=COLORS['text_dark'],
-                    font=('Segoe UI', 9))
-    style.map('TNotebook.Tab',
-              background=[('selected', COLORS['white'])],
-              foreground=[('selected', COLORS['text_dark'])])
-
-    return COLORS, style
-
-
 class GestionMovimientos:
     def __init__(self, parent_frame, main_window):
         self.parent = parent_frame
         self.main_window = main_window
 
-        # Estilos
-        self.COLORS, self._style = setup_styles(self.parent.winfo_toplevel())
-        self.setup_ui()
+        # Paleta local (no afecta estilos globales del Main Window)
+        self.COLORS = {
+            'primary':   '#2c3e50',
+            'accent':    '#3498db',
+            'light':     '#ecf0f1',
+            'white':     '#ffffff',
+            'text_dark': '#2c3e50',
+        }
 
-        # Aplicar estilo al contenedor raíz si es ttk
-        if isinstance(self.parent, ttk.Widget):
-            self.parent.configure(style='Light.TFrame')
+        self.setup_ui()
+        self.actualizar_tipos()
 
     # ---------- Utilería de UI ----------
     def _header_title_sub(self, parent, title_text, subtitle_text):
@@ -171,20 +50,20 @@ class GestionMovimientos:
                  fg=self.COLORS['white'], bg=self.COLORS['primary']).pack(anchor='w', pady=(1, 0))
 
     def _card_section(self, parent, title, icon):
-        container = ttk.Frame(parent, style='Light.TFrame')
+        container = tk.Frame(parent, bg=self.COLORS['light'])
         container.pack(fill='x', padx=10, pady=6)
 
-        card = ttk.Frame(container, style='Card.TFrame')
+        card = tk.Frame(container, bg=self.COLORS['white'], bd=1, relief='solid', highlightthickness=0)
         card.pack(fill='both', expand=True)
 
-        header = ttk.Frame(card, style='Header.TFrame', height=24)
+        header = tk.Frame(card, bg=self.COLORS['primary'], height=24)
         header.pack(fill='x')
         header.pack_propagate(False)
 
-        ttk.Label(header, text=f"{icon} {title}", style='Header.TLabel').pack(side='left', padx=10)
+        tk.Label(header, text=f"{icon} {title}", font=('Segoe UI', 10, 'bold'),
+                 fg=self.COLORS['white'], bg=self.COLORS['primary']).pack(side='left', padx=10)
 
-        # Contenido sin borde interno
-        content = ttk.Frame(card, style='NoBorder.TFrame')
+        content = tk.Frame(card, bg=self.COLORS['white'])
         content.pack(fill='both', expand=True, padx=12, pady=8)
 
         return content
@@ -198,16 +77,8 @@ class GestionMovimientos:
         y = (ventana.winfo_screenheight() // 2) - (height // 2)
         ventana.geometry(f'{width}x{height}+{x}+{y}')
 
+    # ---------- UI principal ----------
     def setup_ui(self):
-        # fondo parent
-        try:
-            if isinstance(self.parent, ttk.Widget):
-                self.parent.configure(style='Light.TFrame')
-            else:
-                self.parent.configure(bg=self.COLORS['light'])
-        except Exception:
-            pass
-
         # Header principal
         self._header_title_sub(
             self.parent,
@@ -216,67 +87,66 @@ class GestionMovimientos:
         )
 
         # Notebook
-        nb_container = ttk.Frame(self.parent, style='Light.TFrame')
+        nb_container = tk.Frame(self.parent, bg=self.COLORS['light'])
         nb_container.pack(fill="both", expand=True, padx=10, pady=5)
 
         self.notebook = ttk.Notebook(nb_container)
         self.notebook.pack(fill="both", expand=True)
 
-        self.tab_tipos = ttk.Frame(self.notebook, style='Light.TFrame')
+        self.tab_tipos = tk.Frame(self.notebook, bg=self.COLORS['light'])
         self.notebook.add(self.tab_tipos, text="🧾 Tipos de Movimiento")
 
         self.setup_tipos_tab()
 
         # Botón cerrar
-        button_frame = ttk.Frame(self.parent, style='Light.TFrame')
+        button_frame = tk.Frame(self.parent, bg=self.COLORS['light'])
         button_frame.pack(fill='x', pady=10, padx=10)
-        ttk.Button(button_frame, text="↩️ Cerrar", style='Primary.TButton',
-                   command=self.cerrar_ventana).pack(anchor='e')
-
-        self.actualizar_tipos()
+        tk.Button(button_frame, text="↩️ Cerrar",
+                  bg=self.COLORS['accent'], fg='white', relief='flat', padx=10, pady=5,
+                  command=self.cerrar_ventana).pack(anchor='e')
 
     def setup_tipos_tab(self):
         # Card: Excel
         frame_excel = self._card_section(self.tab_tipos, "Carga desde Excel", "📥")
-        ttk.Button(frame_excel, text="📂 Cargar Excel", style='Primary.TButton',
-                   command=self.cargar_excel_tipos).pack(side="left", padx=(0, 8), pady=2)
-        ttk.Button(frame_excel, text="📤 Exportar a Excel", style='Primary.TButton',
-                   command=self.exportar_excel_tipos).pack(side="left", padx=(0, 8), pady=2)
+        tk.Button(frame_excel, text="📂 Cargar Excel",
+                  bg=self.COLORS['accent'], fg='white', relief='flat', padx=10, pady=5,
+                  command=self.cargar_excel_tipos).pack(side="left", padx=(0, 8), pady=2)
+        tk.Button(frame_excel, text="📤 Exportar a Excel",
+                  bg=self.COLORS['accent'], fg='white', relief='flat', padx=10, pady=5,
+                  command=self.exportar_excel_tipos).pack(side="left", padx=(0, 8), pady=2)
 
         # Card: Lista
         frame_lista = self._card_section(self.tab_tipos, "Tipos de Movimiento", "🧾")
 
-        table_wrap = ttk.Frame(frame_lista, style='NoBorder.TFrame')
+        table_wrap = tk.Frame(frame_lista, bg=self.COLORS['white'])
         table_wrap.pack(fill='both', expand=True)
 
-        # Treeview plano, alineado a la izquierda
+        # Treeview con solo scroll vertical
         self.tree_tipos = ttk.Treeview(
             table_wrap,
             columns=('descripcion',),
-            show='headings',
-            style="Custom.Treeview"
+            show='headings'
         )
         self.tree_tipos.heading('descripcion', text='Tipo de Movimiento', anchor='w')
-        self.tree_tipos.column('descripcion', anchor='w', width=420)
-        # Quitar contornos residuales
+        self.tree_tipos.column('descripcion', anchor='w', width=420, stretch=True)
         self.tree_tipos.configure(selectmode='browse')
         self.tree_tipos.pack(fill='both', expand=True, side='left', padx=(0, 5), pady=2)
 
-        # Scrollbar sin borde
-        scrolly = ttk.Scrollbar(table_wrap, orient="vertical", command=self.tree_tipos.yview, style='Vertical.TScrollbar')
+        scrolly = ttk.Scrollbar(table_wrap, orient="vertical", command=self.tree_tipos.yview)
         self.tree_tipos.configure(yscrollcommand=scrolly.set)
         scrolly.pack(side='left', fill='y')
 
-        # Botonera horizontal sin marco
-        btns = ttk.Frame(frame_lista, style='NoBorder.TFrame')
+        # Botonera
+        btns = tk.Frame(frame_lista, bg=self.COLORS['white'])
         btns.pack(fill='x', padx=0, pady=(6, 0))
-        ttk.Button(btns, text="➕ Agregar", style='Primary.TButton',
-                   command=self.agregar_tipo).pack(side='left', padx=(0, 6))
-        ttk.Button(btns, text="✏️ Editar", style='Primary.TButton',
-                   command=self.editar_tipo).pack(side='left', padx=(0, 6))
-        ttk.Button(btns, text="🗑️ Eliminar", style='Primary.TButton',
-                   command=self.eliminar_tipo).pack(side='left')
+        tk.Button(btns, text="➕ Agregar", bg=self.COLORS['accent'], fg='white',
+                  relief='flat', padx=10, pady=5, command=self.agregar_tipo).pack(side='left', padx=(0, 6))
+        tk.Button(btns, text="✏️ Editar", bg=self.COLORS['accent'], fg='white',
+                  relief='flat', padx=10, pady=5, command=self.editar_tipo).pack(side='left', padx=(0, 6))
+        tk.Button(btns, text="🗑️ Eliminar", bg=self.COLORS['accent'], fg='white',
+                  relief='flat', padx=10, pady=5, command=self.eliminar_tipo).pack(side='left')
 
+    # ---------- Importar / Exportar ----------
     def cargar_excel_tipos(self):
         filename = filedialog.askopenfilename(title="Seleccionar archivo Excel", filetypes=[("Excel files", "*.xlsx *.xls")])
         if not filename:
@@ -304,7 +174,6 @@ class GestionMovimientos:
                     registros_procesados += 1
                     tipos_existentes.append(descripcion.lower())
                 except Exception:
-                    # Continuar con el siguiente sin romper el flujo
                     pass
 
             self.actualizar_tipos()
@@ -336,8 +205,8 @@ class GestionMovimientos:
         self.centrar_ventana(ventana)
 
     def _dialog_container(self, ventana, title_text, subtitle_text):
-        outer = ttk.Frame(ventana, style='Light.TFrame', padding=(10, 10))
-        outer.pack(fill='both', expand=True)
+        outer = tk.Frame(ventana, bg=self.COLORS['light'])
+        outer.pack(fill='both', expand=True, padx=10, pady=10)
 
         header = tk.Frame(outer, bg=self.COLORS['primary'])
         header.pack(fill='x', pady=(0, 8))
@@ -346,20 +215,23 @@ class GestionMovimientos:
         tk.Label(header, text=subtitle_text, font=('Segoe UI', 8),
                  fg=self.COLORS['white'], bg=self.COLORS['primary']).pack(side='left', padx=10)
 
-        body = ttk.Frame(outer, style='Light.TFrame')
-        body.pack(fill='both', expand=True)
+        body = tk.Frame(outer, bg=self.COLORS['white'])
+        body.pack(fill='both', expand=True, padx=10, pady=8)
 
-        buttons = ttk.Frame(outer, style='Light.TFrame')
+        buttons = tk.Frame(outer, bg=self.COLORS['light'])
         buttons.pack(fill='x', pady=(8, 0), anchor='e')
 
         return {'outer': outer, 'body': body, 'buttons': buttons}
 
     def _dialog_buttons(self, container_buttons, on_accept, on_cancel):
-        ttk.Button(container_buttons, text="✔️ Aceptar", style='Primary.TButton',
-                   command=on_accept).pack(side='right', padx=6)
-        ttk.Button(container_buttons, text="✖️ Cancelar", style='Primary.TButton',
-                   command=on_cancel).pack(side='right', padx=6)
+        tk.Button(container_buttons, text="✔️ Aceptar",
+                  bg=self.COLORS['accent'], fg='white', relief='flat', padx=10, pady=5,
+                  command=on_accept).pack(side='right', padx=6)
+        tk.Button(container_buttons, text="✖️ Cancelar",
+                  bg=self.COLORS['accent'], fg='white', relief='flat', padx=10, pady=5,
+                  command=on_cancel).pack(side='right', padx=6)
 
+    # ---------- CRUD ----------
     def agregar_tipo(self):
         ventana = tk.Toplevel(self.parent)
         ventana.title("➕ Agregar Tipo de Movimiento")
@@ -368,7 +240,7 @@ class GestionMovimientos:
         container = self._dialog_container(ventana, "➕ Agregar Tipo de Movimiento", "Ingrese la descripción")
         body = container['body']
 
-        ttk.Label(body, text="Tipo de Movimiento:", style='Light.TLabel').pack(pady=(0, 4), anchor='w')
+        tk.Label(body, text="Tipo de Movimiento:", bg=self.COLORS['white']).pack(pady=(0, 4), anchor='w')
         descripcion = ttk.Entry(body, width=40)
         descripcion.pack(fill='x')
 
@@ -401,7 +273,7 @@ class GestionMovimientos:
         container = self._dialog_container(ventana, "✏️ Editar Tipo de Movimiento", "Actualice la descripción")
         body = container['body']
 
-        ttk.Label(body, text="Descripción:", style='Light.TLabel').pack(pady=(0, 4), anchor='w')
+        tk.Label(body, text="Descripción:", bg=self.COLORS['white']).pack(pady=(0, 4), anchor='w')
         descripcion = ttk.Entry(body, width=40)
         descripcion.insert(0, item['values'][0])
         descripcion.pack(fill='x')
@@ -443,7 +315,6 @@ class GestionMovimientos:
 
     def actualizar_tipos(self):
         try:
-            # Optimización: ocultar columnas y bloquear dibujo durante la inserción
             self.tree_tipos.configure(displaycolumns=())
             self.tree_tipos.delete(*self.tree_tipos.get_children())
             tipos = obtener_tipos_movimiento() or []
@@ -453,6 +324,7 @@ class GestionMovimientos:
         except Exception as e:
             messagebox.showerror("Error", f"Error al actualizar tipos de movimiento: {str(e)}")
 
+    # ---------- Cierre ----------
     def cerrar_ventana(self):
         try:
             if messagebox.askyesno("Confirmar", "¿Está seguro que desea cerrar esta ventana?"):

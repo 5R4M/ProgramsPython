@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 import os
 import sys
 import tkinter as tk
@@ -8,128 +9,9 @@ from src.database.db_manager import (
     cambiar_password_usuario, eliminar_usuario, existe_usuario
 )
 
-# ================= Estilos unificados =================
-def setup_styles(root):
-    COLORS = {
-        'primary':   '#2c3e50',
-        'secondary': '#34495e',
-        'accent':    '#3498db',
-        'success':   '#27ae60',
-        'warning':   '#f39c12',
-        'danger':    '#e74c3c',
-        'light':     '#ecf0f1',
-        'white':     '#ffffff',
-        'text_dark': '#2c3e50',
-        'text_light':'#7f8c8d'
-    }
-
-    style = ttk.Style(root)
-    try:
-        style.theme_use('clam')
-    except Exception:
-        pass
-
-    try:
-        root.configure(bg=COLORS['light'])
-    except Exception:
-        pass
-
-    style.configure('.', font=('Segoe UI', 9))
-
-    # Frames
-    style.configure('Light.TFrame', background=COLORS['light'])
-
-    # Card EXTERIOR con borde (si quieres ver solo el header y el borde externo)
-    style.configure('Card.TFrame', background=COLORS['white'], relief='solid', borderwidth=1)
-
-    # Header de card
-    style.configure('Header.TFrame', background=COLORS['primary'])
-    style.configure('Header.TLabel', background=COLORS['primary'], foreground=COLORS['white'], font=('Segoe UI', 10, 'bold'))
-
-    # Labels
-    style.configure('Light.TLabel', background=COLORS['light'], foreground=COLORS['text_dark'], font=('Segoe UI', 9))
-    style.configure('Card.TLabel', background=COLORS['white'], foreground=COLORS['text_dark'], font=('Segoe UI', 9))
-
-    # Botón primario
-    style.configure('Primary.TButton',
-                    font=('Segoe UI', 9, 'bold'),
-                    padding=(10, 5),
-                    relief='flat',
-                    borderwidth=0,
-                    background=COLORS['accent'],
-                    foreground=COLORS['white'])
-    style.map('Primary.TButton',
-              background=[('active', '#2980b9'), ('pressed', '#117a8b')],
-              foreground=[('active', '#ffffff'), ('pressed', '#ffffff')])
-
-    # Combobox y Entry
-    style.configure('TCombobox',
-                    fieldbackground=COLORS['white'],
-                    background=COLORS['white'],
-                    foreground=COLORS['text_dark'])
-    style.configure('TEntry',
-                    fieldbackground=COLORS['white'],
-                    foreground=COLORS['text_dark'])
-
-    root.option_add('*TCombobox*Listbox.background', COLORS['white'])
-    root.option_add('*TCombobox*Listbox.foreground', COLORS['text_dark'])
-    root.option_add('*TCombobox*Listbox.selectBackground', COLORS['accent'])
-    root.option_add('*TCombobox*Listbox.selectForeground', COLORS['white'])
-    root.option_add('*TCombobox*Listbox.font', '{Segoe UI} 9')
-
-    # Treeview totalmente plano (sin contornos)
-    style.configure("Custom.Treeview",
-                    background=COLORS['white'],
-                    foreground=COLORS['text_dark'],
-                    rowheight=22,
-                    fieldbackground=COLORS['white'],
-                    font=('Segoe UI', 9),
-                    borderwidth=0,
-                    relief='flat')
-    HEADER_BG = '#e5e7eb'
-    HEADER_FG = '#111827'
-    style.configure("Custom.Treeview.Heading",
-                    background=HEADER_BG,
-                    foreground=HEADER_FG,
-                    font=('Segoe UI', 8, 'bold'),
-                    relief='flat',
-                    borderwidth=0,
-                    padding=(3, 6, 3, 6),
-                    anchor='center',
-                    justify='center')
-    style.map("Custom.Treeview",
-              background=[('selected', COLORS['accent'])],
-              foreground=[('selected', '#ffffff')])
-
-    # Scrollbars planos (sin contorno)
-    style.configure('Vertical.TScrollbar',
-                    gripcount=0,
-                    troughcolor=COLORS['white'],
-                    background=COLORS['white'],
-                    bordercolor=COLORS['white'],
-                    lightcolor=COLORS['white'],
-                    darkcolor=COLORS['white'],
-                    arrowsize=12,
-                    relief='flat')
-    style.configure('Horizontal.TScrollbar',
-                    gripcount=0,
-                    troughcolor=COLORS['white'],
-                    background=COLORS['white'],
-                    bordercolor=COLORS['white'],
-                    lightcolor=COLORS['white'],
-                    darkcolor=COLORS['white'],
-                    arrowsize=12,
-                    relief='flat')
-
-    # Frame sin contorno (para contenedores internos y botoneras)
-    style.configure('NoBorder.TFrame', background=COLORS['white'], relief='flat', borderwidth=0)
-
-    return COLORS, style
-
-
 def resource_path(relative_path):
     try:
-        base_path = sys._MEIPASS
+        base_path = sys._MEIPASS  # type: ignore
     except Exception:
         base_path = os.path.abspath(".")
     return os.path.join(base_path, relative_path)
@@ -140,7 +22,14 @@ class GestionUsuarios:
         self.parent = parent_frame
         self.main_window = main_window
 
-        self.COLORS, self._style = setup_styles(self.parent.winfo_toplevel())
+        # Paleta local solo para esta vista (no toca estilos globales)
+        self.COLORS = {
+            'primary':   '#2c3e50',
+            'accent':    '#3498db',
+            'light':     '#ecf0f1',
+            'white':     '#ffffff',
+            'text_dark': '#2c3e50'
+        }
 
         # Cache en memoria para minimizar lecturas repetidas
         self._usuarios_cache = []
@@ -149,7 +38,7 @@ class GestionUsuarios:
         self.setup_ui()
         self.cargar_usuarios()
 
-    # Header (título + subtítulo)
+    # Header (título + subtítulo) — local, sin estilos globales
     def _header_title_sub(self, parent, title_text, subtitle_text):
         header_frame = tk.Frame(parent, bg=self.COLORS['primary'], height=55)
         header_frame.pack(fill='x', padx=0, pady=(6, 6))
@@ -163,32 +52,40 @@ class GestionUsuarios:
         tk.Label(header_inner, text=subtitle_text, font=('Segoe UI', 8),
                  fg=self.COLORS['white'], bg=self.COLORS['primary']).pack(anchor='w', pady=(1, 0))
 
-    # Card con header azul e icono
+    # Card con header azul e icono — todo con tk Frames/Labels locales
     def _card_section(self, parent, title, icon):
-        container = ttk.Frame(parent, style='Light.TFrame')
+        container = tk.Frame(parent, bg=self.COLORS['light'])
         container.pack(fill='x', padx=10, pady=6)
 
-        card = ttk.Frame(container, style='Card.TFrame')
+        card = tk.Frame(container, bg=self.COLORS['white'], bd=1, relief='solid', highlightthickness=0)
         card.pack(fill='both', expand=True)
 
-        header = ttk.Frame(card, style='Header.TFrame', height=24)
+        header = tk.Frame(card, bg=self.COLORS['primary'], height=26)
         header.pack(fill='x')
         header.pack_propagate(False)
 
-        ttk.Label(header, text=f"{icon} {title}", style='Header.TLabel').pack(side='left', padx=10)
+        tk.Label(header, text=f"{icon} {title}", font=('Segoe UI', 9, 'bold'),
+                 fg=self.COLORS['white'], bg=self.COLORS['primary']).pack(side='left', padx=10)
 
-        # El contenido AHORA ES SIN BORDE para que no haya recuadro gris interno
-        content = ttk.Frame(card, style='NoBorder.TFrame')
+        content = tk.Frame(card, bg=self.COLORS['white'])
         content.pack(fill='both', expand=True, padx=12, pady=8)
 
         return content
+
+    def _primary_button(self, parent, text, command):
+        return tk.Button(parent, text=text, command=command,
+                         font=('Segoe UI', 9, 'bold'),
+                         bg=self.COLORS['accent'], fg='white',
+                         relief='flat', borderwidth=0, padx=10, pady=5, cursor='hand2',
+                         activebackground='#2980b9', activeforeground='white')
 
     def setup_ui(self):
         if not self._build_once:
             for widget in self.parent.winfo_children():
                 widget.destroy()
 
-            self.root_light = ttk.Frame(self.parent, style='Light.TFrame')
+            # Raíz local de esta vista
+            self.root_light = tk.Frame(self.parent, bg=self.COLORS['light'])
             self.root_light.pack(fill='both', expand=True)
 
             # Header principal
@@ -204,45 +101,27 @@ class GestionUsuarios:
             # Tabla de usuarios
             columns = ("id", "username", "nombre", "rol", "activo")
 
-            # Contenedor de la tabla: SIN borde (el único borde debe ser el del card exterior)
-            self.table_outer = ttk.Frame(frame, style='NoBorder.TFrame')
-            self.table_outer.pack(fill="both", expand=True, pady=(4, 8))
+            table_outer = tk.Frame(frame, bg=self.COLORS['white'])
+            table_outer.pack(fill="both", expand=True, pady=(4, 8))
 
-            # Wrapper interior SIN borde y con padding simétrico
-            self.table_wrap = ttk.Frame(self.table_outer, style='NoBorder.TFrame')
-            self.table_wrap.pack(fill="both", expand=True, padx=12, pady=8)
+            table_wrap = tk.Frame(table_outer, bg=self.COLORS['white'])
+            table_wrap.pack(fill="both", expand=True, padx=12, pady=8)
 
-            # Grid interno
-            self.table_wrap.grid_columnconfigure(0, weight=1)
-            self.table_wrap.grid_rowconfigure(0, weight=1)
+            table_wrap.grid_columnconfigure(0, weight=1)
+            table_wrap.grid_rowconfigure(0, weight=1)
 
             self.tree = ttk.Treeview(
-                self.table_wrap,
+                table_wrap,
                 columns=columns,
-                show="headings",
-                style="Custom.Treeview"
+                show="headings"
             )
-            # Quitar contornos/foco nativo del Treeview (por si el tema agrega filetes)
-            try:
-                self.tree['highlightthickness'] = 0
-            except Exception:
-                pass
-            try:
-                self.tree['borderwidth'] = 0
-            except Exception:
-                pass
-            try:
-                self.tree['relief'] = 'flat'
-            except Exception:
-                pass
 
-            scrolly = ttk.Scrollbar(self.table_wrap, orient="vertical", command=self.tree.yview, style='Vertical.TScrollbar')
-            scrollx = ttk.Scrollbar(self.table_wrap, orient="horizontal", command=self.tree.xview, style='Horizontal.TScrollbar')
-            self.tree.configure(yscrollcommand=scrolly.set, xscrollcommand=scrollx.set)
+            # Scroll vertical solamente (removemos horizontal)
+            scrolly = ttk.Scrollbar(table_wrap, orient="vertical", command=self.tree.yview)
+            self.tree.configure(yscrollcommand=scrolly.set)
 
             self.tree.grid(row=0, column=0, sticky="nsew")
             scrolly.grid(row=0, column=1, sticky="ns")
-            scrollx.grid(row=1, column=0, sticky="ew")
 
             # Encabezados y columnas
             headings = {
@@ -257,33 +136,28 @@ class GestionUsuarios:
                 if col == "id":
                     width = 60
                 elif col in ("rol", "activo"):
-                    width = 100
+                    width = 110
                 elif col == "username":
-                    width = 160
+                    width = 180
                 else:
-                    width = 220
+                    width = 260
+                # anchor left y permitir stretch para evitar scroll horizontal
                 self.tree.column(col, width=width, anchor="w", stretch=True)
 
             # Botones (en frame sin contorno)
-            btn_frame = ttk.Frame(frame, style='NoBorder.TFrame')
+            btn_frame = tk.Frame(frame, bg=self.COLORS['white'])
             btn_frame.pack(pady=4, anchor='w')
 
-            ttk.Button(btn_frame, text="➕ Crear Usuario", style="Primary.TButton",
-                       command=self.crear_usuario).pack(side="left", padx=(0, 8))
-            ttk.Button(btn_frame, text="✏️ Editar Usuario", style="Primary.TButton",
-                       command=self.editar_usuario).pack(side="left", padx=(0, 8))
-            ttk.Button(btn_frame, text="🔐 Cambiar Contraseña", style="Primary.TButton",
-                       command=self.cambiar_password).pack(side="left", padx=(0, 8))
-            ttk.Button(btn_frame, text="🗑️ Eliminar Usuario", style="Primary.TButton",
-                       command=self.eliminar_usuario).pack(side="left", padx=(0, 8))
-            ttk.Button(btn_frame, text="↩️ Volver", style="Primary.TButton",
-                       command=self.volver).pack(side="left", padx=(0, 8))
+            self._primary_button(btn_frame, "➕ Crear Usuario", self.crear_usuario).pack(side="left", padx=(0, 8))
+            self._primary_button(btn_frame, "✏️ Editar Usuario", self.editar_usuario).pack(side="left", padx=(0, 8))
+            self._primary_button(btn_frame, "🔐 Cambiar Contraseña", self.cambiar_password).pack(side="left", padx=(0, 8))
+            self._primary_button(btn_frame, "🗑️ Eliminar Usuario", self.eliminar_usuario).pack(side="left", padx=(0, 8))
+            self._primary_button(btn_frame, "↩️ Volver", self.volver).pack(side="left", padx=(0, 8))
 
             self._build_once = True
 
     # =============== Rendimiento: carga eficiente ===============
     def cargar_usuarios(self):
-        # Traer de DB una sola vez y cachear
         try:
             data = obtener_usuarios() or []
         except Exception as e:
@@ -303,7 +177,7 @@ class GestionUsuarios:
                 usuario.get('username', ''),
                 usuario.get('nombre_completo', ''),
                 usuario.get('rol', ''),
-                'Sí' if int(usuario.get('activo', 0)) == 1 else 'No'
+                'Sí' if str(usuario.get('activo', '0')) in ('1', 'True', 'true', 'SI', 'Si', 'sí', 'Sí') else 'No'
             )
             rows.append(values)
 
@@ -399,7 +273,8 @@ class GestionUsuarios:
         if self.main_window and hasattr(self.main_window, "show_welcome_screen"):
             self.main_window.show_welcome_screen()
 
-# =============== Diálogo optimizado ===============
+
+# =============== Diálogo ===============
 class UsuarioDialog(simpledialog.Dialog):
     def __init__(self, parent, title, username="", password=None, nombre="", rol="usuario", activo=1, modo="crear"):
         self.parent_ref = parent
@@ -411,21 +286,29 @@ class UsuarioDialog(simpledialog.Dialog):
         self.modo = modo
         self.result = None
 
-        self.COLORS, self._style = setup_styles(parent.winfo_toplevel())
+        # Paleta local del diálogo (no global)
+        self.COLORS = {
+            'primary':   '#2c3e50',
+            'accent':    '#3498db',
+            'light':     '#ecf0f1',
+            'white':     '#ffffff',
+            'text_dark': '#2c3e50'
+        }
         super().__init__(parent, title)
 
     def body(self, master):
+        # Fondo general del diálogo
         try:
             self.configure(bg=self.COLORS['light'])
         except Exception:
             pass
 
-        container = ttk.Frame(master, style='Light.TFrame', padding=(10, 8))
+        container = tk.Frame(master, bg=self.COLORS['white'])
         container.grid(row=0, column=0, sticky="nsew")
         master.grid_columnconfigure(0, weight=1)
         master.grid_rowconfigure(0, weight=1)
 
-        # Header del diálogo
+        # Card-like: header azul
         header = tk.Frame(container, bg=self.COLORS['primary'])
         header.grid(row=0, column=0, columnspan=2, sticky="ew", pady=(0, 8))
         tk.Label(header, text=("➕ Crear Usuario" if self.modo == "crear" else "✏️ Editar Usuario"),
@@ -435,14 +318,16 @@ class UsuarioDialog(simpledialog.Dialog):
                  font=('Segoe UI', 8),
                  fg=self.COLORS['white'], bg=self.COLORS['primary']).pack(side='left', padx=10)
 
-        # Grid
-        container.grid_columnconfigure(0, weight=1, minsize=140)
-        container.grid_columnconfigure(1, weight=2, minsize=220)
-        r = 1
+        body = tk.Frame(container, bg=self.COLORS['white'])
+        body.grid(row=1, column=0, columnspan=2, sticky="nsew", padx=12, pady=8)
+
+        body.grid_columnconfigure(0, weight=1, minsize=140)
+        body.grid_columnconfigure(1, weight=2, minsize=220)
+        r = 0
 
         # Usuario
-        ttk.Label(container, text="Usuario:", style='Light.TLabel').grid(row=r, column=0, sticky="w", pady=(0, 5))
-        self.username_entry = ttk.Entry(container, width=30)
+        tk.Label(body, text="Usuario:", bg=self.COLORS['white'], fg=self.COLORS['text_dark']).grid(row=r, column=0, sticky="w", pady=(0, 5))
+        self.username_entry = ttk.Entry(body, width=30)
         self.username_entry.grid(row=r, column=1, sticky="ew", pady=(0, 5))
         self.username_entry.insert(0, self.username)
         if self.modo == "editar":
@@ -451,32 +336,32 @@ class UsuarioDialog(simpledialog.Dialog):
 
         # Sección de contraseña
         if self.modo == "crear":
-            ttk.Label(container, text="Contraseña:", style='Light.TLabel').grid(row=r, column=0, sticky="w", pady=(0, 5))
-            self.password_entry = ttk.Entry(container, show="•", width=30)
+            tk.Label(body, text="Contraseña:", bg=self.COLORS['white'], fg=self.COLORS['text_dark']).grid(row=r, column=0, sticky="w", pady=(0, 5))
+            self.password_entry = ttk.Entry(body, show="•", width=30)
             self.password_entry.grid(row=r, column=1, sticky="ew", pady=(0, 5))
             r += 1
 
-            ttk.Label(container, text="Confirmar contraseña:", style='Light.TLabel').grid(row=r, column=0, sticky="w", pady=(0, 5))
-            self.confirm_password_entry = ttk.Entry(container, show="•", width=30)
+            tk.Label(body, text="Confirmar contraseña:", bg=self.COLORS['white'], fg=self.COLORS['text_dark']).grid(row=r, column=0, sticky="w", pady=(0, 5))
+            self.confirm_password_entry = ttk.Entry(body, show="•", width=30)
             self.confirm_password_entry.grid(row=r, column=1, sticky="ew", pady=(0, 5))
             r += 1
         else:
             self.cambiar_password_var = tk.BooleanVar(value=False)
-            chk = ttk.Checkbutton(container, text="Cambiar contraseña", variable=self.cambiar_password_var,
+            chk = ttk.Checkbutton(body, text="Cambiar contraseña", variable=self.cambiar_password_var,
                                   command=self.toggle_password_fields)
             chk.grid(row=r, column=0, columnspan=2, sticky="w", pady=(0, 5))
             r += 1
 
-            self.password_frame = ttk.Frame(container, style='Light.TFrame')
+            self.password_frame = tk.Frame(body, bg=self.COLORS['white'])
             self.password_frame.grid(row=r, column=0, columnspan=2, sticky="ew")
             self.password_frame.grid_columnconfigure(0, weight=1, minsize=140)
             self.password_frame.grid_columnconfigure(1, weight=2, minsize=220)
 
-            ttk.Label(self.password_frame, text="Nueva contraseña:", style='Light.TLabel').grid(row=0, column=0, sticky="w", pady=(0, 5))
+            tk.Label(self.password_frame, text="Nueva contraseña:", bg=self.COLORS['white'], fg=self.COLORS['text_dark']).grid(row=0, column=0, sticky="w", pady=(0, 5))
             self.password_entry = ttk.Entry(self.password_frame, show="•", width=30)
             self.password_entry.grid(row=0, column=1, sticky="ew", pady=(0, 5))
 
-            ttk.Label(self.password_frame, text="Confirmar contraseña:", style='Light.TLabel').grid(row=1, column=0, sticky="w", pady=(0, 5))
+            tk.Label(self.password_frame, text="Confirmar contraseña:", bg=self.COLORS['white'], fg=self.COLORS['text_dark']).grid(row=1, column=0, sticky="w", pady=(0, 5))
             self.confirm_password_entry = ttk.Entry(self.password_frame, show="•", width=30)
             self.confirm_password_entry.grid(row=1, column=1, sticky="ew", pady=(0, 5))
 
@@ -484,24 +369,24 @@ class UsuarioDialog(simpledialog.Dialog):
             r += 1
 
         # Nombre completo
-        ttk.Label(container, text="Nombre completo:", style='Light.TLabel').grid(row=r, column=0, sticky="w", pady=(0, 5))
-        self.nombre_entry = ttk.Entry(container, width=30)
+        tk.Label(body, text="Nombre completo:", bg=self.COLORS['white'], fg=self.COLORS['text_dark']).grid(row=r, column=0, sticky="w", pady=(0, 5))
+        self.nombre_entry = ttk.Entry(body, width=30)
         self.nombre_entry.grid(row=r, column=1, sticky="ew", pady=(0, 5))
         self.nombre_entry.insert(0, self.nombre)
         r += 1
 
         # Rol
-        ttk.Label(container, text="Rol:", style='Light.TLabel').grid(row=r, column=0, sticky="w", pady=(0, 5))
+        tk.Label(body, text="Rol:", bg=self.COLORS['white'], fg=self.COLORS['text_dark']).grid(row=r, column=0, sticky="w", pady=(0, 5))
         self.rol_var = tk.StringVar(value=self.rol)
-        self.rol_combo = ttk.Combobox(container, textvariable=self.rol_var,
+        self.rol_combo = ttk.Combobox(body, textvariable=self.rol_var,
                                       values=["admin", "usuario"], state="readonly", width=28)
         self.rol_combo.grid(row=r, column=1, sticky="ew", pady=(0, 5))
         r += 1
 
         # Activo
-        ttk.Label(container, text="Activo:", style='Light.TLabel').grid(row=r, column=0, sticky="w", pady=(0, 5))
+        tk.Label(body, text="Activo:", bg=self.COLORS['white'], fg=self.COLORS['text_dark']).grid(row=r, column=0, sticky="w", pady=(0, 5))
         self.activo_var = tk.IntVar(value=int(self.activo))
-        ttk.Checkbutton(container, variable=self.activo_var).grid(row=r, column=1, sticky="w", pady=(0, 5))
+        ttk.Checkbutton(body, variable=self.activo_var).grid(row=r, column=1, sticky="w", pady=(0, 5))
         r += 1
 
         return self.username_entry
@@ -518,7 +403,6 @@ class UsuarioDialog(simpledialog.Dialog):
             messagebox.showerror("Error", "El nombre de usuario es obligatorio")
             return False
 
-        # Validación de contraseña cuando corresponde
         if self.modo == "crear" or (self.modo == "editar" and getattr(self, 'cambiar_password_var', tk.BooleanVar(value=False)).get()):
             password = self.password_entry.get()
             confirm_password = self.confirm_password_entry.get()
@@ -536,14 +420,15 @@ class UsuarioDialog(simpledialog.Dialog):
         return True
 
     def buttonbox(self):
-        # Usar un frame sin bordes para quitar el contorno donde están los botones
-        box = ttk.Frame(self, style='NoBorder.TFrame')
+        box = tk.Frame(self, bg=self.COLORS['light'])
         box.pack(pady=10)
 
-        ttk.Button(box, text="✔️ Aceptar", width=12, style='Primary.TButton',
-                   command=self.ok).pack(side=tk.LEFT, padx=6)
-        ttk.Button(box, text="✖️ Cancelar", width=12, style='Primary.TButton',
-                   command=self.cancel).pack(side=tk.LEFT, padx=6)
+        tk.Button(box, text="✔️ Aceptar", width=12,
+                  bg=self.COLORS['accent'], fg='white', relief='flat', padx=10, pady=5,
+                  command=self.ok).pack(side=tk.LEFT, padx=6)
+        tk.Button(box, text="✖️ Cancelar", width=12,
+                  bg=self.COLORS['accent'], fg='white', relief='flat', padx=10, pady=5,
+                  command=self.cancel).pack(side=tk.LEFT, padx=6)
 
         self.bind("<Return>", self.ok)
         self.bind("<Escape>", self.cancel)
@@ -560,5 +445,5 @@ class UsuarioDialog(simpledialog.Dialog):
         elif self.modo == "editar" and getattr(self, 'cambiar_password_var', tk.BooleanVar(value=False)).get():
             password = self.password_entry.get()
 
-        # Devolver la tupla limpia (sin coma extra ni texto)
+        # Devolver la tupla limpia
         self.result = (username, password, nombre, rol, activo)

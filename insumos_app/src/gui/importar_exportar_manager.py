@@ -1,3 +1,5 @@
+# -*- coding: utf-8 -*-
+# Importar/Exportar - sin estilos globales ni scroll (ni vertical ni horizontal)
 import os
 import sys
 import json
@@ -33,114 +35,23 @@ def get_mysql_conn():
     return mysql.connector.connect(**cfg)
 
 
-# ===== Estilos y paleta (unificados con Configurar Servidor) =====
-def setup_styles(root):
-    COLORS = {
-        'primary':   '#2c3e50',
-        'secondary': '#34495e',
-        'accent':    '#3498db',
-        'success':   '#27ae60',
-        'warning':   '#f39c12',
-        'danger':    '#e74c3c',
-        'light':     '#ecf0f1',
-        'white':     '#ffffff',
-        'text_dark': '#2c3e50',
-        'text_light':'#7f8c8d'
-    }
-
-    style = ttk.Style(root)
-    try:
-        style.theme_use('clam')
-    except Exception:
-        pass
-
-    try:
-        root.configure(bg=COLORS['light'])
-    except Exception:
-        pass
-
-    style.configure('.', font=('Segoe UI', 9))
-
-    style.configure('Light.TFrame', background=COLORS['light'])
-    style.configure('Card.TFrame', background=COLORS['white'], relief='solid', borderwidth=1)
-
-    style.configure('Header.TFrame', background=COLORS['primary'])
-    style.configure('Header.TLabel', background=COLORS['primary'], foreground=COLORS['white'], font=('Segoe UI', 10, 'bold'))
-
-    style.configure('Light.TLabel', background=COLORS['light'], foreground=COLORS['text_dark'], font=('Segoe UI', 9))
-    style.configure('Card.TLabel', background=COLORS['white'], foreground=COLORS['text_dark'], font=('Segoe UI', 9))
-
-    style.configure('Primary.TButton',
-                    font=('Segoe UI', 9, 'bold'),
-                    padding=(10, 5),
-                    relief='flat',
-                    borderwidth=0,
-                    background=COLORS['accent'],
-                    foreground=COLORS['white'])
-    style.map('Primary.TButton',
-              background=[('active', '#2980b9'), ('pressed', '#117a8b')],
-              foreground=[('active', '#ffffff'), ('pressed', '#ffffff')])
-
-    style.configure('TCombobox',
-                    fieldbackground=COLORS['white'],
-                    background=COLORS['white'],
-                    foreground=COLORS['text_dark'])
-    style.configure('TEntry',
-                    fieldbackground=COLORS['white'],
-                    foreground=COLORS['text_dark'])
-
-    root.option_add('*TCombobox*Listbox.background', COLORS['white'])
-    root.option_add('*TCombobox*Listbox.foreground', COLORS['text_dark'])
-    root.option_add('*TCombobox*Listbox.selectBackground', COLORS['accent'])
-    root.option_add('*TCombobox*Listbox.selectForeground', COLORS['white'])
-    root.option_add('*TCombobox*Listbox.font', '{Segoe UI} 9')
-
-    style.configure("Custom.Treeview",
-                    background=COLORS['white'],
-                    foreground=COLORS['text_dark'],
-                    rowheight=20,
-                    fieldbackground=COLORS['white'],
-                    font=('Segoe UI', 9),
-                    borderwidth=1,
-                    relief='solid')
-    HEADER_BG = '#e5e7eb'
-    HEADER_FG = '#111827'
-    style.configure("Custom.Treeview.Heading",
-                    background=HEADER_BG,
-                    foreground=HEADER_FG,
-                    font=('Segoe UI', 8, 'bold'),
-                    relief='flat',
-                    borderwidth=1,
-                    padding=(3, 6, 3, 6),
-                    anchor='center',
-                    justify='center')
-    style.map("Custom.Treeview",
-              background=[('selected', COLORS['accent'])],
-              foreground=[('selected', '#ffffff')])
-
-    style.configure('TNotebook', background=COLORS['light'], borderwidth=0)
-    style.configure('TNotebook.Tab',
-                    background=COLORS['light'],
-                    foreground=COLORS['text_dark'],
-                    font=('Segoe UI', 9))
-    style.map('TNotebook.Tab',
-              background=[('selected', COLORS['white'])],
-              foreground=[('selected', COLORS['text_dark'])])
-
-    return COLORS, style
-
-
 class ImportarExportarManager:
-    """Clase para manejar importación y exportación de datos de la base de datos MySQL"""
-
-    def __init__(self, parent_frame, main_window):
+    """Gestor de importación/exportación sin alterar estilos globales y sin scroll."""
+    def __init__(self, parent_frame, main_window=None):
         self.parent_frame = parent_frame
         self.main_window = main_window
 
-        # Estilos/paleta
-        self.COLORS, self._style = setup_styles(self.parent_frame.winfo_toplevel())
+        # Paleta local
+        self.COLORS = {
+            'primary':   '#2c3e50',
+            'accent':    '#3498db',
+            'danger':    '#e74c3c',
+            'light':     '#ecf0f1',
+            'white':     '#ffffff',
+            'text_dark': '#2c3e50',
+        }
 
-        # Definir las tablas y su orden de dependencias
+        # Orden de dependencias
         self.tablas_orden = [
             'area',
             'distrito',
@@ -155,7 +66,7 @@ class ImportarExportarManager:
             'usuarios'
         ]
 
-        # Mapeo de tablas con sus columnas principales
+        # Estructura básica
         self.estructura_tablas = {
             'area': ['id', 'nombre'],
             'distrito': ['id', 'nombre', 'id_area'],
@@ -177,139 +88,106 @@ class ImportarExportarManager:
 
         self.crear_interfaz()
 
-    # Card con header azul e icono como en Configurar Servidor
-    def _card_section(self, parent, title, icon):
-        container = ttk.Frame(parent, style='Light.TFrame')
-        container.pack(fill='x', padx=10, pady=6)
-
-        card = ttk.Frame(container, style='Card.TFrame')
-        card.pack(fill='x')
-
-        header = ttk.Frame(card, style='Header.TFrame', height=24)
-        header.pack(fill='x')
-        header.pack_propagate(False)
-
-        ttk.Label(header, text=f"{icon} {title}", style='Header.TLabel').pack(side='left', padx=10)
-
-        content = ttk.Frame(card, style='Card.TFrame')
-        content.pack(fill='x', padx=12, pady=8)
-
-        return content
-
-    # Header superior (título + subtítulo) solicitado
+    # ------------------------
+    # Helpers de UI locales
+    # ------------------------
     def _header_title_sub(self, parent, title_text, subtitle_text):
         header_frame = tk.Frame(parent, bg=self.COLORS['primary'], height=55)
         header_frame.pack(fill='x', padx=0, pady=(6, 6))
         header_frame.pack_propagate(False)
 
-        header_inner = tk.Frame(header_frame, bg=self.COLORS['primary'])
-        header_inner.pack(fill='both', expand=True, padx=15, pady=4)
+        inner = tk.Frame(header_frame, bg=self.COLORS['primary'])
+        inner.pack(fill='both', expand=True, padx=15, pady=6)
 
-        title_label = tk.Label(header_inner,
-                               text=title_text,
-                               font=('Segoe UI', 11, 'bold'),
-                               fg=self.COLORS['white'],
-                               bg=self.COLORS['primary'])
-        title_label.pack(anchor='w')
+        tk.Label(inner, text=title_text,
+                 font=('Segoe UI', 11, 'bold'),
+                 fg=self.COLORS['white'], bg=self.COLORS['primary']).pack(anchor='w')
+        tk.Label(inner, text=subtitle_text,
+                 font=('Segoe UI', 8),
+                 fg=self.COLORS['white'], bg=self.COLORS['primary']).pack(anchor='w', pady=(2, 0))
 
-        subtitle_label = tk.Label(header_inner,
-                                  text=subtitle_text,
-                                  font=('Segoe UI', 8),
-                                  fg=self.COLORS['white'],
-                                  bg=self.COLORS['primary'])
-        subtitle_label.pack(anchor='w', pady=(1, 0))
+    def _card(self, parent, title, icon_text):
+        container = tk.Frame(parent, bg=self.COLORS['light'])
+        container.pack(fill='x', padx=10, pady=6)
 
+        card = tk.Frame(container, bg=self.COLORS['white'], bd=1, relief='solid', highlightthickness=0)
+        card.pack(fill='x')
+
+        header = tk.Frame(card, bg=self.COLORS['primary'], height=26)
+        header.pack(fill='x')
+        header.pack_propagate(False)
+
+        tk.Label(header, text=f"{icon_text} {title}",
+                 font=('Segoe UI', 9, 'bold'),
+                 fg=self.COLORS['white'], bg=self.COLORS['primary']).pack(side='left', padx=10)
+
+        content = tk.Frame(card, bg=self.COLORS['white'])
+        content.pack(fill='x', padx=12, pady=8)
+
+        return content
+
+    def _primary_button(self, parent, text, command):
+        btn = tk.Button(parent, text=text, command=command,
+                        font=('Segoe UI', 9, 'bold'),
+                        bg=self.COLORS['accent'], fg='white',
+                        relief='flat', borderwidth=0, padx=12, pady=6, cursor='hand2',
+                        activebackground='#2980b9', activeforeground='white')
+        return btn
+
+    # ------------------------
+    # Interfaz
+    # ------------------------
     def crear_interfaz(self):
-        """Crea la interfaz integrada en el panel principal"""
-        main_frame = ttk.Frame(self.parent_frame, style='Light.TFrame')
-        main_frame.pack(fill='both', expand=True, padx=10, pady=10)
+        self.main_frame = tk.Frame(self.parent_frame, bg=self.COLORS['light'])
+        self.main_frame.pack(fill='both', expand=True, padx=10, pady=10)
 
-        # Header de la vista general
         self._header_title_sub(
-            main_frame,
+            self.main_frame,
             "🗄️ Gestión de Importación y Exportación de Datos",
             "Administre los respaldos y transferencias de datos del sistema"
         )
 
-        # Notebook con estilo light
-        self.notebook = ttk.Notebook(main_frame)
+        # Notebook local
+        self.notebook = ttk.Notebook(self.main_frame)
         self.notebook.pack(fill='both', expand=True, pady=5)
 
-        self.crear_pestana_backup()
-        self.crear_pestana_tablas()
+        self._crear_pestana_backup()
+        self._crear_pestana_tablas()
 
-    def _make_scrollable(self, parent):
-        """Crea un contenedor scrollable que respeta paleta y devuelve (canvas, scrollable_frame)."""
-        outer = ttk.Frame(parent, style='Light.TFrame')
-        outer.pack(fill='both', expand=True)
-
-        # Canvas con fondo light
-        canvas = tk.Canvas(outer, bg=self.COLORS['light'], highlightthickness=0, borderwidth=0)
-        scrollbar = ttk.Scrollbar(outer, orient="vertical", command=canvas.yview)
-        canvas.configure(yscrollcommand=scrollbar.set)
-
-        # Frame interior con estilo Light
-        scrollable_frame = ttk.Frame(canvas, style='Light.TFrame')
-        scrollable_frame_id = canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
-
-        def _on_frame_configure(event):
-            canvas.configure(scrollregion=canvas.bbox("all"))
-            # Ajustar ancho del frame interior al canvas
-            canvas_width = event.width
-            canvas.itemconfig(scrollable_frame_id, width=canvas_width)
-
-        def _on_canvas_configure(event):
-            # Mantener ancho del contenido igual al canvas
-            canvas.itemconfig(scrollable_frame_id, width=event.width)
-
-        scrollable_frame.bind("<Configure>", _on_frame_configure)
-        canvas.bind("<Configure>", _on_canvas_configure)
-
-        canvas.pack(side="left", fill="both", expand=True)
-        scrollbar.pack(side="right", fill="y")
-
-        return scrollable_frame
-
-    def crear_pestana_backup(self):
-        frame_backup = ttk.Frame(self.notebook, style='Light.TFrame')
+    def _crear_pestana_backup(self):
+        frame_backup = tk.Frame(self.notebook, bg=self.COLORS['light'])
         self.notebook.add(frame_backup, text="🗄️ Backup Completo")
 
-        # Header de pestaña
-        self._header_title_sub(
-            frame_backup,
-            "🗄️ Backup Completo",
-            "Cree y restaure respaldos completos del sistema"
-        )
+        self._header_title_sub(frame_backup, "🗄️ Backup Completo", "Cree y restaure respaldos completos del sistema")
 
-        scrollable = self._make_scrollable(frame_backup)
+        # Contenido directo, sin scroll
+        content = tk.Frame(frame_backup, bg=self.COLORS['light'])
+        content.pack(fill='both', expand=True)
 
         # Exportación
-        export_frame = self._card_section(scrollable, "📤 Exportación de Backup", "📤")
-        ttk.Label(export_frame,
-                  text="Crear un archivo de respaldo con todos los datos del sistema",
-                  style='Card.TLabel').pack(anchor='w', pady=(0, 10))
-        ttk.Button(export_frame,
-                   text="🗄️ Exportar Backup Completo",
-                   style='Primary.TButton',
-                   command=self.exportar_datos_completos).pack(anchor='w')
+        export_frame = self._card(content, "Exportación de Backup", "📤")
+        tk.Label(export_frame,
+                 text="Crear un archivo de respaldo con todos los datos del sistema",
+                 font=('Segoe UI', 9), fg=self.COLORS['text_dark'], bg=self.COLORS['white']
+                 ).pack(anchor='w', pady=(0, 10))
+        self._primary_button(export_frame, "🗄️ Exportar Backup Completo", self.exportar_datos_completos).pack(anchor='w')
 
         # Importación
-        import_frame = self._card_section(scrollable, "📥 Importación de Backup", "📥")
-        ttk.Label(import_frame,
-                  text="Restaurar datos desde un archivo de respaldo",
-                  style='Card.TLabel').pack(anchor='w', pady=(0, 10))
+        import_frame = self._card(content, "Importación de Backup", "📥")
+        tk.Label(import_frame,
+                 text="Restaurar datos desde un archivo de respaldo",
+                 font=('Segoe UI', 9), fg=self.COLORS['text_dark'], bg=self.COLORS['white']
+                 ).pack(anchor='w', pady=(0, 10))
 
-        button_frame = ttk.Frame(import_frame, style='Card.TFrame')
-        button_frame.pack(fill='x')
-        ttk.Button(button_frame, text="📥 Importar (Mantener Datos)",
-                   style='Primary.TButton',
-                   command=lambda: self.importar_datos_completos(limpiar_antes=False)).pack(side='left', padx=(0, 10))
-        ttk.Button(button_frame, text="⚠️ Importar (Reemplazar Todo)",
-                   style='Primary.TButton',
-                   command=lambda: self.importar_datos_completos(limpiar_antes=True)).pack(side='left')
+        button_row = tk.Frame(import_frame, bg=self.COLORS['white'])
+        button_row.pack(fill='x')
+        self._primary_button(button_row, "📥 Importar (Mantener Datos)",
+                             lambda: self.importar_datos_completos(limpiar_antes=False)).pack(side='left', padx=(0, 10))
+        self._primary_button(button_row, "⚠️ Importar (Reemplazar Todo)",
+                             lambda: self.importar_datos_completos(limpiar_antes=True)).pack(side='left')
 
-        # Información Importante
-        warning_frame = self._card_section(scrollable, "⚠️ Información Importante", "⚠️")
+        # Info
+        warning_frame = self._card(content, "Información Importante", "⚠️")
         warning_text = (
             "• Mantener Datos: Agrega/actualiza registros sin eliminar datos existentes\n"
             "• Reemplazar Todo: ELIMINA todos los datos actuales antes de importar\n"
@@ -317,49 +195,51 @@ class ImportarExportarManager:
             "• Los archivos de backup incluyen información sensible (usuarios y contraseñas)\n"
             "• El proceso puede tomar varios minutos dependiendo del tamaño de los datos"
         )
-        ttk.Label(warning_frame, text=warning_text, style='Card.TLabel',
-                  justify='left').pack(anchor='nw', fill='both', expand=True)
+        tk.Label(warning_frame, text=warning_text,
+                 font=('Segoe UI', 9), justify='left',
+                 fg=self.COLORS['text_dark'], bg=self.COLORS['white']
+                 ).pack(anchor='nw', fill='both', expand=True)
 
-    def crear_pestana_tablas(self):
-        frame_tablas = ttk.Frame(self.notebook, style='Light.TFrame')
+    def _crear_pestana_tablas(self):
+        frame_tablas = tk.Frame(self.notebook, bg=self.COLORS['light'])
         self.notebook.add(frame_tablas, text="📊 Tablas Individuales")
 
-        # Header de pestaña
-        self._header_title_sub(
-            frame_tablas,
-            "📊 Tablas Individuales",
-            "Exportar/Importar datos por tabla"
-        )
+        self._header_title_sub(frame_tablas, "📊 Tablas Individuales", "Exportar/Importar datos por tabla")
 
-        scrollable = self._make_scrollable(frame_tablas)
+        # Contenido directo, sin scroll
+        content = tk.Frame(frame_tablas, bg=self.COLORS['light'])
+        content.pack(fill='both', expand=True)
 
-        # Selección de tabla
-        selection_frame = self._card_section(scrollable, "🎯 Selección de Tabla", "🎯")
-        ttk.Label(selection_frame, text="Seleccionar tabla para exportar/importar:",
-                  style='Card.TLabel').pack(anchor='w', pady=(0, 8))
+        # Selección
+        selection = self._card(content, "Selección de Tabla", "🎯")
+        tk.Label(selection, text="Seleccionar tabla para exportar/importar:",
+                 font=('Segoe UI', 9), fg=self.COLORS['text_dark'], bg=self.COLORS['white']
+                 ).pack(anchor='w', pady=(0, 8))
 
-        self.combo_tabla = ttk.Combobox(selection_frame, values=self.tablas_orden,
-                                        state="readonly", width=30)
+        self.combo_tabla = ttk.Combobox(selection, values=self.tablas_orden, state="readonly", width=30)
         self.combo_tabla.pack(fill='x', pady=(0, 10))
-        self.combo_tabla.set(self.tablas_orden[0])
+        if self.tablas_orden:
+            self.combo_tabla.set(self.tablas_orden[0])
 
-        action_frame = ttk.Frame(selection_frame, style='Card.TFrame')
-        action_frame.pack(fill='x')
-        ttk.Button(action_frame, text="📤 Exportar a Excel",
-                   style='Primary.TButton', command=self.exportar_tabla_seleccionada).pack(side='left', padx=(0, 10))
-        ttk.Button(action_frame, text="📥 Importar desde Excel/CSV",
-                   style='Primary.TButton', command=self.importar_tabla_seleccionada).pack(side='left')
+        action_row = tk.Frame(selection, bg=self.COLORS['white'])
+        action_row.pack(fill='x')
+        self._primary_button(action_row, "📤 Exportar a Excel", self.exportar_tabla_seleccionada).pack(side='left', padx=(0, 10))
+        self._primary_button(action_row, "📥 Importar desde Excel/CSV", self.importar_tabla_seleccionada).pack(side='left')
 
-        # Información de Tablas
-        info_tablas_frame = self._card_section(scrollable, "ℹ️ Información de Tablas", "ℹ️")
-        info_tablas_text = (
+        # Información
+        info = self._card(content, "Información de Tablas", "ℹ️")
+        info_text = (
             "Descripción de las principales tablas del sistema:\n\n"
             "• area, distrito, tipo_servicio, servicio, tipo_insumo, presentacion, insumo, movimiento, usuarios\n"
             "Formatos soportados: Excel (.xlsx), CSV (.csv), JSON (.json)"
         )
-        ttk.Label(info_tablas_frame, text=info_tablas_text, style='Card.TLabel',
-                  justify='left').pack(anchor='nw', fill='both', expand=True)
+        tk.Label(info, text=info_text, font=('Segoe UI', 9),
+                 justify='left', fg=self.COLORS['text_dark'], bg=self.COLORS['white']
+                 ).pack(anchor='nw', fill='both', expand=True)
 
+    # ------------------------
+    # Lógica de exportación/importación (sin cambios funcionales)
+    # ------------------------
     def exportar_datos_completos(self, ruta_archivo=None):
         try:
             if not ruta_archivo:
@@ -653,14 +533,22 @@ class ImportarExportarManager:
             return False
 
     def exportar_tabla_seleccionada(self):
-        tabla = self.combo_tabla.get()
+        tabla = getattr(self, 'combo_tabla', None).get() if hasattr(self, 'combo_tabla') else None
         if tabla:
             self.exportar_tabla_excel(tabla)
 
     def importar_tabla_seleccionada(self):
-        tabla = self.combo_tabla.get()
+        tabla = getattr(self, 'combo_tabla', None).get() if hasattr(self, 'combo_tabla') else None
         if tabla:
             self.importar_tabla_excel(tabla)
+
+    # Limpieza local
+    def destroy(self):
+        try:
+            if hasattr(self, 'main_frame') and self.main_frame.winfo_exists():
+                self.main_frame.destroy()
+        except Exception:
+            pass
 
 
 def crear_gestor_importar_exportar(parent_frame, main_window):

@@ -66,7 +66,10 @@ class MainWindow:
                 "No se pudo inicializar la base de datos. El programa se cerrará.")
             sys.exit(1)
 
+        # CREAR VENTANA PERO MANTENERLA OCULTA INICIALMENTE
         self.root = tk.Tk()
+        self.root.withdraw()  # OCULTAR VENTANA DURANTE CONFIGURACIÓN
+        
         self.root.title("Sistema de Gestión de Insumos")
 
         # Configurar icono de la ventana si existe
@@ -81,6 +84,7 @@ class MainWindow:
         style = ThemedStyle(self.root)
         style.set_theme("arc")
 
+        # CONFIGURAR TODO ANTES DE MOSTRAR
         self.setup_window()
         self.setup_styles()
         self.load_icons()
@@ -88,6 +92,10 @@ class MainWindow:
 
         # Mostrar la pantalla de bienvenida inicial
         self.show_welcome_screen()
+
+        # MOSTRAR VENTANA SOLO DESPUÉS DE QUE TODO ESTÉ CONFIGURADO
+        self.root.deiconify()  # MOSTRAR VENTANA
+        self.root.focus_force()  # DARLE FOCO
 
         # Manejar el cierre de la ventana principal
         self.root.protocol("WM_DELETE_WINDOW", self.on_closing)
@@ -695,9 +703,13 @@ class MainWindow:
         btn.bind('<Button-1>', on_click)
 
     def create_main_content_area(self):
-        """Crea el área de contenido principal"""
+        """Crea el área de contenido principal con mejor alineación"""
         self.main_content_frame = ttk.Frame(self.main_area, style='MainArea.TFrame')
-        self.main_content_frame.pack(fill="both", expand=True, padx=20, pady=20)
+        self.main_content_frame.pack(fill="both", expand=True, padx=0, pady=0)  # Sin padding aquí
+        
+        # Configurar grid para control preciso
+        self.main_content_frame.grid_rowconfigure(0, weight=1)
+        self.main_content_frame.grid_columnconfigure(0, weight=1)
 
     def create_status_bar(self):
         """Crea la barra de estado"""
@@ -729,34 +741,47 @@ class MainWindow:
         self.date_label.pack(side="right")
 
     def show_welcome_screen(self):
-        """Muestra la pantalla de bienvenida mejorada"""
+        """Muestra la pantalla de bienvenida mejorada con mejor alineación"""
         self.clear_content_frame()
-        self.reset_window_size()
+        
+        # NO llamar reset_window_size() aquí si la ventana está oculta
+        if self.root.winfo_viewable():
+            self.reset_window_size()
 
-        # No fuerces blanco en el contenedor principal; mantenlo con estilo MainArea (light)
-        # Frame principal de bienvenida
+        # Frame principal de bienvenida con mejor estructura
         welcome_frame = tk.Frame(self.main_content_frame, bg=self.COLORS['light'])
         welcome_frame.pack(fill="both", expand=True, padx=0, pady=0)
 
-        # Header blanco como tarjeta
-        header_card = tk.Frame(welcome_frame, bg=self.COLORS['white'], relief='solid', bd=1)
-        header_card.pack(fill="x", padx=40, pady=(40, 20))
-        header = tk.Frame(header_card, bg=self.COLORS['white'])
-        header.pack(fill="x", padx=20, pady=20)
+        # Configurar el grid principal para mejor control
+        welcome_frame.grid_rowconfigure(0, weight=0)  # Header
+        welcome_frame.grid_rowconfigure(1, weight=0)  # Spacer
+        welcome_frame.grid_rowconfigure(2, weight=1)  # Cards area
+        welcome_frame.grid_rowconfigure(3, weight=0)  # Footer
+        welcome_frame.grid_columnconfigure(0, weight=1)
 
-        # Título principal
+        # === HEADER CARD (fila 0) ===
+        header_container = tk.Frame(welcome_frame, bg=self.COLORS['light'])
+        header_container.grid(row=0, column=0, sticky="ew", padx=40, pady=(40, 0))
+        
+        header_card = tk.Frame(header_container, bg=self.COLORS['white'], relief='solid', bd=1)
+        header_card.pack(fill="x")
+        
+        header_content = tk.Frame(header_card, bg=self.COLORS['white'])
+        header_content.pack(fill="x", padx=30, pady=25)
+
+        # Título principal centrado
         title_label = tk.Label(
-            header,
+            header_content,
             text="¡Bienvenido al Sistema!",
             font=('Segoe UI', 28, 'bold'),
             fg=self.COLORS['primary'],
             bg=self.COLORS['white']
         )
-        title_label.pack()
+        title_label.pack(anchor='center')
 
-        # Subtítulo
+        # Subtítulo centrado
         subtitle_label = tk.Label(
-            header,
+            header_content,
             text=(
                 "DIRECCIÓN DEPARTAMENTAL DE REDES INTEGRADAS\n"
                 "DE SERVICIOS DE SALUD DE GUATEMALA\n"
@@ -767,99 +792,174 @@ class MainWindow:
             bg=self.COLORS['white'],
             justify='center'
         )
-        subtitle_label.pack(pady=(10, 0))
+        subtitle_label.pack(anchor='center', pady=(15, 0))
 
-        # Separación visual sin contornos ni líneas
-        spacer = tk.Frame(welcome_frame, bg=self.COLORS['light'], height=20)
-        spacer.pack(fill="x", padx=40, pady=(0, 10))
+        # === SPACER (fila 1) ===
+        spacer = tk.Frame(welcome_frame, bg=self.COLORS['light'], height=30)
+        spacer.grid(row=1, column=0, sticky="ew")
 
-        # Tarjetas de información sobre lienzo light
-        cards_area = tk.Frame(welcome_frame, bg=self.COLORS['light'])
-        cards_area.pack(fill="both", expand=True, padx=40, pady=(0, 20))
+        # === CARDS AREA (fila 2) ===
+        cards_container = tk.Frame(welcome_frame, bg=self.COLORS['light'])
+        cards_container.grid(row=2, column=0, sticky="nsew", padx=40, pady=0)
 
-        cards_frame = tk.Frame(cards_area, bg=self.COLORS['light'])
-        cards_frame.pack(fill="both", expand=True)
+        # Una sola tarjeta que ocupe todo el ancho (como el header)
+        cards_container.grid_rowconfigure(0, weight=1)
+        cards_container.grid_columnconfigure(0, weight=1)
 
-        # Grid para las tarjetas
-        cards_frame.grid_columnconfigure(0, weight=1)
-        cards_frame.grid_columnconfigure(1, weight=1)
-
-        # Tarjeta de funcionalidades
-        self.create_info_card(
-            cards_frame,
-            "🎯 Funcionalidades Principales",
+        # Crear UNA SOLA tarjeta combinada que ocupe todo el ancho
+        self.create_combined_info_card(
+            cards_container,
             [
-                "• Gestión completa de insumos médicos",
-                "• Control de inventarios en tiempo real",
-                "• Generación de reportes especializados",
-                "• Seguimiento de movimientos detallado",
-                "• Administración de usuarios y permisos"
+                ("🎯 Funcionalidades Principales", [
+                    "• Gestión completa de insumos médicos",
+                    "• Control de inventarios en tiempo real", 
+                    "• Generación de reportes especializados",
+                    "• Seguimiento de movimientos detallado",
+                    "• Administración de usuarios y permisos"
+                ]),
+                ("🚀 Inicio Rápido", [
+                    "• Seleccione una opción del menú lateral",
+                    "• Use 'Ingreso de Insumos' para registrar",
+                    "• Genere reportes desde el menú",
+                    "• Consulte el Kardex para seguimiento",
+                    "• Configure el sistema en Gestión"
+                ])
             ],
             0, 0
         )
 
-        # Tarjeta de inicio rápido
-        self.create_info_card(
-            cards_frame,
-            "🚀 Inicio Rápido",
-            [
-                "• Seleccione una opción del menú lateral",
-                "• Use 'Ingreso de Insumos' para registrar",
-                "• Genere reportes desde el menú",
-                "• Consulte el Kardex para seguimiento",
-                "• Configure el sistema en Gestión"
-            ],
-            0, 1
-        )
-
-        # Footer con info de usuario (sobre light)
-        footer_frame = tk.Frame(welcome_frame, bg=self.COLORS['light'], height=60)
-        footer_frame.pack(fill="x", side="bottom", pady=(10, 0))
-        footer_frame.pack_propagate(False)
+        # === FOOTER (fila 3) ===
+        footer_container = tk.Frame(welcome_frame, bg=self.COLORS['light'])
+        footer_container.grid(row=3, column=0, sticky="ew", pady=(20, 20))
+        
+        # Frame interno del footer para centrar contenido
+        footer_content = tk.Frame(footer_container, bg=self.COLORS['light'])
+        footer_content.pack(expand=True)
 
         user_info = f"Sesión iniciada como: {self.usuario.get('nombre_completo', 'Usuario')} ({self.usuario.get('rol', '')})"
         footer_label = tk.Label(
-            footer_frame,
+            footer_content,
             text=user_info,
-            font=('Segoe UI', 10),
+            font=('Segoe UI', 11),
             fg=self.COLORS['text_dark'],
             bg=self.COLORS['light']
         )
-        footer_label.pack(expand=True)
+        footer_label.pack()
+
+    def create_combined_info_card(self, parent, sections_data, row, col):
+        """Crea una tarjeta combinada que ocupa todo el ancho con dos secciones lado a lado"""
+        # Frame principal que ocupa todo el ancho disponible
+        card_frame = tk.Frame(
+            parent,
+            bg=self.COLORS['white'],
+            relief='solid',
+            borderwidth=1
+        )
+        card_frame.grid(row=row, column=col, sticky="nsew", pady=10)
+        
+        # Configurar grid interno para dos columnas
+        card_frame.grid_rowconfigure(0, weight=1)
+        card_frame.grid_columnconfigure(0, weight=1)
+        card_frame.grid_columnconfigure(1, weight=1)
+        
+        # Crear cada sección (Funcionalidades e Inicio Rápido)
+        for section_col, (section_title, section_items) in enumerate(sections_data):
+            # Contenedor de cada sección
+            section_container = tk.Frame(card_frame, bg=self.COLORS['white'])
+            section_container.grid(row=0, column=section_col, sticky="nsew", padx=25, pady=20)
+            
+            # Título de la sección
+            title_label = tk.Label(
+                section_container,
+                text=section_title,
+                font=('Segoe UI', 16, 'bold'),
+                fg=self.COLORS['primary'],
+                bg=self.COLORS['white'],
+                anchor="w"
+            )
+            title_label.pack(anchor="w", pady=(0, 15))
+            
+            # Items de la sección
+            for item in section_items:
+                item_label = tk.Label(
+                    section_container,
+                    text=item,
+                    font=('Segoe UI', 11),
+                    fg=self.COLORS['text_dark'],
+                    bg=self.COLORS['white'],
+                    anchor="w",
+                    justify="left",
+                    wraplength=280  # Ajustado para dos columnas
+                )
+                item_label.pack(anchor="w", pady=(0, 8))
+        
+        # Línea divisoria vertical centrada entre las dos secciones
+        divider = tk.Frame(card_frame, bg=self.COLORS['light'], width=1)
+        divider.grid(row=0, column=0, columnspan=2, sticky="ns")
+        divider.place(relx=0.5, rely=0, relheight=1, anchor="n")
 
     def create_info_card(self, parent, title, items, row, col):
-        """Crea una tarjeta de información"""
-        card_frame = tk.Frame(parent, 
-                             bg=self.COLORS['white'],
-                             relief='solid',
-                             borderwidth=1,
-                             padx=20,
-                             pady=20)
-        card_frame.grid(row=row, column=col, padx=10, pady=10, sticky="nsew")
+        """Crea una tarjeta de información con dimensiones uniformes"""
+        # Frame contenedor con padding uniforme
+        card_container = tk.Frame(parent, bg=self.COLORS['light'])
+        card_container.grid(row=row, column=col, sticky="nsew", padx=15, pady=10)
+        
+        # Configurar el contenedor para expansión uniforme
+        card_container.grid_rowconfigure(0, weight=1)
+        card_container.grid_columnconfigure(0, weight=1)
+        
+        # Tarjeta principal con dimensiones fijas
+        card_frame = tk.Frame(
+            card_container,
+            bg=self.COLORS['white'],
+            relief='solid',
+            borderwidth=1
+        )
+        card_frame.grid(row=0, column=0, sticky="nsew")
+        
+        # Configurar grid interno de la tarjeta
+        card_frame.grid_rowconfigure(0, weight=0)  # Título
+        card_frame.grid_rowconfigure(1, weight=1)  # Contenido
+        card_frame.grid_columnconfigure(0, weight=1)
+        
+        # === TÍTULO ===
+        title_container = tk.Frame(card_frame, bg=self.COLORS['white'])
+        title_container.grid(row=0, column=0, sticky="ew", padx=25, pady=(20, 10))
+        
+        title_label = tk.Label(
+            title_container,
+            text=title,
+            font=('Segoe UI', 16, 'bold'),
+            fg=self.COLORS['primary'],
+            bg=self.COLORS['white'],
+            anchor="w"
+        )
+        title_label.pack(anchor="w")
 
-        # Título de la tarjeta
-        title_label = tk.Label(card_frame,
-                              text=title,
-                              font=('Segoe UI', 16, 'bold'),
-                              fg=self.COLORS['primary'],
-                              bg=self.COLORS['white'])
-        title_label.pack(anchor="w", pady=(0, 15))
+        # === CONTENIDO ===
+        content_container = tk.Frame(card_frame, bg=self.COLORS['white'])
+        content_container.grid(row=1, column=0, sticky="nsew", padx=25, pady=(0, 20))
+        
+        # Crear items con espaciado uniforme
+        for i, item in enumerate(items):
+            item_label = tk.Label(
+                content_container,
+                text=item,
+                font=('Segoe UI', 11),
+                fg=self.COLORS['text_dark'],
+                bg=self.COLORS['white'],
+                anchor="w",
+                justify="left",
+                wraplength=300  # Evitar que el texto se desborde
+            )
+            item_label.pack(anchor="w", pady=(0, 8))
 
-        # Items de la tarjeta
-        for item in items:
-            item_label = tk.Label(card_frame,
-                                 text=item,
-                                 font=('Segoe UI', 11),
-                                 fg=self.COLORS['text_dark'],
-                                 bg=self.COLORS['white'],
-                                 anchor="w",
-                                 justify="left")
-            item_label.pack(anchor="w", pady=2)
-
-    # Resto de métodos sin cambios...
     def center_window(self, width, height):
         """Centra la ventana en la pantalla tanto horizontal como verticalmente"""
-        self.root.update_idletasks()
+        # NO LLAMAR update_idletasks() aquí si la ventana está oculta
+        if self.root.winfo_viewable():
+            self.root.update_idletasks()
+        
         screen_width = self.root.winfo_screenwidth()
         screen_height = self.root.winfo_screenheight()
         x = (screen_width - width) // 2

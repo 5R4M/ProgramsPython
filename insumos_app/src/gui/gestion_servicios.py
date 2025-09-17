@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
 import pandas as pd
@@ -6,7 +7,8 @@ import os
 
 # Agregar el directorio raíz del proyecto al PATH de Python
 project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-sys.path.append(project_root)
+if project_root not in sys.path:
+    sys.path.append(project_root)
 
 from src.database.db_manager import (
     agregar_area,
@@ -14,7 +16,6 @@ from src.database.db_manager import (
     actualizar_area,
     eliminar_area,
     obtener_distritos,
-    obtener_distritos_por_area,
     obtener_tipos_servicio_por_distrito,
     obtener_servicios_por_tipo,
     agregar_distrito,
@@ -28,147 +29,43 @@ from src.database.db_manager import (
     eliminar_servicio
 )
 
-# ================= Estilos unificados =================
-def setup_styles(root):
-    COLORS = {
-        'primary':   '#2c3e50',
-        'secondary': '#34495e',
-        'accent':    '#3498db',
-        'success':   '#27ae60',
-        'warning':   '#f39c12',
-        'danger':    '#e74c3c',
-        'light':     '#ecf0f1',
-        'white':     '#ffffff',
-        'text_dark': '#2c3e50',
-        'text_light':'#7f8c8d',
-        'border':    '#d1d5db'
-    }
-
-    style = ttk.Style(root)
-    try:
-        style.theme_use('clam')
-    except Exception:
-        pass
-
-    try:
-        root.configure(bg=COLORS['light'])
-    except Exception:
-        pass
-
-    style.configure('.', font=('Segoe UI', 9))
-
-    # Frames
-    style.configure('Light.TFrame', background=COLORS['light'])
-    # Card exterior con borde fino
-    style.configure('Card.TFrame', background=COLORS['white'], relief='solid', borderwidth=1)
-    # Frame interno sin bordes
-    style.configure('NoBorder.TFrame', background=COLORS['white'], relief='flat', borderwidth=0)
-
-    # Header de card
-    style.configure('Header.TFrame', background=COLORS['primary'])
-    style.configure('Header.TLabel', background=COLORS['primary'], foreground=COLORS['white'], font=('Segoe UI', 10, 'bold'))
-
-    # Labels
-    style.configure('Light.TLabel', background=COLORS['light'], foreground=COLORS['text_dark'], font=('Segoe UI', 9))
-    style.configure('Card.TLabel', background=COLORS['white'], foreground=COLORS['text_dark'], font=('Segoe UI', 9))
-
-    # Botón primario
-    style.configure('Primary.TButton',
-                    font=('Segoe UI', 9, 'bold'),
-                    padding=(10, 5),
-                    relief='flat',
-                    borderwidth=0,
-                    background=COLORS['accent'],
-                    foreground=COLORS['white'])
-    style.map('Primary.TButton',
-              background=[('active', '#2980b9'), ('pressed', '#117a8b')],
-              foreground=[('active', '#ffffff'), ('pressed', '#ffffff')])
-
-    # Entry/Combobox
-    style.configure('TCombobox',
-                    fieldbackground=COLORS['white'],
-                    background=COLORS['white'],
-                    foreground=COLORS['text_dark'])
-    style.configure('TEntry',
-                    fieldbackground=COLORS['white'],
-                    foreground=COLORS['text_dark'])
-
-    root.option_add('*TCombobox*Listbox.background', COLORS['white'])
-    root.option_add('*TCombobox*Listbox.foreground', COLORS['text_dark'])
-    root.option_add('*TCombobox*Listbox.selectBackground', COLORS['accent'])
-    root.option_add('*TCombobox*Listbox.selectForeground', COLORS['white'])
-    root.option_add('*TCombobox*Listbox.font', '{Segoe UI} 9')
-
-    # Treeview sin borde
-    style.configure("Custom.Treeview",
-                    background=COLORS['white'],
-                    foreground=COLORS['text_dark'],
-                    rowheight=22,
-                    fieldbackground=COLORS['white'],
-                    font=('Segoe UI', 9),
-                    borderwidth=0,
-                    relief='flat')
-    HEADER_BG = '#e5e7eb'
-    HEADER_FG = '#111827'
-    style.configure("Custom.Treeview.Heading",
-                    background=HEADER_BG,
-                    foreground=HEADER_FG,
-                    font=('Segoe UI', 8, 'bold'),
-                    relief='flat',
-                    borderwidth=0,
-                    padding=(3, 6, 3, 6),
-                    anchor='center',
-                    justify='center')
-    style.map("Custom.Treeview",
-              background=[('selected', COLORS['accent'])],
-              foreground=[('selected', '#ffffff')])
-
-    # Scrollbars planos (sin contorno)
-    style.configure('Vertical.TScrollbar',
-                    gripcount=0,
-                    troughcolor=COLORS['white'],
-                    background=COLORS['white'],
-                    bordercolor=COLORS['white'],
-                    lightcolor=COLORS['white'],
-                    darkcolor=COLORS['white'],
-                    arrowsize=12,
-                    relief='flat')
-    style.configure('Horizontal.TScrollbar',
-                    gripcount=0,
-                    troughcolor=COLORS['white'],
-                    background=COLORS['white'],
-                    bordercolor=COLORS['white'],
-                    lightcolor=COLORS['white'],
-                    darkcolor=COLORS['white'],
-                    arrowsize=12,
-                    relief='flat')
-
-    # Notebook
-    style.configure('TNotebook', background=COLORS['light'], borderwidth=0)
-    style.configure('TNotebook.Tab',
-                    background=COLORS['light'],
-                    foreground=COLORS['text_dark'],
-                    font=('Segoe UI', 9))
-    style.map('TNotebook.Tab',
-              background=[('selected', COLORS['white'])],
-              foreground=[('selected', COLORS['text_dark'])])
-
-    return COLORS, style
-
-
 class GestionServicios:
     def __init__(self, parent_frame, main_window):
         self.parent = parent_frame
         self.main_window = main_window
 
-        # Estilos
-        self.COLORS, self._style = setup_styles(self.parent.winfo_toplevel())
+        # Paleta local (no modifica estilos globales)
+        self.COLORS = {
+            'primary':   '#2c3e50',
+            'accent':    '#3498db',
+            'light':     '#ecf0f1',
+            'white':     '#ffffff',
+            'text_dark': '#2c3e50',
+        }
+
+        # Caches en memoria
+        self.areas_by_id = {}
+        self.areas_by_name = {}
+        self.distritos_by_id = {}
+        self.distritos_by_name = {}
+        self.distritos_by_area = {}      # id_area -> [ {id, nombre} ]
+        self.tipos_by_distrito = {}      # id_distrito -> [ {id, descripcion} ]
+        self.tipos_flat = []             # [(id_tipo, id_distrito, desc)]
+        self.servicios_by_tipo = {}      # id_tipo -> [ {id, nombre} ]
+
+        # Flags de carga por pestaña
+        self._areas_loaded = False
+        self._distritos_loaded = False
+        self._tipos_loaded = False
+        self._servicios_loaded = False
 
         self.setup_ui()
 
-        # Aplicar estilo al contenedor raíz si es ttk
-        if isinstance(self.parent, ttk.Widget):
-            self.parent.configure(style='Light.TFrame')
+        # Cargar inicialmente solo la pestaña de Áreas
+        self._load_areas_tab()
+
+        # Carga diferida al cambiar de pestaña
+        self.notebook.bind("<<NotebookTabChanged>>", self._on_tab_changed)
 
     # ---------- Utilería de UI ----------
     def _header_title_sub(self, parent, title_text, subtitle_text):
@@ -187,20 +84,20 @@ class GestionServicios:
                  fg=self.COLORS['white'], bg=self.COLORS['primary']).pack(anchor='w', pady=(1, 0))
 
     def _card_section(self, parent, title, icon):
-        container = ttk.Frame(parent, style='Light.TFrame')
+        container = tk.Frame(parent, bg=self.COLORS['light'])
         container.pack(fill='x', padx=10, pady=6)
 
-        card = ttk.Frame(container, style='Card.TFrame')
+        card = tk.Frame(container, bg=self.COLORS['white'], bd=1, relief='solid', highlightthickness=0)
         card.pack(fill='both', expand=True)
 
-        header = ttk.Frame(card, style='Header.TFrame', height=24)
+        header = tk.Frame(card, bg=self.COLORS['primary'], height=24)
         header.pack(fill='x')
         header.pack_propagate(False)
 
-        ttk.Label(header, text=f"{icon} {title}", style='Header.TLabel').pack(side='left', padx=10)
+        tk.Label(header, text=f"{icon} {title}", font=('Segoe UI', 10, 'bold'),
+                 fg=self.COLORS['white'], bg=self.COLORS['primary']).pack(side='left', padx=10)
 
-        # Contenido sin borde interno
-        content = ttk.Frame(card, style='NoBorder.TFrame')
+        content = tk.Frame(card, bg=self.COLORS['white'])
         content.pack(fill='both', expand=True, padx=12, pady=8)
 
         return content
@@ -214,52 +111,119 @@ class GestionServicios:
         y = (ventana.winfo_screenheight() // 2) - (height // 2)
         ventana.geometry(f'{width}x{height}+{x}+{y}')
 
-    # --- Obtención de IDs ---
+    # --- Carga diferida por pestañas ---
+    def _on_tab_changed(self, event):
+        tab = event.widget.select()
+        current = event.widget.tab(tab, "text")
+        if current.startswith("🏢"):
+            self._load_areas_tab()
+        elif current.startswith("🗺️"):
+            self._load_distritos_tab()
+        elif current.startswith("🧾"):
+            self._load_tipos_tab()
+        elif current.startswith("🛎️"):
+            self._load_servicios_tab()
+        
+        # Forzar actualización de scrollbars después de cambio de pestaña
+        self.parent.after(100, self._actualizar_scrollbars)
+
+    def _load_areas_tab(self):
+        if not self._areas_loaded:
+            self._refresh_caches_base()
+            self.actualizar_areas()
+            self._areas_loaded = True
+
+    def _load_distritos_tab(self):
+        if not self._distritos_loaded:
+            self._refresh_caches_base()
+            self.actualizar_distritos()
+            self._distritos_loaded = True
+
+    def _load_tipos_tab(self):
+        if not self._tipos_loaded:
+            self._refresh_caches_base()
+            self._refresh_cache_tipos()
+            self.actualizar_tipos()
+            self._tipos_loaded = True
+
+    def _load_servicios_tab(self):
+        if not self._servicios_loaded:
+            self._refresh_caches_base()
+            self._refresh_cache_tipos()
+            self._refresh_cache_servicios()
+            self.actualizar_servicios()
+            self._servicios_loaded = True
+
+    # --- Caches de datos ---
+    def _refresh_caches_base(self):
+        # Áreas
+        areas = obtener_areas() or []
+        self.areas_by_id = {a['id']: a['nombre'] for a in areas}
+        self.areas_by_name = {a['nombre']: a['id'] for a in areas}
+
+        # Distritos (ideal si tu función devuelve area_id y area_nombre)
+        distritos = obtener_distritos() or []
+        self.distritos_by_id = {
+            d['id']: {
+                'id': d['id'],
+                'nombre': d['nombre'],
+                'area_id': d.get('area_id'),
+                'area_nombre': d.get('area_nombre')
+            } for d in distritos
+        }
+        self.distritos_by_name = {d['nombre']: d['id'] for d in distritos}
+
+        # Mapear distritos por área
+        self.distritos_by_area = {}
+        for d in distritos:
+            aid = d.get('area_id')
+            if aid is None and d.get('area_nombre'):
+                aid = self.areas_by_name.get(d['area_nombre'])
+            if aid is not None:
+                self.distritos_by_area.setdefault(aid, []).append({'id': d['id'], 'nombre': d['nombre']})
+
+    def _refresh_cache_tipos(self):
+        self.tipos_by_distrito = {}
+        self.tipos_flat = []
+        for d_id in self.distritos_by_id.keys():
+            tipos = obtener_tipos_servicio_por_distrito(d_id) or []
+            self.tipos_by_distrito[d_id] = tipos
+            for t in tipos:
+                self.tipos_flat.append((t['id'], d_id, t['descripcion']))
+
+    def _refresh_cache_servicios(self):
+        self.servicios_by_tipo = {}
+        for t_id, _d_id, _desc in self.tipos_flat:
+            servicios = obtener_servicios_por_tipo(t_id) or []
+            self.servicios_by_tipo[t_id] = servicios
+
+    # --- Lookups O(1) sobre caches ---
     def obtener_id_area(self, nombre):
-        for a in obtener_areas():
-            if a['nombre'] == nombre:
-                return a['id']
-        return None
+        return self.areas_by_name.get(nombre)
 
     def obtener_id_distrito(self, nombre):
-        distritos = obtener_distritos()
-        if distritos:
-            for distrito in distritos:
-                if distrito['nombre'] == nombre:
-                    return distrito['id']
-        return None
+        return self.distritos_by_name.get(nombre)
 
     def obtener_id_tipo_servicio(self, nombre_tipo, nombre_distrito):
-        id_distrito = self.obtener_id_distrito(nombre_distrito)
-        if id_distrito:
-            tipos_servicio = obtener_tipos_servicio_por_distrito(id_distrito)
-            if tipos_servicio:
-                for tipo in tipos_servicio:
-                    if tipo['descripcion'] == nombre_tipo:
-                        return tipo['id']
+        d_id = self.obtener_id_distrito(nombre_distrito)
+        if not d_id:
+            return None
+        for t in self.tipos_by_distrito.get(d_id, []):
+            if t['descripcion'] == nombre_tipo:
+                return t['id']
         return None
 
     def obtener_id_servicio(self, nombre_servicio, nombre_tipo, nombre_distrito):
-        id_tipo = self.obtener_id_tipo_servicio(nombre_tipo, nombre_distrito)
-        if id_tipo:
-            servicios = obtener_servicios_por_tipo(id_tipo)
-            if servicios:
-                for servicio in servicios:
-                    if servicio['nombre'] == nombre_servicio:
-                        return servicio['id']
+        t_id = self.obtener_id_tipo_servicio(nombre_tipo, nombre_distrito)
+        if not t_id:
+            return None
+        for s in self.servicios_by_tipo.get(t_id, []):
+            if s['nombre'] == nombre_servicio:
+                return s['id']
         return None
 
     # --- Configuración UI ---
     def setup_ui(self):
-        # fondo parent
-        try:
-            if isinstance(self.parent, ttk.Widget):
-                self.parent.configure(style='Light.TFrame')
-            else:
-                self.parent.configure(bg=self.COLORS['light'])
-        except Exception:
-            pass
-
         # Header principal
         self._header_title_sub(
             self.parent,
@@ -268,16 +232,16 @@ class GestionServicios:
         )
 
         # Notebook
-        nb_container = ttk.Frame(self.parent, style='Light.TFrame')
+        nb_container = tk.Frame(self.parent, bg=self.COLORS['light'])
         nb_container.pack(fill="both", expand=True, padx=10, pady=5)
 
         self.notebook = ttk.Notebook(nb_container)
         self.notebook.pack(fill="both", expand=True)
 
-        self.tab_areas = ttk.Frame(self.notebook, style='Light.TFrame')
-        self.tab_distritos = ttk.Frame(self.notebook, style='Light.TFrame')
-        self.tab_tipos = ttk.Frame(self.notebook, style='Light.TFrame')
-        self.tab_servicios = ttk.Frame(self.notebook, style='Light.TFrame')
+        self.tab_areas = tk.Frame(self.notebook, bg=self.COLORS['light'])
+        self.tab_distritos = tk.Frame(self.notebook, bg=self.COLORS['light'])
+        self.tab_tipos = tk.Frame(self.notebook, bg=self.COLORS['light'])
+        self.tab_servicios = tk.Frame(self.notebook, bg=self.COLORS['light'])
 
         self.notebook.add(self.tab_areas, text="🏢 Áreas")
         self.notebook.add(self.tab_distritos, text="🗺️ Distritos")
@@ -290,48 +254,48 @@ class GestionServicios:
         self.setup_servicios_tab()
 
         # Botón cerrar
-        button_frame = ttk.Frame(self.parent, style='Light.TFrame')
+        button_frame = tk.Frame(self.parent, bg=self.COLORS['light'])
         button_frame.pack(fill='x', pady=10, padx=10)
-        ttk.Button(button_frame, text="↩️ Cerrar", style='Primary.TButton',
-                   command=self.cerrar_ventana).pack(anchor='e')
-
-        # Cargar datos
-        self.actualizar_areas()
-        self.actualizar_distritos()
-        self.actualizar_tipos()
-        self.actualizar_servicios()
+        tk.Button(button_frame, text="↩️ Cerrar",
+                  bg=self.COLORS['accent'], fg='white', relief='flat', padx=10, pady=5,
+                  command=self.cerrar_ventana).pack(anchor='e')
 
     # ================== ÁREAS ==================
     def setup_areas_tab(self):
         frame_excel = self._card_section(self.tab_areas, "Carga desde Excel", "📥")
-        ttk.Button(frame_excel, text="📂 Cargar Excel", style='Primary.TButton',
-                   command=self.cargar_excel_areas).pack(side="left", padx=(0, 8), pady=2)
-        ttk.Button(frame_excel, text="📤 Exportar a Excel", style='Primary.TButton',
-                   command=self.exportar_excel_areas).pack(side="left", padx=(0, 8), pady=2)
+        tk.Button(frame_excel, text="📂 Cargar Excel",
+                bg=self.COLORS['accent'], fg='white', relief='flat', padx=10, pady=5,
+                command=self.cargar_excel_areas).pack(side="left", padx=(0, 8), pady=2)
+        tk.Button(frame_excel, text="📤 Exportar a Excel",
+                bg=self.COLORS['accent'], fg='white', relief='flat', padx=10, pady=5,
+                command=self.exportar_excel_areas).pack(side="left", padx=(0, 8), pady=2)
 
         frame_lista = self._card_section(self.tab_areas, "Áreas", "🏢")
 
-        table_wrap = ttk.Frame(frame_lista, style='NoBorder.TFrame')
+        table_wrap = tk.Frame(frame_lista, bg=self.COLORS['white'])
         table_wrap.pack(fill='both', expand=True)
 
-        self.tree_areas = ttk.Treeview(table_wrap, columns=('nombre',), show='headings', style="Custom.Treeview")
+        # Crear Treeview con altura mínima
+        self.tree_areas = ttk.Treeview(table_wrap, columns=('nombre',), show='headings', height=10)
         self.tree_areas.heading('nombre', text='Área', anchor='w')
-        self.tree_areas.column('nombre', anchor='w', width=320)
-        self.tree_areas.pack(fill='both', expand=True, side='left', padx=(0, 5), pady=2)
+        self.tree_areas.column('nombre', anchor='w', width=320, stretch=True)
+        
+        # Scrollbar vertical - CONFIGURACIÓN MEJORADA
+        scrolly_areas = ttk.Scrollbar(table_wrap, orient="vertical", command=self.tree_areas.yview)
+        self.tree_areas.configure(yscrollcommand=scrolly_areas.set)
+        
+        # Empaquetado correcto - scrollbar primero
+        scrolly_areas.pack(side='right', fill='y')
+        self.tree_areas.pack(side='left', fill='both', expand=True, pady=2)
 
-        scrolly = ttk.Scrollbar(table_wrap, orient="vertical", command=self.tree_areas.yview, style='Vertical.TScrollbar')
-        self.tree_areas.configure(yscrollcommand=scrolly.set)
-        scrolly.pack(side='left', fill='y')
-
-        # Botonera horizontal sin marco
-        btns = ttk.Frame(frame_lista, style='NoBorder.TFrame')
+        btns = tk.Frame(frame_lista, bg=self.COLORS['white'])
         btns.pack(fill='x', padx=0, pady=(6, 0))
-        ttk.Button(btns, text="➕ Agregar", style='Primary.TButton',
-                   command=self.agregar_area).pack(side='left', padx=(0, 6))
-        ttk.Button(btns, text="✏️ Editar", style='Primary.TButton',
-                   command=self.editar_area).pack(side='left', padx=(0, 6))
-        ttk.Button(btns, text="🗑️ Eliminar", style='Primary.TButton',
-                   command=self.eliminar_area).pack(side='left')
+        tk.Button(btns, text="➕ Agregar", bg=self.COLORS['accent'], fg='white',
+                relief='flat', padx=10, pady=5, command=self.agregar_area).pack(side='left', padx=(0, 6))
+        tk.Button(btns, text="✏️ Editar", bg=self.COLORS['accent'], fg='white',
+                relief='flat', padx=10, pady=5, command=self.editar_area).pack(side='left', padx=(0, 6))
+        tk.Button(btns, text="🗑️ Eliminar", bg=self.COLORS['accent'], fg='white',
+                relief='flat', padx=10, pady=5, command=self.eliminar_area).pack(side='left')
 
     def cargar_excel_areas(self):
         filename = filedialog.askopenfilename(title="Seleccionar archivo Excel de Áreas", filetypes=[("Excel files", "*.xlsx *.xls")])
@@ -341,22 +305,32 @@ class GestionServicios:
         if 'Área' not in df.columns:
             messagebox.showerror("Error", "El archivo debe tener la columna: Área")
             return
+        nuevos = 0
+        existentes = 0
+        existentes_set = set(self.areas_by_name.keys())
         for area in df['Área'].dropna().unique():
             nombre = str(area).strip()
-            if nombre:
-                try:
-                    agregar_area(nombre)
-                except Exception:
-                    pass
-        messagebox.showinfo("Éxito", "Áreas cargadas correctamente")
+            if not nombre:
+                continue
+            if nombre in existentes_set:
+                existentes += 1
+                continue
+            try:
+                new_id = agregar_area(nombre)
+                self.areas_by_id[new_id] = nombre
+                self.areas_by_name[nombre] = new_id
+                nuevos += 1
+            except Exception:
+                existentes += 1
+        messagebox.showinfo("Éxito", f"Áreas cargadas.\nNuevas: {nuevos}\nExistentes: {existentes}")
         self.actualizar_areas()
 
     def exportar_excel_areas(self):
         filename = filedialog.asksaveasfilename(defaultextension=".xlsx", filetypes=[("Excel files", "*.xlsx")])
         if not filename:
             return
-        areas = obtener_areas()
-        df = pd.DataFrame([{'Área': a['nombre']} for a in areas])
+        df = pd.DataFrame([{'Área': nombre} for _id, nombre in self.areas_by_id.items()])
+        df = df.sort_values(by='Área')
         df.to_excel(filename, index=False)
         messagebox.showinfo("Éxito", "Áreas exportadas correctamente")
 
@@ -368,18 +342,24 @@ class GestionServicios:
         container = self._dialog_container(ventana, "➕ Agregar Área", "Ingrese el nombre del área")
         body = container['body']
 
-        ttk.Label(body, text="Nombre:", style='Light.TLabel').pack(pady=(0, 4), anchor='w')
+        tk.Label(body, text="Nombre:", bg=self.COLORS['white']).pack(pady=(0, 4), anchor='w')
         nombre = ttk.Entry(body, width=40)
         nombre.pack(fill='x')
 
         def guardar():
-            if nombre.get().strip():
-                agregar_area(nombre.get().strip())
-                self.actualizar_areas()
-                ventana.destroy()
-                messagebox.showinfo("Éxito", "Área agregada correctamente")
-            else:
+            nom = nombre.get().strip()
+            if not nom:
                 messagebox.showwarning("Advertencia", "Ingrese un nombre")
+                return
+            if nom in self.areas_by_name:
+                messagebox.showwarning("Advertencia", "El área ya existe")
+                return
+            new_id = agregar_area(nom)
+            self.areas_by_id[new_id] = nom
+            self.areas_by_name[nom] = new_id
+            self.actualizar_areas()
+            ventana.destroy()
+            messagebox.showinfo("Éxito", "Área agregada correctamente")
 
         self._dialog_buttons(container['buttons'], guardar, ventana.destroy)
 
@@ -397,14 +377,25 @@ class GestionServicios:
         container = self._dialog_container(ventana, "✏️ Editar Área", "Modifique el nombre del área")
         body = container['body']
 
-        ttk.Label(body, text="Nuevo nombre:", style='Light.TLabel').pack(pady=(0, 4), anchor='w')
+        tk.Label(body, text="Nuevo nombre:", bg=self.COLORS['white']).pack(pady=(0, 4), anchor='w')
         nuevo_nombre = ttk.Entry(body, width=40)
         nuevo_nombre.insert(0, item['values'][0])
         nuevo_nombre.pack(fill='x')
 
         def guardar():
-            id_area = self.obtener_id_area(item['values'][0])
-            actualizar_area(id_area, nuevo_nombre.get().strip())
+            old_name = item['values'][0]
+            new_name = nuevo_nombre.get().strip()
+            if not new_name:
+                messagebox.showwarning("Advertencia", "Ingrese un nombre")
+                return
+            if new_name == old_name:
+                ventana.destroy()
+                return
+            area_id = self.areas_by_name.get(old_name)
+            actualizar_area(area_id, new_name)
+            self.areas_by_id[area_id] = new_name
+            self.areas_by_name.pop(old_name, None)
+            self.areas_by_name[new_name] = area_id
             self.actualizar_areas()
             ventana.destroy()
             messagebox.showinfo("Éxito", "Área actualizada correctamente")
@@ -418,53 +409,70 @@ class GestionServicios:
             return
         item = self.tree_areas.item(selected[0])
         if messagebox.askyesno("Confirmar", "¿Está seguro de eliminar esta área?"):
-            id_area = self.obtener_id_area(item['values'][0])
-            eliminar_area(id_area)
+            area_name = item['values'][0]
+            area_id = self.areas_by_name.get(area_name)
+            eliminar_area(area_id)
+            self.areas_by_name.pop(area_name, None)
+            self.areas_by_id.pop(area_id, None)
+            self.distritos_by_area.pop(area_id, None)
             self.actualizar_areas()
+            if self._distritos_loaded:
+                self._refresh_caches_base()
+                self.actualizar_distritos()
+            if self._tipos_loaded:
+                self._refresh_cache_tipos()
+                self.actualizar_tipos()
+            if self._servicios_loaded:
+                self._refresh_cache_tipos()
+                self._refresh_cache_servicios()
+                self.actualizar_servicios()
             messagebox.showinfo("Éxito", "Área eliminada correctamente")
 
     def actualizar_areas(self):
-        # Optimización: ocultar columnas durante inserción (aunque hay una)
         self.tree_areas.configure(displaycolumns=())
         self.tree_areas.delete(*self.tree_areas.get_children())
-        areas = obtener_areas()
-        if areas:
-            for area in areas:
-                self.tree_areas.insert('', 'end', values=(area['nombre'],))
+        for aid, nombre in sorted(self.areas_by_id.items(), key=lambda kv: kv[1].lower()):
+            self.tree_areas.insert('', 'end', values=(nombre,))
         self.tree_areas.configure(displaycolumns=('nombre',))
+        # Forzar actualización del scrollbar
+        self.tree_areas.update_idletasks()
 
     # ================== DISTRITOS ==================
     def setup_distritos_tab(self):
         frame_excel = self._card_section(self.tab_distritos, "Carga desde Excel", "📥")
-        ttk.Button(frame_excel, text="📂 Cargar Excel", style='Primary.TButton',
-                   command=self.cargar_excel_distritos).pack(side="left", padx=(0, 8), pady=2)
-        ttk.Button(frame_excel, text="📤 Exportar a Excel", style='Primary.TButton',
-                   command=self.exportar_excel_distritos).pack(side="left", padx=(0, 8), pady=2)
+        tk.Button(frame_excel, text="📂 Cargar Excel",
+                bg=self.COLORS['accent'], fg='white', relief='flat', padx=10, pady=5,
+                command=self.cargar_excel_distritos).pack(side="left", padx=(0, 8), pady=2)
+        tk.Button(frame_excel, text="📤 Exportar a Excel",
+                bg=self.COLORS['accent'], fg='white', relief='flat', padx=10, pady=5,
+                command=self.exportar_excel_distritos).pack(side="left", padx=(0, 8), pady=2)
 
         frame_lista = self._card_section(self.tab_distritos, "Distritos", "🗺️")
 
-        table_wrap = ttk.Frame(frame_lista, style='NoBorder.TFrame')
+        table_wrap = tk.Frame(frame_lista, bg=self.COLORS['white'])
         table_wrap.pack(fill='both', expand=True)
 
-        self.tree_distritos = ttk.Treeview(table_wrap, columns=('nombre','area'), show='headings', style="Custom.Treeview")
+        self.tree_distritos = ttk.Treeview(table_wrap, columns=('nombre','area'), show='headings', height=10)
         self.tree_distritos.heading('nombre', text='Distrito', anchor='w')
         self.tree_distritos.heading('area', text='Área', anchor='w')
-        self.tree_distritos.column('nombre', width=240, anchor='w')
-        self.tree_distritos.column('area', width=220, anchor='w')
-        self.tree_distritos.pack(fill='both', expand=True, side='left', padx=(0, 5), pady=2)
+        self.tree_distritos.column('nombre', width=240, anchor='w', stretch=True)
+        self.tree_distritos.column('area', width=220, anchor='w', stretch=True)
 
-        scrolly = ttk.Scrollbar(table_wrap, orient="vertical", command=self.tree_distritos.yview, style='Vertical.TScrollbar')
-        self.tree_distritos.configure(yscrollcommand=scrolly.set)
-        scrolly.pack(side='left', fill='y')
+        # Scrollbar vertical mejorada
+        scrolly_distritos = ttk.Scrollbar(table_wrap, orient="vertical", command=self.tree_distritos.yview)
+        self.tree_distritos.configure(yscrollcommand=scrolly_distritos.set)
+        
+        scrolly_distritos.pack(side='right', fill='y')
+        self.tree_distritos.pack(side='left', fill='both', expand=True, pady=2)
 
-        btns = ttk.Frame(frame_lista, style='NoBorder.TFrame')
+        btns = tk.Frame(frame_lista, bg=self.COLORS['white'])
         btns.pack(fill='x', padx=0, pady=(6, 0))
-        ttk.Button(btns, text="➕ Agregar", style='Primary.TButton',
-                   command=self.agregar_distrito).pack(side='left', padx=(0, 6))
-        ttk.Button(btns, text="✏️ Editar", style='Primary.TButton',
-                   command=self.editar_distrito).pack(side='left', padx=(0, 6))
-        ttk.Button(btns, text="🗑️ Eliminar", style='Primary.TButton',
-                   command=self.eliminar_distrito).pack(side='left')
+        tk.Button(btns, text="➕ Agregar", bg=self.COLORS['accent'], fg='white',
+                relief='flat', padx=10, pady=5, command=self.agregar_distrito).pack(side='left', padx=(0, 6))
+        tk.Button(btns, text="✏️ Editar", bg=self.COLORS['accent'], fg='white',
+                relief='flat', padx=10, pady=5, command=self.editar_distrito).pack(side='left', padx=(0, 6))
+        tk.Button(btns, text="🗑️ Eliminar", bg=self.COLORS['accent'], fg='white',
+                relief='flat', padx=10, pady=5, command=self.eliminar_distrito).pack(side='left')
 
     def cargar_excel_distritos(self):
         filename = filedialog.askopenfilename(title="Seleccionar archivo Excel de Distritos", filetypes=[("Excel files", "*.xlsx *.xls")])
@@ -474,24 +482,41 @@ class GestionServicios:
         if 'Distrito' not in df.columns or 'Área' not in df.columns:
             messagebox.showerror("Error", "El archivo debe tener las columnas: Distrito y Área")
             return
+        nuevos = 0
+        existentes = 0
         for _, row in df.iterrows():
             distrito = str(row['Distrito']).strip()
             area_nombre = str(row['Área']).strip()
-            id_area = self.obtener_id_area(area_nombre) if area_nombre else None
-            if distrito:
-                try:
-                    agregar_distrito(distrito, id_area)
-                except Exception:
-                    pass
-        messagebox.showinfo("Éxito", "Distritos cargados correctamente")
+            if not distrito:
+                continue
+            area_id = self.areas_by_name.get(area_nombre)
+            if area_nombre and area_id is None:
+                area_id = agregar_area(area_nombre)
+                self.areas_by_id[area_id] = area_nombre
+                self.areas_by_name[area_nombre] = area_id
+            if distrito in self.distritos_by_name:
+                existentes += 1
+                continue
+            try:
+                d_id = agregar_distrito(distrito, area_id)
+                self.distritos_by_id[d_id] = {'id': d_id, 'nombre': distrito, 'area_id': area_id, 'area_nombre': area_nombre}
+                self.distritos_by_name[distrito] = d_id
+                if area_id is not None:
+                    self.distritos_by_area.setdefault(area_id, []).append({'id': d_id, 'nombre': distrito})
+                nuevos += 1
+            except Exception:
+                existentes += 1
+        messagebox.showinfo("Éxito", f"Distritos cargados.\nNuevos: {nuevos}\nExistentes: {existentes}")
         self.actualizar_distritos()
 
     def exportar_excel_distritos(self):
         filename = filedialog.asksaveasfilename(defaultextension=".xlsx", filetypes=[("Excel files", "*.xlsx")])
         if not filename:
             return
-        distritos = obtener_distritos()
-        df = pd.DataFrame([{'Distrito': d['nombre'], 'Área': d['area_nombre']} for d in distritos])
+        data = []
+        for d in self.distritos_by_id.values():
+            data.append({'Distrito': d['nombre'], 'Área': d.get('area_nombre') or self.areas_by_id.get(d.get('area_id'))})
+        df = pd.DataFrame(data).sort_values(by=['Área','Distrito'], na_position='last')
         df.to_excel(filename, index=False)
         messagebox.showinfo("Éxito", "Distritos exportados correctamente")
 
@@ -503,25 +528,31 @@ class GestionServicios:
         container = self._dialog_container(ventana, "➕ Agregar Distrito", "Complete los campos")
         body = container['body']
 
-        ttk.Label(body, text="Área:", style='Light.TLabel').pack(pady=(0, 4), anchor='w')
-        combo_area = ttk.Combobox(body, state="readonly")
-        combo_area['values'] = [a['nombre'] for a in obtener_areas()]
+        tk.Label(body, text="Área:", bg=self.COLORS['white']).pack(pady=(0, 4), anchor='w')
+        combo_area = ttk.Combobox(body, state="readonly", values=sorted(self.areas_by_name.keys()))
         combo_area.pack(fill='x')
 
-        ttk.Label(body, text="Nombre:", style='Light.TLabel').pack(pady=(8, 4), anchor='w')
+        tk.Label(body, text="Nombre:", bg=self.COLORS['white']).pack(pady=(8, 4), anchor='w')
         nombre = ttk.Entry(body, width=40)
         nombre.pack(fill='x')
 
         def guardar():
-            if nombre.get().strip() and combo_area.get():
-                area_nombre = combo_area.get()
-                id_area = self.obtener_id_area(area_nombre)
-                agregar_distrito(nombre.get().strip(), id_area)
-                self.actualizar_distritos()
-                ventana.destroy()
-                messagebox.showinfo("Éxito", "Distrito agregado correctamente")
-            else:
+            nom = nombre.get().strip()
+            area_nombre = combo_area.get()
+            if not nom or not area_nombre:
                 messagebox.showwarning("Advertencia", "Complete todos los campos")
+                return
+            if nom in self.distritos_by_name:
+                messagebox.showwarning("Advertencia", "El distrito ya existe")
+                return
+            area_id = self.areas_by_name.get(area_nombre)
+            d_id = agregar_distrito(nom, area_id)
+            self.distritos_by_id[d_id] = {'id': d_id, 'nombre': nom, 'area_id': area_id, 'area_nombre': area_nombre}
+            self.distritos_by_name[nom] = d_id
+            self.distritos_by_area.setdefault(area_id, []).append({'id': d_id, 'nombre': nom})
+            self.actualizar_distritos()
+            ventana.destroy()
+            messagebox.showinfo("Éxito", "Distrito agregado correctamente")
 
         self._dialog_buttons(container['buttons'], guardar, ventana.destroy)
 
@@ -532,6 +563,9 @@ class GestionServicios:
             return
 
         item = self.tree_distritos.item(selected[0])
+        old_name = item['values'][0]
+        old_area_name = item['values'][1]
+
         ventana = tk.Toplevel(self.parent)
         ventana.title("✏️ Editar Distrito")
         self._estilizar_toplevel(ventana)
@@ -539,24 +573,33 @@ class GestionServicios:
         container = self._dialog_container(ventana, "✏️ Editar Distrito", "Modifique los datos del distrito")
         body = container['body']
 
-        ttk.Label(body, text="Área:", style='Light.TLabel').pack(pady=(0, 4), anchor='w')
-        combo_area = ttk.Combobox(body, state="readonly")
-        areas = obtener_areas()
-        combo_area['values'] = [a['nombre'] for a in areas]
-        current_area = item['values'][1] if len(item['values']) > 1 else ''
-        combo_area.set(current_area)
+        tk.Label(body, text="Área:", bg=self.COLORS['white']).pack(pady=(0, 4), anchor='w')
+        combo_area = ttk.Combobox(body, state="readonly", values=sorted(self.areas_by_name.keys()))
+        combo_area.set(old_area_name or '')
         combo_area.pack(fill='x')
 
-        ttk.Label(body, text="Nuevo nombre:", style='Light.TLabel').pack(pady=(8, 4), anchor='w')
+        tk.Label(body, text="Nuevo nombre:", bg=self.COLORS['white']).pack(pady=(8, 4), anchor='w')
         nuevo_nombre = ttk.Entry(body, width=40)
-        nuevo_nombre.insert(0, item['values'][0])
+        nuevo_nombre.insert(0, old_name)
         nuevo_nombre.pack(fill='x')
 
         def guardar():
-            id_distrito = self.obtener_id_distrito(item['values'][0])
-            area_nombre = combo_area.get()
-            id_area = self.obtener_id_area(area_nombre) if area_nombre else None
-            actualizar_distrito(id_distrito, nuevo_nombre.get().strip(), id_area)
+            new_name = nuevo_nombre.get().strip()
+            new_area_name = combo_area.get()
+            if not new_name or not new_area_name:
+                messagebox.showwarning("Advertencia", "Complete todos los campos")
+                return
+            d_id = self.distritos_by_name.get(old_name)
+            new_area_id = self.areas_by_name.get(new_area_name)
+            actualizar_distrito(d_id, new_name, new_area_id)
+            self.distritos_by_name.pop(old_name, None)
+            self.distritos_by_name[new_name] = d_id
+            self.distritos_by_id[d_id].update({'nombre': new_name, 'area_id': new_area_id, 'area_nombre': new_area_name})
+            for aid in list(self.distritos_by_area.keys()):
+                self.distritos_by_area[aid] = [d for d in self.distritos_by_area[aid] if d['id'] != d_id]
+                if not self.distritos_by_area[aid]:
+                    self.distritos_by_area.pop(aid, None)
+            self.distritos_by_area.setdefault(new_area_id, []).append({'id': d_id, 'nombre': new_name})
             self.actualizar_distritos()
             ventana.destroy()
             messagebox.showinfo("Éxito", "Distrito actualizado correctamente")
@@ -570,52 +613,76 @@ class GestionServicios:
             return
         item = self.tree_distritos.item(selected[0])
         if messagebox.askyesno("Confirmar", "¿Está seguro de eliminar este distrito?"):
-            id_distrito = self.obtener_id_distrito(item['values'][0])
-            eliminar_distrito(id_distrito)
+            d_name = item['values'][0]
+            d_id = self.distritos_by_name.get(d_name)
+            eliminar_distrito(d_id)
+            self.distritos_by_name.pop(d_name, None)
+            info = self.distritos_by_id.pop(d_id, {})
+            aid = info.get('area_id')
+            if aid in self.distritos_by_area:
+                self.distritos_by_area[aid] = [d for d in self.distritos_by_area[aid] if d['id'] != d_id]
+                if not self.distritos_by_area[aid]:
+                    self.distritos_by_area.pop(aid, None)
+            if d_id in self.tipos_by_distrito:
+                self.tipos_by_distrito.pop(d_id, None)
             self.actualizar_distritos()
+            if self._tipos_loaded:
+                self._refresh_cache_tipos()
+                self.actualizar_tipos()
+            if self._servicios_loaded:
+                self._refresh_cache_tipos()
+                self._refresh_cache_servicios()
+                self.actualizar_servicios()
             messagebox.showinfo("Éxito", "Distrito eliminado correctamente")
 
     def actualizar_distritos(self):
         self.tree_distritos.configure(displaycolumns=())
         self.tree_distritos.delete(*self.tree_distritos.get_children())
-        distritos = obtener_distritos()
-        if distritos:
-            for d in distritos:
-                self.tree_distritos.insert('', 'end', values=(d['nombre'], d['area_nombre']))
+        rows = []
+        for d in self.distritos_by_id.values():
+            area_nombre = d.get('area_nombre') or self.areas_by_id.get(d.get('area_id')) or ''
+            rows.append((d['nombre'], area_nombre))
+        for nombre, area in sorted(rows, key=lambda r: (r[1].lower(), r[0].lower())):
+            self.tree_distritos.insert('', 'end', values=(nombre, area))
         self.tree_distritos.configure(displaycolumns=('nombre', 'area'))
+        self.tree_distritos.update_idletasks()
 
     # ================== TIPOS DE SERVICIO ==================
     def setup_tipos_tab(self):
         frame_excel = self._card_section(self.tab_tipos, "Carga desde Excel", "📥")
-        ttk.Button(frame_excel, text="📂 Cargar Excel", style='Primary.TButton',
-                   command=self.cargar_excel_tipos).pack(side="left", padx=(0, 8), pady=2)
-        ttk.Button(frame_excel, text="📤 Exportar a Excel", style='Primary.TButton',
-                   command=self.exportar_excel_tipos).pack(side="left", padx=(0, 8), pady=2)
+        tk.Button(frame_excel, text="📂 Cargar Excel",
+                bg=self.COLORS['accent'], fg='white', relief='flat', padx=10, pady=5,
+                command=self.cargar_excel_tipos).pack(side="left", padx=(0, 8), pady=2)
+        tk.Button(frame_excel, text="📤 Exportar a Excel",
+                bg=self.COLORS['accent'], fg='white', relief='flat', padx=10, pady=5,
+                command=self.exportar_excel_tipos).pack(side="left", padx=(0, 8), pady=2)
 
         frame_lista = self._card_section(self.tab_tipos, "Tipos de Servicio", "🧾")
 
-        table_wrap = ttk.Frame(frame_lista, style='NoBorder.TFrame')
+        table_wrap = tk.Frame(frame_lista, bg=self.COLORS['white'])
         table_wrap.pack(fill='both', expand=True)
 
-        self.tree_tipos = ttk.Treeview(table_wrap, columns=('distrito', 'descripcion'), show='headings', style="Custom.Treeview")
+        self.tree_tipos = ttk.Treeview(table_wrap, columns=('distrito', 'descripcion'), show='headings', height=10)
         self.tree_tipos.heading('distrito', text='Distrito', anchor='w')
         self.tree_tipos.heading('descripcion', text='Tipo de Servicio', anchor='w')
-        self.tree_tipos.column('distrito', width=240, anchor='w')
-        self.tree_tipos.column('descripcion', width=280, anchor='w')
-        self.tree_tipos.pack(fill='both', expand=True, side='left', padx=(0, 5), pady=2)
+        self.tree_tipos.column('distrito', width=240, anchor='w', stretch=True)
+        self.tree_tipos.column('descripcion', width=280, anchor='w', stretch=True)
 
-        scrolly = ttk.Scrollbar(table_wrap, orient="vertical", command=self.tree_tipos.yview, style='Vertical.TScrollbar')
-        self.tree_tipos.configure(yscrollcommand=scrolly.set)
-        scrolly.pack(side='left', fill='y')
+        # Scrollbar vertical mejorada
+        scrolly_tipos = ttk.Scrollbar(table_wrap, orient="vertical", command=self.tree_tipos.yview)
+        self.tree_tipos.configure(yscrollcommand=scrolly_tipos.set)
+        
+        scrolly_tipos.pack(side='right', fill='y')
+        self.tree_tipos.pack(side='left', fill='both', expand=True, pady=2)
 
-        btns = ttk.Frame(frame_lista, style='NoBorder.TFrame')
+        btns = tk.Frame(frame_lista, bg=self.COLORS['white'])
         btns.pack(fill='x', padx=0, pady=(6, 0))
-        ttk.Button(btns, text="➕ Agregar", style='Primary.TButton',
-                   command=self.agregar_tipo).pack(side='left', padx=(0, 6))
-        ttk.Button(btns, text="✏️ Editar", style='Primary.TButton',
-                   command=self.editar_tipo).pack(side='left', padx=(0, 6))
-        ttk.Button(btns, text="🗑️ Eliminar", style='Primary.TButton',
-                   command=self.eliminar_tipo).pack(side='left')
+        tk.Button(btns, text="➕ Agregar", bg=self.COLORS['accent'], fg='white',
+                relief='flat', padx=10, pady=5, command=self.agregar_tipo).pack(side='left', padx=(0, 6))
+        tk.Button(btns, text="✏️ Editar", bg=self.COLORS['accent'], fg='white',
+                relief='flat', padx=10, pady=5, command=self.editar_tipo).pack(side='left', padx=(0, 6))
+        tk.Button(btns, text="🗑️ Eliminar", bg=self.COLORS['accent'], fg='white',
+                relief='flat', padx=10, pady=5, command=self.eliminar_tipo).pack(side='left')
 
     def cargar_excel_tipos(self):
         filename = filedialog.askopenfilename(
@@ -624,7 +691,6 @@ class GestionServicios:
         )
         if not filename:
             return
-
         try:
             df = pd.read_excel(filename)
             required_columns = ['Distrito', 'Tipo de Servicio']
@@ -636,26 +702,26 @@ class GestionServicios:
             registros_existentes = 0
 
             for _, row in df.iterrows():
-                try:
-                    distrito = str(row['Distrito']).strip()
-                    tipo = str(row['Tipo de Servicio']).strip()
-                    if not distrito or not tipo:
-                        continue
-
-                    id_distrito = self.obtener_id_distrito(distrito)
-                    if not id_distrito:
-                        id_distrito = agregar_distrito(distrito)
-
-                    tipo_existente = self.obtener_id_tipo_servicio(tipo, distrito)
-                    if tipo_existente:
-                        registros_existentes += 1
-                        continue
-
-                    agregar_tipo_servicio(id_distrito, tipo)
-                    registros_procesados += 1
-                except Exception:
+                distrito = str(row['Distrito']).strip()
+                tipo = str(row['Tipo de Servicio']).strip()
+                if not distrito or not tipo:
                     continue
 
+                d_id = self.distritos_by_name.get(distrito)
+                if not d_id:
+                    d_id = agregar_distrito(distrito, None)
+                    self.distritos_by_id[d_id] = {'id': d_id, 'nombre': distrito, 'area_id': None, 'area_nombre': None}
+                    self.distritos_by_name[distrito] = d_id
+
+                if any(t['descripcion'] == tipo for t in self.tipos_by_distrito.get(d_id, [])):
+                    registros_existentes += 1
+                    continue
+
+                agregar_tipo_servicio(d_id, tipo)
+                self.tipos_by_distrito.setdefault(d_id, []).append({'id': None, 'descripcion': tipo})
+                registros_procesados += 1
+
+            self._refresh_cache_tipos()
             self.actualizar_tipos()
             mensaje = f"Proceso completado:\n- Registros nuevos agregados: {registros_procesados}\n- Registros existentes omitidos: {registros_existentes}"
             messagebox.showinfo("Éxito", mensaje)
@@ -668,10 +734,12 @@ class GestionServicios:
         if not filename:
             return
         datos = []
-        for d in obtener_distritos():
-            for t in obtener_tipos_servicio_por_distrito(d['id']):
-                datos.append({'Distrito': d['nombre'], 'Tipo de Servicio': t['descripcion']})
+        for d_id, tipos in self.tipos_by_distrito.items():
+            d_name = self.distritos_by_id.get(d_id, {}).get('nombre', '')
+            for t in tipos:
+                datos.append({'Distrito': d_name, 'Tipo de Servicio': t['descripcion']})
         df = pd.DataFrame(datos)
+        df = df.sort_values(by=['Distrito','Tipo de Servicio'])
         df.to_excel(filename, index=False)
         messagebox.showinfo("Éxito", "Tipos de servicio exportados correctamente")
 
@@ -683,30 +751,24 @@ class GestionServicios:
         container = self._dialog_container(ventana, "➕ Agregar Tipo de Servicio", "Complete los campos")
         body = container['body']
 
-        ttk.Label(body, text="Área:", style='Light.TLabel').pack(pady=(0, 4), anchor='w')
-        combo_area = ttk.Combobox(body, state="readonly")
-        areas = obtener_areas()
-        combo_area['values'] = [a['nombre'] for a in areas]
+        tk.Label(body, text="Área:", bg=self.COLORS['white']).pack(pady=(0, 4), anchor='w')
+        combo_area = ttk.Combobox(body, state="readonly", values=sorted(self.areas_by_name.keys()))
         combo_area.pack(fill='x')
 
-        ttk.Label(body, text="Distrito:", style='Light.TLabel').pack(pady=(8, 4), anchor='w')
+        tk.Label(body, text="Distrito:", bg=self.COLORS['white']).pack(pady=(8, 4), anchor='w')
         combo_distrito = ttk.Combobox(body, state="readonly")
         combo_distrito.pack(fill='x')
 
         def actualizar_distritos(event=None):
             area_nombre = combo_area.get()
-            id_area = next((a['id'] for a in areas if a['nombre'] == area_nombre), None)
-            if id_area:
-                distritos = obtener_distritos_por_area(id_area)
-                combo_distrito['values'] = [d['nombre'] for d in distritos]
-                combo_distrito.set('')
-            else:
-                combo_distrito['values'] = []
-                combo_distrito.set('')
+            id_area = self.areas_by_name.get(area_nombre)
+            distritos = self.distritos_by_area.get(id_area, [])
+            combo_distrito['values'] = [d['nombre'] for d in distritos]
+            combo_distrito.set('')
 
         combo_area.bind("<<ComboboxSelected>>", actualizar_distritos)
 
-        ttk.Label(body, text="Tipo de Servicio:", style='Light.TLabel').pack(pady=(8, 4), anchor='w')
+        tk.Label(body, text="Tipo de Servicio:", bg=self.COLORS['white']).pack(pady=(8, 4), anchor='w')
         descripcion = ttk.Entry(body, width=40)
         descripcion.pack(fill='x')
 
@@ -715,15 +777,15 @@ class GestionServicios:
                 messagebox.showwarning("Advertencia", "Complete todos los campos")
                 return
 
-            id_distrito = self.obtener_id_distrito(combo_distrito.get())
+            d_id = self.distritos_by_name.get(combo_distrito.get())
             tipo = descripcion.get().strip()
-
-            tipo_existente = self.obtener_id_tipo_servicio(tipo, combo_distrito.get())
-            if tipo_existente:
+            if any(t['descripcion'] == tipo for t in self.tipos_by_distrito.get(d_id, [])):
                 messagebox.showwarning("Advertencia", "Ya existe un tipo de servicio con ese nombre en el distrito seleccionado")
                 return
 
-            agregar_tipo_servicio(id_distrito, tipo)
+            agregar_tipo_servicio(d_id, tipo)
+            self.tipos_by_distrito[d_id] = obtener_tipos_servicio_por_distrito(d_id) or []
+            self._tipos_loaded = True
             self.actualizar_tipos()
             ventana.destroy()
             messagebox.showinfo("Éxito", "Tipo de servicio agregado correctamente")
@@ -744,41 +806,29 @@ class GestionServicios:
         container = self._dialog_container(ventana, "✏️ Editar Tipo de Servicio", "Actualice los datos")
         body = container['body']
 
-        ttk.Label(body, text="Área:", style='Light.TLabel').pack(pady=(0, 4), anchor='w')
-        combo_area = ttk.Combobox(body, state="readonly")
-        areas = obtener_areas()
-        combo_area['values'] = [a['nombre'] for a in areas]
+        tk.Label(body, text="Área:", bg=self.COLORS['white']).pack(pady=(0, 4), anchor='w')
+        combo_area = ttk.Combobox(body, state="readonly", values=sorted(self.areas_by_name.keys()))
         combo_area.pack(fill='x')
 
-        ttk.Label(body, text="Distrito:", style='Light.TLabel').pack(pady=(8, 4), anchor='w')
+        tk.Label(body, text="Distrito:", bg=self.COLORS['white']).pack(pady=(8, 4), anchor='w')
         combo_distrito = ttk.Combobox(body, state="readonly")
         combo_distrito.pack(fill='x')
 
         def actualizar_distritos(event=None):
             area_nombre = combo_area.get()
-            id_area = next((a['id'] for a in areas if a['nombre'] == area_nombre), None)
-            if id_area:
-                distritos = obtener_distritos_por_area(id_area)
-                combo_distrito['values'] = [d['nombre'] for d in distritos]
-            else:
-                combo_distrito['values'] = []
+            id_area = self.areas_by_name.get(area_nombre)
+            distritos = self.distritos_by_area.get(id_area, [])
+            combo_distrito['values'] = [d['nombre'] for d in distritos]
 
         combo_area.bind("<<ComboboxSelected>>", actualizar_distritos)
 
-        # Establecer valores iniciales desde item
         distrito_actual = item['values'][0]
-        distritos = obtener_distritos()
-        area_actual = ''
-        for d in distritos:
-            if d['nombre'] == distrito_actual:
-                area_actual = d.get('area_nombre', '')
-                break
-
-        combo_area.set(area_actual)
+        area_actual = self.distritos_by_id.get(self.distritos_by_name.get(distrito_actual), {}).get('area_nombre', '')
+        combo_area.set(area_actual or '')
         actualizar_distritos(None)
         combo_distrito.set(distrito_actual)
 
-        ttk.Label(body, text="Tipo de Servicio:", style='Light.TLabel').pack(pady=(8, 4), anchor='w')
+        tk.Label(body, text="Tipo de Servicio:", bg=self.COLORS['white']).pack(pady=(8, 4), anchor='w')
         descripcion = ttk.Entry(body, width=40)
         descripcion.insert(0, item['values'][1])
         descripcion.pack(fill='x')
@@ -787,9 +837,12 @@ class GestionServicios:
             if not combo_area.get() or not combo_distrito.get() or not descripcion.get().strip():
                 messagebox.showwarning("Advertencia", "Complete todos los campos")
                 return
-
-            id_tipo = self.obtener_id_tipo_servicio(item['values'][1], item['values'][0])
-            actualizar_tipo_servicio(id_tipo, descripcion.get().strip())
+            d_name = item['values'][0]
+            t_old_desc = item['values'][1]
+            t_id = self.obtener_id_tipo_servicio(t_old_desc, d_name)
+            actualizar_tipo_servicio(t_id, descripcion.get().strip())
+            d_id = self.distritos_by_name.get(d_name)
+            self.tipos_by_distrito[d_id] = obtener_tipos_servicio_por_distrito(d_id) or []
             self.actualizar_tipos()
             ventana.destroy()
             messagebox.showinfo("Éxito", "Tipo de servicio actualizado correctamente")
@@ -803,53 +856,68 @@ class GestionServicios:
             return
         item = self.tree_tipos.item(selected[0])
         if messagebox.askyesno("Confirmar", "¿Está seguro de eliminar este tipo de servicio?"):
-            id_tipo = self.obtener_id_tipo_servicio(item['values'][1], item['values'][0])
-            eliminar_tipo_servicio(id_tipo)
+            t_id = self.obtener_id_tipo_servicio(item['values'][1], item['values'][0])
+            eliminar_tipo_servicio(t_id)
+            d_id = self.distritos_by_name.get(item['values'][0])
+            self.tipos_by_distrito[d_id] = [t for t in self.tipos_by_distrito.get(d_id, []) if t.get('id') != t_id and t.get('descripcion') != item['values'][1]]
+            self.servicios_by_tipo.pop(t_id, None)
             self.actualizar_tipos()
+            if self._servicios_loaded:
+                self._refresh_cache_servicios()
+                self.actualizar_servicios()
             messagebox.showinfo("Éxito", "Tipo de servicio eliminado correctamente")
 
     def actualizar_tipos(self):
         self.tree_tipos.configure(displaycolumns=())
         self.tree_tipos.delete(*self.tree_tipos.get_children())
-        for d in obtener_distritos():
-            for t in obtener_tipos_servicio_por_distrito(d['id']):
-                self.tree_tipos.insert('', 'end', values=(d['nombre'], t['descripcion']))
+        rows = []
+        for d_id, tipos in self.tipos_by_distrito.items():
+            d_name = self.distritos_by_id.get(d_id, {}).get('nombre', '')
+            for t in tipos:
+                rows.append((d_name, t['descripcion']))
+        for dname, desc in sorted(rows, key=lambda r: (r[0].lower(), r[1].lower())):
+            self.tree_tipos.insert('', 'end', values=(dname, desc))
         self.tree_tipos.configure(displaycolumns=('distrito', 'descripcion'))
+        self.tree_tipos.update_idletasks()
 
     # ================== SERVICIOS ==================
     def setup_servicios_tab(self):
         frame_excel = self._card_section(self.tab_servicios, "Carga desde Excel", "📥")
-        ttk.Button(frame_excel, text="📂 Cargar Excel", style='Primary.TButton',
-                   command=self.cargar_excel_servicios).pack(side="left", padx=(0, 8), pady=2)
-        ttk.Button(frame_excel, text="📤 Exportar a Excel", style='Primary.TButton',
-                   command=self.exportar_excel_servicios).pack(side="left", padx=(0, 8), pady=2)
+        tk.Button(frame_excel, text="📂 Cargar Excel",
+                bg=self.COLORS['accent'], fg='white', relief='flat', padx=10, pady=5,
+                command=self.cargar_excel_servicios).pack(side="left", padx=(0, 8), pady=2)
+        tk.Button(frame_excel, text="📤 Exportar a Excel",
+                bg=self.COLORS['accent'], fg='white', relief='flat', padx=10, pady=5,
+                command=self.exportar_excel_servicios).pack(side="left", padx=(0, 8), pady=2)
 
         frame_lista = self._card_section(self.tab_servicios, "Servicios", "🛎️")
 
-        table_wrap = ttk.Frame(frame_lista, style='NoBorder.TFrame')
+        table_wrap = tk.Frame(frame_lista, bg=self.COLORS['white'])
         table_wrap.pack(fill='both', expand=True)
 
-        self.tree_servicios = ttk.Treeview(table_wrap, columns=('distrito', 'tipo', 'nombre'), show='headings', style="Custom.Treeview")
+        self.tree_servicios = ttk.Treeview(table_wrap, columns=('distrito', 'tipo', 'nombre'), show='headings', height=10)
         self.tree_servicios.heading('distrito', text='Distrito', anchor='w')
         self.tree_servicios.heading('tipo', text='Tipo de Servicio', anchor='w')
         self.tree_servicios.heading('nombre', text='Servicio', anchor='w')
-        self.tree_servicios.column('distrito', width=220, anchor='w')
-        self.tree_servicios.column('tipo', width=260, anchor='w')
-        self.tree_servicios.column('nombre', width=260, anchor='w')
-        self.tree_servicios.pack(fill='both', expand=True, side='left', padx=(0, 5), pady=2)
+        self.tree_servicios.column('distrito', width=220, anchor='w', stretch=True)
+        self.tree_servicios.column('tipo', width=260, anchor='w', stretch=True)
+        self.tree_servicios.column('nombre', width=260, anchor='w', stretch=True)
 
-        scrolly = ttk.Scrollbar(table_wrap, orient="vertical", command=self.tree_servicios.yview, style='Vertical.TScrollbar')
-        self.tree_servicios.configure(yscrollcommand=scrolly.set)
-        scrolly.pack(side='left', fill='y')
+        # Scrollbar vertical mejorada
+        scrolly_servicios = ttk.Scrollbar(table_wrap, orient="vertical", command=self.tree_servicios.yview)
+        self.tree_servicios.configure(yscrollcommand=scrolly_servicios.set)
+        
+        scrolly_servicios.pack(side='right', fill='y')
+        self.tree_servicios.pack(side='left', fill='both', expand=True, pady=2)
 
-        btns = ttk.Frame(frame_lista, style='NoBorder.TFrame')
+        btns = tk.Frame(frame_lista, bg=self.COLORS['white'])
         btns.pack(fill='x', padx=0, pady=(6, 0))
-        ttk.Button(btns, text="➕ Agregar", style='Primary.TButton',
-                   command=self.agregar_servicio).pack(side='left', padx=(0, 6))
-        ttk.Button(btns, text="✏️ Editar", style='Primary.TButton',
-                   command=self.editar_servicio).pack(side='left', padx=(0, 6))
-        ttk.Button(btns, text="🗑️ Eliminar", style='Primary.TButton',
-                   command=self.eliminar_servicio).pack(side='left')
+        tk.Button(btns, text="➕ Agregar", bg=self.COLORS['accent'], fg='white',
+                relief='flat', padx=10, pady=5, command=self.agregar_servicio).pack(side='left', padx=(0, 6))
+        tk.Button(btns, text="✏️ Editar", bg=self.COLORS['accent'], fg='white',
+                relief='flat', padx=10, pady=5, command=self.editar_servicio).pack(side='left', padx=(0, 6))
+        tk.Button(btns, text="🗑️ Eliminar", bg=self.COLORS['accent'], fg='white',
+                relief='flat', padx=10, pady=5, command=self.eliminar_servicio).pack(side='left')
 
     def cargar_excel_servicios(self):
         filename = filedialog.askopenfilename(title="Seleccionar archivo Excel de Servicios", filetypes=[("Excel files", "*.xlsx *.xls")])
@@ -860,35 +928,54 @@ class GestionServicios:
         if not all(col in df.columns for col in required_columns):
             messagebox.showerror("Error", "El archivo debe tener las columnas: Distrito, Tipo de Servicio, Servicio")
             return
+        nuevos = 0
+        existentes = 0
         for _, row in df.iterrows():
             distrito = str(row['Distrito']).strip()
             tipo = str(row['Tipo de Servicio']).strip()
             servicio = str(row['Servicio']).strip()
             if not (distrito and tipo and servicio):
                 continue
-            id_distrito = self.obtener_id_distrito(distrito)
-            if not id_distrito:
-                id_distrito = agregar_distrito(distrito)
-            id_tipo = self.obtener_id_tipo_servicio(tipo, distrito)
-            if not id_tipo:
-                id_tipo = agregar_tipo_servicio(id_distrito, tipo)
+            d_id = self.distritos_by_name.get(distrito)
+            if not d_id:
+                d_id = agregar_distrito(distrito, None)
+                self.distritos_by_id[d_id] = {'id': d_id, 'nombre': distrito, 'area_id': None, 'area_nombre': None}
+                self.distritos_by_name[distrito] = d_id
+
+            t_id = self.obtener_id_tipo_servicio(tipo, distrito)
+            if not t_id:
+                agregar_tipo_servicio(d_id, tipo)
+                self.tipos_by_distrito[d_id] = obtener_tipos_servicio_por_distrito(d_id) or []
+                t_id = self.obtener_id_tipo_servicio(tipo, distrito)
+
+            if any(s['nombre'] == servicio for s in self.servicios_by_tipo.get(t_id, [])):
+                existentes += 1
+                continue
+
             try:
-                agregar_servicio(id_tipo, servicio)
+                agregar_servicio(t_id, servicio)
+                self.servicios_by_tipo.setdefault(t_id, []).append({'id': None, 'nombre': servicio})
+                nuevos += 1
             except Exception:
-                pass
-        messagebox.showinfo("Éxito", "Servicios cargados correctamente")
+                existentes += 1
+
+        self._refresh_cache_servicios()
         self.actualizar_servicios()
+        messagebox.showinfo("Éxito", f"Servicios cargados.\nNuevos: {nuevos}\nExistentes: {existentes}")
 
     def exportar_excel_servicios(self):
         filename = filedialog.asksaveasfilename(defaultextension=".xlsx", filetypes=[("Excel files", "*.xlsx")])
         if not filename:
             return
         datos = []
-        for d in obtener_distritos():
-            for t in obtener_tipos_servicio_por_distrito(d['id']):
-                for s in obtener_servicios_por_tipo(t['id']):
-                    datos.append({'Distrito': d['nombre'], 'Tipo de Servicio': t['descripcion'], 'Servicio': s['nombre']})
-        df = pd.DataFrame(datos)
+        dname_by_id = {d_id: d['nombre'] for d_id, d in self.distritos_by_id.items()}
+        for t_id, servicios in self.servicios_by_tipo.items():
+            d_id = next((d for (tid, d, _desc) in self.tipos_flat if tid == t_id), None)
+            d_name = dname_by_id.get(d_id, '')
+            t_desc = next((desc for (tid, _d, desc) in self.tipos_flat if tid == t_id), '')
+            for s in servicios:
+                datos.append({'Distrito': d_name, 'Tipo de Servicio': t_desc, 'Servicio': s['nombre']})
+        df = pd.DataFrame(datos).sort_values(by=['Distrito','Tipo de Servicio','Servicio'])
         df.to_excel(filename, index=False)
         messagebox.showinfo("Éxito", "Servicios exportados correctamente")
 
@@ -900,45 +987,37 @@ class GestionServicios:
         container = self._dialog_container(ventana, "➕ Agregar Servicio", "Complete los campos")
         body = container['body']
 
-        ttk.Label(body, text="Área:", style='Light.TLabel').pack(pady=(0, 4), anchor='w')
-        combo_area = ttk.Combobox(body, state="readonly")
-        areas = obtener_areas()
-        combo_area['values'] = [a['nombre'] for a in areas]
+        tk.Label(body, text="Área:", bg=self.COLORS['white']).pack(pady=(0, 4), anchor='w')
+        combo_area = ttk.Combobox(body, state="readonly", values=sorted(self.areas_by_name.keys()))
         combo_area.pack(fill='x')
 
-        ttk.Label(body, text="Distrito:", style='Light.TLabel').pack(pady=(8, 4), anchor='w')
+        tk.Label(body, text="Distrito:", bg=self.COLORS['white']).pack(pady=(8, 4), anchor='w')
         combo_distrito = ttk.Combobox(body, state="readonly")
         combo_distrito.pack(fill='x')
 
-        ttk.Label(body, text="Tipo de Servicio:", style='Light.TLabel').pack(pady=(8, 4), anchor='w')
+        tk.Label(body, text="Tipo de Servicio:", bg=self.COLORS['white']).pack(pady=(8, 4), anchor='w')
         combo_tipo = ttk.Combobox(body, state="readonly")
         combo_tipo.pack(fill='x')
 
         def actualizar_distritos(event=None):
             area_nombre = combo_area.get()
-            id_area = next((a['id'] for a in areas if a['nombre'] == area_nombre), None)
-            if id_area:
-                distritos = obtener_distritos_por_area(id_area)
-                combo_distrito['values'] = [d['nombre'] for d in distritos]
-                combo_distrito.set('')
-                combo_tipo.set('')
-                combo_tipo['values'] = []
-            else:
-                combo_distrito['values'] = []
-                combo_distrito.set('')
-                combo_tipo['values'] = []
-                combo_tipo.set('')
+            id_area = self.areas_by_name.get(area_nombre)
+            distritos = self.distritos_by_area.get(id_area, [])
+            combo_distrito['values'] = [d['nombre'] for d in distritos]
+            combo_distrito.set('')
+            combo_tipo.set('')
+            combo_tipo['values'] = []
 
         def actualizar_tipos(event=None):
-            id_distrito = self.obtener_id_distrito(combo_distrito.get())
-            tipos = obtener_tipos_servicio_por_distrito(id_distrito) if id_distrito else []
+            d_id = self.distritos_by_name.get(combo_distrito.get())
+            tipos = self.tipos_by_distrito.get(d_id, [])
             combo_tipo['values'] = [t['descripcion'] for t in tipos]
             combo_tipo.set('')
 
         combo_area.bind("<<ComboboxSelected>>", actualizar_distritos)
         combo_distrito.bind("<<ComboboxSelected>>", actualizar_tipos)
 
-        ttk.Label(body, text="Servicio:", style='Light.TLabel').pack(pady=(8, 4), anchor='w')
+        tk.Label(body, text="Servicio:", bg=self.COLORS['white']).pack(pady=(8, 4), anchor='w')
         nombre = ttk.Entry(body, width=40)
         nombre.pack(fill='x')
 
@@ -946,9 +1025,15 @@ class GestionServicios:
             if not combo_area.get() or not combo_distrito.get() or not combo_tipo.get() or not nombre.get().strip():
                 messagebox.showwarning("Advertencia", "Complete todos los campos")
                 return
-
-            id_tipo = self.obtener_id_tipo_servicio(combo_tipo.get(), combo_distrito.get())
-            agregar_servicio(id_tipo, nombre.get().strip())
+            d_name = combo_distrito.get()
+            t_desc = combo_tipo.get()
+            t_id = self.obtener_id_tipo_servicio(t_desc, d_name)
+            if any(s['nombre'] == nombre.get().strip() for s in self.servicios_by_tipo.get(t_id, [])):
+                messagebox.showwarning("Advertencia", "Ya existe un servicio con ese nombre")
+                return
+            agregar_servicio(t_id, nombre.get().strip())
+            self.servicios_by_tipo[t_id] = obtener_servicios_por_tipo(t_id) or []
+            self._servicios_loaded = True
             self.actualizar_servicios()
             ventana.destroy()
             messagebox.showinfo("Éxito", "Servicio agregado correctamente")
@@ -969,35 +1054,29 @@ class GestionServicios:
         container = self._dialog_container(ventana, "✏️ Editar Servicio", "Actualice los datos")
         body = container['body']
 
-        ttk.Label(body, text="Área:", style='Light.TLabel').pack(pady=(0, 4), anchor='w')
-        combo_area = ttk.Combobox(body, state="readonly")
-        areas = obtener_areas()
-        combo_area['values'] = [a['nombre'] for a in areas]
+        tk.Label(body, text="Área:", bg=self.COLORS['white']).pack(pady=(0, 4), anchor='w')
+        combo_area = ttk.Combobox(body, state="readonly", values=sorted(self.areas_by_name.keys()))
         combo_area.pack(fill='x')
 
-        ttk.Label(body, text="Distrito:", style='Light.TLabel').pack(pady=(8, 4), anchor='w')
+        tk.Label(body, text="Distrito:", bg=self.COLORS['white']).pack(pady=(8, 4), anchor='w')
         combo_distrito = ttk.Combobox(body, state="readonly")
         combo_distrito.pack(fill='x')
 
-        ttk.Label(body, text="Tipo de Servicio:", style='Light.TLabel').pack(pady=(8, 4), anchor='w')
+        tk.Label(body, text="Tipo de Servicio:", bg=self.COLORS['white']).pack(pady=(8, 4), anchor='w')
         combo_tipo = ttk.Combobox(body, state="readonly")
         combo_tipo.pack(fill='x')
 
         def actualizar_distritos(event=None):
             area_nombre = combo_area.get()
-            id_area = next((a['id'] for a in areas if a['nombre'] == area_nombre), None)
-            if id_area:
-                distritos = obtener_distritos_por_area(id_area)
-                combo_distrito['values'] = [d['nombre'] for d in distritos]
-                if item['values'][0] not in [d['nombre'] for d in distritos]:
-                    combo_distrito.set('')
-            else:
-                combo_distrito['values'] = []
+            id_area = self.areas_by_name.get(area_nombre)
+            distritos = self.distritos_by_area.get(id_area, [])
+            combo_distrito['values'] = [d['nombre'] for d in distritos]
+            if item['values'][0] not in [d['nombre'] for d in distritos]:
                 combo_distrito.set('')
 
         def actualizar_tipos(event=None):
-            id_distrito = self.obtener_id_distrito(combo_distrito.get())
-            tipos = obtener_tipos_servicio_por_distrito(id_distrito) if id_distrito else []
+            d_id = self.distritos_by_name.get(combo_distrito.get())
+            tipos = self.tipos_by_distrito.get(d_id, [])
             combo_tipo['values'] = [t['descripcion'] for t in tipos]
             if item['values'][1] not in [t['descripcion'] for t in tipos]:
                 combo_tipo.set('')
@@ -1005,37 +1084,33 @@ class GestionServicios:
         combo_area.bind("<<ComboboxSelected>>", actualizar_distritos)
         combo_distrito.bind("<<ComboboxSelected>>", actualizar_tipos)
 
-        # Establecer valores iniciales
-        distritos = obtener_distritos()
-        area_actual = ''
-        for d in distritos:
-            if d['nombre'] == item['values'][0]:
-                area_actual = d.get('area_nombre', '')
-                break
-
-        combo_area.set(area_actual)
+        d_name = item['values'][0]
+        t_desc = item['values'][1]
+        s_name = item['values'][2]
+        area_actual = self.distritos_by_id.get(self.distritos_by_name.get(d_name), {}).get('area_nombre', '')
+        combo_area.set(area_actual or '')
         actualizar_distritos(None)
-        combo_distrito.set(item['values'][0])
+        combo_distrito.set(d_name)
         actualizar_tipos(None)
-        combo_tipo.set(item['values'][1])
+        combo_tipo.set(t_desc)
 
-        ttk.Label(body, text="Servicio:", style='Light.TLabel').pack(pady=(8, 4), anchor='w')
+        tk.Label(body, text="Servicio:", bg=self.COLORS['white']).pack(pady=(8, 4), anchor='w')
         nombre = ttk.Entry(body, width=40)
-        nombre.insert(0, item['values'][2])
+        nombre.insert(0, s_name)
         nombre.pack(fill='x')
 
         def guardar():
-            if not combo_area.get() or not combo_distrito.get() or not combo_tipo.get() or not nombre.get().strip():
+            new_name = nombre.get().strip()
+            if not combo_area.get() or not combo_distrito.get() or not combo_tipo.get() or not new_name:
                 messagebox.showwarning("Advertencia", "Complete todos los campos")
                 return
-
-            id_servicio = self.obtener_id_servicio(item['values'][2], item['values'][1], item['values'][0])
-            actualizar_servicio(id_servicio, nombre.get().strip())
+            s_id = self.obtener_id_servicio(s_name, t_desc, d_name)
+            actualizar_servicio(s_id, new_name)
+            t_id = self.obtener_id_tipo_servicio(combo_tipo.get(), combo_distrito.get())
+            self.servicios_by_tipo[t_id] = obtener_servicios_por_tipo(t_id) or []
             self.actualizar_servicios()
             ventana.destroy()
             messagebox.showinfo("Éxito", "Servicio actualizado correctamente")
-
-        self._dialog_buttons(container['buttons'], guardar, ventana.destroy)
 
     def eliminar_servicio(self):
         selected = self.tree_servicios.selection()
@@ -1044,32 +1119,54 @@ class GestionServicios:
             return
         item = self.tree_servicios.item(selected[0])
         if messagebox.askyesno("Confirmar", "¿Está seguro de eliminar este servicio?"):
-            id_servicio = self.obtener_id_servicio(item['values'][2], item['values'][1], item['values'][0])
-            eliminar_servicio(id_servicio)
+            s_id = self.obtener_id_servicio(item['values'][2], item['values'][1], item['values'][0])
+            eliminar_servicio(s_id)
+            t_id = self.obtener_id_tipo_servicio(item['values'][1], item['values'][0])
+            self.servicios_by_tipo[t_id] = [s for s in self.servicios_by_tipo.get(t_id, []) if s.get('id') != s_id and s.get('nombre') != item['values'][2]]
             self.actualizar_servicios()
             messagebox.showinfo("Éxito", "Servicio eliminado correctamente")
 
     def actualizar_servicios(self):
         self.tree_servicios.configure(displaycolumns=())
         self.tree_servicios.delete(*self.tree_servicios.get_children())
-        for d in obtener_distritos():
-            for t in obtener_tipos_servicio_por_distrito(d['id']):
-                for s in obtener_servicios_por_tipo(t['id']):
-                    self.tree_servicios.insert('', 'end', values=(d['nombre'], t['descripcion'], s['nombre']))
+        rows = []
+        dname_by_id = {d_id: d['nombre'] for d_id, d in self.distritos_by_id.items()}
+        tdesc_by_id = {t_id: desc for (t_id, _d, desc) in self.tipos_flat}
+        d_by_tipo = {t_id: d_id for (t_id, d_id, _desc) in self.tipos_flat}
+        for t_id, servicios in self.servicios_by_tipo.items():
+            d_id = d_by_tipo.get(t_id)
+            d_name = dname_by_id.get(d_id, '')
+            t_desc = tdesc_by_id.get(t_id, '')
+            for s in servicios:
+                rows.append((d_name, t_desc, s['nombre']))
+        for dname, tdesc, sname in sorted(rows, key=lambda r: (r[0].lower(), r[1].lower(), r[2].lower())):
+            self.tree_servicios.insert('', 'end', values=(dname, tdesc, sname))
         self.tree_servicios.configure(displaycolumns=('distrito', 'tipo', 'nombre'))
+        self.tree_servicios.update_idletasks()
 
-    # ---------- Diálogos y Toplevel estilizados ----------
+    def _actualizar_scrollbars(self):
+        """Método para forzar la actualización de todos los scrollbars"""
+        if hasattr(self, 'tree_areas'):
+            self.tree_areas.update_idletasks()
+        if hasattr(self, 'tree_distritos'):
+            self.tree_distritos.update_idletasks()
+        if hasattr(self, 'tree_tipos'):
+            self.tree_tipos.update_idletasks()
+        if hasattr(self, 'tree_servicios'):
+            self.tree_servicios.update_idletasks()
+    
+    # ---------- Diálogos y Toplevel estilizados (local) ----------
     def _estilizar_toplevel(self, ventana):
         try:
             ventana.configure(bg=self.COLORS['light'])
         except Exception:
             pass
-        ventana.geometry("420x260")
+        ventana.geometry("420x320")
         self.centrar_ventana(ventana)
 
     def _dialog_container(self, ventana, title_text, subtitle_text):
-        outer = ttk.Frame(ventana, style='Light.TFrame', padding=(10, 10))
-        outer.pack(fill='both', expand=True)
+        outer = tk.Frame(ventana, bg=self.COLORS['light'])
+        outer.pack(fill='both', expand=True, padx=10, pady=10)
 
         header = tk.Frame(outer, bg=self.COLORS['primary'])
         header.pack(fill='x', pady=(0, 8))
@@ -1078,19 +1175,21 @@ class GestionServicios:
         tk.Label(header, text=subtitle_text, font=('Segoe UI', 8),
                  fg=self.COLORS['white'], bg=self.COLORS['primary']).pack(side='left', padx=10)
 
-        body = ttk.Frame(outer, style='Light.TFrame')
-        body.pack(fill='both', expand=True)
+        body = tk.Frame(outer, bg=self.COLORS['white'])
+        body.pack(fill='both', expand=True, padx=10, pady=8)
 
-        buttons = ttk.Frame(outer, style='Light.TFrame')
+        buttons = tk.Frame(outer, bg=self.COLORS['light'])
         buttons.pack(fill='x', pady=(8, 0), anchor='e')
 
         return {'outer': outer, 'body': body, 'buttons': buttons}
 
     def _dialog_buttons(self, container_buttons, on_accept, on_cancel):
-        ttk.Button(container_buttons, text="✔️ Aceptar", style='Primary.TButton',
-                   command=on_accept).pack(side='right', padx=6)
-        ttk.Button(container_buttons, text="✖️ Cancelar", style='Primary.TButton',
-                   command=on_cancel).pack(side='right', padx=6)
+        tk.Button(container_buttons, text="✔️ Aceptar",
+                  bg=self.COLORS['accent'], fg='white', relief='flat', padx=10, pady=5,
+                  command=on_accept).pack(side='right', padx=6)
+        tk.Button(container_buttons, text="✖️ Cancelar",
+                  bg=self.COLORS['accent'], fg='white', relief='flat', padx=10, pady=5,
+                  command=on_cancel).pack(side='right', padx=6)
 
     # ---------- Cierre ----------
     def cerrar_ventana(self):

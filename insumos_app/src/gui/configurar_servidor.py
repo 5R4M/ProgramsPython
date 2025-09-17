@@ -1,3 +1,5 @@
+# -*- coding: utf-8 -*-
+# Configurar Servidor - versión limpia sin estilos globales ni "clamp", respetando el estilo del Main Window
 import ctypes
 import os
 import sys
@@ -13,114 +15,6 @@ try:
     import mysql.connector
 except Exception:
     mysql = None
-
-
-# =========================
-# Estilos y paleta unificados
-# =========================
-def setup_styles(root):
-    COLORS = {
-        'primary':   '#2c3e50',
-        'secondary': '#34495e',
-        'accent':    '#3498db',
-        'success':   '#27ae60',
-        'warning':   '#f39c12',
-        'danger':    '#e74c3c',
-        'light':     '#ecf0f1',
-        'white':     '#ffffff',
-        'text_dark': '#2c3e50',
-        'text_light':'#7f8c8d'
-    }
-
-    style = ttk.Style(root)
-    try:
-        style.theme_use('clam')
-    except Exception:
-        pass
-
-    # Fondo general “light”
-    try:
-        root.configure(bg=COLORS['light'])
-    except Exception:
-        pass
-
-    # Tipografía
-    style.configure('.', font=('Segoe UI', 9))
-
-    # Frames
-    style.configure('Light.TFrame', background=COLORS['light'])
-    style.configure('Card.TFrame', background=COLORS['white'], relief='solid', borderwidth=1)
-
-    # Encabezados
-    style.configure('Header.TFrame', background=COLORS['primary'])
-    style.configure('Header.TLabel', background=COLORS['primary'], foreground=COLORS['white'], font=('Segoe UI', 10, 'bold'))
-
-    # Labels
-    style.configure('Light.TLabel', background=COLORS['light'], foreground=COLORS['text_dark'], font=('Segoe UI', 9))
-    style.configure('Card.TLabel', background=COLORS['white'], foreground=COLORS['text_dark'], font=('Segoe UI', 9))
-
-    # Botón primario
-    style.configure('Primary.TButton',
-                    font=('Segoe UI', 9, 'bold'),
-                    padding=(10, 5),
-                    relief='flat',
-                    borderwidth=0,
-                    background=COLORS['accent'],
-                    foreground=COLORS['white'])
-    style.map('Primary.TButton',
-              background=[('active', '#2980b9'), ('pressed', '#117a8b')],
-              foreground=[('active', '#ffffff'), ('pressed', '#ffffff')])
-
-    # Entradas/combos
-    style.configure('TCombobox',
-                    fieldbackground=COLORS['white'],
-                    background=COLORS['white'],
-                    foreground=COLORS['text_dark'])
-    style.configure('TEntry',
-                    fieldbackground=COLORS['white'],
-                    foreground=COLORS['text_dark'])
-
-    root.option_add('*TCombobox*Listbox.background', COLORS['white'])
-    root.option_add('*TCombobox*Listbox.foreground', COLORS['text_dark'])
-    root.option_add('*TCombobox*Listbox.selectBackground', COLORS['accent'])
-    root.option_add('*TCombobox*Listbox.selectForeground', COLORS['white'])
-    root.option_add('*TCombobox*Listbox.font', '{Segoe UI} 9')
-
-    # Treeview
-    style.configure("Custom.Treeview",
-                    background=COLORS['white'],
-                    foreground=COLORS['text_dark'],
-                    rowheight=20,
-                    fieldbackground=COLORS['white'],
-                    font=('Segoe UI', 9),
-                    borderwidth=1,
-                    relief='solid')
-    HEADER_BG = '#e5e7eb'
-    HEADER_FG = '#111827'
-    style.configure("Custom.Treeview.Heading",
-                    background=HEADER_BG,
-                    foreground=HEADER_FG,
-                    font=('Segoe UI', 8, 'bold'),
-                    relief='flat',
-                    borderwidth=1,
-                    padding=(3, 6, 3, 6),
-                    anchor='center',
-                    justify='center')
-    style.map("Custom.Treeview",
-              background=[('selected', COLORS['accent'])],
-              foreground=[('selected', '#ffffff')])
-
-    # Notebook
-    style.configure('TNotebook', background=COLORS['light'], borderwidth=0)
-    style.configure('TNotebook.Tab',
-                    background=COLORS['light'],
-                    foreground=COLORS['text_dark'],
-                    font=('Segoe UI', 9))
-    style.map('TNotebook.Tab',
-              background=[('selected', COLORS['white'])],
-              foreground=[('selected', COLORS['text_dark'])])
-
-    return COLORS, style
 
 
 def crear_script_bat(bind_address, port, max_connections, ruta_bat):
@@ -150,31 +44,27 @@ pause
 
 
 def ejecutar_bat_con_elevacion(ruta_bat):
-    ret = ctypes.windll.shell32.ShellExecuteW(None, "runas", ruta_bat, None, None, 1)
-    if ret <= 32:
-        print(f"Error al ejecutar el script con elevación, código: {ret}")
+    try:
+        ret = ctypes.windll.shell32.ShellExecuteW(None, "runas", ruta_bat, None, None, 1)
+        return ret > 32
+    except Exception:
         return False
-    return True
 
 
 def es_admin():
     try:
         return ctypes.windll.shell32.IsUserAnAdmin()
-    except:
+    except Exception:
         return False
 
 
 def ejecutar_como_admin():
     if es_admin():
-        return True  # Ya es admin
+        return True
     executable = sys.executable
     params = ' '.join([f'"{arg}"' for arg in sys.argv])
     ret = ctypes.windll.shell32.ShellExecuteW(None, "runas", executable, params, None, 1)
-    if ret <= 32:
-        print(f"Error al pedir elevación, código: {ret}")
-        return False
-    else:
-        return True
+    return ret > 32
 
 
 def resource_path(relative_path):
@@ -191,67 +81,79 @@ class ConfigurarServidor:
         self.main_window = main_window
         self.config_file = "mysql_config.ini"
 
-        self.COLORS, self.style = setup_styles(self.parent.winfo_toplevel())
+        # Paleta local solo para headers/cards (sin afectar el Main Window)
+        self.COLORS = {
+            'primary':   '#2c3e50',
+            'accent':    '#3498db',
+            'danger':    '#e74c3c',
+            'light':     '#ecf0f1',
+            'white':     '#ffffff',
+            'text_dark': '#2c3e50',
+        }
 
         self.setup_ui()
         self.cargar_configuracion()
 
-    # Sección "card" con header azul e icono
-    def _card_section(self, parent, title, icon):
-        container = ttk.Frame(parent, style='Light.TFrame')
+    # Helpers de UI locales (no globales)
+    def _header_title_sub(self, parent, title_text, subtitle_text):
+        header_frame = tk.Frame(parent, bg=self.COLORS['primary'], height=55)
+        header_frame.pack(fill='x', padx=0, pady=(6, 6))
+        header_frame.pack_propagate(False)
+
+        inner = tk.Frame(header_frame, bg=self.COLORS['primary'])
+        inner.pack(fill='both', expand=True, padx=15, pady=6)
+
+        tk.Label(inner, text=title_text,
+                 font=('Segoe UI', 11, 'bold'),
+                 fg=self.COLORS['white'], bg=self.COLORS['primary']).pack(anchor='w')
+        tk.Label(inner, text=subtitle_text,
+                 font=('Segoe UI', 8),
+                 fg=self.COLORS['white'], bg=self.COLORS['primary']).pack(anchor='w', pady=(2, 0))
+
+    def _card(self, parent, title, icon_text):
+        container = tk.Frame(parent, bg=self.COLORS['light'])
         container.pack(fill='x', padx=10, pady=6)
 
-        card = ttk.Frame(container, style='Card.TFrame')
+        card = tk.Frame(container, bg=self.COLORS['white'], bd=1, relief='solid', highlightthickness=0)
         card.pack(fill='x')
 
-        header = ttk.Frame(card, style='Header.TFrame', height=24)
+        header = tk.Frame(card, bg=self.COLORS['primary'], height=26)
         header.pack(fill='x')
         header.pack_propagate(False)
 
-        ttk.Label(header, text=f"{icon} {title}", style='Header.TLabel').pack(side='left', padx=10)
+        tk.Label(header, text=f"{icon_text} {title}",
+                 font=('Segoe UI', 9, 'bold'),
+                 fg=self.COLORS['white'], bg=self.COLORS['primary']).pack(side='left', padx=10)
 
-        content = ttk.Frame(card, style='Card.TFrame')
+        content = tk.Frame(card, bg=self.COLORS['white'])
         content.pack(fill='x', padx=12, pady=8)
 
         return content
 
+    def _primary_button(self, parent, text, command):
+        btn = tk.Button(parent, text=text, command=command,
+                        font=('Segoe UI', 9, 'bold'),
+                        bg=self.COLORS['accent'], fg='white',
+                        relief='flat', borderwidth=0, padx=10, pady=5, cursor='hand2',
+                        activebackground='#2980b9', activeforeground='white')
+        return btn
+
     def setup_ui(self):
-        # Header (título + subtítulo) con el mismo estilo
-        container_for_header = getattr(self, 'scrollable_frame', self.parent)
-
-        header_frame = tk.Frame(container_for_header, bg=self.COLORS['primary'], height=55)
-        header_frame.pack(fill='x', padx=0, pady=(6, 6))
-        header_frame.pack_propagate(False)
-
-        header_inner = tk.Frame(header_frame, bg=self.COLORS['primary'])
-        header_inner.pack(fill='both', expand=True, padx=15, pady=4)
-
-        title_label = tk.Label(
-            header_inner,
-            text="🗄️ Configuración de MySQL para Acceso en Red",
-            font=('Segoe UI', 11, 'bold'),
-            fg=self.COLORS['white'],
-            bg=self.COLORS['primary']
+        # Header principal de la vista
+        self._header_title_sub(
+            self.parent,
+            "🗄️ Configuración de MySQL para Acceso en Red",
+            "Configure el servidor MySQL para permitir conexiones remotas"
         )
-        title_label.pack(anchor='w')
-
-        subtitle_label = tk.Label(
-            header_inner,
-            text="Configure el servidor MySQL para permitir conexiones remotas",
-            font=('Segoe UI', 8),
-            fg=self.COLORS['white'],
-            bg=self.COLORS['primary']
-        )
-        subtitle_label.pack(anchor='w', pady=(1, 0))
 
         # Notebook
         self.notebook = ttk.Notebook(self.parent)
         self.notebook.pack(fill="both", expand=True, padx=10, pady=10)
 
         # Tabs
-        self.config_tab = ttk.Frame(self.notebook, style='Light.TFrame')
-        self.users_tab = ttk.Frame(self.notebook, style='Light.TFrame')
-        self.status_tab = ttk.Frame(self.notebook, style='Light.TFrame')
+        self.config_tab = tk.Frame(self.notebook, bg=self.COLORS['light'])
+        self.users_tab = tk.Frame(self.notebook, bg=self.COLORS['light'])
+        self.status_tab = tk.Frame(self.notebook, bg=self.COLORS['light'])
 
         self.notebook.add(self.config_tab, text="⚙️ Configuración Servidor")
         self.notebook.add(self.users_tab, text="👤 Usuarios Remotos")
@@ -264,109 +166,83 @@ class ConfigurarServidor:
 
     def setup_config_tab(self, tab):
         # Sección Configuración Básica
-        basic = self._card_section(tab, "Configuración Básica", "🔧")
+        basic = self._card(tab, "Configuración Básica", "🔧")
 
-        ttk.Label(basic, text="Host/IP del servidor:", style='Card.TLabel').grid(row=0, column=0, sticky="w", padx=5, pady=5)
+        tk.Label(basic, text="Host/IP del servidor:",
+                 bg=self.COLORS['white'], fg=self.COLORS['text_dark']).grid(row=0, column=0, sticky="w", padx=5, pady=5)
         self.host_var = tk.StringVar(value="localhost")
         ttk.Entry(basic, textvariable=self.host_var, width=20).grid(row=0, column=1, sticky="w", padx=5, pady=5)
 
-        ttk.Label(basic, text="Puerto:", style='Card.TLabel').grid(row=0, column=2, sticky="w", padx=5, pady=5)
+        tk.Label(basic, text="Puerto:",
+                 bg=self.COLORS['white'], fg=self.COLORS['text_dark']).grid(row=0, column=2, sticky="w", padx=5, pady=5)
         self.puerto_var = tk.StringVar(value="3306")
         ttk.Entry(basic, textvariable=self.puerto_var, width=10).grid(row=0, column=3, sticky="w", padx=5, pady=5)
 
-        ttk.Label(basic, text="Usuario Admin:", style='Card.TLabel').grid(row=1, column=0, sticky="w", padx=5, pady=5)
+        tk.Label(basic, text="Usuario Admin:",
+                 bg=self.COLORS['white'], fg=self.COLORS['text_dark']).grid(row=1, column=0, sticky="w", padx=5, pady=5)
         self.admin_user_var = tk.StringVar(value="root")
         ttk.Entry(basic, textvariable=self.admin_user_var, width=20).grid(row=1, column=1, sticky="w", padx=5, pady=5)
 
-        ttk.Label(basic, text="Contraseña Admin:", style='Card.TLabel').grid(row=1, column=2, sticky="w", padx=5, pady=5)
+        tk.Label(basic, text="Contraseña Admin:",
+                 bg=self.COLORS['white'], fg=self.COLORS['text_dark']).grid(row=1, column=2, sticky="w", padx=5, pady=5)
         self.admin_pass_var = tk.StringVar()
         ttk.Entry(basic, textvariable=self.admin_pass_var, show="*", width=20).grid(row=1, column=3, sticky="w", padx=5, pady=5)
 
         # Sección Red
-        net = self._card_section(tab, "Configuración de Red", "🌐")
+        net = self._card(tab, "Configuración de Red", "🌐")
 
-        ttk.Label(net, text="Bind Address:", style='Card.TLabel').grid(row=0, column=0, sticky="w", padx=5, pady=5)
+        tk.Label(net, text="Bind Address:",
+                 bg=self.COLORS['white'], fg=self.COLORS['text_dark']).grid(row=0, column=0, sticky="w", padx=5, pady=5)
         self.bind_address_var = tk.StringVar(value="0.0.0.0")
-        self.bind_address_combo = ttk.Combobox(net, textvariable=self.bind_address_var,
-                                               values=["0.0.0.0", "127.0.0.1", self.obtener_ip_local()], width=15, state="readonly")
+        self.bind_address_combo = ttk.Combobox(
+            net, textvariable=self.bind_address_var,
+            values=["0.0.0.0", "127.0.0.1", self.obtener_ip_local()], width=15, state="readonly"
+        )
         self.bind_address_combo.grid(row=0, column=1, sticky="w", padx=5, pady=5)
-        ttk.Label(net, text="(0.0.0.0 = todas las interfaces)", style='Card.TLabel').grid(row=0, column=2, sticky="w", padx=5, pady=5)
+        tk.Label(net, text="(0.0.0.0 = todas las interfaces)",
+                 bg=self.COLORS['white'], fg=self.COLORS['text_dark']).grid(row=0, column=2, sticky="w", padx=5, pady=5)
 
-        ttk.Label(net, text="Máx. Conexiones:", style='Card.TLabel').grid(row=1, column=0, sticky="w", padx=5, pady=5)
+        tk.Label(net, text="Máx. Conexiones:",
+                 bg=self.COLORS['white'], fg=self.COLORS['text_dark']).grid(row=1, column=0, sticky="w", padx=5, pady=5)
         self.max_connections_var = tk.StringVar(value="100")
         ttk.Entry(net, textvariable=self.max_connections_var, width=10).grid(row=1, column=1, sticky="w", padx=5, pady=5)
 
-        ttk.Label(net, text="Timeout (seg):", style='Card.TLabel').grid(row=1, column=2, sticky="w", padx=5, pady=5)
+        tk.Label(net, text="Timeout (seg):",
+                 bg=self.COLORS['white'], fg=self.COLORS['text_dark']).grid(row=1, column=2, sticky="w", padx=5, pady=5)
         self.timeout_var = tk.StringVar(value="28800")
         ttk.Entry(net, textvariable=self.timeout_var, width=10).grid(row=1, column=3, sticky="w", padx=5, pady=5)
 
-        # Botones
-        btns = ttk.Frame(tab, style='Light.TFrame')
+        # Botones acciones
+        btns = tk.Frame(tab, bg=self.COLORS['light'])
         btns.pack(fill="x", padx=10, pady=5)
 
-        self.test_btn = ttk.Button(btns, text="🔌 Probar Conexión", style="Primary.TButton", command=self.probar_conexion)
+        self.test_btn = self._primary_button(btns, "🔌 Probar Conexión", self.probar_conexion)
         self.test_btn.pack(side="left", padx=5)
-        self.apply_btn = ttk.Button(btns, text="💾 Aplicar Configuración", style="Primary.TButton", command=self.aplicar_configuracion)
+        self.apply_btn = self._primary_button(btns, "💾 Aplicar Configuración", self.aplicar_configuracion)
         self.apply_btn.pack(side="left", padx=5)
-        self.restart_btn = ttk.Button(btns, text="🔄 Reiniciar MySQL", style="Primary.TButton", command=self.reiniciar_mysql)
+        self.restart_btn = self._primary_button(btns, "🔄 Reiniciar MySQL", self.reiniciar_mysql)
         self.restart_btn.pack(side="left", padx=5)
-        self.save_btn = ttk.Button(btns, text="📝 Guardar Config", style="Primary.TButton", command=self.guardar_configuracion)
+        self.save_btn = self._primary_button(btns, "📝 Guardar Config", self.guardar_configuracion)
         self.save_btn.pack(side="left", padx=5)
 
     def setup_users_tab(self, tab):
         # Header para la pestaña Usuarios
-        container_for_header = tab  # el header pertenece a la pestaña
-        header_frame = tk.Frame(container_for_header, bg=self.COLORS['primary'], height=55)
-        header_frame.pack(fill='x', padx=0, pady=(6, 6))
-        header_frame.pack_propagate(False)
-
-        header_inner = tk.Frame(header_frame, bg=self.COLORS['primary'])
-        header_inner.pack(fill='both', expand=True, padx=15, pady=4)
-
-        title_label = tk.Label(
-            header_inner,
-            text="👤 Usuarios Remotos",
-            font=('Segoe UI', 11, 'bold'),
-            fg=self.COLORS['white'],
-            bg=self.COLORS['primary']
-        )
-        title_label.pack(anchor='w')
-
-        subtitle_label = tk.Label(
-            header_inner,
-            text="Gestione usuarios y privilegios de acceso remoto",
-            font=('Segoe UI', 8),
-            fg=self.COLORS['white'],
-            bg=self.COLORS['primary']
-        )
-        subtitle_label.pack(anchor='w', pady=(1, 0))
+        self._header_title_sub(tab, "👤 Usuarios Remotos", "Gestione usuarios y privilegios de acceso remoto")
 
         # Sección lista de usuarios
-        list_frame = self._card_section(tab, "Usuarios con Acceso Remoto", "👤")
+        list_frame = self._card(tab, "Usuarios con Acceso Remoto", "👤")
 
-        # Tabla
+        # Tabla (sin scroll horizontal añadido)
         columns = ("usuario", "host", "privilegios", "activo")
-
-        tree_frame = ttk.Frame(list_frame, style='Card.TFrame')
+        tree_frame = tk.Frame(list_frame, bg=self.COLORS['white'])
         tree_frame.pack(fill="both", expand=True, pady=4)
-
-        scroll_y = ttk.Scrollbar(tree_frame, orient="vertical")
-        scroll_x = ttk.Scrollbar(tree_frame, orient="horizontal")
 
         self.users_tree = ttk.Treeview(
             tree_frame,
             columns=columns,
             show="headings",
-            yscrollcommand=scroll_y.set,
-            xscrollcommand=scroll_x.set,
-            style="Custom.Treeview",
             height=10
         )
-        scroll_y.config(command=self.users_tree.yview)
-        scroll_x.config(command=self.users_tree.xview)
-
-        scroll_y.pack(side="right", fill="y")
-        scroll_x.pack(side="bottom", fill="x")
         self.users_tree.pack(fill="both", expand=True)
 
         for col in columns:
@@ -374,48 +250,26 @@ class ConfigurarServidor:
             self.users_tree.column(col, width=150, anchor="center")
 
         # Botones
-        btns = ttk.Frame(tab, style='Light.TFrame')
+        btns = tk.Frame(tab, bg=self.COLORS['light'])
         btns.pack(fill="x", padx=10, pady=5)
-        ttk.Button(btns, text="➕ Crear Usuario Remoto", style="Primary.TButton", command=self.crear_usuario_remoto).pack(side="left", padx=5)
-        ttk.Button(btns, text="🛂 Modificar Privilegios", style="Primary.TButton", command=self.modificar_privilegios).pack(side="left", padx=5)
-        ttk.Button(btns, text="🗑️ Eliminar Usuario", style="Primary.TButton", command=self.eliminar_usuario_remoto).pack(side="left", padx=5)
-        ttk.Button(btns, text="🔁 Actualizar Lista", style="Primary.TButton", command=self.cargar_usuarios_remotos).pack(side="left", padx=5)
+        self._primary_button(btns, "➕ Crear Usuario Remoto", self.crear_usuario_remoto).pack(side="left", padx=5)
+        self._primary_button(btns, "🛂 Modificar Privilegios", self.modificar_privilegios).pack(side="left", padx=5)
+        self._primary_button(btns, "🗑️ Eliminar Usuario", self.eliminar_usuario_remoto).pack(side="left", padx=5)
+        self._primary_button(btns, "🔁 Actualizar Lista", self.cargar_usuarios_remotos).pack(side="left", padx=5)
 
     def setup_status_tab(self, tab):
         # Header para la pestaña Estado
-        container_for_header = tab
-        header_frame = tk.Frame(container_for_header, bg=self.COLORS['primary'], height=55)
-        header_frame.pack(fill='x', padx=0, pady=(6, 6))
-        header_frame.pack_propagate(False)
-
-        header_inner = tk.Frame(header_frame, bg=self.COLORS['primary'])
-        header_inner.pack(fill='both', expand=True, padx=15, pady=4)
-
-        title_label = tk.Label(
-            header_inner,
-            text="📊 Estado y Pruebas",
-            font=('Segoe UI', 11, 'bold'),
-            fg=self.COLORS['white'],
-            bg=self.COLORS['primary']
-        )
-        title_label.pack(anchor='w')
-
-        subtitle_label = tk.Label(
-            header_inner,
-            text="Verifique estado del servicio y conexiones",
-            font=('Segoe UI', 8),
-            fg=self.COLORS['white'],
-            bg=self.COLORS['primary']
-        )
-        subtitle_label.pack(anchor='w', pady=(1, 0))
+        self._header_title_sub(tab, "📊 Estado y Pruebas", "Verifique estado del servicio y conexiones")
 
         # Estado del Servicio
-        service_frame = self._card_section(tab, "Estado del Servicio MySQL", "🛰️")
-        self.status_label = ttk.Label(service_frame, text="Verificando estado...", style='Card.TLabel')
+        service_frame = self._card(tab, "Estado del Servicio MySQL", "🛰️")
+        self.status_label = tk.Label(service_frame, text="Verificando estado...",
+                                     bg=self.COLORS['white'], fg=self.COLORS['text_dark'])
         self.status_label.pack(pady=6, anchor='w')
 
         # Información de Conexiones
-        conn_frame = self._card_section(tab, "Información de Conexiones", "🔗")
+        conn_frame = self._card(tab, "Información de Conexiones", "🔗")
+        # Text con scroll vertical para logs largos; si lo quieres sin scroll, avísame y lo retiro.
         self.info_text = tk.Text(
             conn_frame,
             height=15,
@@ -432,20 +286,20 @@ class ConfigurarServidor:
         info_scroll.pack(side="right", fill="y")
 
         # Botones de estado
-        btns = ttk.Frame(tab, style='Light.TFrame')
+        btns = tk.Frame(tab, bg=self.COLORS['light'])
         btns.pack(fill="x", padx=10, pady=5)
-        ttk.Button(btns, text="🩺 Verificar Estado", style="Primary.TButton", command=self.verificar_estado).pack(side="left", padx=5)
-        ttk.Button(btns, text="🧵 Ver Conexiones Activas", style="Primary.TButton", command=self.ver_conexiones_activas).pack(side="left", padx=5)
-        ttk.Button(btns, text="🌍 Probar desde IP Externa", style="Primary.TButton", command=self.probar_ip_externa).pack(side="left", padx=5)
-        ttk.Button(btns, text="🪵 Ver Log de Errores", style="Primary.TButton", command=self.ver_log_errores).pack(side="left", padx=5)
-        ttk.Button(btns, text="↩️ Volver", style="Primary.TButton", command=self.volver).pack(side="right", padx=5)
+        self._primary_button(btns, "🩺 Verificar Estado", self.verificar_estado).pack(side="left", padx=5)
+        self._primary_button(btns, "🧵 Ver Conexiones Activas", self.ver_conexiones_activas).pack(side="left", padx=5)
+        self._primary_button(btns, "🌍 Probar desde IP Externa", self.probar_ip_externa).pack(side="left", padx=5)
+        self._primary_button(btns, "🪵 Ver Log de Errores", self.ver_log_errores).pack(side="left", padx=5)
+        self._primary_button(btns, "↩️ Volver", self.volver).pack(side="right", padx=5)
 
     def obtener_ip_local(self):
         try:
             hostname = socket.gethostname()
             ip_local = socket.gethostbyname(hostname)
             return ip_local
-        except:
+        except Exception:
             return "192.168.1.100"
 
     def probar_conexion(self):
@@ -662,7 +516,6 @@ max_connections = {max_connections}
                     user=self.admin_user_var.get(),
                     password=self.admin_pass_var.get()
                 )
-
                 cursor = connection.cursor()
                 cursor.execute(f"CREATE USER '{username}'@'{host}' IDENTIFIED BY '{password}'")
                 if privilegios == "ALL":
@@ -710,6 +563,7 @@ max_connections = {max_connections}
 
             cursor.close()
             connection.close()
+            # info_text existe en pestaña Estado; si aún no fue creada, ignora
             try:
                 self.info_text.insert(tk.END, f"Lista de usuarios actualizada: {len(usuarios)} usuarios remotos\n")
             except Exception:
@@ -1014,30 +868,33 @@ class UsuarioRemotoDialog(tk.Toplevel):
         self.grab_set()
 
         # Header
-        header = ttk.Frame(self, style='Header.TFrame', height=40)
+        header = tk.Frame(self, bg=self.COLORS['primary'], height=40)
         header.pack(fill='x')
         header.pack_propagate(False)
-        ttk.Label(header, text=f"👤 {title}", style='Header.TLabel').pack(side='left', padx=10, pady=6)
+        tk.Label(header, text=f"👤 {title}", fg='white', bg=self.COLORS['primary'],
+                 font=('Segoe UI', 10, 'bold')).pack(side='left', padx=10, pady=6)
 
         # Contenido
-        content = ttk.Frame(self, style='Card.TFrame', padding=12)
+        content = tk.Frame(self, bg=self.COLORS['white'])
         content.pack(fill='both', expand=True, padx=12, pady=12)
 
-        ttk.Label(content, text="Nombre de usuario:", style='Card.TLabel').grid(row=0, column=0, sticky="w", pady=5)
+        tk.Label(content, text="Nombre de usuario:", bg=self.COLORS['white']).grid(row=0, column=0, sticky="w", pady=5)
         self.username_var = tk.StringVar()
-        ttk.Entry(content, textvariable=self.username_var, width=30).grid(row=0, column=1, sticky="ew", pady=5, padx=(5,0))
+        ttk.Entry(content, textvariable=self.username_var, width=30).grid(row=0, column=1, sticky="ew", pady=5, padx=(5, 0))
 
-        ttk.Label(content, text="Contraseña:", style='Card.TLabel').grid(row=1, column=0, sticky="w", pady=5)
+        tk.Label(content, text="Contraseña:", bg=self.COLORS['white']).grid(row=1, column=0, sticky="w", pady=5)
         self.password_var = tk.StringVar()
-        ttk.Entry(content, textvariable=self.password_var, show="*", width=30).grid(row=1, column=1, sticky="ew", pady=5, padx=(5,0))
+        ttk.Entry(content, textvariable=self.password_var, show="*", width=30).grid(row=1, column=1, sticky="ew", pady=5, padx=(5, 0))
 
-        ttk.Label(content, text="Host permitido:", style='Card.TLabel').grid(row=2, column=0, sticky="w", pady=5)
+        tk.Label(content, text="Host permitido:", bg=self.COLORS['white']).grid(row=2, column=0, sticky="w", pady=5)
         self.host_var = tk.StringVar(value="%")
-        ttk.Combobox(content, textvariable=self.host_var, values=["%", "192.168.1.%", "10.0.0.%", "172.16.0.%"], width=28, state="readonly").grid(row=2, column=1, sticky="ew", pady=5, padx=(5,0))
+        ttk.Combobox(content, textvariable=self.host_var, values=["%", "192.168.1.%", "10.0.0.%", "172.16.0.%"],
+                     width=28, state="readonly").grid(row=2, column=1, sticky="ew", pady=5, padx=(5, 0))
 
-        ttk.Label(content, text="(% = cualquier IP, 192.168.1.% = subnet específica)", style='Card.TLabel').grid(row=3, column=0, columnspan=2, sticky="w", pady=(0, 10))
+        tk.Label(content, text="(% = cualquier IP, 192.168.1.% = subnet específica)",
+                 bg=self.COLORS['white']).grid(row=3, column=0, columnspan=2, sticky="w", pady=(0, 10))
 
-        ttk.Label(content, text="Privilegios:", style='Card.TLabel').grid(row=4, column=0, sticky="w", pady=5)
+        tk.Label(content, text="Privilegios:", bg=self.COLORS['white']).grid(row=4, column=0, sticky="w", pady=5)
         self.privilegios_var = tk.StringVar(value="SELECT,INSERT,UPDATE,DELETE")
         ttk.Combobox(content, textvariable=self.privilegios_var,
                      values=[
@@ -1045,14 +902,16 @@ class UsuarioRemotoDialog(tk.Toplevel):
                          "SELECT",
                          "ALL",
                          "SELECT,INSERT,UPDATE,DELETE,CREATE,DROP,ALTER"
-                     ], width=28, state="readonly").grid(row=4, column=1, sticky="ew", pady=5, padx=(5,0))
+                     ], width=28, state="readonly").grid(row=4, column=1, sticky="ew", pady=5, padx=(5, 0))
 
         content.grid_columnconfigure(1, weight=1)
 
-        btns = ttk.Frame(self, style='Light.TFrame')
+        btns = tk.Frame(self, bg=self.COLORS['light'])
         btns.pack(fill='x', pady=(0, 12))
-        ttk.Button(btns, text="✔️ Aceptar", style='Primary.TButton', command=self.aceptar).pack(side="left", padx=6)
-        ttk.Button(btns, text="✖️ Cancelar", style='Primary.TButton', command=self.cancelar).pack(side="left", padx=6)
+        tk.Button(btns, text="✔️ Aceptar", command=self.aceptar,
+                  bg=self.COLORS['accent'], fg='white', relief='flat', padx=10, pady=5).pack(side="left", padx=6)
+        tk.Button(btns, text="✖️ Cancelar", command=self.cancelar,
+                  bg=self.COLORS['accent'], fg='white', relief='flat', padx=10, pady=5).pack(side="left", padx=6)
 
         self.update_idletasks()
         w, h = 420, 260
@@ -1086,20 +945,21 @@ class PrivilegiosDialog(tk.Toplevel):
         self.transient(parent)
         self.grab_set()
 
-        header = ttk.Frame(self, style='Header.TFrame', height=40)
+        header = tk.Frame(self, bg=self.COLORS['primary'], height=40)
         header.pack(fill='x')
         header.pack_propagate(False)
-        ttk.Label(header, text=f"🛂 {title}", style='Header.TLabel').pack(side='left', padx=10, pady=6)
+        tk.Label(header, text=f"🛂 {title}", fg='white', bg=self.COLORS['primary'],
+                 font=('Segoe UI', 10, 'bold')).pack(side='left', padx=10, pady=6)
 
-        content = ttk.Frame(self, style='Card.TFrame', padding=12)
+        content = tk.Frame(self, bg=self.COLORS['white'])
         content.pack(fill='both', expand=True, padx=12, pady=12)
 
-        ttk.Label(content, text="Seleccione los privilegios a otorgar:", style='Card.TLabel').pack(anchor="w", pady=(0, 8))
+        tk.Label(content, text="Seleccione los privilegios a otorgar:", bg=self.COLORS['white']).pack(anchor="w", pady=(0, 8))
 
         # Checkboxes
         self.vars = {}
         options = ['SELECT', 'INSERT', 'UPDATE', 'DELETE', 'CREATE', 'DROP', 'ALTER', 'INDEX', 'GRANT']
-        grid = ttk.Frame(content, style='Card.TFrame')
+        grid = tk.Frame(content, bg=self.COLORS['white'])
         grid.pack(fill='x', pady=5)
         for i, name in enumerate(options):
             var = tk.BooleanVar(value=(name in ['SELECT', 'INSERT', 'UPDATE', 'DELETE']))
@@ -1110,10 +970,12 @@ class PrivilegiosDialog(tk.Toplevel):
         ttk.Checkbutton(content, text="Otorgar TODOS los privilegios (ALL)", variable=self.all_privs,
                         command=self.toggle_all).pack(anchor="w", pady=(8, 0))
 
-        btns = ttk.Frame(self, style='Light.TFrame')
+        btns = tk.Frame(self, bg=self.COLORS['light'])
         btns.pack(fill='x', pady=(8, 12))
-        ttk.Button(btns, text="✔️ Aceptar", style='Primary.TButton', command=self.aceptar).pack(side="left", padx=6)
-        ttk.Button(btns, text="✖️ Cancelar", style='Primary.TButton', command=self.cancelar).pack(side="left", padx=6)
+        tk.Button(btns, text="✔️ Aceptar", command=self.aceptar,
+                  bg=self.COLORS['accent'], fg='white', relief='flat', padx=10, pady=5).pack(side="left", padx=6)
+        tk.Button(btns, text="✖️ Cancelar", command=self.cancelar,
+                  bg=self.COLORS['accent'], fg='white', relief='flat', padx=10, pady=5).pack(side="left", padx=6)
 
         self.update_idletasks()
         w, h = 420, 300
@@ -1143,13 +1005,11 @@ class PrivilegiosDialog(tk.Toplevel):
         self.destroy()
 
 
-# Ejemplo de uso
+# Ejemplo de uso directo
 if __name__ == "__main__":
     root = tk.Tk()
     root.title("Configurador MySQL Red")
     root.geometry("1000x740")
-
-    setup_styles(root)
 
     app = ConfigurarServidor(root)
     root.mainloop()
