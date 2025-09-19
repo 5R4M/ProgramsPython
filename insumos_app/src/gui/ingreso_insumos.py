@@ -493,14 +493,19 @@ class IngresoInsumos:
         self.scrollable_frame = tk.Frame(self.main_frame, bg=self.COLORS['light'])
         self.scrollable_frame.pack(fill="both", expand=True)
 
+        # Franja superior para asegurar continuidad del color con el sidebar/topbar
+        top_strip = ttk.Frame(self.scrollable_frame, style='Ingreso.Header.TFrame', height=6)
+        top_strip.pack(fill='x', padx=0, pady=0)
+        top_strip.pack_propagate(False)
+        
         # Header
         header_frame = ttk.Frame(self.scrollable_frame, style='Ingreso.Header.TFrame', height=55)
-        header_frame.pack(fill='x', padx=0, pady=(6, 6))
+        header_frame.pack(fill='x', padx=0, pady=(0, 6))  # sin margen superior
         header_frame.pack_propagate(False)
 
         header_inner = ttk.Frame(header_frame, style='Ingreso.Header.TFrame')
         header_inner.pack(fill='both', expand=True, padx=15, pady=4)
-
+        
         ttk.Label(header_inner, text="📦 Ingreso Insumos", style='Ingreso.Header.TLabel').pack(anchor='w')
 
         ttk.Label(header_inner,

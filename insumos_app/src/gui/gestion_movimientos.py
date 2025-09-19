@@ -35,19 +35,20 @@ class GestionMovimientos:
 
     # ---------- Utilería de UI ----------
     def _header_title_sub(self, parent, title_text, subtitle_text):
+        # Header azul a todo el ancho, pegado arriba, sin separadores laterales
         header_frame = tk.Frame(parent, bg=self.COLORS['primary'], height=55)
-        header_frame.pack(fill='x', padx=10, pady=(10, 6))
+        header_frame.pack(fill='x', padx=0, pady=(0, 6))  # sin margen superior ni laterales
         header_frame.pack_propagate(False)
 
         header_inner = tk.Frame(header_frame, bg=self.COLORS['primary'])
-        header_inner.pack(fill='both', expand=True, padx=10, pady=4)
+        header_inner.pack(fill='both', expand=True, padx=10, pady=4)  # padding interno solo para el contenido
 
         tk.Label(header_inner, text=title_text,
-                 font=('Segoe UI', 12, 'bold'),
-                 fg=self.COLORS['white'], bg=self.COLORS['primary']).pack(anchor='w')
+                font=('Segoe UI', 12, 'bold'),
+                fg=self.COLORS['white'], bg=self.COLORS['primary']).pack(anchor='w')
         tk.Label(header_inner, text=subtitle_text,
-                 font=('Segoe UI', 9),
-                 fg=self.COLORS['white'], bg=self.COLORS['primary']).pack(anchor='w', pady=(1, 0))
+                font=('Segoe UI', 9),
+                fg=self.COLORS['white'], bg=self.COLORS['primary']).pack(anchor='w', pady=(1, 0))
 
     def _card_section(self, parent, title, icon):
         container = tk.Frame(parent, bg=self.COLORS['light'])

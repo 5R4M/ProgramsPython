@@ -2,27 +2,12 @@
 
 import os
 import sys
-from PyInstaller.utils.hooks import collect_all, collect_data_files
-import setuptools
+from PyInstaller.utils.hooks import collect_all
 
 BASE_DIR = os.path.abspath(os.getcwd())
 
 # Recolectar mysql-connector-python
 datas, binaries, hiddenimports = collect_all('mysql')
-
-# Agregar archivos de setuptools que faltan
-try:
-    setuptools_datas = collect_data_files('setuptools')
-    datas += setuptools_datas
-except:
-    pass
-
-# Agregar específicamente los archivos de jaraco.text
-try:
-    jaraco_datas = collect_data_files('jaraco.text')
-    datas += jaraco_datas
-except:
-    pass
 
 def add_dir_to_datas(src_dir, prefix):
     """Añade todos los archivos de src_dir a datas manteniendo estructura relativa bajo prefix."""
@@ -44,9 +29,9 @@ DATABASE_DIR = os.path.abspath(os.path.join(BASE_DIR, '..', 'database'))
 datas += add_dir_to_datas(UTILS_DIR, 'utils')
 datas += add_dir_to_datas(DATABASE_DIR, 'database')
 
-# NO incluir la carpeta _internal aquí - se genera automáticamente
-# INTERNAL_DIR = os.path.abspath(os.path.join(BASE_DIR, 'dist', 'login_window', '_internal'))
-# datas += add_dir_to_datas(INTERNAL_DIR, '_internal')
+# Incluir la carpeta _internal generada por PyInstaller
+INTERNAL_DIR = os.path.abspath(os.path.join(BASE_DIR, 'dist', 'login_window', '_internal'))
+datas += add_dir_to_datas(INTERNAL_DIR, '_internal')
 
 # Archivos sueltos junto a login_window.py
 BAT_PATH = os.path.join(BASE_DIR, 'modificar_mysql.bat')
@@ -65,9 +50,6 @@ hiddenimports += [
     'tkinter.messagebox',
     'src.database.db_manager',
     'src.gui.main_window',
-    'pkg_resources.extern',
-    'setuptools._vendor',
-    'jaraco.text',
 ]
 
 block_cipher = None

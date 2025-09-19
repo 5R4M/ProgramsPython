@@ -380,12 +380,16 @@ class CorreccionMovimientos:
 
         # --- Título principal ---
         title_frame = tk.Frame(main_container, bg=self.COLORS['primary'], height=70)
-        title_frame.pack(fill='x', padx=0, pady=(10, 5))
+        title_frame.pack(fill='x', padx=0)
         title_frame.pack_propagate(False)
 
         title_inner = tk.Frame(title_frame, bg=self.COLORS['primary'])
         title_inner.pack(fill='both', expand=True, padx=15, pady=8)
 
+        top_strip = tk.Frame(main_container, bg=self.COLORS['primary'], height=6)
+        top_strip.pack(fill='x', padx=0, pady=0)
+        top_strip.pack_propagate(False)
+        
         tk.Label(title_inner,
                 text="🛠️ Correcciones Movimientos de Insumos",
                 font=('Segoe UI', 12, 'bold'),

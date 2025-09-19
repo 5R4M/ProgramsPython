@@ -40,17 +40,18 @@ class GestionUsuarios:
 
     # Header (título + subtítulo) — local, sin estilos globales
     def _header_title_sub(self, parent, title_text, subtitle_text):
+        # Header azul a todo el ancho, pegado arriba, sin separadores laterales
         header_frame = tk.Frame(parent, bg=self.COLORS['primary'], height=55)
-        header_frame.pack(fill='x', padx=0, pady=(6, 6))
+        header_frame.pack(fill='x', padx=0, pady=(0, 6))  # sin margen superior ni laterales
         header_frame.pack_propagate(False)
 
         header_inner = tk.Frame(header_frame, bg=self.COLORS['primary'])
-        header_inner.pack(fill='both', expand=True, padx=15, pady=4)
+        header_inner.pack(fill='both', expand=True, padx=15, pady=4)  # padding interno para el contenido (conserva tus 15 px)
 
         tk.Label(header_inner, text=title_text, font=('Segoe UI', 11, 'bold'),
-                 fg=self.COLORS['white'], bg=self.COLORS['primary']).pack(anchor='w')
+                fg=self.COLORS['white'], bg=self.COLORS['primary']).pack(anchor='w')
         tk.Label(header_inner, text=subtitle_text, font=('Segoe UI', 8),
-                 fg=self.COLORS['white'], bg=self.COLORS['primary']).pack(anchor='w', pady=(1, 0))
+                fg=self.COLORS['white'], bg=self.COLORS['primary']).pack(anchor='w', pady=(1, 0))
 
     # Card con header azul e icono — todo con tk Frames/Labels locales
     def _card_section(self, parent, title, icon):
