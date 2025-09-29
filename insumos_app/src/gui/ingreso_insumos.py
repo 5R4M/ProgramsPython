@@ -286,6 +286,7 @@ class IngresoInsumos:
         self.manual_widths = {}
         self.auto_resize_enabled = True
 
+        # Variables
         self.distrito_var = tk.StringVar()
         self.tipo_servicio_var = tk.StringVar()
         self.servicio_var = tk.StringVar()
@@ -297,8 +298,15 @@ class IngresoInsumos:
         self.salida_tipo_servicio_var = tk.StringVar()
         self.salida_servicio_var = tk.StringVar()
         self.lote_var = tk.StringVar()
-
         self.nivel_bodega_var = tk.StringVar(value="area")
+
+        # Limpieza/control de recursos
+        self._trace_ids = []              # [(var, mode, cbname)]
+        self._open_toplevels = []         # [Toplevel, ...]
+        self._tree_on_mousewheel = None
+        self._enter_bind_id = None
+        self._leave_bind_id = None
+        self._after_update_id = None      # si luego usas after(), guarda IDs aquí
 
         self.LABEL_WIDTH = 15
         self.WIDGET_WIDTH = 25
@@ -434,7 +442,7 @@ class IngresoInsumos:
             self.icon_servicio = tk.PhotoImage(file=os.path.join(icons_path, "servicio_1.png")).subsample(3, 3)
 
             self.icon_agregar = tk.PhotoImage(file=os.path.join(icons_path, "agregar.png")).subsample(2, 2)
-            self.icon_editar = tk.PhotoImage(file=os.path.join(icons_path, "editar.png")).subsample(2, 2)
+            self.icon_editar = tk.PhotoImage(file(os.path.join(icons_path, "editar.png"))).subsample(2, 2) if False else tk.PhotoImage(file=os.path.join(icons_path, "editar.png")).subsample(2, 2)
             self.icon_eliminar = tk.PhotoImage(file=os.path.join(icons_path, "eliminar.png")).subsample(2, 2)
             self.icon_guardar = tk.PhotoImage(file=os.path.join(icons_path, "guardar.png")).subsample(2, 2)
             self.icon_cerrar = tk.PhotoImage(file=os.path.join(icons_path, "cerrar.png")).subsample(2, 2)
@@ -451,11 +459,9 @@ class IngresoInsumos:
 
     def _setup_treeview_styles(self):
         style = ttk.Style(self.parent)
-        # Colores alineados al módulo
-        header_bg = '#e5e7eb'   # igual que Ingreso
-        header_fg = '#111827'   # igual que Ingreso
+        header_bg = '#e5e7eb'
+        header_fg = '#111827'
 
-        # Cuerpo del tree
         style.configure('Correccion.Treeview',
                         background=self.COLORS['white'],
                         foreground=self.COLORS['text_dark'],
@@ -465,7 +471,6 @@ class IngresoInsumos:
                         borderwidth=1,
                         relief='solid')
 
-        # Encabezados
         style.configure('Correccion.Treeview.Heading',
                         background=header_bg,
                         foreground=header_fg,
@@ -476,38 +481,34 @@ class IngresoInsumos:
                         anchor='center',
                         justify='center')
 
-        # Estado seleccionado (opcional, consistente)
         style.map('Correccion.Treeview',
-                background=[('selected', self.COLORS['accent'])],
-                foreground=[('selected', '#ffffff')])
-    
+                  background=[('selected', self.COLORS['accent'])],
+                  foreground=[('selected', '#ffffff')])
+
     def setup_ui(self):
-        
         self._setup_treeview_styles()
-        
-        # Frame raíz del módulo, manteniendo layout del MainWindow
+
+        # Frame raíz del módulo
         self.main_frame = ttk.Frame(self.parent, style='Ingreso.Main.TFrame')
         self.main_frame.pack(fill="both", expand=True)
 
-        # Scrollable base (usa tk.Frame pero sobre fondo light)
+        # Scrollable base
         self.scrollable_frame = tk.Frame(self.main_frame, bg=self.COLORS['light'])
         self.scrollable_frame.pack(fill="both", expand=True)
 
-        # Franja superior para asegurar continuidad del color con el sidebar/topbar
+        # Top strip
         top_strip = ttk.Frame(self.scrollable_frame, style='Ingreso.Header.TFrame', height=6)
         top_strip.pack(fill='x', padx=0, pady=0)
         top_strip.pack_propagate(False)
-        
+
         # Header
         header_frame = ttk.Frame(self.scrollable_frame, style='Ingreso.Header.TFrame', height=55)
-        header_frame.pack(fill='x', padx=0, pady=(0, 6))  # sin margen superior
+        header_frame.pack(fill='x', padx=0, pady=(0, 6))
         header_frame.pack_propagate(False)
 
         header_inner = ttk.Frame(header_frame, style='Ingreso.Header.TFrame')
         header_inner.pack(fill='both', expand=True, padx=15, pady=4)
-        
         ttk.Label(header_inner, text="📦 Ingreso Insumos", style='Ingreso.Header.TLabel').pack(anchor='w')
-
         ttk.Label(header_inner,
                   text="Registre los movimientos de insumos de manera eficiente y organizada",
                   style='Ingreso.Header.TLabel').pack(anchor='w', pady=(1, 0))
@@ -522,7 +523,6 @@ class IngresoInsumos:
         nivel_header = ttk.Frame(self.frame_nivel_bodega, style='Ingreso.Header.TFrame', height=20)
         nivel_header.pack(fill='x')
         nivel_header.pack_propagate(False)
-
         ttk.Label(nivel_header, text="🏢 Nivel de Bodega", style='Ingreso.Header.TLabel').pack(side='left', padx=10, pady=2)
 
         nivel_content = ttk.Frame(self.frame_nivel_bodega, style='Ingreso.Main.TFrame')
@@ -531,7 +531,6 @@ class IngresoInsumos:
         rb_frame = ttk.Frame(nivel_content, style='Ingreso.Main.TFrame')
         rb_frame.pack(fill='x', pady=2)
 
-        # Radios mantienen tk para selectcolor, pero sobre fondo light del módulo
         rb_area = tk.Radiobutton(rb_frame, text="Área", image=self.icon_area, compound='left',
                                  variable=self.nivel_bodega_var, value="area",
                                  command=self.actualizar_estado_comboboxes,
@@ -565,7 +564,6 @@ class IngresoInsumos:
         servicios_header = ttk.Frame(self.frame_servicios, style='Ingreso.Header.TFrame', height=16)
         servicios_header.pack(fill='x')
         servicios_header.pack_propagate(False)
-
         ttk.Label(servicios_header, text="🏥 Configuración de Servicios",
                   style='Ingreso.Header.TLabel').pack(side='left', padx=8, pady=0)
 
@@ -612,7 +610,6 @@ class IngresoInsumos:
         insumos_header = ttk.Frame(self.frame_insumos, style='Ingreso.Header.TFrame', height=16)
         insumos_header.pack(fill='x')
         insumos_header.pack_propagate(False)
-
         ttk.Label(insumos_header, text="💊 Gestión de Insumos", style='Ingreso.Header.TLabel').pack(side='left', padx=10, pady=0)
 
         insumos_content = ttk.Frame(self.frame_insumos, style='Ingreso.Main.TFrame')
@@ -681,7 +678,6 @@ class IngresoInsumos:
         registro_header = ttk.Frame(self.frame_registro, style='Ingreso.Header.TFrame', height=16)
         registro_header.pack(fill='x')
         registro_header.pack_propagate(False)
-
         ttk.Label(registro_header, text="📋 Registro de Movimiento", style='Ingreso.Header.TLabel').pack(side='left', padx=10, pady=0)
 
         registro_content = ttk.Frame(self.frame_registro, style='Ingreso.Main.TFrame')
@@ -712,7 +708,7 @@ class IngresoInsumos:
         self.observaciones_entry = ttk.Entry(registro_content, font=('Segoe UI', 8))
         self.observaciones_entry.grid(row=1, column=4, padx=4, pady=(1,2), sticky="ew")
 
-        # Salida a Nivel Inferior (siempre visible; habilitación condicionada)
+        # Salida a Nivel Inferior
         self.salida_container = ttk.Frame(self.scrollable_frame, style='Ingreso.Main.TFrame')
         self.salida_container.pack(fill="x", padx=15, pady=2)
 
@@ -722,7 +718,6 @@ class IngresoInsumos:
         salida_header = ttk.Frame(self.frame_salida_nivel_inferior, style='Ingreso.Header.TFrame', height=16)
         salida_header.pack(fill='x')
         salida_header.pack_propagate(False)
-
         ttk.Label(salida_header, text="🔄 Salida a Nivel Inferior", style='Ingreso.Header.TLabel').pack(side='left', padx=8, pady=0)
 
         salida_content = ttk.Frame(self.frame_salida_nivel_inferior, style='Ingreso.Main.TFrame')
@@ -753,7 +748,6 @@ class IngresoInsumos:
         btn_inner = ttk.Frame(btn_container, style='Ingreso.Main.TFrame')
         btn_inner.pack(padx=8, pady=1)
 
-        # Usamos tk.Button para icono + estilo plano, pero mantiene colores del módulo
         self.btn_agregar = tk.Button(btn_inner, text="Agregar Movimiento", image=self.icon_agregar, compound='left',
                                      command=self.agregar_movimiento,
                                      font=('Segoe UI', 8, 'bold'),
@@ -772,7 +766,6 @@ class IngresoInsumos:
         movimientos_header = ttk.Frame(self.frame_movimientos, style='Ingreso.Header.TFrame', height=22)
         movimientos_header.pack(fill='x')
         movimientos_header.pack_propagate(False)
-
         ttk.Label(movimientos_header, text="📊 Listado de Movimientos",
                   style='Ingreso.Header.TLabel').pack(side='left', padx=10, pady=2)
 
@@ -861,17 +854,16 @@ class IngresoInsumos:
 
         self.tree.configure(yscrollcommand=scrollbar_y.set, xscrollcommand=scrollbar_x.set)
 
+        # Binds locales del tree (evita bind_all)
         def on_treeview_mousewheel(event):
-            self.tree.yview_scroll(int(-1*(event.delta/120)), "units")
+            try:
+                self.tree.yview_scroll(int(-1*(event.delta/120)), "units")
+            except Exception:
+                pass
+            return "break"
 
-        def bind_treeview_mousewheel(event):
-            self.tree.bind_all("<MouseWheel>", on_treeview_mousewheel)
-
-        def unbind_treeview_mousewheel(event):
-            self.tree.unbind_all("<MouseWheel>")
-
-        self.tree.bind('<Enter>', bind_treeview_mousewheel)
-        self.tree.bind('<Leave>', unbind_treeview_mousewheel)
+        self._tree_on_mousewheel = on_treeview_mousewheel
+        self.tree.bind("<MouseWheel>", self._tree_on_mousewheel)
 
         # Botones inferiores
         botones_container = ttk.Frame(self.scrollable_frame, style='Ingreso.Main.TFrame')
@@ -915,20 +907,94 @@ class IngresoInsumos:
                                     padx=10, pady=3, cursor='hand2')
         self.btn_cerrar.pack(side="right", padx=10)
 
+    def _trace(self, var, mode, cb):
+        cbname = var.trace_add(mode, cb)
+        self._trace_ids.append((var, mode, cbname))
+
     def setup_bindings(self):
-        self.area_var.trace_add('write', self.on_area_selected)
-        self.distrito_var.trace_add('write', self.actualizar_tipos_servicio)
-        self.tipo_servicio_var.trace_add('write', self.actualizar_servicios)
-        self.tipo_insumo_var.trace_add('write', self.actualizar_insumos)
-        self.insumo_var.trace_add('write', self.actualizar_presentacion)
+        # Registrar traces y guardar IDs para limpieza
+        self._trace(self.area_var, 'write', self.on_area_selected)
+        self._trace(self.distrito_var, 'write', self.actualizar_tipos_servicio)
+        self._trace(self.tipo_servicio_var, 'write', self.actualizar_servicios)
+        self._trace(self.tipo_insumo_var, 'write', self.actualizar_insumos)
+        self._trace(self.insumo_var, 'write', self.actualizar_presentacion)
 
-        self.tipo_movimiento_var.trace_add('write', lambda *args: self.actualizar_estado_salida_nivel_inferior())
-        self.nivel_bodega_var.trace_add('write', lambda *args: self.actualizar_estado_salida_nivel_inferior())
+        self._trace(self.tipo_movimiento_var, 'write', lambda *args: self.actualizar_estado_salida_nivel_inferior())
+        self._trace(self.nivel_bodega_var, 'write', lambda *args: self.actualizar_estado_salida_nivel_inferior())
 
-        self.salida_distrito_var.trace_add('write', self.actualizar_tipos_servicio_salida)
-        self.salida_tipo_servicio_var.trace_add('write', self.actualizar_servicios_salida)
+        self._trace(self.salida_distrito_var, 'write', self.actualizar_tipos_servicio_salida)
+        self._trace(self.salida_tipo_servicio_var, 'write', self.actualizar_servicios_salida)
+
+    def before_destroy(self):
+        # 1) Quitar traces
+        try:
+            if self._trace_ids:
+                for var, mode, cbname in self._trace_ids:
+                    try:
+                        var.trace_remove(mode, cbname)
+                    except Exception:
+                        pass
+                self._trace_ids.clear()
+        except Exception:
+            pass
+
+        # 2) Unbind eventos del Treeview
+        try:
+            if hasattr(self, 'tree') and self.tree and self.tree.winfo_exists():
+                try:
+                    self.tree.unbind("<MouseWheel>")
+                except Exception:
+                    pass
+                if self._enter_bind_id:
+                    try:
+                        self.tree.unbind('<Enter>', self._enter_bind_id)
+                    except Exception:
+                        pass
+                    self._enter_bind_id = None
+                if self._leave_bind_id:
+                    try:
+                        self.tree.unbind('<Leave>', self._leave_bind_id)
+                    except Exception:
+                        pass
+                    self._leave_bind_id = None
+        except Exception:
+            pass
+
+        # 3) Cerrar tooltip
+        try:
+            if hasattr(self, 'tooltip_insumo') and self.tooltip_insumo:
+                try:
+                    self.tooltip_insumo._hide()
+                except Exception:
+                    pass
+                self.tooltip_insumo = None
+        except Exception:
+            pass
+
+        # 4) Cancelar afters si usas
+        try:
+            if self._after_update_id:
+                self.parent.after_cancel(self._after_update_id)
+                self._after_update_id = None
+        except Exception:
+            pass
+
+        # 5) Cerrar Toplevels abiertos
+        try:
+            if self._open_toplevels:
+                for tl in list(self._open_toplevels):
+                    try:
+                        if tl and tl.winfo_exists():
+                            tl.destroy()
+                    except Exception:
+                        pass
+                self._open_toplevels.clear()
+        except Exception:
+            pass
 
     def actualizar_estado_comboboxes(self):
+        if not hasattr(self, 'area_cb'):
+            return
         nivel = self.nivel_bodega_var.get()
         if nivel == "area":
             self.area_cb.config(state="normal")
@@ -954,6 +1020,8 @@ class IngresoInsumos:
             self.actualizar_tipos_servicio_salida()
 
     def actualizar_estado_salida_nivel_inferior(self):
+        if not hasattr(self, 'salida_distrito_cb'):
+            return
         tipo_mov = self.tipo_movimiento_var.get().strip().upper()
         nivel = self.nivel_bodega_var.get()
 
@@ -983,9 +1051,12 @@ class IngresoInsumos:
         self.actualizar_altura_treeview()
 
     def actualizar_altura_treeview(self):
-        self.tree.configure(height=6)
+        if hasattr(self, 'tree'):
+            self.tree.configure(height=6)
 
     def actualizar_tipos_movimiento_filtrados(self):
+        if not hasattr(self, 'tipo_mov_cb'):
+            return
         nivel = self.nivel_bodega_var.get()
         tipos_movimiento = [tm['descripcion'] for tm in obtener_tipos_movimiento() or []]
 
@@ -999,6 +1070,8 @@ class IngresoInsumos:
             self.tipo_movimiento_var.set('')
 
     def actualizar_tipos_servicio(self, *args):
+        if not hasattr(self, 'tipo_servicio_cb'):
+            return
         distrito_nombre = self.distrito_var.get()
         distrito_id = cache.distrito_id(distrito_nombre)
         if distrito_id:
@@ -1014,6 +1087,8 @@ class IngresoInsumos:
             self.servicio_var.set('')
 
     def actualizar_servicios(self, *args):
+        if not hasattr(self, 'servicio_cb'):
+            return
         distrito_nombre = self.distrito_var.get()
         tipo_servicio_desc = self.tipo_servicio_var.get()
         distrito_id = cache.distrito_id(distrito_nombre)
@@ -1029,6 +1104,8 @@ class IngresoInsumos:
         self.servicio_var.set('')
 
     def actualizar_insumos(self, *args):
+        if not hasattr(self, 'insumo_cb'):
+            return
         tipo_insumo_desc = self.tipo_insumo_var.get()
         tipo_insumo_id = cache.tipo_insumo_id(tipo_insumo_desc)
         if tipo_insumo_id:
@@ -1041,6 +1118,8 @@ class IngresoInsumos:
             self.insumo_var.set('')
 
     def actualizar_presentacion(self, *args):
+        if not hasattr(self, 'presentacion_cb'):
+            return
         tipo_insumo_desc = self.tipo_insumo_var.get()
         insumo_nombre = self.insumo_var.get()
         tipo_insumo_id = cache.tipo_insumo_id(tipo_insumo_desc)
@@ -1055,6 +1134,8 @@ class IngresoInsumos:
         self.presentacion_var.set('')
 
     def actualizar_tipos_servicio_salida(self, *args):
+        if not hasattr(self, 'salida_tipo_servicio_cb'):
+            return
         distrito_nombre = self.salida_distrito_var.get()
         distrito_id = cache.distrito_id(distrito_nombre)
         if distrito_id:
@@ -1071,6 +1152,8 @@ class IngresoInsumos:
             self.salida_servicio_var.set('')
 
     def actualizar_servicios_salida(self, *args):
+        if not hasattr(self, 'salida_servicio_cb'):
+            return
         distrito_nombre = self.salida_distrito_var.get()
         tipo_servicio_desc = self.salida_tipo_servicio_var.get()
         distrito_id = cache.distrito_id(distrito_nombre)
@@ -1193,7 +1276,21 @@ class IngresoInsumos:
         editar_ventana.title("Editar Movimiento")
         editar_ventana.configure(bg=self.COLORS['light'])
 
-        # Centrado sin tocar root
+        # Registrar toplevel para limpieza
+        self._open_toplevels.append(editar_ventana)
+        def _on_close_editor():
+            try:
+                try:
+                    self._open_toplevels.remove(editar_ventana)
+                except ValueError:
+                    pass
+                if editar_ventana and editar_ventana.winfo_exists():
+                    editar_ventana.destroy()
+            except Exception:
+                pass
+        editar_ventana.protocol("WM_DELETE_WINDOW", _on_close_editor)
+
+        # Centrado
         ancho_ventana = 1075
         alto_ventana = 525
         screen_width = editar_ventana.winfo_screenwidth()
@@ -1216,7 +1313,6 @@ class IngresoInsumos:
         header_frame = tk.Frame(scrollable_frame, bg=self.COLORS['primary'], height=22)
         header_frame.pack(fill="x", padx=14, pady=(10, 4))
         header_frame.pack_propagate(False)
-
         tk.Label(header_frame, text="EDITAR MOVIMIENTO",
                  font=('Segoe UI', 10, 'bold'),
                  bg=self.COLORS['primary'], fg='white').pack(expand=True)
@@ -1228,7 +1324,6 @@ class IngresoInsumos:
         nivel_header = tk.Frame(self.frame_nivel_bodega_edit, bg=self.COLORS['primary'], height=16)
         nivel_header.pack(fill='x')
         nivel_header.pack_propagate(False)
-
         tk.Label(nivel_header, text="🏢 Nivel de Bodega",
                  font=('Segoe UI', 8, 'bold'),
                  fg=self.COLORS['white'], bg=self.COLORS['primary']).pack(side='left', padx=8, pady=0)
@@ -1260,7 +1355,6 @@ class IngresoInsumos:
         servicios_header = tk.Frame(self.frame_servicios_edit, bg=self.COLORS['primary'], height=16)
         servicios_header.pack(fill='x')
         servicios_header.pack_propagate(False)
-
         tk.Label(servicios_header, text="🏥 Configuración de Servicios",
                  font=('Segoe UI', 8, 'bold'), fg=self.COLORS['white'], bg=self.COLORS['primary']).pack(side='left', padx=8, pady=0)
 
@@ -1303,7 +1397,6 @@ class IngresoInsumos:
         insumos_header = tk.Frame(self.frame_insumos_edit, bg=self.COLORS['primary'], height=16)
         insumos_header.pack(fill='x')
         insumos_header.pack_propagate(False)
-
         tk.Label(insumos_header, text="💊 Gestión de Insumos",
                  font=('Segoe UI', 8, 'bold'), fg=self.COLORS['white'], bg=self.COLORS['primary']).pack(side='left', padx=8, pady=0)
 
@@ -1342,7 +1435,6 @@ class IngresoInsumos:
         detalles_header = tk.Frame(self.frame_detalles_edit, bg=self.COLORS['primary'], height=16)
         detalles_header.pack(fill='x')
         detalles_header.pack_propagate(False)
-
         tk.Label(detalles_header, text="📋 Detalles del Movimiento",
                  font=('Segoe UI', 8, 'bold'),
                  fg=self.COLORS['white'], bg=self.COLORS['primary']).pack(side='left', padx=8, pady=0)
@@ -1411,7 +1503,6 @@ class IngresoInsumos:
         salida_header = tk.Frame(self.frame_salida_nivel_inferior_edit, bg=self.COLORS['primary'], height=16)
         salida_header.pack(fill='x')
         salida_header.pack_propagate(False)
-
         tk.Label(salida_header, text="🔄 Salida a Nivel Inferior",
                  font=('Segoe UI', 8, 'bold'), fg=self.COLORS['white'], bg=self.COLORS['primary']).pack(side='left', padx=8, pady=0)
 
@@ -1492,8 +1583,8 @@ class IngresoInsumos:
                 salida_servicio_cb.config(state="disabled")
 
         def actualizar_tipos_movimiento_filtrados_edit():
-            nivel = nivel_sel.get()
             tipos = cache.get_tipos_movimiento_names() or []
+            nivel = nivel_sel.get()
             if nivel in ("area", "distrito"):
                 tipos = [t for t in tipos if t not in ("ENTREGADO", "NO ENTREGADO")]
             elif nivel == "servicio":
@@ -1594,7 +1685,7 @@ class IngresoInsumos:
             presentacion_cb.set_completion_list([])
             edit_presentacion_var.set('')
 
-        # Variables y enlaces del nivel (se usa una sola var)
+        # Variables del diálogo
         nivel_sel = tk.StringVar(value="area")
         nivel_sel.trace_add("write", actualizar_estado_comboboxes_edit)
 
@@ -1753,7 +1844,7 @@ class IngresoInsumos:
 
             self.tree.item(selected_item, values=nuevos_valores)
             self.ajustar_ancho_columnas_automatico()
-            editar_ventana.destroy()
+            _on_close_editor()
             messagebox.showinfo("Éxito", "Movimiento actualizado correctamente")
 
         frame_botones = tk.Frame(scrollable_frame, bg=self.COLORS['light'])
@@ -1768,7 +1859,7 @@ class IngresoInsumos:
         btn_guardar.pack(side="left", padx=6, pady=(0,2))
 
         btn_cerrar = tk.Button(botones_container, text="CERRAR", image=self.icon_cerrar, compound='left',
-                               command=editar_ventana.destroy, bg=self.COLORS['light'], fg=self.COLORS['text_dark'],
+                               command=_on_close_editor, bg=self.COLORS['light'], fg=self.COLORS['text_dark'],
                                font=('Segoe UI', 8, 'bold'), relief='flat', padx=12, pady=4,
                                cursor='hand2', borderwidth=0, highlightthickness=0)
         btn_cerrar.pack(side="left", padx=6, pady=(0,2))
@@ -1998,12 +2089,22 @@ class IngresoInsumos:
 
     def cerrar_ventana(self):
         if messagebox.askyesno("Confirmar", "¿Está seguro que desea cerrar esta ventana?"):
+            # Limpieza defensiva
+            try:
+                self.before_destroy()
+            except Exception:
+                pass
             for widget in self.parent.winfo_children():
-                widget.destroy()
+                try:
+                    widget.destroy()
+                except Exception:
+                    pass
             if hasattr(self, "main_window") and self.main_window:
                 self.main_window.show_welcome_screen()
 
     def on_area_selected(self, *args):
+        if not hasattr(self, 'distrito_cb'):
+            return
         area_nombre = self.area_var.get()
         area_id = cache.area_id(area_nombre)
         if area_id:

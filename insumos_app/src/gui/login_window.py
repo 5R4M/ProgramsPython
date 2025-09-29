@@ -49,12 +49,48 @@ def get_bat_path():
         return os.path.join(script_dir, "modificar_mysql.bat")
 
 def resource_path(relative_path):
-    """Obtiene la ruta correcta para recursos (iconos, etc.)"""
+    """
+    Devuelve ruta absoluta a un recurso tanto en dev como en ejecutable (PyInstaller).
+    - En ejecutable usa sys._MEIPASS.
+    - En desarrollo este archivo está en src/gui, así que subimos un nivel a src/.
+    """
     try:
-        base_path = sys._MEIPASS
-    except AttributeError:
-        base_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
+        base_path = sys._MEIPASS  # PyInstaller (onefile/onedir)
+    except Exception:
+        base_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))  # -> src/
     return os.path.join(base_path, relative_path)
+
+# Constantes de iconos: usamos prefijo utils/icons (coincidir con lo empaquetado)
+APP_ICO = os.path.join('utils', 'icons', 'app.ico')
+APP_PNG = os.path.join('utils', 'icons', 'app.png')
+CFG_ICO = os.path.join('utils', 'icons', 'app1.ico')
+CFG_PNG = os.path.join('utils', 'icons', 'app1.png')
+
+def apply_window_icons(win, ico_rel, png_rel):
+    """
+    Aplica iconos a una ventana Tk/Toplevel.
+    - Intenta .ico (Windows) con iconbitmap.
+    - Aplica PNG como wm_iconphoto (conservar referencias para evitar GC).
+    """
+    # .ico (Windows)
+    try:
+        ico_path = resource_path(ico_rel)
+        if os.path.exists(ico_path):
+            win.iconbitmap(ico_path)
+    except Exception as e:
+        log(f"iconbitmap fallo: {e}")
+    # PNG fallback / multi-size
+    try:
+        png_path = resource_path(png_rel)
+        if os.path.exists(png_path):
+            img16 = ImageTk.PhotoImage(Image.open(png_path).resize((16, 16), Image.Resampling.LANCZOS))
+            img32 = ImageTk.PhotoImage(Image.open(png_path).resize((32, 32), Image.Resampling.LANCZOS))
+            if not hasattr(win, '_icon_imgs'):
+                win._icon_imgs = []
+            win._icon_imgs.extend([img16, img32])  # evitar GC
+            win.wm_iconphoto(True, img16, img32)
+    except Exception as e:
+        log(f"iconphoto fallo: {e}")
 
 def debug_paths():
     """Función de debug: neutralizada para modo silencioso"""
@@ -372,10 +408,6 @@ if not getattr(sys, 'frozen', False):
     except Exception:
         pass
 
-if not getattr(sys, 'frozen', False):
-    project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-    sys.path.append(project_root)
-
 try:
     from src.database.db_manager import verificar_credenciales, crear_tabla_usuarios
 except ImportError:
@@ -499,9 +531,7 @@ def crear_tabla_usuarios_fallback():
     return True
 
 try:
-    if not getattr(sys, 'frozen', False):
-        from src.database.db_manager import verificar_credenciales, crear_tabla_usuarios
-    else:
+    if getattr(sys, 'frozen', False):
         verificar_credenciales = verificar_credenciales_fallback
         crear_tabla_usuarios = crear_tabla_usuarios_fallback
 except ImportError:
@@ -796,13 +826,6 @@ def verificar_conectividad_red(host, port):
         log(f"❌ Error de conectividad: {e}")
         return False
 
-def resource_path(relative_path):
-    try:
-        base_path = sys._MEIPASS
-    except AttributeError:
-        base_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
-    return os.path.join(base_path, relative_path)
-
 class ConfiguracionMySQL:
     def __init__(self, parent):
         self.parent = parent
@@ -817,6 +840,9 @@ class ConfiguracionMySQL:
         self.config_window.resizable(False, False)
         self.config_window.transient(parent)
         self.config_window.grab_set()
+
+        # Iconos del Toplevel (helper unificado)
+        apply_window_icons(self.config_window, CFG_ICO, CFG_PNG)
 
         self.center_window()
 
@@ -1160,11 +1186,15 @@ class LoginWindow:
         self.root.configure(bg='#f8f9fa')
         self.root.resizable(False, False)
 
+        # Centrar
         screen_width = self.root.winfo_screenwidth()
         screen_height = self.root.winfo_screenheight()
         x = (screen_width - 800) // 2
         y = (screen_height - 450) // 2
         self.root.geometry(f"800x450+{x}+{y}")
+
+        # Iconos de la ventana principal (helper unificado)
+        apply_window_icons(self.root, APP_ICO, APP_PNG)
 
         self.load_icons()
 
@@ -1538,6 +1568,7 @@ class LoginWindow:
     def load_icons(self):
         """Carga los iconos para la ventana de login"""
         self.icons = {}
+        # Usamos utils/icons (coherente con resource_path y empaquetado)
         icon_path = resource_path(os.path.join('utils', 'icons'))
 
         icon_files = {
@@ -1559,7 +1590,7 @@ class LoginWindow:
                     self.icons[f'{key}_18'] = ImageTk.PhotoImage(image.resize((18, 18), Image.Resampling.LANCZOS))
                     self.icons[f'{key}_120'] = ImageTk.PhotoImage(image.resize((120, 120), Image.Resampling.LANCZOS))
                 else:
-                    log(f"Icono no encontrado: {filename}")
+                    log(f"Icono no encontrado: {icon_full_path}")
             except Exception as e:
                 log(f"Error cargando icono {filename}: {e}")
 
@@ -1823,5 +1854,5 @@ if __name__ == "__main__":
         login = LoginWindow()
         login.run()
     except Exception as e:
-        # En modo silencioso no se imprime traza; mostrar dialogo crítico
+        # Mostrar dialogo crítico
         messagebox.showerror("Error fatal", f"Ocurrió un error iniciando la aplicación:\n{str(e)}")

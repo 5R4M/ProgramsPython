@@ -97,18 +97,19 @@ class ConfigurarServidor:
     # Helpers de UI locales (no globales)
     def _header_title_sub(self, parent, title_text, subtitle_text):
         header_frame = tk.Frame(parent, bg=self.COLORS['primary'], height=55)
-        header_frame.pack(fill='x', padx=0, pady=(6, 6))
+        # full-bleed sin separación superior
+        header_frame.pack(fill='x', padx=0, pady=(0, 6))
         header_frame.pack_propagate(False)
 
         inner = tk.Frame(header_frame, bg=self.COLORS['primary'])
         inner.pack(fill='both', expand=True, padx=15, pady=6)
 
         tk.Label(inner, text=title_text,
-                 font=('Segoe UI', 11, 'bold'),
-                 fg=self.COLORS['white'], bg=self.COLORS['primary']).pack(anchor='w')
+                font=('Segoe UI', 11, 'bold'),
+                fg=self.COLORS['white'], bg=self.COLORS['primary']).pack(anchor='w')
         tk.Label(inner, text=subtitle_text,
-                 font=('Segoe UI', 8),
-                 fg=self.COLORS['white'], bg=self.COLORS['primary']).pack(anchor='w', pady=(2, 0))
+                font=('Segoe UI', 8),
+                fg=self.COLORS['white'], bg=self.COLORS['primary']).pack(anchor='w', pady=(2, 0))
 
     def _card(self, parent, title, icon_text):
         container = tk.Frame(parent, bg=self.COLORS['light'])
@@ -137,9 +138,15 @@ class ConfigurarServidor:
                         relief='flat', borderwidth=0, padx=10, pady=5, cursor='hand2',
                         activebackground='#2980b9', activeforeground='white')
         return btn
-
+    
     def setup_ui(self):
-        # Header principal de la vista
+        
+        # Franja superior azul para pegar el header al tope del panel derecho
+        top_strip = tk.Frame(self.parent, bg=self.COLORS['primary'], height=6)
+        top_strip.pack(fill='x', padx=0, pady=0)
+        top_strip.pack_propagate(False)
+        
+        # Header principal de la vista (full-bleed)
         self._header_title_sub(
             self.parent,
             "🗄️ Configuración de MySQL para Acceso en Red",
@@ -226,6 +233,11 @@ class ConfigurarServidor:
         self.save_btn.pack(side="left", padx=5)
 
     def setup_users_tab(self, tab):
+        # Franja superior azul dentro de la pestaña
+        top_strip = tk.Frame(tab, bg=self.COLORS['primary'], height=6)
+        top_strip.pack(fill='x', padx=0, pady=0)
+        top_strip.pack_propagate(False)
+        
         # Header para la pestaña Usuarios
         self._header_title_sub(tab, "👤 Usuarios Remotos", "Gestione usuarios y privilegios de acceso remoto")
 

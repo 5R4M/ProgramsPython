@@ -93,18 +93,18 @@ class ImportarExportarManager:
     # ------------------------
     def _header_title_sub(self, parent, title_text, subtitle_text):
         header_frame = tk.Frame(parent, bg=self.COLORS['primary'], height=55)
-        header_frame.pack(fill='x', padx=0, pady=(6, 6))
+        header_frame.pack(fill='x', padx=0, pady=(0, 6))  # sin margen superior
         header_frame.pack_propagate(False)
 
         inner = tk.Frame(header_frame, bg=self.COLORS['primary'])
         inner.pack(fill='both', expand=True, padx=15, pady=6)
 
         tk.Label(inner, text=title_text,
-                 font=('Segoe UI', 11, 'bold'),
-                 fg=self.COLORS['white'], bg=self.COLORS['primary']).pack(anchor='w')
+                font=('Segoe UI', 11, 'bold'),
+                fg=self.COLORS['white'], bg=self.COLORS['primary']).pack(anchor='w')
         tk.Label(inner, text=subtitle_text,
-                 font=('Segoe UI', 8),
-                 fg=self.COLORS['white'], bg=self.COLORS['primary']).pack(anchor='w', pady=(2, 0))
+                font=('Segoe UI', 8),
+                fg=self.COLORS['white'], bg=self.COLORS['primary']).pack(anchor='w', pady=(2, 0))
 
     def _card(self, parent, title, icon_text):
         container = tk.Frame(parent, bg=self.COLORS['light'])
@@ -139,7 +139,13 @@ class ImportarExportarManager:
     # ------------------------
     def crear_interfaz(self):
         self.main_frame = tk.Frame(self.parent_frame, bg=self.COLORS['light'])
-        self.main_frame.pack(fill='both', expand=True, padx=10, pady=10)
+        # Quitar padding externo para cubrir ancho/alto total
+        self.main_frame.pack(fill='both', expand=True)
+
+        # Franja superior azul para pegar el header al tope
+        top_strip = tk.Frame(self.main_frame, bg=self.COLORS['primary'], height=6)
+        top_strip.pack(fill='x', padx=0, pady=0)
+        top_strip.pack_propagate(False)
 
         self._header_title_sub(
             self.main_frame,
@@ -147,9 +153,9 @@ class ImportarExportarManager:
             "Administre los respaldos y transferencias de datos del sistema"
         )
 
-        # Notebook local
+        # Notebook local sin padding externo
         self.notebook = ttk.Notebook(self.main_frame)
-        self.notebook.pack(fill='both', expand=True, pady=5)
+        self.notebook.pack(fill='both', expand=True, padx=0, pady=0)
 
         self._crear_pestana_backup()
         self._crear_pestana_tablas()
@@ -158,6 +164,11 @@ class ImportarExportarManager:
         frame_backup = tk.Frame(self.notebook, bg=self.COLORS['light'])
         self.notebook.add(frame_backup, text="🗄️ Backup Completo")
 
+        # Franja superior azul dentro de la pestaña
+        top_strip = tk.Frame(frame_backup, bg=self.COLORS['primary'], height=6)
+        top_strip.pack(fill='x', padx=0, pady=0)
+        top_strip.pack_propagate(False)
+        
         self._header_title_sub(frame_backup, "🗄️ Backup Completo", "Cree y restaure respaldos completos del sistema")
 
         # Contenido directo, sin scroll
@@ -204,6 +215,11 @@ class ImportarExportarManager:
         frame_tablas = tk.Frame(self.notebook, bg=self.COLORS['light'])
         self.notebook.add(frame_tablas, text="📊 Tablas Individuales")
 
+        # Franja superior azul dentro de la pestaña
+        top_strip = tk.Frame(frame_tablas, bg=self.COLORS['primary'], height=6)
+        top_strip.pack(fill='x', padx=0, pady=0)
+        top_strip.pack_propagate(False)
+        
         self._header_title_sub(frame_tablas, "📊 Tablas Individuales", "Exportar/Importar datos por tabla")
 
         # Contenido directo, sin scroll
