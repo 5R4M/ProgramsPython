@@ -420,7 +420,11 @@ class IngresoInsumos:
             if hasattr(self, 'tipo_insumo_cb'):
                 self.tipo_insumo_cb.config(completevalues=cache.get_tipos_insumo_names())
             if hasattr(self, 'tipo_mov_cb'):
+                # El combo de tipo de movimiento será luego gobernado por el filtro,
+                # pero podemos inicializar con todos.
                 self.tipo_mov_cb.config(completevalues=cache.get_tipos_movimiento_names())
+            # Refresco explícito del filtro tras la precarga
+            self.actualizar_tipos_movimiento_filtrados()
         except Exception as e:
             print("Error aplicando datos precargados:", e)
 
@@ -916,15 +920,250 @@ class IngresoInsumos:
         self._trace(self.area_var, 'write', self.on_area_selected)
         self._trace(self.distrito_var, 'write', self.actualizar_tipos_servicio)
         self._trace(self.tipo_servicio_var, 'write', self.actualizar_servicios)
-        self._trace(self.tipo_insumo_var, 'write', self.actualizar_insumos)
-        self._trace(self.insumo_var, 'write', self.actualizar_presentacion)
+        self._trace(self.tipo_insumo_var, 'write', self._on_tipo_insumo_changed)
+        self._trace(self.insumo_var, 'write', self._on_insumo_changed)
+        # Refuerzo: si cambia la presentación, recalculamos (no debería afectar, pero mantiene consistencia)
+        self._trace(self.presentacion_var, 'write', lambda *a: self.actualizar_tipos_movimiento_filtrados())
 
         self._trace(self.tipo_movimiento_var, 'write', lambda *args: self.actualizar_estado_salida_nivel_inferior())
-        self._trace(self.nivel_bodega_var, 'write', lambda *args: self.actualizar_estado_salida_nivel_inferior())
+        self._trace(self.nivel_bodega_var, 'write', lambda *args: (self.actualizar_estado_comboboxes(), self.actualizar_tipos_movimiento_filtrados()))
 
         self._trace(self.salida_distrito_var, 'write', self.actualizar_tipos_servicio_salida)
         self._trace(self.salida_tipo_servicio_var, 'write', self.actualizar_servicios_salida)
 
+    # Cache mínimo en sesión para no consultar cada vez
+    _cache_inventario_inicial_por_insumo = {}
+
+    def _insumo_tiene_inventario_inicial(self):
+        return self._insumo_tiene_inventario_inicial_por_desc(
+            (self.tipo_insumo_var.get() or '').strip(),
+            (self.insumo_var.get() or '').strip()
+        )
+
+    def _insumo_tiene_inventario_inicial_por_desc(self, tipo_insumo_desc, insumo_nombre):
+        tipo_insumo_desc = (tipo_insumo_desc or '').strip()
+        insumo_nombre = (insumo_nombre or '').strip()
+        if not tipo_insumo_desc or not insumo_nombre:
+            return False
+        key = (tipo_insumo_desc, insumo_nombre)
+        if key in self._cache_inventario_inicial_por_insumo:
+            return self._cache_inventario_inicial_por_insumo[key]
+        tipo_insumo_id = cache.tipo_insumo_id(tipo_insumo_desc)
+        if not tipo_insumo_id:
+            self._cache_inventario_inicial_por_insumo[key] = False
+            return False
+        insumo_id = cache.insumo_id(insumo_nombre, tipo_insumo_id)
+        if not insumo_id:
+            insumos = obtener_insumos_por_tipo(tipo_insumo_id) or []
+            target = insumo_nombre.strip().casefold()
+            insumo_id = next((i['id'] for i in insumos if (i.get('nombre') or '').strip().casefold() == target), None)
+            if not insumo_id:
+                self._cache_inventario_inicial_por_insumo[key] = False
+                return False
+        conn = None
+        try:
+            from src.database.db_manager import conectar_db
+            conn = conectar_db()
+            if not conn:
+                self._cache_inventario_inicial_por_insumo[key] = False
+                return False
+            cur = conn.cursor(dictionary=True)
+            cur.execute("""
+                SELECT COUNT(*) AS cnt
+                FROM movimiento m
+                JOIN tipo_movimiento tm ON tm.id = m.tipo_movimiento_id
+                WHERE m.insumo_id = %s AND UPPER(TRIM(tm.descripcion)) = 'INVENTARIO INICIAL'
+                LIMIT 1
+            """, (insumo_id,))
+            row = cur.fetchone()
+            existe = bool(row and row.get('cnt', 0) > 0)
+            self._cache_inventario_inicial_por_insumo[key] = existe
+            return existe
+        except Exception:
+            self._cache_inventario_inicial_por_insumo[key] = False
+            return False
+        finally:
+            try:
+                if conn:
+                    conn.close()
+            except Exception:
+                pass
+
+    def _invalidate_inventario_inicial_cache_for_current(self):
+        ti = (self.tipo_insumo_var.get() or '').strip()
+        ins = (self.insumo_var.get() or '').strip()
+        if ti or ins:
+            self._cache_inventario_inicial_por_insumo.pop((ti, ins), None)
+
+    def _on_tipo_insumo_changed(self, *args):
+        self._invalidate_inventario_inicial_cache_for_current()
+        self.actualizar_insumos()
+        self.actualizar_tipos_movimiento_filtrados()
+
+    def _on_insumo_changed(self, *args):
+        self._invalidate_inventario_inicial_cache_for_current()
+        self.actualizar_presentacion()
+        self.actualizar_tipos_movimiento_filtrados()
+
+    def _resolver_insumo_id_robusto(self, tipo_insumo_desc, insumo_nombre):
+        """
+        Devuelve insumo_id a partir de descripciones, buscando primero en cache y luego en BD con matching robusto.
+        """
+        tipo_insumo_desc = (tipo_insumo_desc or '').strip()
+        insumo_nombre = (insumo_nombre or '').strip()
+        if not tipo_insumo_desc or not insumo_nombre:
+            return None
+
+        tipo_insumo_id = cache.tipo_insumo_id(tipo_insumo_desc)
+        if not tipo_insumo_id:
+            return None
+
+        insumo_id = cache.insumo_id(insumo_nombre, tipo_insumo_id)
+        if insumo_id:
+            return insumo_id
+
+        # Fallback robusto por nombre
+        try:
+            insumos = obtener_insumos_por_tipo(tipo_insumo_id) or []
+            target = insumo_nombre.strip().casefold()
+            insumo_id = next((i['id'] for i in insumos if (i.get('nombre') or '').strip().casefold() == target), None)
+            return insumo_id
+        except Exception:
+            return None
+    
+    def _obtener_saldo_actual(self, nivel, area_id, distrito_id, tipo_servicio_id, servicio_id, insumo_id):
+        """
+        Calcula el saldo acumulado en BD para el insumo dado, restringido al nivel:
+        - area: area_id
+        - distrito: area_id + distrito_id
+        - servicio: area_id + distrito_id + tipo_servicio_id + servicio_id
+        saldo = sum(positivos) - sum(negativos)
+        """
+        if not insumo_id or not area_id:
+            return 0.0
+
+        # Normalizados
+        POSITIVOS = ("INVENTARIO INICIAL", "ENTRADA NIVEL SUPERIOR", "REAJUSTE (+)")
+        NEGATIVOS = ("SALIDA NIVEL INFERIOR", "REAJUSTE (-)", "ENTREGADO")
+
+        condiciones = ["m.insumo_id = %s", "m.area_id = %s"]
+        params_where = [insumo_id, area_id]
+
+        if nivel in ('distrito', 'servicio'):
+            if not distrito_id:
+                return 0.0
+            condiciones.append("m.distrito_id = %s")
+            params_where.append(distrito_id)
+
+        if nivel == 'servicio':
+            if not tipo_servicio_id or not servicio_id:
+                return 0.0
+            condiciones.append("m.tipo_servicio_id = %s")
+            condiciones.append("m.servicio_id = %s")
+            params_where.extend([tipo_servicio_id, servicio_id])
+
+        where_clause = " AND ".join(condiciones)
+
+        # Importante: primero los 3 de positivos, luego 3 de negativos, luego los del WHERE
+        sql = f"""
+            SELECT
+                COALESCE(SUM(CASE WHEN UPPER(TRIM(tm.descripcion)) IN (%s, %s, %s) THEN m.cantidad ELSE 0 END), 0)
+            - COALESCE(SUM(CASE WHEN UPPER(TRIM(tm.descripcion)) IN (%s, %s, %s) THEN m.cantidad ELSE 0 END), 0)
+            AS saldo
+            FROM movimiento m
+            JOIN tipo_movimiento tm ON tm.id = m.tipo_movimiento_id
+            WHERE {where_clause}
+        """
+
+        params = list(POSITIVOS) + list(NEGATIVOS) + params_where
+
+        conn = None
+        try:
+            from src.database.db_manager import conectar_db
+            conn = conectar_db()
+            if not conn:
+                return 0.0
+            cur = conn.cursor()
+            cur.execute(sql, params)
+            row = cur.fetchone()
+            return float(row[0]) if row and row[0] is not None else 0.0
+        except Exception as e:
+            # Opcional: print para debug
+            # print("Error _obtener_saldo_actual:", e)
+            return 0.0
+        finally:
+            try:
+                if conn:
+                    conn.close()
+            except Exception:
+                pass
+    
+    def _saldo_virtual_treeview(self, nivel, area_id, distrito_id, tipo_servicio_id, servicio_id, insumo_id):
+        """
+        Suma el saldo de los movimientos en el TreeView (no guardados en BD) que aplican
+        al mismo contexto e insumo. Usa la misma lógica de positivos/negativos.
+        """
+        if not insumo_id or not area_id:
+            return 0.0
+
+        def norm(s): return (s or '').strip().upper()
+        POSITIVOS = {"INVENTARIO INICIAL", "ENTRADA NIVEL SUPERIOR", "REAJUSTE (+)"}
+        NEGATIVOS = {"SALIDA NIVEL INFERIOR", "REAJUSTE (-)", "ENTREGADO"}
+
+        saldo = 0.0
+        for item in self.tree.get_children():
+            vals = self.tree.item(item)['values']
+            try:
+                tipo_mov_desc = norm(vals[2])
+                insumo_nombre = (vals[3] or '').strip()
+                presentacion_nombre = (vals[4] or '').strip()
+                servicio_nombre = (vals[5] or '').strip()
+                cantidad = float(vals[8])
+                tipo_insumo_desc = (vals[12] or '').strip()
+                area_nombre = (vals[13] or '').strip()
+                distrito_nombre = (vals[14] or '').strip()
+                tipo_servicio_desc = (vals[15] or '').strip()
+
+                # Resolver IDs
+                area_id_i = cache.area_id(area_nombre) if area_nombre else None
+                distrito_id_i = cache.distrito_id(distrito_nombre) if distrito_nombre else None
+
+                tipo_servicio_id_i = None
+                if tipo_servicio_desc and distrito_id_i:
+                    tipo_servicio_id_i = cache.tipo_servicio_id(tipo_servicio_desc, distrito_id_i)
+                    if tipo_servicio_id_i is None:
+                        tipos = obtener_tipos_servicio_por_distrito(distrito_id_i) or []
+                        tipo_servicio_id_i = next((ts['id'] for ts in tipos if ts['descripcion'] == tipo_servicio_desc), None)
+
+                servicio_id_i = None
+                if servicio_nombre and tipo_servicio_id_i:
+                    servicio_id_i = cache.servicio_id(servicio_nombre, tipo_servicio_id_i)
+                    if servicio_id_i is None:
+                        servicios = obtener_servicios_por_tipo(tipo_servicio_id_i) or []
+                        servicio_id_i = next((s['id'] for s in servicios if s['nombre'] == servicio_nombre), None)
+
+                insumo_id_i = self._resolver_insumo_id_robusto(tipo_insumo_desc, insumo_nombre)
+
+                # Debe ser el mismo insumo y mismo contexto
+                if insumo_id_i != insumo_id:
+                    continue
+                if area_id_i != area_id:
+                    continue
+                if nivel in ('distrito', 'servicio'):
+                    if distrito_id_i != distrito_id:
+                        continue
+                if nivel == 'servicio':
+                    if tipo_servicio_id_i != tipo_servicio_id or servicio_id_i != servicio_id:
+                        continue
+
+                if tipo_mov_desc in POSITIVOS:
+                    saldo += cantidad
+                elif tipo_mov_desc in NEGATIVOS:
+                    saldo -= cantidad
+            except Exception:
+                continue
+        return saldo
+    
     def before_destroy(self):
         # 1) Quitar traces
         try:
@@ -1055,20 +1294,90 @@ class IngresoInsumos:
             self.tree.configure(height=6)
 
     def actualizar_tipos_movimiento_filtrados(self):
+        """
+        Llena el combo de tipos de movimiento cumpliendo:
+        - En nivel Área y Distrito: ocultar 'ENTREGADO' y 'NO ENTREGADO'.
+        - En nivel Servicio: ocultar 'SALIDA NIVEL INFERIOR'.
+        - Orden deseado: primero positivos (INVENTARIO INICIAL, ENTRADA NIVEL SUPERIOR, REAJUSTE POSITIVO),
+                        luego negativos (SALIDA NIVEL INFERIOR, REAJUSTE NEGATIVO, ENTREGADO),
+                        finalmente indiferentes (NO ENTREGADO).
+        - Si el insumo ya tiene 'INVENTARIO INICIAL' guardado, ocultarlo de la lista.
+        """
         if not hasattr(self, 'tipo_mov_cb'):
             return
+
+        # Obtener todos los tipos desde la BD
+        tipos_raw = [tm['descripcion'] for tm in (obtener_tipos_movimiento() or [])]
+
+        # Normalizaciones útiles
+        def norm(s): return (s or '').strip().upper()
+
+        # Particiones
+        POSITIVOS = ["INVENTARIO INICIAL", "ENTRADA NIVEL SUPERIOR", "REAJUSTE (+)"]
+        NEGATIVOS = ["SALIDA NIVEL INFERIOR", "REAJUSTE (-)", "ENTREGADO"]
+        INDIFERENTES = ["NO ENTREGADO"]
+
+        # Conjuntos normalizados
+        pos_set = {norm(x) for x in POSITIVOS}
+        neg_set = {norm(x) for x in NEGATIVOS}
+        ind_set = {norm(x) for x in INDIFERENTES}
+
         nivel = self.nivel_bodega_var.get()
-        tipos_movimiento = [tm['descripcion'] for tm in obtener_tipos_movimiento() or []]
 
-        if nivel in ("area", "distrito"):
-            tipos_movimiento = [tm for tm in tipos_movimiento if tm not in ("ENTREGADO", "NO ENTREGADO")]
-        elif nivel == "servicio":
-            tipos_movimiento = [tm for tm in tipos_movimiento if tm != "SALIDA NIVEL INFERIOR"]
+        # Filtrado por nivel
+        filtrados = []
+        for t in tipos_raw:
+            t_up = norm(t)
+            if nivel in ("area", "distrito"):
+                # Ocultar ENTREGADO y NO ENTREGADO
+                if t_up == "ENTREGADO" or t_up == "NO ENTREGADO":
+                    continue
+            elif nivel == "servicio":
+                # Ocultar SALIDA NIVEL INFERIOR
+                if t_up == "SALIDA NIVEL INFERIOR":
+                    continue
+            filtrados.append(t)
 
-        self.tipo_mov_cb.config(completevalues=tipos_movimiento)
-        if self.tipo_movimiento_var.get() not in tipos_movimiento:
+        # Ocultar INVENTARIO INICIAL si ya existe para el insumo seleccionado
+        try:
+            if self._insumo_tiene_inventario_inicial():
+                filtrados = [t for t in filtrados if norm(t) != "INVENTARIO INICIAL"]
+        except Exception:
+            pass
+
+        # Ordenar según prioridad
+        def orden_clave(t):
+            tu = norm(t)
+            if tu in pos_set:
+                order_map = {
+                    "INVENTARIO INICIAL": 1,
+                    "ENTRADA NIVEL SUPERIOR": 2,
+                    "REAJUSTE (+)": 3
+                }
+                return (1, order_map.get(tu, 99), tu)
+            if tu in neg_set:
+                order_map = {
+                    "SALIDA NIVEL INFERIOR": 1,
+                    "REAJUSTE (-)": 2,
+                    "ENTREGADO": 3
+                }
+                return (2, order_map.get(tu, 99), tu)
+            if tu in ind_set:
+                order_map = {
+                    "NO ENTREGADO": 1
+                }
+                return (3, order_map.get(tu, 99), tu)
+            return (4, 99, tu)
+
+        filtrados.sort(key=orden_clave)
+
+        # Aplicar a combobox
+        self.tipo_mov_cb.config(completevalues=filtrados)
+
+        # Reset si el valor ya no está en la lista
+        if self.tipo_movimiento_var.get() not in filtrados:
             self.tipo_movimiento_var.set('')
-
+        
     def actualizar_tipos_servicio(self, *args):
         if not hasattr(self, 'tipo_servicio_cb'):
             return
@@ -1206,26 +1515,27 @@ class IngresoInsumos:
                 return
 
             fecha_registro = self.fecha_reg.get_date().strftime('%d/%m/%Y')
-            tipo_movimiento = self.tipo_movimiento_var.get()
-            tipo_insumo = self.tipo_insumo_var.get()
-            insumo = self.insumo_var.get()
-            presentacion = self.presentacion_var.get()
-            lote = "N/A" if self.sin_lote_var.get() else self.lote_entry.get().upper()
+            tipo_movimiento = (self.tipo_movimiento_var.get() or '').strip()
+            tipo_mov_up = tipo_movimiento.upper()
+            tipo_insumo = (self.tipo_insumo_var.get() or '').strip()
+            insumo = (self.insumo_var.get() or '').strip()
+            presentacion = (self.presentacion_var.get() or '').strip()
+            lote = "N/A" if self.sin_lote_var.get() else (self.lote_entry.get() or '').upper().strip()
             fecha_venc_str = "N/A" if self.sin_fecha_venc.get() else self.fecha_venc.get_date().strftime('%d/%m/%Y')
-            cantidad_str = self.cantidad_entry.get()
-            referencia = self.referencia_entry.get().upper()
-            observaciones = self.observaciones_entry.get().upper()
+            cantidad_str = (self.cantidad_entry.get() or '').strip()
+            referencia = (self.referencia_entry.get() or '').upper().strip()
+            observaciones = (self.observaciones_entry.get() or '').upper().strip()
 
-            area = self.area_var.get()
-            distrito = self.distrito_var.get()
-            tipo_servicio = self.tipo_servicio_var.get()
-            servicio = self.servicio_var.get()
+            area = (self.area_var.get() or '').strip()
+            distrito = (self.distrito_var.get() or '').strip()
+            tipo_servicio = (self.tipo_servicio_var.get() or '').strip()
+            servicio = (self.servicio_var.get() or '').strip()
 
             salida_distrito = ''
             salida_servicio = ''
-            if tipo_movimiento.strip().upper() == "SALIDA NIVEL INFERIOR":
-                salida_distrito = self.salida_distrito_var.get()
-                salida_servicio = self.salida_servicio_var.get()
+            if tipo_mov_up == "SALIDA NIVEL INFERIOR":
+                salida_distrito = (self.salida_distrito_var.get() or '').strip()
+                salida_servicio = (self.salida_servicio_var.get() or '').strip()
 
             if not tipo_insumo:
                 messagebox.showerror("Error", "Debe seleccionar un tipo de insumo")
@@ -1234,9 +1544,67 @@ class IngresoInsumos:
             if not all([tipo_movimiento, insumo, presentacion, lote, cantidad_str, referencia]):
                 messagebox.showerror("Error", "Los campos son requeridos excepto observaciones")
                 return
-
+            
             cantidad = float(cantidad_str)
+            if cantidad <= 0:
+                messagebox.showerror("Error", "La cantidad debe ser un número positivo")
+                return
 
+            # Validación de saldo previo si el movimiento es negativo
+            NEGATIVOS = {"SALIDA NIVEL INFERIOR", "REAJUSTE (-)", "ENTREGADO"}
+            if tipo_mov_up in NEGATIVOS:
+                # Resolver IDs de contexto según nivel
+                nivel_val = self.nivel_bodega_var.get()
+                area_id = cache.area_id(area) if area else None
+                distrito_id = cache.distrito_id(distrito) if distrito else None
+
+                tipo_servicio_id = None
+                if tipo_servicio and distrito_id:
+                    tipo_servicio_id = cache.tipo_servicio_id(tipo_servicio, distrito_id)
+                    if tipo_servicio_id is None:
+                        tipos = obtener_tipos_servicio_por_distrito(distrito_id) or []
+                        tipo_servicio_id = next((ts['id'] for ts in tipos if ts['descripcion'] == tipo_servicio), None)
+
+                servicio_id = None
+                if servicio and tipo_servicio_id:
+                    servicio_id = cache.servicio_id(servicio, tipo_servicio_id)
+                    if servicio_id is None:
+                        servicios = obtener_servicios_por_tipo(tipo_servicio_id) or []
+                        servicio_id = next((s['id'] for s in servicios if s['nombre'] == servicio), None)
+
+                insumo_id = self._resolver_insumo_id_robusto(tipo_insumo, insumo)
+
+                # Saldo en BD y saldo virtual por separado
+                saldo_bd = self._obtener_saldo_actual(nivel_val, area_id, distrito_id, tipo_servicio_id, servicio_id, insumo_id)
+                saldo_virtual = self._saldo_virtual_treeview(nivel_val, area_id, distrito_id, tipo_servicio_id, servicio_id, insumo_id)
+                saldo_total_estimado = saldo_bd + saldo_virtual
+
+                # 1) No permitir negativos si en BD ya no hay saldo
+                if saldo_bd <= 0:
+                    messagebox.showerror(
+                        "Saldo insuficiente (BD)",
+                        "No puede registrar un movimiento negativo porque el insumo no tiene saldo previo en la base de datos para el nivel seleccionado.\n"
+                        "Registre primero un movimiento positivo (p. ej. Inventario Inicial o Entrada)."
+                    )
+                    return
+
+                # 2) No permitir que el negativo supere lo que ya existe en BD
+                if cantidad > saldo_bd:
+                    messagebox.showerror(
+                        "Saldo insuficiente (BD)",
+                        f"La cantidad solicitada ({cantidad}) excede el saldo disponible en base de datos ({saldo_bd:.2f})."
+                    )
+                    return
+
+                # 3) Adicionalmente controlar que no se pase del total estimado (BD + TreeView)
+                if cantidad > saldo_total_estimado:
+                    messagebox.showerror(
+                        "Saldo insuficiente",
+                        f"La cantidad solicitada ({cantidad}) excede el saldo total estimado ({saldo_total_estimado:.2f})."
+                    )
+                    return
+
+            # Insertar al listado temporal
             self.tree.insert('', 'end', values=(
                 fecha_registro,
                 referencia,
@@ -1331,18 +1699,21 @@ class IngresoInsumos:
         nivel_content = tk.Frame(self.frame_nivel_bodega_edit, bg=self.COLORS['light'])
         nivel_content.pack(fill='x', padx=10, pady=3)
 
+        # Variable compartida para los tres radios
+        nivel_sel = tk.StringVar(value="area")  # inicial, luego será establecido por cargar_datos_iniciales
+
         rb_area = tk.Radiobutton(nivel_content, text="Área", image=self.icon_area, compound='left',
-                                 variable=tk.StringVar(value="area"), value="area",
+                                 variable=nivel_sel, value="area",
                                  font=('Segoe UI', 8), bg=self.COLORS['light'], fg=self.COLORS['text_dark'],
-                                 selectcolor=self.COLORS['white'], activebackground=self.COLORS['white'])
+                                 selectcolor=self.COLORS['light'], activebackground=self.COLORS['light'])
         rb_distrito = tk.Radiobutton(nivel_content, text="Distrito", image=self.icon_distrito, compound='left',
-                                     variable=tk.StringVar(value="distrito"), value="distrito",
+                                     variable=nivel_sel, value="distrito",
                                      font=('Segoe UI', 8), bg=self.COLORS['light'], fg=self.COLORS['text_dark'],
-                                     selectcolor=self.COLORS['white'], activebackground=self.COLORS['white'])
+                                     selectcolor=self.COLORS['light'], activebackground=self.COLORS['light'])
         rb_servicio = tk.Radiobutton(nivel_content, text="Servicio", image=self.icon_servicio, compound='left',
-                                     variable=tk.StringVar(value="servicio"), value="servicio",
+                                     variable=nivel_sel, value="servicio",
                                      font=('Segoe UI', 8), bg=self.COLORS['light'], fg=self.COLORS['text_dark'],
-                                     selectcolor=self.COLORS['white'], activebackground=self.COLORS['white'])
+                                     selectcolor=self.COLORS['light'], activebackground=self.COLORS['light'])
 
         rb_area.grid(row=0, column=0, padx=(0, 12), pady=2, sticky="w")
         rb_distrito.grid(row=0, column=1, padx=(0, 12), pady=2, sticky="w")
@@ -1470,8 +1841,12 @@ class IngresoInsumos:
         lote_entry = ttk.Entry(lote_frame, width=20, font=('Segoe UI', 8))
         lote_entry.pack(side="left", fill="x", expand=True)
         edit_sin_lote_var = tk.BooleanVar()
-        edit_check_sin_lote = ttk.Checkbutton(lote_frame, text="Sin\nlote", variable=edit_sin_lote_var,
-                                              command=lambda: (lote_entry.delete(0, tk.END) or lote_entry.config(state='disabled')) if edit_sin_lote_var.get() else lote_entry.config(state='normal'))
+        edit_check_sin_lote = tk.Checkbutton(lote_frame, text="Sin\nlote", variable=edit_sin_lote_var,
+                                             command=lambda: (lote_entry.delete(0, tk.END) or lote_entry.config(state='disabled')) if edit_sin_lote_var.get() else lote_entry.config(state='normal'),
+                                             font=('Segoe UI', 8),
+                                             bg=self.COLORS['light'], fg=self.COLORS['text_dark'],
+                                             activebackground=self.COLORS['white'], activeforeground=self.COLORS['text_dark'],
+                                             selectcolor=self.COLORS['white'])
         edit_check_sin_lote.pack(side="right", padx=(5, 0))
 
         tk.Label(detalles_content, text="Fecha\nVencimiento:", font=('Segoe UI', 8, 'bold'),
@@ -1482,8 +1857,12 @@ class IngresoInsumos:
                                     borderwidth=2, date_pattern='dd/mm/yyyy', font=('Segoe UI', 8))
         fecha_venc_edit.pack(side="left")
         edit_sin_fecha_venc = tk.BooleanVar()
-        edit_check_sin_fecha = ttk.Checkbutton(fecha_venc_frame, text="Sin fecha\nvencimiento", variable=edit_sin_fecha_venc,
-                                               command=lambda: fecha_venc_edit.configure(state='disabled' if edit_sin_fecha_venc.get() else 'normal'))
+        edit_check_sin_fecha = tk.Checkbutton(fecha_venc_frame, text="Sin fecha\nvencimiento", variable=edit_sin_fecha_venc,
+                                              command=lambda: fecha_venc_edit.configure(state='disabled' if edit_sin_fecha_venc.get() else 'normal'),
+                                              font=('Segoe UI', 8),
+                                              bg=self.COLORS['light'], fg=self.COLORS['text_dark'],
+                                              activebackground=self.COLORS['white'], activeforeground=self.COLORS['text_dark'],
+                                              selectcolor=self.COLORS['white'])
         edit_check_sin_fecha.pack(side="right", padx=(5, 0))
 
         tk.Label(detalles_content, text="Cantidad:", font=('Segoe UI', 8, 'bold'),
@@ -1535,36 +1914,36 @@ class IngresoInsumos:
 
         # Funciones auxiliares del diálogo
         def actualizar_estado_comboboxes_edit(*args):
-            nivel = nivel_sel.get()
-            if nivel == "area":
+            nivel_val = nivel_sel.get()
+            if nivel_val == "area":
                 area_cb.config(state="normal")
                 distrito_cb.config(state="disabled")
                 tipo_servicio_cb.config(state="disabled")
                 servicio_cb.config(state="disabled")
-            elif nivel == "distrito":
+            elif nivel_val == "distrito":
                 area_cb.config(state="normal")
                 distrito_cb.config(state="normal")
                 tipo_servicio_cb.config(state="disabled")
                 servicio_cb.config(state="disabled")
-            elif nivel == "servicio":
+            elif nivel_val == "servicio":
                 area_cb.config(state="normal")
                 distrito_cb.config(state="normal")
                 tipo_servicio_cb.config(state="normal")
                 servicio_cb.config(state="normal")
             actualizar_tipos_movimiento_filtrados_edit()
-            if nivel == "distrito" and edit_tipo_movimiento_var.get().strip().upper() == "SALIDA NIVEL INFERIOR":
+            if nivel_val == "distrito" and edit_tipo_movimiento_var.get().strip().upper() == "SALIDA NIVEL INFERIOR":
                 edit_salida_distrito_var.set(edit_distrito_var.get())
                 actualizar_tipos_servicio_salida_edit()
 
         def actualizar_estado_salida_nivel_inferior_edit(*args):
             tipo_mov = edit_tipo_movimiento_var.get().strip().upper()
-            nivel = nivel_sel.get()
+            nivel_val = nivel_sel.get()
             if tipo_mov == "SALIDA NIVEL INFERIOR":
-                if nivel == "area":
+                if nivel_val == "area":
                     salida_distrito_cb.config(state="normal")
                     salida_tipo_servicio_cb.config(state="disabled")
                     salida_servicio_cb.config(state="disabled")
-                elif nivel == "distrito":
+                elif nivel_val == "distrito":
                     edit_salida_distrito_var.set(edit_distrito_var.get())
                     salida_distrito_cb.config(state="disabled")
                     salida_tipo_servicio_cb.config(state="normal")
@@ -1583,14 +1962,68 @@ class IngresoInsumos:
                 salida_servicio_cb.config(state="disabled")
 
         def actualizar_tipos_movimiento_filtrados_edit():
-            tipos = cache.get_tipos_movimiento_names() or []
-            nivel = nivel_sel.get()
-            if nivel in ("area", "distrito"):
-                tipos = [t for t in tipos if t not in ("ENTREGADO", "NO ENTREGADO")]
-            elif nivel == "servicio":
-                tipos = [t for t in tipos if t != "SALIDA NIVEL INFERIOR"]
-            tipo_mov_cb.set_completion_list(tipos)
-            if edit_tipo_movimiento_var.get() not in tipos:
+            tipos_raw = cache.get_tipos_movimiento_names() or []
+
+            def norm(s): return (s or '').strip().upper()
+
+            POSITIVOS = ["INVENTARIO INICIAL", "ENTRADA NIVEL SUPERIOR", "REAJUSTE (+)"]
+            NEGATIVOS = ["SALIDA NIVEL INFERIOR", "REAJUSTE (-)","ENTREGADO"]
+            INDIFERENTES = ["NO ENTREGADO"]
+
+            pos_set = {norm(x) for x in POSITIVOS}
+            neg_set = {norm(x) for x in NEGATIVOS}
+            ind_set = {norm(x) for x in INDIFERENTES}
+
+            nivel_val = nivel_sel.get()
+
+            filtrados = []
+            for t in tipos_raw:
+                tu = norm(t)
+                if nivel_val in ("area", "distrito"):
+                    if tu in ind_set:
+                        continue
+                elif nivel_val == "servicio":
+                    if tu == "SALIDA NIVEL INFERIOR":
+                        continue
+                filtrados.append(t)
+
+            # Ocultar INVENTARIO INICIAL si ya existe para el insumo de la edición
+            try:
+                ti_desc = (edit_tipo_insumo_var.get() or '').strip()
+                ins_desc = (edit_insumo_var.get() or '').strip()
+                if ti_desc and ins_desc:
+                    if self._insumo_tiene_inventario_inicial_por_desc(ti_desc, ins_desc):
+                        filtrados = [t for t in filtrados if norm(t) != "INVENTARIO INICIAL"]
+            except Exception:
+                pass
+
+            def orden_clave(t):
+                tu = norm(t)
+                if tu in pos_set:
+                    order_map = {
+                        "INVENTARIO INICIAL": 1,
+                        "ENTRADA NIVEL SUPERIOR": 2,
+                        "REAJUSTE (+)": 3
+                    }
+                    return (1, order_map.get(tu, 99), tu)
+                if tu in neg_set:
+                    order_map = {
+                        "SALIDA NIVEL INFERIOR": 1,
+                        "REAJUSTE (-)": 2,
+                        "ENTREGADO": 3
+                    }
+                    return (2, order_map.get(tu, 99), tu)
+                if tu in ind_set:
+                    order_map = {
+                        "NO ENTREGADO": 1
+                    }
+                    return (3, order_map.get(tu, 99), tu)
+                return (4, 99, tu)
+
+            filtrados.sort(key=orden_clave)
+
+            tipo_mov_cb.set_completion_list(filtrados)
+            if edit_tipo_movimiento_var.get() not in filtrados:
                 edit_tipo_movimiento_var.set('')
 
         def actualizar_tipos_servicio_edit(*args):
@@ -1686,12 +2119,19 @@ class IngresoInsumos:
             edit_presentacion_var.set('')
 
         # Variables del diálogo
-        nivel_sel = tk.StringVar(value="area")
         nivel_sel.trace_add("write", actualizar_estado_comboboxes_edit)
 
         edit_distrito_var.trace_add("write", actualizar_tipos_servicio_edit)
         edit_tipo_servicio_var.trace_add("write", actualizar_servicios_edit)
-        edit_tipo_movimiento_var.trace_add("write", actualizar_estado_salida_nivel_inferior_edit)
+        def _on_tipo_mov_edit_changed(*args):
+            actualizar_estado_salida_nivel_inferior_edit()
+
+        edit_tipo_movimiento_var.trace_add("write", _on_tipo_mov_edit_changed)
+        nivel_sel.trace_add("write", lambda *a: (actualizar_estado_comboboxes_edit(), actualizar_tipos_movimiento_filtrados_edit()))
+        edit_distrito_var.trace_add("write", lambda *a: (actualizar_tipos_servicio_edit(), actualizar_tipos_movimiento_filtrados_edit()))
+        edit_tipo_servicio_var.trace_add("write", lambda *a: (actualizar_servicios_edit(), actualizar_tipos_movimiento_filtrados_edit()))
+        edit_tipo_insumo_var.trace_add("write", lambda *a: (actualizar_insumos_edit(), actualizar_tipos_movimiento_filtrados_edit()))
+        edit_insumo_var.trace_add("write", lambda *a: (actualizar_presentacion_edit(), actualizar_tipos_movimiento_filtrados_edit()))
         edit_salida_distrito_var.trace_add("write", actualizar_tipos_servicio_salida_edit)
         edit_salida_tipo_servicio_var.trace_add("write", actualizar_servicios_salida_edit)
         edit_tipo_insumo_var.trace_add("write", actualizar_insumos_edit)
@@ -1776,11 +2216,11 @@ class IngresoInsumos:
                 messagebox.showerror("Error", "La presentación es obligatoria")
                 return False
 
-            nivel = nivel_sel.get()
-            if nivel == "distrito" and not edit_distrito_var.get().strip():
+            nivel_val = nivel_sel.get()
+            if nivel_val == "distrito" and not edit_distrito_var.get().strip():
                 messagebox.showerror("Error", "El distrito es obligatorio para nivel Distrito")
                 return False
-            if nivel == "servicio":
+            if nivel_val == "servicio":
                 if not edit_distrito_var.get().strip():
                     messagebox.showerror("Error", "El distrito es obligatorio para nivel Servicio")
                     return False
@@ -1792,10 +2232,10 @@ class IngresoInsumos:
                     return False
 
             if edit_tipo_movimiento_var.get().strip().upper() == "SALIDA NIVEL INFERIOR":
-                if nivel == "area" and not edit_salida_distrito_var.get().strip():
+                if nivel_val == "area" and not edit_salida_distrito_var.get().strip():
                     messagebox.showerror("Requisito", "Debe seleccionar un Distrito (Salida) antes de continuar.")
                     return False
-                if nivel == "distrito" and not edit_salida_servicio_var.get().strip():
+                if nivel_val == "distrito" and not edit_salida_servicio_var.get().strip():
                     messagebox.showerror("Requisito", "Debe seleccionar un Servicio (Salida) antes de continuar.")
                     return False
 
@@ -1841,7 +2281,76 @@ class IngresoInsumos:
                 edit_distrito_var.get().strip(),
                 edit_tipo_servicio_var.get().strip()
             )
+            
+            # VALIDACIÓN DE SALDO PARA MOVIMIENTOS NEGATIVOS (sin cambiar nombres)
+            desc_up = (edit_tipo_movimiento_var.get() or '').strip().upper()
+            NEGATIVOS = {"SALIDA NIVEL INFERIOR", "REAJUSTE (-)", "ENTREGADO"}
+            if desc_up in NEGATIVOS:
+                try:
+                    nivel_val = (nivel_sel.get() or '').strip()
 
+                    area_nombre = (edit_area_var.get() or '').strip()
+                    distrito_nombre = (edit_distrito_var.get() or '').strip()
+                    tipo_servicio_desc = (edit_tipo_servicio_var.get() or '').strip()
+                    servicio_nombre = (edit_servicio_var.get() or '').strip()
+                    tipo_insumo_desc = (edit_tipo_insumo_var.get() or '').strip()
+                    insumo_nombre = (edit_insumo_var.get() or '').strip()
+
+                    area_id = cache.area_id(area_nombre) if area_nombre else None
+                    distrito_id = cache.distrito_id(distrito_nombre) if distrito_nombre else None
+
+                    tipo_servicio_id = None
+                    if tipo_servicio_desc and distrito_id:
+                        tipo_servicio_id = cache.tipo_servicio_id(tipo_servicio_desc, distrito_id)
+                        if tipo_servicio_id is None:
+                            tipos = obtener_tipos_servicio_por_distrito(distrito_id) or []
+                            tipo_servicio_id = next((ts['id'] for ts in tipos if ts['descripcion'] == tipo_servicio_desc), None)
+
+                    servicio_id = None
+                    if servicio_nombre and tipo_servicio_id:
+                        servicio_id = cache.servicio_id(servicio_nombre, tipo_servicio_id)
+                        if servicio_id is None:
+                            servicios = obtener_servicios_por_tipo(tipo_servicio_id) or []
+                            servicio_id = next((s['id'] for s in servicios if s['nombre'] == servicio_nombre), None)
+
+                    insumo_id = self._resolver_insumo_id_robusto(tipo_insumo_desc, insumo_nombre)
+
+                    try:
+                        cantidad_val = float(cantidad_entry.get().strip())
+                    except Exception:
+                        messagebox.showerror("Error", "La cantidad debe ser un número válido")
+                        return
+
+                    saldo_bd = self._obtener_saldo_actual(nivel_val, area_id, distrito_id, tipo_servicio_id, servicio_id, insumo_id)
+                    saldo_virtual = self._saldo_virtual_treeview(nivel_val, area_id, distrito_id, tipo_servicio_id, servicio_id, insumo_id)
+                    saldo_total_estimado = saldo_bd + saldo_virtual
+
+                    if saldo_bd <= 0:
+                        messagebox.showerror(
+                            "Saldo insuficiente (BD)",
+                            "No puede guardar un movimiento negativo porque el insumo no tiene saldo previo en la base de datos para el nivel seleccionado.\n"
+                            "Registre primero un movimiento positivo (p. ej. Inventario Inicial o Entrada)."
+                        )
+                        return
+
+                    if cantidad_val > saldo_bd:
+                        messagebox.showerror(
+                            "Saldo insuficiente (BD)",
+                            f"La cantidad ({cantidad_val}) excede el saldo disponible en base de datos ({saldo_bd:.2f})."
+                        )
+                        return
+
+                    if cantidad_val > saldo_total_estimado:
+                        messagebox.showerror(
+                            "Saldo insuficiente",
+                            f"La cantidad ({cantidad_val}) excede el saldo total estimado ({saldo_total_estimado:.2f})."
+                        )
+                        return
+
+                except Exception as e:
+                    messagebox.showerror("Error", f"Error validando saldo: {str(e)}")
+                    return
+    
             self.tree.item(selected_item, values=nuevos_valores)
             self.ajustar_ancho_columnas_automatico()
             _on_close_editor()
@@ -1949,7 +2458,23 @@ class IngresoInsumos:
                 salida_servicio_id = None
                 if salida_servicio_nombre:
                     salida_servicio_id = obtener_id_servicio(salida_servicio_nombre)
+                
+                # VALIDACIÓN NEGATIVOS: impedir guardar si no hay saldo suficiente
+                desc_up = (tipo_movimiento_desc or '').strip().upper()
+                NEGATIVOS = {"SALIDA NIVEL INFERIOR", "REAJUSTE (-)", "ENTREGADO"}
+                if desc_up in NEGATIVOS:
+                    nivel_val = self.nivel_bodega_var.get()  # nivel de la pantalla al guardar
+                    saldo_bd = self._obtener_saldo_actual(nivel_val, area_id, distrito_id, tipo_servicio_id, servicio_id, insumo_id)
+                    saldo_virtual = self._saldo_virtual_treeview(nivel_val, area_id, distrito_id, tipo_servicio_id, servicio_id, insumo_id)
+                    saldo_total_estimado = saldo_bd + saldo_virtual
 
+                    if saldo_bd <= 0:
+                        raise ValueError("Saldo insuficiente (BD): no existe saldo previo en base de datos para registrar un movimiento negativo.")
+                    if cantidad > saldo_bd:
+                        raise ValueError(f"Saldo insuficiente (BD): cantidad {cantidad} excede el saldo disponible en base de datos {saldo_bd:.2f}.")
+                    if cantidad > saldo_total_estimado:
+                        raise ValueError(f"Saldo insuficiente: la cantidad {cantidad} excede el saldo total estimado {saldo_total_estimado:.2f}.")
+                
                 movimiento_data = {
                     'fecha_registro': fecha_registro,
                     'referencia': referencia,
@@ -1970,6 +2495,18 @@ class IngresoInsumos:
                 }
 
                 guardar_movimiento(movimiento_data)
+                
+                # Si guardamos un INVENTARIO INICIAL para ese insumo, invalidar cache y refrescar el combo
+                desc_up = (tipo_movimiento_desc or '').strip().upper()
+                if desc_up == 'INVENTARIO INICIAL':
+                    ti = (tipo_insumo_desc or '').strip()
+                    ins = (insumo_nombre or '').strip()
+                    # invalidar entrada de cache
+                    self._cache_inventario_inicial_por_insumo.pop((ti, ins), None)
+                    # si el usuario mantiene seleccionado el mismo insumo en pantalla, refrescar lista
+                    if ti == (self.tipo_insumo_var.get() or '').strip() and ins == (self.insumo_var.get() or '').strip():
+                        self.actualizar_tipos_movimiento_filtrados()
+                
                 movimientos_guardados += 1
 
             except Exception as e:

@@ -203,106 +203,136 @@ class ReporteKardex:
 
     def ordenar_movimientos(self, movimientos):
         """
-        Ordena los movimientos por fecha y luego por prioridad de tipo de movimiento.
-        Positivos primero, luego negativos, luego neutrales (NO ENTREGADO).
+        Ordena por:
+        1) fecha asc
+        2) prioridad por tipo: positivos primero, luego negativos, al final 'NO ENTREGADO', luego otros
+        Positivos: INVENTARIO INICIAL, ENTRADA NIVEL SUPERIOR, REAJUSTE (+)
+        Negativos: SALIDA NIVEL INFERIOR, REAJUSTE (-), ENTREGADO
+        Indiferente: NO ENTREGADO
         """
-        def obtener_prioridad(tipo_movimiento):
-            tipo = tipo_movimiento.upper()
-            if tipo in ['INVENTARIO INICIAL', 'ENTRADA NIVEL SUPERIOR', 'REAJUSTE POSITIVO']:
+        def prioridad_tipo(tipo_mov):
+            t = (tipo_mov or '').strip().upper()
+            if t in ('INVENTARIO INICIAL', 'ENTRADA NIVEL SUPERIOR', 'REAJUSTE (+)', 'REAJUSTE POSITIVO'):
                 return 1
-            elif tipo in ['SALIDA NIVEL INFERIOR', 'REAJUSTE NEGATIVO', 'ENTREGADO']:
+            if t in ('SALIDA NIVEL INFERIOR', 'REAJUSTE (-)', 'REAJUSTE NEGATIVO', 'ENTREGADO'):
                 return 2
-            elif tipo == 'NO ENTREGADO':
+            if t == 'NO ENTREGADO':
                 return 3
-            else:
-                return 4
+            return 4  # otros o desconocidos
 
-        return sorted(movimientos, key=lambda x: (x['fecha'], obtener_prioridad(x['tipo_movimiento'])))
+        # Normaliza fecha a comparable
+        def fecha_key(m):
+            f = m.get('fecha')
+            if isinstance(f, str):
+                # Intenta varios formatos comunes
+                for fmt in ('%Y-%m-%d', '%Y/%m/%d', '%d-%m-%Y', '%d/%m/%Y', '%Y-%m-%d %H:%M:%S', '%Y/%m/%d %H:%M:%S'):
+                    try:
+                        return datetime.strptime(f, fmt)
+                    except Exception:
+                        continue
+                return datetime.max  # si no se puede parsear, empuja al final
+            elif hasattr(f, 'timestamp'):
+                return f
+            else:
+                return datetime.max
+
+        return sorted(
+            movimientos,
+            key=lambda x: (fecha_key(x), prioridad_tipo(x.get('tipo_movimiento')))
+        )
 
     def calcular_saldo_acumulado(self, movimientos_ordenados):
         """
-        Calcula el saldo acumulado para los movimientos ordenados.
-        Los movimientos "NO ENTREGADO" se muestran pero no afectan el saldo.
+        Construye filas para PDF/Excel con:
+        - Entrada: INVENTARIO INICIAL, ENTRADA NIVEL SUPERIOR
+        - Reajuste: '+x.xx' para REAJUSTE (+), '-x.xx' para REAJUSTE (-)
+        - Salidas: SALIDA NIVEL INFERIOR, ENTREGADO
+        - Cantidad (cantidad_col): SIEMPRE la cantidad del movimiento (todos)
+        - Saldo: acumulado de +positivos y -negativos. 'NO ENTREGADO' no afecta saldo.
         """
-        saldo = 0
+        saldo = 0.0
         movimientos_con_saldo = []
 
-        for mov in movimientos_ordenados:
-            tipo = mov['tipo_movimiento'].upper()
+        POSITIVOS = {'INVENTARIO INICIAL', 'ENTRADA NIVEL SUPERIOR', 'REAJUSTE (+)', 'REAJUSTE POSITIVO'}
+        NEGATIVOS = {'SALIDA NIVEL INFERIOR', 'REAJUSTE (-)', 'REAJUSTE NEGATIVO', 'ENTREGADO'}
+        INDIFERENTE = {'NO ENTREGADO'}
 
-            # Buscar la cantidad usando múltiples posibles nombres de campo
-            cantidad = 0
-            posibles_campos_cantidad = [
+        def parse_cantidad(mov):
+            # Busca un campo cantidad válido
+            posibles = [
                 'cantidad', 'cantidad_movimiento', 'cantidad_entrada', 'cantidad_salida',
-                'qty', 'quantity', 'cant', 'cantidades', 'valor_cantidad'
+                'qty', 'quantity', 'cant', 'valor_cantidad'
             ]
-
-            for campo in posibles_campos_cantidad:
-                if campo in mov and mov[campo] is not None:
+            for campo in posibles:
+                if campo in mov and mov[campo] not in (None, ''):
                     try:
-                        cantidad = float(mov[campo])
-                        break
-                    except (ValueError, TypeError):
-                        continue
+                        return float(mov[campo])
+                    except Exception:
+                        pass
+            # Búsqueda flexible por claves que contengan 'cantidad'
+            for k, v in mov.items():
+                if 'cantidad' in str(k).lower() and v not in (None, ''):
+                    try:
+                        return float(v)
+                    except Exception:
+                        pass
+            return 0.0
 
-            if cantidad == 0:
-                for key, value in mov.items():
-                    if 'cantidad' in key.lower() and value is not None:
-                        try:
-                            cantidad = float(value)
-                            break
-                        except (ValueError, TypeError):
-                            continue
+        for mov in movimientos_ordenados:
+            tipo_raw = mov.get('tipo_movimiento', '')
+            tipo = (tipo_raw or '').strip().upper()
 
-            # Formatear fechas
+            cantidad = parse_cantidad(mov)
+
+            # Fechas
             fecha_registro = self.formatear_fecha(mov.get('fecha', ''))
             fecha_vencimiento = mov.get('fecha_vencimiento')
-            if fecha_vencimiento is None:
-                fecha_vencimiento = "N/A"
-            else:
-                fecha_vencimiento = self.formatear_fecha(fecha_vencimiento)
+            fecha_vencimiento = "N/A" if fecha_vencimiento in (None, '') else self.formatear_fecha(fecha_vencimiento)
 
             lote_val = mov.get('lote')
-            if lote_val is None or lote_val == '':
-                lote_val = "N/A"
+            lote_val = "N/A" if lote_val in (None, '') else lote_val
 
-            # Determinar el destinatario para SALIDA NIVEL INFERIOR
-            destinatario = mov['tipo_movimiento']
+            # Remitente/Destinatario (para salida nivel inferior mostrar destino humano)
+            remit_dest = tipo_raw
             if tipo == 'SALIDA NIVEL INFERIOR':
                 if mov.get('distrito_destino'):
-                    destinatario = mov['distrito_destino']
+                    remit_dest = mov.get('distrito_destino')
                 elif mov.get('servicio_destino'):
-                    destinatario = mov['servicio_destino']
+                    remit_dest = mov.get('servicio_destino')
 
-            # Configurar las columnas según el tipo de movimiento
+            # Columnas
             entrada = ""
             salida = ""
             reajuste = ""
-            cantidad_col = self.formato_float(cantidad)
+            cantidad_col = self.formato_float(cantidad)  # SIEMPRE mostrar la cantidad del movimiento en esta columna
 
-            if tipo in ['INVENTARIO INICIAL', 'ENTRADA NIVEL SUPERIOR']:
+            if tipo in ('INVENTARIO INICIAL', 'ENTRADA NIVEL SUPERIOR'):
                 entrada = self.formato_float(cantidad)
                 saldo += cantidad
-            elif tipo in ['SALIDA NIVEL INFERIOR', 'ENTREGADO']:
+            elif tipo in ('REAJUSTE (+)', 'REAJUSTE POSITIVO'):
+                reajuste = f"+{self.formato_float(cantidad)}" if cantidad > 0 else "+0.00"
+                saldo += cantidad
+            elif tipo in ('REAJUSTE (-)', 'REAJUSTE NEGATIVO'):
+                reajuste = f"-{self.formato_float(cantidad)}" if cantidad > 0 else "-0.00"
+                saldo -= cantidad
+            elif tipo in ('SALIDA NIVEL INFERIOR', 'ENTREGADO'):
                 salida = self.formato_float(cantidad)
                 saldo -= cantidad
-            elif tipo == 'REAJUSTE POSITIVO':
-                reajuste = f"+{self.formato_float(cantidad)}" if cantidad > 0 else ""
-                saldo += cantidad
-            elif tipo == 'REAJUSTE NEGATIVO':
-                reajuste = f"-{self.formato_float(cantidad)}" if cantidad > 0 else ""
-                saldo -= cantidad
-            elif tipo == 'NO ENTREGADO':
+            elif tipo in INDIFERENTE:
+                # Mostrar cantidad de salida visualmente si deseas, pero NO afecta saldo
                 salida = self.formato_float(cantidad)
                 # saldo no cambia
+            else:
+                # Tipos desconocidos: solo reflejamos en 'cantidad' y no alteramos saldo
+                pass
 
             movimientos_con_saldo.append({
                 'fecha': fecha_registro,
                 'referencia': mov.get('referencia', ''),
-                'tipo_movimiento': destinatario,
+                'tipo_movimiento': remit_dest,
                 'entrada': entrada,
-                'precio_unitario': "",
-                'valor_total': "",
+                'precio_unitario': "",   # si en futuro hay precio, aquí va
+                'valor_total': "",       # idem
                 'lote': lote_val,
                 'fecha_vencimiento': fecha_vencimiento,
                 'salida': salida,
