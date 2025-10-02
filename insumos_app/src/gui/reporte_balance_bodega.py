@@ -641,9 +641,9 @@ class ReporteBalanceBodega:
                 insumos_dict[codigo_generado]['entrada_nivel_superior'] += cantidad
             elif tipo_movimiento == 'SALIDA NIVEL INFERIOR':
                 insumos_dict[codigo_generado]['salida_nivel_inferior'] += cantidad
-            elif tipo_movimiento == 'REAJUSTE POSITIVO':
+            elif tipo_movimiento == 'REAJUSTE (+)':
                 insumos_dict[codigo_generado]['reajuste_positivo'] += cantidad
-            elif tipo_movimiento == 'REAJUSTE NEGATIVO':
+            elif tipo_movimiento == 'REAJUSTE (-)':
                 insumos_dict[codigo_generado]['reajuste_negativo'] += cantidad
 
         # Saldo anterior si no hubo inventario inicial
@@ -690,9 +690,9 @@ class ReporteBalanceBodega:
             for mov in movimientos_insumo:
                 tipo = str(mov.get('tipo_movimiento', '')).upper()
                 cantidad = float(mov.get('cantidad', 0))
-                if tipo in ['INVENTARIO INICIAL', 'ENTRADA NIVEL SUPERIOR', 'REAJUSTE POSITIVO']:
+                if tipo in ['INVENTARIO INICIAL', 'ENTRADA NIVEL SUPERIOR', 'REAJUSTE (+)']:
                     saldo += cantidad
-                elif tipo in ['ENTREGADO', 'SALIDA NIVEL INFERIOR', 'REAJUSTE NEGATIVO']:
+                elif tipo in ['ENTREGADO', 'SALIDA NIVEL INFERIOR', 'REAJUSTE (-)']:
                     saldo -= cantidad
             return saldo
         except Exception as e:

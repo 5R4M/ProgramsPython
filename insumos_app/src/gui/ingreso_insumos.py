@@ -1635,7 +1635,7 @@ class IngresoInsumos:
     def editar_movimiento(self):
         selected_item = self.tree.selection()
         if not selected_item:
-            messagebox.showwarning("Advertencia", "Por favor, seleccione un movimiento para editar")
+            messagebox.showwarning("Advertencia", "Por favor, seleccione un movimiento para editar", parent=self.parent)
             return
 
         valores = self.tree.item(selected_item)['values']
@@ -1643,6 +1643,9 @@ class IngresoInsumos:
         editar_ventana = tk.Toplevel(self.parent)
         editar_ventana.title("Editar Movimiento")
         editar_ventana.configure(bg=self.COLORS['light'])
+        editar_ventana.transient(self.parent)
+        editar_ventana.grab_set()
+        editar_ventana.focus_set()
 
         # Registrar toplevel para limpieza
         self._open_toplevels.append(editar_ventana)
@@ -1682,8 +1685,8 @@ class IngresoInsumos:
         header_frame.pack(fill="x", padx=14, pady=(10, 4))
         header_frame.pack_propagate(False)
         tk.Label(header_frame, text="EDITAR MOVIMIENTO",
-                 font=('Segoe UI', 10, 'bold'),
-                 bg=self.COLORS['primary'], fg='white').pack(expand=True)
+                font=('Segoe UI', 10, 'bold'),
+                bg=self.COLORS['primary'], fg='white').pack(expand=True)
 
         # Nivel de Bodega
         self.frame_nivel_bodega_edit = tk.Frame(scrollable_frame, bg=self.COLORS['light'], relief='solid', borderwidth=1)
@@ -1693,8 +1696,8 @@ class IngresoInsumos:
         nivel_header.pack(fill='x')
         nivel_header.pack_propagate(False)
         tk.Label(nivel_header, text="🏢 Nivel de Bodega",
-                 font=('Segoe UI', 8, 'bold'),
-                 fg=self.COLORS['white'], bg=self.COLORS['primary']).pack(side='left', padx=8, pady=0)
+                font=('Segoe UI', 8, 'bold'),
+                fg=self.COLORS['white'], bg=self.COLORS['primary']).pack(side='left', padx=8, pady=0)
 
         nivel_content = tk.Frame(self.frame_nivel_bodega_edit, bg=self.COLORS['light'])
         nivel_content.pack(fill='x', padx=10, pady=3)
@@ -1703,17 +1706,17 @@ class IngresoInsumos:
         nivel_sel = tk.StringVar(value="area")  # inicial, luego será establecido por cargar_datos_iniciales
 
         rb_area = tk.Radiobutton(nivel_content, text="Área", image=self.icon_area, compound='left',
-                                 variable=nivel_sel, value="area",
-                                 font=('Segoe UI', 8), bg=self.COLORS['light'], fg=self.COLORS['text_dark'],
-                                 selectcolor=self.COLORS['light'], activebackground=self.COLORS['light'])
+                                variable=nivel_sel, value="area",
+                                font=('Segoe UI', 8), bg=self.COLORS['light'], fg=self.COLORS['text_dark'],
+                                selectcolor=self.COLORS['light'], activebackground=self.COLORS['light'])
         rb_distrito = tk.Radiobutton(nivel_content, text="Distrito", image=self.icon_distrito, compound='left',
-                                     variable=nivel_sel, value="distrito",
-                                     font=('Segoe UI', 8), bg=self.COLORS['light'], fg=self.COLORS['text_dark'],
-                                     selectcolor=self.COLORS['light'], activebackground=self.COLORS['light'])
+                                    variable=nivel_sel, value="distrito",
+                                    font=('Segoe UI', 8), bg=self.COLORS['light'], fg=self.COLORS['text_dark'],
+                                    selectcolor=self.COLORS['light'], activebackground=self.COLORS['light'])
         rb_servicio = tk.Radiobutton(nivel_content, text="Servicio", image=self.icon_servicio, compound='left',
-                                     variable=nivel_sel, value="servicio",
-                                     font=('Segoe UI', 8), bg=self.COLORS['light'], fg=self.COLORS['text_dark'],
-                                     selectcolor=self.COLORS['light'], activebackground=self.COLORS['light'])
+                                    variable=nivel_sel, value="servicio",
+                                    font=('Segoe UI', 8), bg=self.COLORS['light'], fg=self.COLORS['text_dark'],
+                                    selectcolor=self.COLORS['light'], activebackground=self.COLORS['light'])
 
         rb_area.grid(row=0, column=0, padx=(0, 12), pady=2, sticky="w")
         rb_distrito.grid(row=0, column=1, padx=(0, 12), pady=2, sticky="w")
@@ -1727,7 +1730,7 @@ class IngresoInsumos:
         servicios_header.pack(fill='x')
         servicios_header.pack_propagate(False)
         tk.Label(servicios_header, text="🏥 Configuración de Servicios",
-                 font=('Segoe UI', 8, 'bold'), fg=self.COLORS['white'], bg=self.COLORS['primary']).pack(side='left', padx=8, pady=0)
+                font=('Segoe UI', 8, 'bold'), fg=self.COLORS['white'], bg=self.COLORS['primary']).pack(side='left', padx=8, pady=0)
 
         servicios_content = tk.Frame(self.frame_servicios_edit, bg=self.COLORS['light'])
         servicios_content.pack(fill="x", padx=10, pady=3)
@@ -1736,27 +1739,27 @@ class IngresoInsumos:
             servicios_content.columnconfigure(col, weight=1)
 
         tk.Label(servicios_content, text="Área:", font=('Segoe UI', 8, 'bold'),
-                 bg=self.COLORS['light'], fg=self.COLORS['text_dark']).grid(row=0, column=0, padx=4, pady=(1,1), sticky="w")
+                bg=self.COLORS['light'], fg=self.COLORS['text_dark']).grid(row=0, column=0, padx=4, pady=(1,1), sticky="w")
         edit_area_var = tk.StringVar()
         area_cb = AutocompleteCombobox(servicios_content, textvariable=edit_area_var, width=25, state="normal", font=('Segoe UI', 8))
         editar_ventana.after_idle(lambda: area_cb.set_completion_list(cache.get_area_names()))
         area_cb.grid(row=0, column=1, padx=4, pady=(1,2), sticky="ew")
 
         tk.Label(servicios_content, text="Distrito:", font=('Segoe UI', 8, 'bold'),
-                 bg=self.COLORS['light'], fg=self.COLORS['text_dark']).grid(row=0, column=2, padx=4, pady=(1,1), sticky="w")
+                bg=self.COLORS['light'], fg=self.COLORS['text_dark']).grid(row=0, column=2, padx=4, pady=(1,1), sticky="w")
         edit_distrito_var = tk.StringVar()
         distrito_cb = AutocompleteCombobox(servicios_content, textvariable=edit_distrito_var, width=25, state="normal", font=('Segoe UI', 8))
         editar_ventana.after_idle(lambda: distrito_cb.set_completion_list(cache.get_distritos_names()))
         distrito_cb.grid(row=0, column=3, padx=4, pady=(1,2), sticky="ew")
 
         tk.Label(servicios_content, text="Tipo de Servicio:", font=('Segoe UI', 8, 'bold'),
-                 bg=self.COLORS['light'], fg=self.COLORS['text_dark']).grid(row=0, column=4, padx=4, pady=(1,1), sticky="w")
+                bg=self.COLORS['light'], fg=self.COLORS['text_dark']).grid(row=0, column=4, padx=4, pady=(1,1), sticky="w")
         edit_tipo_servicio_var = tk.StringVar()
         tipo_servicio_cb = AutocompleteCombobox(servicios_content, textvariable=edit_tipo_servicio_var, width=25, state="normal", font=('Segoe UI', 8))
         tipo_servicio_cb.grid(row=0, column=5, padx=4, pady=(1,2), sticky="ew")
 
         tk.Label(servicios_content, text="Servicio:", font=('Segoe UI', 8, 'bold'),
-                 bg=self.COLORS['light'], fg=self.COLORS['text_dark']).grid(row=0, column=6, padx=4, pady=(1,1), sticky="w")
+                bg=self.COLORS['light'], fg=self.COLORS['text_dark']).grid(row=0, column=6, padx=4, pady=(1,1), sticky="w")
         edit_servicio_var = tk.StringVar()
         servicio_cb = AutocompleteCombobox(servicios_content, textvariable=edit_servicio_var, width=25, state="normal", font=('Segoe UI', 8))
         servicio_cb.grid(row=0, column=7, padx=4, pady=(1,2), sticky="ew")
@@ -1769,7 +1772,7 @@ class IngresoInsumos:
         insumos_header.pack(fill='x')
         insumos_header.pack_propagate(False)
         tk.Label(insumos_header, text="💊 Gestión de Insumos",
-                 font=('Segoe UI', 8, 'bold'), fg=self.COLORS['white'], bg=self.COLORS['primary']).pack(side='left', padx=8, pady=0)
+                font=('Segoe UI', 8, 'bold'), fg=self.COLORS['white'], bg=self.COLORS['primary']).pack(side='left', padx=8, pady=0)
 
         insumos_content = tk.Frame(self.frame_insumos_edit, bg=self.COLORS['light'])
         insumos_content.pack(fill="x", padx=10, pady=3)
@@ -1778,25 +1781,25 @@ class IngresoInsumos:
             insumos_content.columnconfigure(col, weight=1, uniform="insumos_edit")
 
         tk.Label(insumos_content, text="Tipo de Insumo:", font=('Segoe UI', 8, 'bold'),
-                 bg=self.COLORS['light'], fg=self.COLORS['text_dark']).grid(row=0, column=0, columnspan=2, padx=4, pady=(1,1), sticky="w")
+                bg=self.COLORS['light'], fg=self.COLORS['text_dark']).grid(row=0, column=0, columnspan=2, padx=4, pady=(1,1), sticky="w")
         edit_tipo_insumo_var = tk.StringVar()
         tipo_insumo_cb = AutocompleteCombobox(insumos_content, textvariable=edit_tipo_insumo_var,
-                                              width=18, state="normal", font=('Segoe UI', 8))
+                                            width=18, state="normal", font=('Segoe UI', 8))
         tipo_insumo_cb.set_completion_list([ti['descripcion'] for ti in obtener_tipos_insumo() or []])
         tipo_insumo_cb.grid(row=1, column=0, columnspan=2, padx=4, pady=(1,2), sticky="ew")
 
         tk.Label(insumos_content, text="Insumo:", font=('Segoe UI', 8, 'bold'),
-                 bg=self.COLORS['light'], fg=self.COLORS['text_dark']).grid(row=0, column=2, columnspan=4, padx=4, pady=(1,1), sticky="w")
+                bg=self.COLORS['light'], fg=self.COLORS['text_dark']).grid(row=0, column=2, columnspan=4, padx=4, pady=(1,1), sticky="w")
         edit_insumo_var = tk.StringVar()
         insumo_cb = AutocompleteCombobox(insumos_content, textvariable=edit_insumo_var,
-                                         width=38, state="normal", font=('Segoe UI', 8))
+                                        width=38, state="normal", font=('Segoe UI', 8))
         insumo_cb.grid(row=1, column=2, columnspan=4, padx=4, pady=(1,2), sticky="ew")
 
         tk.Label(insumos_content, text="Presentación:", font=('Segoe UI', 8, 'bold'),
-                 bg=self.COLORS['light'], fg=self.COLORS['text_dark']).grid(row=0, column=6, columnspan=2, padx=4, pady=(1,1), sticky="w")
+                bg=self.COLORS['light'], fg=self.COLORS['text_dark']).grid(row=0, column=6, columnspan=2, padx=4, pady=(1,1), sticky="w")
         edit_presentacion_var = tk.StringVar()
         presentacion_cb = AutocompleteCombobox(insumos_content, textvariable=edit_presentacion_var,
-                                               width=18, state="normal", font=('Segoe UI', 8))
+                                            width=18, state="normal", font=('Segoe UI', 8))
         presentacion_cb.grid(row=1, column=6, columnspan=2, padx=4, pady=(1,2), sticky="ew")
 
         # Detalles del Movimiento
@@ -1807,8 +1810,8 @@ class IngresoInsumos:
         detalles_header.pack(fill='x')
         detalles_header.pack_propagate(False)
         tk.Label(detalles_header, text="📋 Detalles del Movimiento",
-                 font=('Segoe UI', 8, 'bold'),
-                 fg=self.COLORS['white'], bg=self.COLORS['primary']).pack(side='left', padx=8, pady=0)
+                font=('Segoe UI', 8, 'bold'),
+                fg=self.COLORS['white'], bg=self.COLORS['primary']).pack(side='left', padx=8, pady=0)
 
         detalles_content = tk.Frame(self.frame_detalles_edit, bg=self.COLORS['light'])
         detalles_content.pack(fill="x", padx=10, pady=3)
@@ -1817,40 +1820,40 @@ class IngresoInsumos:
             detalles_content.columnconfigure(col, weight=1)
 
         tk.Label(detalles_content, text="Fecha de Registro:", font=('Segoe UI', 8, 'bold'),
-                 bg=self.COLORS['light'], fg=self.COLORS['text_dark']).grid(row=0, column=0, padx=4, pady=(1,1), sticky="w")
+                bg=self.COLORS['light'], fg=self.COLORS['text_dark']).grid(row=0, column=0, padx=4, pady=(1,1), sticky="w")
         fecha_edit = DateEntry(detalles_content, width=18, background='darkblue', foreground='white',
-                               borderwidth=2, date_pattern='dd/mm/yyyy', font=('Segoe UI', 8))
+                            borderwidth=2, date_pattern='dd/mm/yyyy', font=('Segoe UI', 8))
         fecha_edit.grid(row=0, column=1, padx=4, pady=(1,2), sticky="ew")
 
         tk.Label(detalles_content, text="Referencia:", font=('Segoe UI', 8, 'bold'),
-                 bg=self.COLORS['light'], fg=self.COLORS['text_dark']).grid(row=0, column=2, padx=4, pady=(1,1), sticky="w")
+                bg=self.COLORS['light'], fg=self.COLORS['text_dark']).grid(row=0, column=2, padx=4, pady=(1,1), sticky="w")
         referencia_entry = ttk.Entry(detalles_content, width=24, font=('Segoe UI', 8))
         referencia_entry.grid(row=0, column=3, padx=4, pady=(1,2), sticky="ew")
 
         tk.Label(detalles_content, text="Tipo Movimiento:", font=('Segoe UI', 8, 'bold'),
-                 bg=self.COLORS['light'], fg=self.COLORS['text_dark']).grid(row=0, column=4, padx=4, pady=(1,1), sticky="w")
+                bg=self.COLORS['light'], fg=self.COLORS['text_dark']).grid(row=0, column=4, padx=4, pady=(1,1), sticky="w")
         edit_tipo_movimiento_var = tk.StringVar()
         tipo_mov_cb = AutocompleteCombobox(detalles_content, textvariable=edit_tipo_movimiento_var, width=25, state="normal", font=('Segoe UI', 8))
         editar_ventana.after_idle(lambda: tipo_mov_cb.set_completion_list(cache.get_tipos_movimiento_names()))
         tipo_mov_cb.grid(row=0, column=5, padx=4, pady=(1,2), sticky="ew")
 
         tk.Label(detalles_content, text="Lote:", font=('Segoe UI', 8, 'bold'),
-                 bg=self.COLORS['light'], fg=self.COLORS['text_dark']).grid(row=1, column=0, padx=4, pady=(1,1), sticky="w")
+                bg=self.COLORS['light'], fg=self.COLORS['text_dark']).grid(row=1, column=0, padx=4, pady=(1,1), sticky="w")
         lote_frame = tk.Frame(detalles_content, bg=self.COLORS['light'])
         lote_frame.grid(row=1, column=1, padx=4, pady=(1,2), sticky="ew")
         lote_entry = ttk.Entry(lote_frame, width=20, font=('Segoe UI', 8))
         lote_entry.pack(side="left", fill="x", expand=True)
         edit_sin_lote_var = tk.BooleanVar()
         edit_check_sin_lote = tk.Checkbutton(lote_frame, text="Sin\nlote", variable=edit_sin_lote_var,
-                                             command=lambda: (lote_entry.delete(0, tk.END) or lote_entry.config(state='disabled')) if edit_sin_lote_var.get() else lote_entry.config(state='normal'),
-                                             font=('Segoe UI', 8),
-                                             bg=self.COLORS['light'], fg=self.COLORS['text_dark'],
-                                             activebackground=self.COLORS['white'], activeforeground=self.COLORS['text_dark'],
-                                             selectcolor=self.COLORS['white'])
+                                            command=lambda: (lote_entry.delete(0, tk.END) or lote_entry.config(state='disabled')) if edit_sin_lote_var.get() else lote_entry.config(state='normal'),
+                                            font=('Segoe UI', 8),
+                                            bg=self.COLORS['light'], fg=self.COLORS['text_dark'],
+                                            activebackground=self.COLORS['white'], activeforeground=self.COLORS['text_dark'],
+                                            selectcolor=self.COLORS['white'])
         edit_check_sin_lote.pack(side="right", padx=(5, 0))
 
         tk.Label(detalles_content, text="Fecha\nVencimiento:", font=('Segoe UI', 8, 'bold'),
-                 bg=self.COLORS['light'], fg=self.COLORS['text_dark']).grid(row=1, column=2, padx=4, pady=(1,1), sticky="w")
+                bg=self.COLORS['light'], fg=self.COLORS['text_dark']).grid(row=1, column=2, padx=4, pady=(1,1), sticky="w")
         fecha_venc_frame = tk.Frame(detalles_content, bg=self.COLORS['light'])
         fecha_venc_frame.grid(row=1, column=3, padx=4, pady=(1,2), sticky="ew")
         fecha_venc_edit = DateEntry(fecha_venc_frame, width=15, background='darkblue', foreground='white',
@@ -1858,20 +1861,20 @@ class IngresoInsumos:
         fecha_venc_edit.pack(side="left")
         edit_sin_fecha_venc = tk.BooleanVar()
         edit_check_sin_fecha = tk.Checkbutton(fecha_venc_frame, text="Sin fecha\nvencimiento", variable=edit_sin_fecha_venc,
-                                              command=lambda: fecha_venc_edit.configure(state='disabled' if edit_sin_fecha_venc.get() else 'normal'),
-                                              font=('Segoe UI', 8),
-                                              bg=self.COLORS['light'], fg=self.COLORS['text_dark'],
-                                              activebackground=self.COLORS['white'], activeforeground=self.COLORS['text_dark'],
-                                              selectcolor=self.COLORS['white'])
+                                            command=lambda: fecha_venc_edit.configure(state='disabled' if edit_sin_fecha_venc.get() else 'normal'),
+                                            font=('Segoe UI', 8),
+                                            bg=self.COLORS['light'], fg=self.COLORS['text_dark'],
+                                            activebackground=self.COLORS['white'], activeforeground=self.COLORS['text_dark'],
+                                            selectcolor=self.COLORS['white'])
         edit_check_sin_fecha.pack(side="right", padx=(5, 0))
 
         tk.Label(detalles_content, text="Cantidad:", font=('Segoe UI', 8, 'bold'),
-                 bg=self.COLORS['light'], fg=self.COLORS['text_dark']).grid(row=1, column=4, padx=4, pady=(1,1), sticky="w")
+                bg=self.COLORS['light'], fg=self.COLORS['text_dark']).grid(row=1, column=4, padx=4, pady=(1,1), sticky="w")
         cantidad_entry = ttk.Entry(detalles_content, width=24, font=('Segoe UI', 8))
         cantidad_entry.grid(row=1, column=5, padx=4, pady=(1,2), sticky="ew")
 
         tk.Label(detalles_content, text="Observaciones:", font=('Segoe UI', 8, 'bold'),
-                 bg=self.COLORS['light'], fg=self.COLORS['text_dark']).grid(row=2, column=0, padx=4, pady=(1,1), sticky="w")
+                bg=self.COLORS['light'], fg=self.COLORS['text_dark']).grid(row=2, column=0, padx=4, pady=(1,1), sticky="w")
         observaciones_entry = ttk.Entry(detalles_content, width=80, font=('Segoe UI', 8))
         observaciones_entry.grid(row=2, column=1, columnspan=5, padx=4, pady=(1,2), sticky="ew")
 
@@ -1883,7 +1886,7 @@ class IngresoInsumos:
         salida_header.pack(fill='x')
         salida_header.pack_propagate(False)
         tk.Label(salida_header, text="🔄 Salida a Nivel Inferior",
-                 font=('Segoe UI', 8, 'bold'), fg=self.COLORS['white'], bg=self.COLORS['primary']).pack(side='left', padx=8, pady=0)
+                font=('Segoe UI', 8, 'bold'), fg=self.COLORS['white'], bg=self.COLORS['primary']).pack(side='left', padx=8, pady=0)
 
         salida_content = tk.Frame(self.frame_salida_nivel_inferior_edit, bg=self.COLORS['light'])
         salida_content.pack(fill='x', padx=10, pady=3)
@@ -1892,24 +1895,24 @@ class IngresoInsumos:
             salida_content.columnconfigure(col, weight=1)
 
         tk.Label(salida_content, text="Distrito:", font=('Segoe UI', 8, 'bold'),
-                 bg=self.COLORS['light'], fg=self.COLORS['text_dark']).grid(row=0, column=0, padx=4, pady=(1,1), sticky="w")
+                bg=self.COLORS['light'], fg=self.COLORS['text_dark']).grid(row=0, column=0, padx=4, pady=(1,1), sticky="w")
         edit_salida_distrito_var = tk.StringVar()
         salida_distrito_cb = AutocompleteCombobox(salida_content, textvariable=edit_salida_distrito_var, width=25,
-                                                  completevalues=[d['nombre'] for d in obtener_distritos() or []], state="disabled", font=('Segoe UI', 8))
+                                                completevalues=[d['nombre'] for d in obtener_distritos() or []], state="disabled", font=('Segoe UI', 8))
         salida_distrito_cb.grid(row=0, column=1, padx=4, pady=(1,2), sticky="ew")
 
         tk.Label(salida_content, text="Tipo de Servicio:", font=('Segoe UI', 8, 'bold'),
-                 bg=self.COLORS['light'], fg=self.COLORS['text_dark']).grid(row=0, column=2, padx=4, pady=(1,1), sticky="w")
+                bg=self.COLORS['light'], fg=self.COLORS['text_dark']).grid(row=0, column=2, padx=4, pady=(1,1), sticky="w")
         edit_salida_tipo_servicio_var = tk.StringVar()
         salida_tipo_servicio_cb = AutocompleteCombobox(salida_content, textvariable=edit_salida_tipo_servicio_var, width=25,
-                                                       completevalues=[], state="disabled", font=('Segoe UI', 8))
+                                                    completevalues=[], state="disabled", font=('Segoe UI', 8))
         salida_tipo_servicio_cb.grid(row=0, column=3, padx=4, pady=(1,2), sticky="ew")
 
         tk.Label(salida_content, text="Servicio:", font=('Segoe UI', 8, 'bold'),
-                 bg=self.COLORS['light'], fg=self.COLORS['text_dark']).grid(row=0, column=4, padx=4, pady=(1,1), sticky="w")
+                bg=self.COLORS['light'], fg=self.COLORS['text_dark']).grid(row=0, column=4, padx=4, pady=(1,1), sticky="w")
         edit_salida_servicio_var = tk.StringVar()
         salida_servicio_cb = AutocompleteCombobox(salida_content, textvariable=edit_salida_servicio_var, width=25,
-                                                  completevalues=[], state="disabled", font=('Segoe UI', 8))
+                                                completevalues=[], state="disabled", font=('Segoe UI', 8))
         salida_servicio_cb.grid(row=0, column=5, padx=4, pady=(1,2), sticky="ew")
 
         # Funciones auxiliares del diálogo
@@ -2201,58 +2204,58 @@ class IngresoInsumos:
 
         def validar_campos():
             if not fecha_edit.get_date():
-                messagebox.showerror("Error", "La fecha de registro es obligatoria")
+                messagebox.showerror("Error", "La fecha de registro es obligatoria", parent=editar_ventana)
                 return False
             if not referencia_entry.get().strip():
-                messagebox.showerror("Error", "La referencia es obligatoria")
+                messagebox.showerror("Error", "La referencia es obligatoria", parent=editar_ventana)
                 return False
             if not edit_tipo_movimiento_var.get().strip():
-                messagebox.showerror("Error", "El tipo de movimiento es obligatorio")
+                messagebox.showerror("Error", "El tipo de movimiento es obligatorio", parent=editar_ventana)
                 return False
             if not edit_insumo_var.get().strip():
-                messagebox.showerror("Error", "El insumo es obligatorio")
+                messagebox.showerror("Error", "El insumo es obligatorio", parent=editar_ventana)
                 return False
             if not edit_presentacion_var.get().strip():
-                messagebox.showerror("Error", "La presentación es obligatoria")
+                messagebox.showerror("Error", "La presentación es obligatoria", parent=editar_ventana)
                 return False
 
             nivel_val = nivel_sel.get()
             if nivel_val == "distrito" and not edit_distrito_var.get().strip():
-                messagebox.showerror("Error", "El distrito es obligatorio para nivel Distrito")
+                messagebox.showerror("Error", "El distrito es obligatorio para nivel Distrito", parent=editar_ventana)
                 return False
             if nivel_val == "servicio":
                 if not edit_distrito_var.get().strip():
-                    messagebox.showerror("Error", "El distrito es obligatorio para nivel Servicio")
+                    messagebox.showerror("Error", "El distrito es obligatorio para nivel Servicio", parent=editar_ventana)
                     return False
                 if not edit_tipo_servicio_var.get().strip():
-                    messagebox.showerror("Error", "El tipo de servicio es obligatorio para nivel Servicio")
+                    messagebox.showerror("Error", "El tipo de servicio es obligatorio para nivel Servicio", parent=editar_ventana)
                     return False
                 if not edit_servicio_var.get().strip():
-                    messagebox.showerror("Error", "El servicio es obligatorio para nivel Servicio")
+                    messagebox.showerror("Error", "El servicio es obligatorio para nivel Servicio", parent=editar_ventana)
                     return False
 
             if edit_tipo_movimiento_var.get().strip().upper() == "SALIDA NIVEL INFERIOR":
                 if nivel_val == "area" and not edit_salida_distrito_var.get().strip():
-                    messagebox.showerror("Requisito", "Debe seleccionar un Distrito (Salida) antes de continuar.")
+                    messagebox.showerror("Requisito", "Debe seleccionar un Distrito (Salida) antes de continuar.", parent=editar_ventana)
                     return False
                 if nivel_val == "distrito" and not edit_salida_servicio_var.get().strip():
-                    messagebox.showerror("Requisito", "Debe seleccionar un Servicio (Salida) antes de continuar.")
+                    messagebox.showerror("Requisito", "Debe seleccionar un Servicio (Salida) antes de continuar.", parent=editar_ventana)
                     return False
 
             if not edit_sin_lote_var.get() and not lote_entry.get().strip():
-                messagebox.showerror("Error", "El campo Lote es obligatorio si no está marcado 'Sin lote'")
+                messagebox.showerror("Error", "El campo Lote es obligatorio si no está marcado 'Sin lote'", parent=editar_ventana)
                 return False
             if not edit_sin_fecha_venc.get() and not fecha_venc_edit.get_date():
-                messagebox.showerror("Error", "La fecha de vencimiento es obligatoria si no está marcada 'Sin fecha'")
+                messagebox.showerror("Error", "La fecha de vencimiento es obligatoria si no está marcada 'Sin fecha'", parent=editar_ventana)
                 return False
 
             try:
                 cantidad = float(cantidad_entry.get().strip())
                 if cantidad <= 0:
-                    messagebox.showerror("Error", "La cantidad debe ser un número positivo")
+                    messagebox.showerror("Error", "La cantidad debe ser un número positivo", parent=editar_ventana)
                     return False
             except ValueError:
-                messagebox.showerror("Error", "La cantidad debe ser un número válido")
+                messagebox.showerror("Error", "La cantidad debe ser un número válido", parent=editar_ventana)
                 return False
             return True
 
@@ -2318,7 +2321,7 @@ class IngresoInsumos:
                     try:
                         cantidad_val = float(cantidad_entry.get().strip())
                     except Exception:
-                        messagebox.showerror("Error", "La cantidad debe ser un número válido")
+                        messagebox.showerror("Error", "La cantidad debe ser un número válido", parent=editar_ventana)
                         return
 
                     saldo_bd = self._obtener_saldo_actual(nivel_val, area_id, distrito_id, tipo_servicio_id, servicio_id, insumo_id)
@@ -2329,32 +2332,35 @@ class IngresoInsumos:
                         messagebox.showerror(
                             "Saldo insuficiente (BD)",
                             "No puede guardar un movimiento negativo porque el insumo no tiene saldo previo en la base de datos para el nivel seleccionado.\n"
-                            "Registre primero un movimiento positivo (p. ej. Inventario Inicial o Entrada)."
+                            "Registre primero un movimiento positivo (p. ej. Inventario Inicial o Entrada).",
+                            parent=editar_ventana
                         )
                         return
 
                     if cantidad_val > saldo_bd:
                         messagebox.showerror(
                             "Saldo insuficiente (BD)",
-                            f"La cantidad ({cantidad_val}) excede el saldo disponible en base de datos ({saldo_bd:.2f})."
+                            f"La cantidad ({cantidad_val}) excede el saldo disponible en base de datos ({saldo_bd:.2f}).",
+                            parent=editar_ventana
                         )
                         return
 
                     if cantidad_val > saldo_total_estimado:
                         messagebox.showerror(
                             "Saldo insuficiente",
-                            f"La cantidad ({cantidad_val}) excede el saldo total estimado ({saldo_total_estimado:.2f})."
+                            f"La cantidad ({cantidad_val}) excede el saldo total estimado ({saldo_total_estimado:.2f}).",
+                            parent=editar_ventana
                         )
                         return
 
                 except Exception as e:
-                    messagebox.showerror("Error", f"Error validando saldo: {str(e)}")
+                    messagebox.showerror("Error", f"Error validando saldo: {str(e)}", parent=editar_ventana)
                     return
-    
+
             self.tree.item(selected_item, values=nuevos_valores)
             self.ajustar_ancho_columnas_automatico()
             _on_close_editor()
-            messagebox.showinfo("Éxito", "Movimiento actualizado correctamente")
+            messagebox.showinfo("Éxito", "Movimiento actualizado correctamente", parent=editar_ventana)
 
         frame_botones = tk.Frame(scrollable_frame, bg=self.COLORS['light'])
         frame_botones.pack(fill="x", padx=14, pady=8)
@@ -2368,9 +2374,9 @@ class IngresoInsumos:
         btn_guardar.pack(side="left", padx=6, pady=(0,2))
 
         btn_cerrar = tk.Button(botones_container, text="CERRAR", image=self.icon_cerrar, compound='left',
-                               command=_on_close_editor, bg=self.COLORS['light'], fg=self.COLORS['text_dark'],
-                               font=('Segoe UI', 8, 'bold'), relief='flat', padx=12, pady=4,
-                               cursor='hand2', borderwidth=0, highlightthickness=0)
+                            command=_on_close_editor, bg=self.COLORS['light'], fg=self.COLORS['text_dark'],
+                            font=('Segoe UI', 8, 'bold'), relief='flat', padx=12, pady=4,
+                            cursor='hand2', borderwidth=0, highlightthickness=0)
         btn_cerrar.pack(side="left", padx=6, pady=(0,2))
 
         # Enlaces extra

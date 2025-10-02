@@ -199,11 +199,105 @@ class ReporteBres:
             import traceback
             traceback.print_exc()
             return {}
+    
+    # === Corte logístico y saldo anterior desde BD (26–25) ===
 
+    def _fecha_corte_anterior(self, fecha_inicio_periodo):
+        """
+        Devuelve un datetime del día 25 del mismo mes de 'fecha_inicio_periodo'.
+        Si el periodo es [26/M/Y, 25/(M+1)/Y], el corte anterior es 25/M/Y.
+        """
+        y = fecha_inicio_periodo.year
+        m = fecha_inicio_periodo.month
+        return datetime(y, m, 25)
+
+    def _obtener_saldo_corte_bd(self, fecha_corte_dt, contexto, insumo_id):
+        """
+        Devuelve el saldo (existencia) acumulado al cierre de 'fecha_corte_dt' (inclusive)
+        consultando la BD para el contexto actual y el insumo_id.
+        Ajusta nombres de tablas/columnas según tu esquema real si difiere.
+        contexto: dict con claves: area, distrito, tipo_servicio, servicio, presentacion
+        """
+        try:
+            conn = conectar_db()
+            if not conn:
+                return 0.0
+            cur = conn.cursor(dictionary=True)
+
+            filtros = []
+            params_ctx = []
+
+            # Ajusta a tus columnas reales de los joins de obtener_movimientos_bres
+            # Usamos los mismos nombres que ya aparecen en tus datos: area_nombre, distrito_nombre, tipo_servicio_descripcion, servicio_nombre, presentacion_nombre
+            if contexto.get('area'):
+                filtros.append("a.nombre = %s")
+                params_ctx.append(contexto['area'])
+            if contexto.get('distrito'):
+                filtros.append("d.nombre = %s")
+                params_ctx.append(contexto['distrito'])
+            if contexto.get('tipo_servicio'):
+                filtros.append("ts.descripcion = %s")
+                params_ctx.append(contexto['tipo_servicio'])
+            if contexto.get('servicio'):
+                filtros.append("s.nombre = %s")
+                params_ctx.append(contexto['servicio'])
+            if contexto.get('presentacion'):
+                filtros.append("p.nombre = %s")
+                params_ctx.append(contexto['presentacion'])
+
+            where_ctx = (" AND " + " AND ".join(filtros)) if filtros else ""
+
+            sql = f"""
+                SELECT
+                    COALESCE(SUM(
+                        CASE
+                            WHEN tm.descripcion IN ('INVENTARIO INICIAL', 'ENTRADA NIVEL SUPERIOR', 'REAJUSTE (+)')
+                                THEN m.cantidad
+                            WHEN tm.descripcion IN ('SALIDA NIVEL INFERIOR', 'REAJUSTE (-)', 'ENTREGADO')
+                                THEN -m.cantidad
+                            ELSE 0
+                        END
+                    ), 0) AS saldo
+                FROM movimiento m
+                INNER JOIN tipo_movimiento tm ON m.tipo_movimiento_id = tm.id
+                INNER JOIN insumo i ON i.id = m.insumo_id
+                LEFT JOIN presentacion p ON p.id = i.id_presentacion
+                LEFT JOIN servicio s ON s.id = m.servicio_id
+                LEFT JOIN tipo_servicio ts ON ts.id = s.id_tipo_servicio
+                LEFT JOIN distrito d ON d.id = m.distrito_id OR d.id = ts.id_distrito
+                LEFT JOIN area a ON a.id = d.id_area
+                WHERE DATE(m.fecha_registro) <= %s
+                  AND m.insumo_id = %s
+                  {where_ctx}
+            """
+
+            params = [fecha_corte_dt.strftime('%Y-%m-%d'), insumo_id] + params_ctx
+            cur.execute(sql, params)
+            row = cur.fetchone()
+            cur.close()
+            conn.close()
+            return float(row['saldo'] or 0.0)
+        except Exception as e:
+            print(f"ERROR obteniendo saldo corte BRES: {e}")
+            return 0.0
+    
+    def _formatear_periodo_logistico(self, fecha_ini, fecha_fin):
+        """
+        Devuelve un string 'Periodo logístico: 26/MM/YYYY – 25/MM/YYYY' usando fecha_ini/fecha_fin.
+        """
+        ini = fecha_ini.strftime('%d/%m/%Y')
+        fin = fecha_fin.strftime('%d/%m/%Y')
+        return f"Periodo logístico: {ini} – {fin}"
+    
     def procesar_datos_bres(self, movimientos_raw, fecha_ini, fecha_fin):
         """
-        Lógica de datos (no toca estilos).
+        Procesa BRES:
+        - Usa self.saldo_anterior_por_insumo (saldo al 25 inclusive) como base.
+        - Suma SOLO movimientos dentro del periodo [fecha_ini, fecha_fin] (26–25).
+        - Normaliza a float para evitar Decimal.
+        - Agrega totales por nivel según selección.
         """
+        # Normalizar campos y mapear tipo_servicio si viene con otra clave
         for m in movimientos_raw:
             if 'tipo_servicio_desc' in m and 'tipo_servicio_descripcion' not in m:
                 m['tipo_servicio_descripcion'] = m['tipo_servicio_desc']
@@ -214,10 +308,17 @@ class ReporteBres:
 
         datos_agrupados = {}
 
-        nivel_area = self.combo_area.get().strip()
-        nivel_distrito = self.combo_distrito.get().strip()
-        nivel_tipo_servicio = self.combo_tipo_servicio.get().strip()
-        nivel_servicio = self.combo_servicio.get().strip()
+        nivel_area = (self.combo_area.get() or '').strip()
+        nivel_distrito = (self.combo_distrito.get() or '').strip()
+        nivel_tipo_servicio = (self.combo_tipo_servicio.get() or '').strip()
+        nivel_servicio = (self.combo_servicio.get() or '').strip()
+
+        # Función de suma segura
+        def f(x):
+            try:
+                return float(x)
+            except:
+                return 0.0
 
         for mov in movimientos_raw:
             insumo_id = mov.get('codigo_insumo')
@@ -226,43 +327,85 @@ class ReporteBres:
 
             codigo = codigos_insumos.get(insumo_id, f"TEMP-{str(insumo_id).zfill(4)}")
             nombre = mov.get('nombre_insumo', '')
+
             area = mov.get('area_nombre', '')
             distrito = mov.get('distrito_nombre', '')
             tipo_servicio = mov.get('tipo_servicio_descripcion', '')
             servicio = mov.get('servicio_nombre', '')
-            tipo_movimiento = str(mov.get('tipo_movimiento', '')).upper()
 
+            tipo_movimiento = str(mov.get('tipo_movimiento', '')).strip().upper()
+
+            # Fecha: solo sumar si está dentro [fecha_ini, fecha_fin]
+            fecha_str = mov.get('fecha_registro') or mov.get('fecha')
+            if not fecha_str:
+                continue
             try:
-                cantidad = float(mov.get('cantidad', 0))
+                # Soporta 'YYYY-mm-dd' o 'dd/mm/YYYY'
+                if isinstance(fecha_str, datetime):
+                    fecha_mov = fecha_str
+                else:
+                    try:
+                        fecha_mov = datetime.strptime(str(fecha_str), '%Y-%m-%d')
+                    except:
+                        fecha_mov = datetime.strptime(str(fecha_str), '%d/%m/%Y')
             except:
-                cantidad = 0
+                continue
+
+            if not (fecha_ini <= fecha_mov <= fecha_fin):
+                continue
+
+            cantidad = f(mov.get('cantidad', 0))
 
             if codigo not in datos_agrupados:
                 datos_agrupados[codigo] = {
                     'nombre_insumo': nombre,
                     'insumo_id': insumo_id,
-                    'saldo_anterior_area': 0,
-                    'saldo_anterior_distritos': 0,
-                    'saldo_anterior_servicios': 0,
-                    'entradas_nivel_superior_area': 0,
-                    'entradas_nivel_superior_distritos': 0,
-                    'entradas_nivel_superior_servicios': 0,
-                    'salidas_nivel_inferior_area': 0,
-                    'salidas_nivel_inferior_distritos': 0,
-                    'entregado_distritos': 0,
-                    'entregado_servicios': 0,
-                    'no_entregado_distritos': 0,
-                    'no_entregado_servicios': 0,
-                    'reajustes_area': 0,
-                    'reajustes_distritos': 0,
-                    'reajustes_servicios': 0,
+                    # saldos base: tomar de self.saldo_anterior_por_insumo por insumo_id
+                    'saldo_anterior_area': 0.0,
+                    'saldo_anterior_distritos': 0.0,
+                    'saldo_anterior_servicios': 0.0,
+                    'entradas_nivel_superior_area': 0.0,
+                    'entradas_nivel_superior_distritos': 0.0,
+                    'entradas_nivel_superior_servicios': 0.0,
+                    'salidas_nivel_inferior_area': 0.0,
+                    'salidas_nivel_inferior_distritos': 0.0,
+                    'entregado_distritos': 0.0,
+                    'entregado_servicios': 0.0,
+                    'no_entregado_distritos': 0.0,
+                    'no_entregado_servicios': 0.0,
+                    'reajustes_area': 0.0,
+                    'reajustes_distritos': 0.0,
+                    'reajustes_servicios': 0.0,
+                    '_saldo_base_asignado': False
                 }
 
+            # Asignar el saldo base solo una vez por código/insumo
+            if not datos_agrupados[codigo]['_saldo_base_asignado']:
+                saldo_base = f(self.saldo_anterior_por_insumo.get(insumo_id, 0.0))
+                # Distribuimos el saldo base según el nivel donde comparecerá:
+                # - Si hay servicio seleccionado: va a servicios
+                # - Si hay tipo_servicio seleccionado: también lo presentamos en servicios (misma base)
+                # - Si hay distrito (sin servicio): distribuirlo en distritos
+                # - Si solo área: distribuirlo en área
+                if nivel_servicio or nivel_tipo_servicio:
+                    datos_agrupados[codigo]['saldo_anterior_servicios'] = saldo_base
+                elif nivel_distrito:
+                    datos_agrupados[codigo]['saldo_anterior_distritos'] = saldo_base
+                elif nivel_area:
+                    datos_agrupados[codigo]['saldo_anterior_area'] = saldo_base
+                else:
+                    # Si no hay filtro específico, dejaremos el total en el nivel más abarcador (área)
+                    datos_agrupados[codigo]['saldo_anterior_area'] = saldo_base
+                datos_agrupados[codigo]['_saldo_base_asignado'] = True
+
+            # Determinar nivel del movimiento (contexto del mov)
             es_nivel_area = bool(area and not distrito)
             es_nivel_distrito = bool(distrito and not servicio)
             es_nivel_servicio = bool(servicio)
 
+            # Acumulación por tipo dentro del periodo
             if tipo_movimiento == 'INVENTARIO INICIAL':
+                # Inventario inicial cae dentro del periodo si fue registrado dentro del rango
                 if es_nivel_area:
                     datos_agrupados[codigo]['saldo_anterior_area'] += cantidad
                 elif es_nivel_distrito:
@@ -296,7 +439,7 @@ class ReporteBres:
                 elif es_nivel_servicio:
                     datos_agrupados[codigo]['no_entregado_servicios'] += cantidad
 
-            elif tipo_movimiento == 'REAJUSTE POSITIVO':
+            elif tipo_movimiento == 'REAJUSTE (+)':
                 if es_nivel_area:
                     datos_agrupados[codigo]['reajustes_area'] += cantidad
                 elif es_nivel_distrito:
@@ -304,7 +447,7 @@ class ReporteBres:
                 elif es_nivel_servicio:
                     datos_agrupados[codigo]['reajustes_servicios'] += cantidad
 
-            elif tipo_movimiento == 'REAJUSTE NEGATIVO':
+            elif tipo_movimiento == 'REAJUSTE (-)':
                 if es_nivel_area:
                     datos_agrupados[codigo]['reajustes_area'] -= cantidad
                 elif es_nivel_distrito:
@@ -312,54 +455,61 @@ class ReporteBres:
                 elif es_nivel_servicio:
                     datos_agrupados[codigo]['reajustes_servicios'] -= cantidad
 
+        # Promedios
         insumo_ids = [datos['insumo_id'] for datos in datos_agrupados.values() if datos['insumo_id'] is not None]
         promedios_batch = self.calcular_promedio_demanda_real(insumo_ids, fecha_ini, fecha_fin)
 
         datos_procesados = []
-
         for codigo, datos in datos_agrupados.items():
+            # Totales por nivel según la selección actual de combos
             if nivel_servicio:
-                saldo_anterior_total = datos['saldo_anterior_servicios']
-                entradas_nivel_superior_total = datos['entradas_nivel_superior_servicios']
-                entregado_total = datos['entregado_servicios']
-                no_entregado_total = datos['no_entregado_servicios']
-                reajustes_total = datos['reajustes_servicios']
+                saldo_anterior_total = f(datos['saldo_anterior_servicios'])
+                entradas_nivel_superior_total = f(datos['entradas_nivel_superior_servicios'])
+                entregado_total = f(datos['entregado_servicios'])
+                no_entregado_total = f(datos['no_entregado_servicios'])
+                reajustes_total = f(datos['reajustes_servicios'])
+
             elif nivel_tipo_servicio:
-                saldo_anterior_total = datos['saldo_anterior_servicios']
-                entradas_nivel_superior_total = datos['entradas_nivel_superior_servicios']
-                entregado_total = datos['entregado_servicios']
-                no_entregado_total = datos['no_entregado_servicios']
-                reajustes_total = datos['reajustes_servicios']
+                saldo_anterior_total = f(datos['saldo_anterior_servicios'])
+                entradas_nivel_superior_total = f(datos['entradas_nivel_superior_servicios'])
+                entregado_total = f(datos['entregado_servicios'])
+                no_entregado_total = f(datos['no_entregado_servicios'])
+                reajustes_total = f(datos['reajustes_servicios'])
+
             elif nivel_distrito:
-                saldo_anterior_total = datos['saldo_anterior_distritos'] + datos['saldo_anterior_servicios']
-                entradas_nivel_superior_total = (datos['entradas_nivel_superior_distritos'] + datos['entradas_nivel_superior_servicios'] - datos['salidas_nivel_inferior_distritos'])
-                entregado_total = datos['entregado_distritos'] + datos['entregado_servicios']
-                no_entregado_total = datos['no_entregado_distritos'] + datos['no_entregado_servicios']
-                reajustes_total = datos['reajustes_distritos'] + datos['reajustes_servicios']
+                saldo_anterior_total = f(datos['saldo_anterior_distritos'] + datos['saldo_anterior_servicios'])
+                entradas_nivel_superior_total = f(datos['entradas_nivel_superior_distritos'] + datos['entradas_nivel_superior_servicios'] - datos['salidas_nivel_inferior_distritos'])
+                entregado_total = f(datos['entregado_distritos'] + datos['entregado_servicios'])
+                no_entregado_total = f(datos['no_entregado_distritos'] + datos['no_entregado_servicios'])
+                reajustes_total = f(datos['reajustes_distritos'] + datos['reajustes_servicios'])
+
             elif nivel_area:
-                saldo_anterior_total = datos['saldo_anterior_area'] + datos['saldo_anterior_distritos'] + datos['saldo_anterior_servicios']
-                entradas_nivel_superior_total = (datos['entradas_nivel_superior_area'] + datos['entradas_nivel_superior_distritos'] - datos['salidas_nivel_inferior_area'])
-                entregado_total = datos['entregado_distritos'] + datos['entregado_servicios']
-                no_entregado_total = datos['no_entregado_distritos'] + datos['no_entregado_servicios']
-                reajustes_total = datos['reajustes_area'] + datos['reajustes_distritos'] + datos['reajustes_servicios']
+                saldo_anterior_total = f(datos['saldo_anterior_area'] + datos['saldo_anterior_distritos'] + datos['saldo_anterior_servicios'])
+                entradas_nivel_superior_total = f(datos['entradas_nivel_superior_area'] + datos['entradas_nivel_superior_distritos'] - datos['salidas_nivel_inferior_area'])
+                entregado_total = f(datos['entregado_distritos'] + datos['entregado_servicios'])
+                no_entregado_total = f(datos['no_entregado_distritos'] + datos['no_entregado_servicios'])
+                reajustes_total = f(datos['reajustes_area'] + datos['reajustes_distritos'] + datos['reajustes_servicios'])
+
             else:
-                saldo_anterior_total = datos['saldo_anterior_area'] + datos['saldo_anterior_distritos'] + datos['saldo_anterior_servicios']
-                entradas_nivel_superior_total = (datos['entradas_nivel_superior_area'] + datos['entradas_nivel_superior_distritos'] + datos['entradas_nivel_superior_servicios'] - datos['salidas_nivel_inferior_area'] - datos['salidas_nivel_inferior_distritos'])
-                entregado_total = datos['entregado_distritos'] + datos['entregado_servicios']
-                no_entregado_total = datos['no_entregado_distritos'] + datos['no_entregado_servicios']
-                reajustes_total = datos['reajustes_area'] + datos['reajustes_distritos'] + datos['reajustes_servicios']
+                saldo_anterior_total = f(datos['saldo_anterior_area'] + datos['saldo_anterior_distritos'] + datos['saldo_anterior_servicios'])
+                entradas_nivel_superior_total = f(datos['entradas_nivel_superior_area'] + datos['entradas_nivel_superior_distritos'] + datos['entradas_nivel_superior_servicios'] - datos['salidas_nivel_inferior_area'] - datos['salidas_nivel_inferior_distritos'])
+                entregado_total = f(datos['entregado_distritos'] + datos['entregado_servicios'])
+                no_entregado_total = f(datos['no_entregado_distritos'] + datos['no_entregado_servicios'])
+                reajustes_total = f(datos['reajustes_area'] + datos['reajustes_distritos'] + datos['reajustes_servicios'])
 
-            saldo_mes_siguiente = (saldo_anterior_total + entradas_nivel_superior_total - entregado_total + reajustes_total)
-            demanda_total = entregado_total + no_entregado_total
+            saldo_mes_siguiente = f(saldo_anterior_total + entradas_nivel_superior_total - entregado_total + reajustes_total)
+            demanda_total = f(entregado_total + no_entregado_total)
 
-            promedio_mensual = promedios_batch.get(datos['insumo_id'], 0.0)
-            meses_existencia = saldo_mes_siguiente / promedio_mensual if promedio_mensual > 0 else 0
+            promedio_mensual = f(promedios_batch.get(datos['insumo_id'], 0.0))
+            meses_existencia = f((saldo_mes_siguiente / promedio_mensual) if promedio_mensual > 0 else 0.0)
+
             try:
-                nivel_maximo = float(self.nivel_maximo_var.get()) if self.nivel_maximo_var.get() else 6
+                nivel_maximo = float(self.nivel_maximo_var.get()) if self.nivel_maximo_var.get() else 6.0
             except Exception:
-                nivel_maximo = 6
-            cantidad_maxima = promedio_mensual * nivel_maximo
-            cantidad_solicitar = cantidad_maxima - saldo_mes_siguiente
+                nivel_maximo = 6.0
+
+            cantidad_maxima = f(promedio_mensual * nivel_maximo)
+            cantidad_solicitar = f(cantidad_maxima - saldo_mes_siguiente)
 
             datos_procesados.append({
                 'codigo_insumo': codigo,
@@ -594,9 +744,9 @@ class ReporteBres:
             for mov in movimientos_insumo:
                 tipo = str(mov.get('tipo_movimiento', '')).upper()
                 cantidad = float(mov.get('cantidad', 0))
-                if tipo in ['INVENTARIO INICIAL', 'ENTRADA NIVEL SUPERIOR', 'REAJUSTE POSITIVO']:
+                if tipo in ['INVENTARIO INICIAL', 'ENTRADA NIVEL SUPERIOR', 'REAJUSTE (+)']:
                     saldo += cantidad
-                elif tipo in ['ENTREGADO', 'SALIDA NIVEL INFERIOR', 'REAJUSTE NEGATIVO']:
+                elif tipo in ['ENTREGADO', 'SALIDA NIVEL INFERIOR', 'REAJUSTE (-)']:
                     saldo -= cantidad
             return saldo
         except Exception as e:
@@ -1016,6 +1166,15 @@ class ReporteBres:
                 fecha_ini_str, fecha_fin_str = self.calcular_rango_corte_logistico(anio, mes_inicio, mes_final)
                 fecha_ini = datetime.strptime(fecha_ini_str, '%d/%m/%Y')
                 fecha_fin = datetime.strptime(fecha_fin_str, '%d/%m/%Y')
+                
+                periodo_txt = self._formatear_periodo_logistico(fecha_ini, fecha_fin)
+                # Si quieres, colócalo en algún lugar de tu UI:
+                # Por ejemplo, crear una etiqueta en self.pdf_outer arriba del visor:
+                if not hasattr(self, 'lbl_periodo_logistico_ui'):
+                    self.lbl_periodo_logistico_ui = tk.Label(self.pdf_outer, text=periodo_txt, bg=self.COLORS['white'], fg=self.COLORS['text_dark'], font=('Segoe UI', 9, 'italic'))
+                    self.lbl_periodo_logistico_ui.pack(anchor='w', padx=5, pady=(0, 4))
+                else:
+                    self.lbl_periodo_logistico_ui.config(text=periodo_txt)
 
             if fecha_fin < fecha_ini:
                 messagebox.showerror("Error", "La fecha final debe ser mayor a la inicial")
@@ -1032,6 +1191,36 @@ class ReporteBres:
                 insumo_nombre=self.combo_insumo.get().strip() or None,
                 presentacion_nombre=self.combo_presentacion.get().strip() or None
             )
+            
+            # Filtrar por rango logístico (ya obtuviste movimientos por fecha_ini/fecha_fin)
+            # Construir contexto actual para saldo anterior
+            contexto = {
+                'area': (self.combo_area.get() or '').strip() or None,
+                'distrito': (self.combo_distrito.get() or '').strip() or None,
+                'tipo_servicio': (self.combo_tipo_servicio.get() or '').strip() or None,
+                'servicio': (self.combo_servicio.get() or '').strip() or None,
+                'presentacion': (self.combo_presentacion.get() or '').strip() or None
+            }
+
+            # Fecha de corte: 25 del mes de fecha_ini
+            fecha_corte_anterior = self._fecha_corte_anterior(fecha_ini)
+
+            # Detectar insumos presentes
+            insumo_ids_en_periodo = set()
+            for m in movimientos_raw:
+                iid = m.get('codigo_insumo')
+                if iid is None:
+                    continue
+                try:
+                    iid = int(str(iid).strip())
+                    insumo_ids_en_periodo.add(iid)
+                except:
+                    pass
+
+            # Obtener saldo anterior por insumo y guardar en self para que lo use procesar_datos_bres
+            self.saldo_anterior_por_insumo = {}
+            for iid in insumo_ids_en_periodo:
+                self.saldo_anterior_por_insumo[iid] = self._obtener_saldo_corte_bd(fecha_corte_anterior, contexto, iid)
 
             if not movimientos_raw:
                 messagebox.showinfo("Info", "No hay datos para mostrar")
@@ -1415,6 +1604,24 @@ class ReporteBres:
             elements.append(Paragraph("ÁREA NOR ORIENTE", subtitle_style))
             elements.append(Paragraph("BALANCE, REQUISICIÓN Y ENVÍO DE SUMINISTROS", subtitle_style))
             elements.append(Paragraph(f"Generado el: {datetime.now().strftime('%d/%m/%Y %H:%M:%S')}", timestamp_style))
+            
+            # Agregar debajo el periodo logístico (26–25) o el rango seleccionado
+            try:
+                if self.modo_fecha_var.get() == "corte" and self.mes_inicio_var.get() and self.mes_final_var.get() and self.anio_var.get():
+                    # Reconstruir fechas a partir del corte
+                    fecha_ini_str, fecha_fin_str = self.calcular_rango_corte_logistico(self.anio_var.get(), self.mes_inicio_var.get(), self.mes_final_var.get())
+                    _fi = datetime.strptime(fecha_ini_str, '%d/%m/%Y')
+                    _ff = datetime.strptime(fecha_fin_str, '%d/%m/%Y')
+                else:
+                    # Tomar del rango manual
+                    _fi = datetime.strptime(self.fecha_inicial.get(), '%d/%m/%Y')
+                    _ff = datetime.strptime(self.fecha_final.get(), '%d/%m/%Y')
+
+                periodo_txt = self._formatear_periodo_logistico(_fi, _ff)
+                periodo_style = ParagraphStyle('PeriodoStyle', parent=styles['Normal'], alignment=1, spaceAfter=12, fontSize=9)
+                elements.append(Paragraph(periodo_txt, periodo_style))
+            except Exception:
+                pass
 
             left_style = ParagraphStyle(name="LeftAlign", alignment=0, fontSize=9, fontName='Helvetica')
             filtros = [
@@ -1605,6 +1812,21 @@ class ReporteBres:
                     worksheet.merge_range(1, 0, 1, len(encabezados) - 1, "ÁREA NOR ORIENTE", subtitle_format)
                     worksheet.merge_range(2, 0, 2, len(encabezados) - 1, "BALANCE, REQUISICIÓN Y ENVÍO DE SUMINISTROS", subtitle_format)
                     worksheet.merge_range(3, 0, 3, len(encabezados) - 1, f"Generado el: {datetime.now().strftime('%d/%m/%Y %H:%M:%S')}", subtitle_format)
+                    
+                    # Fila 4 para el periodo logístico
+                    try:
+                        if self.modo_fecha_var.get() == "corte" and self.mes_inicio_var.get() and self.mes_final_var.get() and self.anio_var.get():
+                            fi_str, ff_str = self.calcular_rango_corte_logistico(self.anio_var.get(), self.mes_inicio_var.get(), self.mes_final_var.get())
+                            _fi = datetime.strptime(fi_str, '%d/%m/%Y')
+                            _ff = datetime.strptime(ff_str, '%d/%m/%Y')
+                        else:
+                            _fi = datetime.strptime(self.fecha_inicial.get(), '%d/%m/%Y')
+                            _ff = datetime.strptime(self.fecha_final.get(), '%d/%m/%Y')
+
+                        periodo_txt = self._formatear_periodo_logistico(_fi, _ff)
+                        worksheet.merge_range(4, 0, 4, len(encabezados) - 1, periodo_txt, subtitle_format)
+                    except Exception:
+                        pass
 
                     worksheet.merge_range(5, 0, 5, 1, f"Área: {self.combo_area.get()}", filtro_format)
                     worksheet.merge_range(5, 2, 5, 3, f"Distrito: {self.combo_distrito.get()}", filtro_format)

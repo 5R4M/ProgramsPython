@@ -592,120 +592,218 @@ class ReporteDemandaReal:
             except ValueError:
                 return datetime.fromisoformat(value)
         raise TypeError(f"Tipo de fecha no soportado: {type(value)}")
-  
+    
+    # === Helpers de corte logístico (26–25) ===
+
+    def _fecha_corte_anterior(self, fecha_inicio_periodo):
+        """
+        Devuelve un datetime del día 25 del mismo mes de 'fecha_inicio_periodo'.
+        Uso para el periodo [26/M/Y, 25/(M+1)/Y]: el corte anterior es 25/M/Y.
+        """
+        from datetime import datetime
+        y = fecha_inicio_periodo.year
+        m = fecha_inicio_periodo.month
+        return datetime(y, m, 25)
+
+    def _obtener_saldo_corte_bd(self, fecha_corte_dt, contexto, insumo_id):
+        """
+        Devuelve el saldo (existencia) acumulado al cierre de 'fecha_corte_dt' (inclusive),
+        consultando movimientos históricos hasta esa fecha, para el contexto dado.
+        Ajusta la consulta a tu esquema real (nombres de tablas y columnas).
+        contexto: dict con claves opcionales: distrito, tipo_servicio, servicio, presentacion
+        """
+        try:
+            conn = conectar_db()
+            if not conn:
+                return 0.0
+            cur = conn.cursor(dictionary=True)
+
+            filtros = []
+            params_ctx = []
+
+            # Ajusta los nombres de columnas/joins según tu BD real.
+            if contexto.get('distrito'):
+                filtros.append("d.nombre = %s")
+                params_ctx.append(contexto['distrito'])
+            if contexto.get('tipo_servicio'):
+                filtros.append("ts.descripcion = %s")
+                params_ctx.append(contexto['tipo_servicio'])
+            if contexto.get('servicio'):
+                filtros.append("s.nombre = %s")
+                params_ctx.append(contexto['servicio'])
+            if contexto.get('presentacion'):
+                filtros.append("p.nombre = %s")
+                params_ctx.append(contexto['presentacion'])
+
+            where_ctx = (" AND " + " AND ".join(filtros)) if filtros else ""
+
+            sql = f"""
+                SELECT
+                    COALESCE(SUM(
+                        CASE
+                            WHEN m.tipo_movimiento IN ('INVENTARIO INICIAL', 'ENTRADA NIVEL SUPERIOR', 'REAJUSTE (+)')
+                                THEN m.cantidad
+                            WHEN m.tipo_movimiento IN ('SALIDA NIVEL INFERIOR', 'REAJUSTE (-)', 'ENTREGADO')
+                                THEN -m.cantidad
+                            ELSE 0
+                        END
+                    ), 0) AS saldo
+                FROM movimiento m
+                INNER JOIN insumo i ON i.id = m.id_insumo
+                LEFT JOIN presentacion p ON p.id = i.id_presentacion
+                LEFT JOIN servicio s ON s.id = m.id_servicio
+                LEFT JOIN tipo_servicio ts ON ts.id = s.id_tipo_servicio
+                LEFT JOIN distrito d ON d.id = s.id_distrito
+                WHERE DATE(m.fecha) <= %s
+                  AND m.id_insumo = %s
+                  {where_ctx}
+            """
+
+            params = [fecha_corte_dt.strftime('%Y-%m-%d'), insumo_id] + params_ctx
+            cur.execute(sql, params)
+            row = cur.fetchone()
+            cur.close()
+            conn.close()
+            return float(row['saldo'] or 0.0)
+        except Exception as e:
+            print(f"ERROR obteniendo saldo corte: {e}")
+            return 0.0
+    
     def procesar_datos(self, movimientos, fecha_ini, fecha_fin, dias):
         """
-        Integra códigos con prefijos y agrupa datos.
+        Procesa movimientos para el rango [fecha_ini, fecha_fin] (corte logístico 26–25).
+        Usa self.saldo_anterior_por_insumo como base para existencia.
+        Integra códigos con prefijo.
         """
         codigos_insumos = self.generar_codigo_insumo(movimientos)
         print(f"DEBUG: Códigos generados para {len(codigos_insumos)} insumos")
-        
+
         insumos = {}
-        
-        for mov in movimientos:
-            insumo_id_raw = mov.get('codigo_insumo') or mov.get('insumo_id') or mov.get('codigo')
-            try:
-                insumo_id = int(str(insumo_id_raw).strip()) if insumo_id_raw else None
-            except:
-                insumo_id = None
 
-            if insumo_id is None:
-                continue
-
-            codigo_con_prefijo = codigos_insumos.get(insumo_id)
-            if not codigo_con_prefijo:
-                codigo_con_prefijo = f"TEMP-{str(insumo_id).zfill(4)}"
-            
-            nombre_insumo = mov.get('nombre_insumo', '')
-            presentacion = mov.get('nombre_presentacion', '')
-            
-            insumo_key = f"{codigo_con_prefijo}_{nombre_insumo}_{presentacion}"
-            
-            if insumo_key not in insumos:
-                insumos[insumo_key] = {
+        def agregar_si_no_existe(key, insumo_id, codigo_con_prefijo, nombre_insumo, presentacion):
+            if key not in insumos:
+                insumos[key] = {
                     'codigo': codigo_con_prefijo,
                     'insumo_id': insumo_id,
                     'nombre_insumo': nombre_insumo,
                     'presentacion': presentacion,
-                    'entregado': {dia: 0 for dia in dias},
-                    'no_entregado': {dia: 0 for dia in dias},
-                    'inventario_inicial': 0,
-                    'entrada_nivel_superior': 0,
-                    'salida_nivel_inferior': 0,
-                    'reajuste_positivo': 0,
-                    'reajuste_negativo': 0
+                    'entregado': {dia: 0.0 for dia in dias},
+                    'no_entregado': {dia: 0.0 for dia in dias},
+                    'inventario_inicial': 0.0,
+                    'entrada_nivel_superior': 0.0,
+                    'salida_nivel_inferior': 0.0,
+                    'reajuste_positivo': 0.0,
+                    'reajuste_negativo': 0.0
                 }
-            
+
+        for mov in movimientos:
+            # Identificación insumo
+            insumo_id_raw = mov.get('codigo_insumo') or mov.get('insumo_id') or mov.get('codigo')
+            try:
+                insumo_id = int(str(insumo_id_raw).strip()) if insumo_id_raw is not None else None
+            except:
+                insumo_id = None
+            if insumo_id is None:
+                continue
+
+            codigo_con_prefijo = codigos_insumos.get(insumo_id, f"TEMP-{str(insumo_id).zfill(4)}")
+            nombre_insumo = mov.get('nombre_insumo', '')
+            presentacion = mov.get('nombre_presentacion', '')
+
+            insumo_key = f"{codigo_con_prefijo}_{nombre_insumo}_{presentacion}"
+
+            # Fecha y filtro de periodo
             fecha_str = mov.get('fecha', '')
             if not fecha_str:
                 continue
-                
             try:
                 fecha_mov = self._to_datetime(fecha_str)
-            except ValueError:
+            except Exception:
                 continue
-                
+
+            dentro_periodo = (fecha_ini <= fecha_mov <= fecha_fin)
+            tipo_mov = (mov.get('tipo_movimiento') or '').strip().upper()
+
+            # Normalizar cantidad a float, evitando Decimal
+            try:
+                cantidad = float(mov.get('cantidad') or 0)
+            except Exception:
+                # Si por algún motivo no se puede, caer a 0.0
+                cantidad = 0.0
+
             dia = fecha_mov.day
-            cantidad = mov.get('cantidad', 0)
-            tipo_mov = mov.get('tipo_movimiento', '')
-            
-            if tipo_mov == 'ENTREGADO' and dia in dias:
-                insumos[insumo_key]['entregado'][dia] += cantidad
-            elif tipo_mov == 'NO ENTREGADO' and dia in dias:
-                insumos[insumo_key]['no_entregado'][dia] += cantidad
-            elif tipo_mov == 'INVENTARIO INICIAL':
-                insumos[insumo_key]['inventario_inicial'] += cantidad
-            elif tipo_mov == 'ENTRADA NIVEL SUPERIOR':
-                insumos[insumo_key]['entrada_nivel_superior'] += cantidad
-            elif tipo_mov == 'SALIDA NIVEL INFERIOR':
-                insumos[insumo_key]['salida_nivel_inferior'] += cantidad
-            elif tipo_mov == 'REAJUSTE POSITIVO':
-                insumos[insumo_key]['reajuste_positivo'] += cantidad
-            elif tipo_mov == 'REAJUSTE NEGATIVO':
-                insumos[insumo_key]['reajuste_negativo'] += cantidad
-        
+
+            # Crea estructura si no existe
+            agregar_si_no_existe(insumo_key, insumo_id, codigo_con_prefijo, nombre_insumo, presentacion)
+
+            # Acumular SOLO si el movimiento cae dentro del periodo 26–25
+            if dentro_periodo:
+                if tipo_mov == 'ENTREGADO' and dia in dias:
+                    insumos[insumo_key]['entregado'][dia] += cantidad
+                elif tipo_mov == 'NO ENTREGADO' and dia in dias:
+                    insumos[insumo_key]['no_entregado'][dia] += cantidad
+                elif tipo_mov == 'INVENTARIO INICIAL':
+                    insumos[insumo_key]['inventario_inicial'] += cantidad
+                elif tipo_mov == 'ENTRADA NIVEL SUPERIOR':
+                    insumos[insumo_key]['entrada_nivel_superior'] += cantidad
+                elif tipo_mov == 'SALIDA NIVEL INFERIOR':
+                    insumos[insumo_key]['salida_nivel_inferior'] += cantidad
+                elif tipo_mov == 'REAJUSTE (+)':
+                    insumos[insumo_key]['reajuste_positivo'] += cantidad
+                elif tipo_mov == 'REAJUSTE (-)':
+                    insumos[insumo_key]['reajuste_negativo'] += cantidad
+
+        # Calcular totales y existencia con saldo anterior
         datos_procesados = {}
-        
         for insumo_key, valores in insumos.items():
+            total_entregado = float(sum(float(v) for v in valores['entregado'].values()))
+            total_no_entregado = float(sum(float(v) for v in valores['no_entregado'].values()))
+            reajuste_total = float(valores['reajuste_positivo'] - valores['reajuste_negativo'])
+
+            try:
+                saldo_anterior = float(self.saldo_anterior_por_insumo.get(valores['insumo_id'], 0.0))
+            except Exception:
+                saldo_anterior = 0.0
+
+            existencia_val = float(
+                saldo_anterior +
+                float(valores['inventario_inicial']) +
+                float(valores['entrada_nivel_superior']) +
+                float(valores['reajuste_positivo']) -
+                float(valores['salida_nivel_inferior']) -
+                float(valores['reajuste_negativo']) -
+                total_entregado
+            )
+
             fila_datos = {
                 'codigo': valores['codigo'],
                 'insumo_id': valores['insumo_id'],
                 'nombre_insumo': valores['nombre_insumo'],
                 'presentacion': valores['presentacion']
             }
-            
+
             for dia in dias:
-                fila_datos[f'Día_{dia}_Entregado'] = self.formato_valor(valores['entregado'].get(dia, 0))
-                fila_datos[f'Día_{dia}_No_Entregado'] = self.formato_valor(valores['no_entregado'].get(dia, 0))
-            
-            total_entregado = sum(valores['entregado'].values())
-            total_no_entregado = sum(valores['no_entregado'].values())
-            reajuste_total = valores['reajuste_positivo'] - valores['reajuste_negativo']
-            existencia = (valores['inventario_inicial'] + 
-                          valores['entrada_nivel_superior'] + 
-                          valores['reajuste_positivo'] - 
-                          valores['salida_nivel_inferior'] - 
-                          total_entregado - 
-                          valores['reajuste_negativo'])
-            
+                fila_datos[f'Día_{dia}_Entregado'] = self.formato_valor(valores['entregado'].get(dia, 0.0))
+                fila_datos[f'Día_{dia}_No_Entregado'] = self.formato_valor(valores['no_entregado'].get(dia, 0.0))
+
             fila_datos['Total_Entregado'] = self.formato_valor(total_entregado)
             fila_datos['Total_No_Entregado'] = self.formato_valor(total_no_entregado)
             fila_datos['Demanda'] = self.formato_valor(total_entregado + total_no_entregado)
-            fila_datos['Existencia'] = self.formato_valor(existencia)
+            fila_datos['Existencia'] = self.formato_valor(existencia_val)
             fila_datos['Reajuste'] = self.formato_valor(reajuste_total)
-            
+
             fila_datos['_valores_originales'] = {
                 'entregado': valores['entregado'],
                 'no_entregado': valores['no_entregado'],
                 'total_entregado': total_entregado,
                 'total_no_entregado': total_no_entregado,
-                'existencia': existencia,
+                'existencia': existencia_val,
                 'reajuste': reajuste_total
             }
-            
+
             nueva_clave = f"{valores['codigo']} - {valores['nombre_insumo']} - {valores['presentacion']}"
             datos_procesados[nueva_clave] = fila_datos
-        
+
         self.codigos_insumos = codigos_insumos
         return datos_procesados
 
@@ -1035,6 +1133,41 @@ class ReporteDemandaReal:
 
         codigos_insumos = self.generar_codigo_insumo(datos_movimientos)
 
+        # === Saldo anterior logístico para PDF ===
+        # Contexto tomado de los combos actuales
+        ctx_distrito = (self.combo_distrito.get() or "").strip()
+        ctx_tipo_servicio = (self.combo_tipo_servicio.get() or "").strip()
+        ctx_servicio = (self.combo_servicio.get() or "").strip()
+        ctx_presentacion = (self.combo_presentacion.get() or "").strip() if hasattr(self, 'combo_presentacion') else ""
+
+        contexto_pdf = {
+            'distrito': ctx_distrito or None,
+            'tipo_servicio': ctx_tipo_servicio or None,
+            'servicio': ctx_servicio or None,
+            'presentacion': ctx_presentacion or None,
+        }
+
+        fecha_corte_anterior_pdf = self._fecha_corte_anterior(fecha_inicio)
+
+        # Detectar insumos presentes en los datos_movimientos
+        insumo_ids_pdf = set()
+        for m in datos_movimientos:
+            iid = m.get('codigo_insumo') or m.get('insumo_id') or m.get('codigo')
+            if iid is None:
+                continue
+            try:
+                iid = int(str(iid).strip())
+                insumo_ids_pdf.add(iid)
+            except:
+                pass
+
+        saldo_anterior_por_insumo_pdf = {}
+        for iid in insumo_ids_pdf:
+            saldo_anterior_por_insumo_pdf[iid] = self._obtener_saldo_corte_bd(fecha_corte_anterior_pdf, contexto_pdf, iid)
+
+        # Inverso de códigos si lo necesitas para mapear
+        inv_codigos = {v: k for k, v in codigos_insumos.items()} if isinstance(codigos_insumos, dict) else {}
+        
         insumos = {}
         for mov in datos_movimientos:
             insumo_id_raw = mov.get('codigo_insumo') or mov.get('insumo_id') or mov.get('codigo')
@@ -1067,7 +1200,10 @@ class ReporteDemandaReal:
 
             dia_mov = fecha_mov.day
             tipo = str(mov.get('tipo_movimiento', '')).upper()
-            cantidad = mov.get('cantidad', 0)
+            try:
+                cantidad = float(mov.get('cantidad') or 0)
+            except Exception:
+                cantidad = 0.0
 
             if fecha_inicio <= fecha_mov <= fecha_fin:
                 if tipo == 'ENTREGADO' and dia_mov in dias:
@@ -1081,9 +1217,9 @@ class ReporteDemandaReal:
                 insumos[key]['entrada_nivel_superior'] += cantidad
             elif tipo == 'SALIDA NIVEL INFERIOR':
                 insumos[key]['salida_nivel_inferior'] += cantidad
-            elif tipo == 'REAJUSTE POSITIVO':
+            elif tipo == 'REAJUSTE (+)':
                 insumos[key]['reajuste_positivo'] += cantidad
-            elif tipo == 'REAJUSTE NEGATIVO':
+            elif tipo == 'REAJUSTE (-)':
                 insumos[key]['reajuste_negativo'] += cantidad
 
         doc = SimpleDocTemplate(
@@ -1167,12 +1303,27 @@ class ReporteDemandaReal:
             total_entregado = sum(valores['entregado'].get(d, 0) for d in dias)
             total_no_entregado = sum(valores['no_entregado'].get(d, 0) for d in dias)
             reajuste_total = valores['reajuste_positivo'] - valores['reajuste_negativo']
-            existencia = (valores['inventario_inicial'] +
-                          valores['entrada_nivel_superior'] +
-                          valores['reajuste_positivo'] -
-                          valores['salida_nivel_inferior'] -
-                          total_entregado -
-                          valores['reajuste_negativo'])
+            
+            # Obtener insumo_id a partir del código visible si es posible
+            insumo_id_for_row = inv_codigos.get(codigo_con_prefijo, None)
+            try:
+                saldo_anterior_row = float(saldo_anterior_por_insumo_pdf.get(insumo_id_for_row, 0.0))
+            except Exception:
+                saldo_anterior_row = 0.0
+
+            total_entregado = float(sum(float(valores['entregado'].get(d, 0.0)) for d in dias))
+            total_no_entregado = float(sum(float(valores['no_entregado'].get(d, 0.0)) for d in dias))
+            reajuste_total = float(valores['reajuste_positivo'] - valores['reajuste_negativo'])
+
+            existencia = float(
+                saldo_anterior_row +
+                float(valores['inventario_inicial']) +
+                float(valores['entrada_nivel_superior']) +
+                float(valores['reajuste_positivo']) -
+                float(valores['salida_nivel_inferior']) -
+                float(valores['reajuste_negativo']) -
+                total_entregado
+            )
 
             codigo_paragraph = Paragraph(str(codigo_con_prefijo), cell_code_style)
             nombre_paragraph = Paragraph(str(nombre_pres), cell_text_style)
@@ -1325,10 +1476,45 @@ class ReporteDemandaReal:
             messagebox.showinfo("Info", "No hay datos para mostrar")
             return
 
-        movimientos_filtrados = [m for m in movimientos_raw if m.get('tipo_movimiento', '').upper() in [
-            'ENTREGADO', 'NO ENTREGADO', 'REAJUSTE POSITIVO', 'REAJUSTE NEGATIVO', 'INVENTARIO INICIAL', 'ENTRADA NIVEL SUPERIOR', 'SALDO ANTERIOR'
+        movimientos_filtrados = [m for m in movimientos_raw if (m.get('tipo_movimiento', '') or '').upper() in [
+            'ENTREGADO', 'NO ENTREGADO', 'REAJUSTE (+)', 'REAJUSTE (-)', 'INVENTARIO INICIAL', 'ENTRADA NIVEL SUPERIOR', 'SALIDA NIVEL INFERIOR'
         ]]
 
+        # === Integración de saldo anterior logístico (corte al 25) ===
+        # Construir contexto desde los filtros actuales
+        distrito_nombre = self.combo_distrito.get().strip()
+        tipo_servicio_desc = self.combo_tipo_servicio.get().strip()
+        servicio_nombre = self.combo_servicio.get().strip()
+        presentacion_nombre = self.combo_presentacion.get().strip()
+
+        contexto = {
+            'distrito': distrito_nombre or None,
+            'tipo_servicio': tipo_servicio_desc or None,
+            'servicio': servicio_nombre or None,
+            'presentacion': presentacion_nombre or None,
+        }
+
+        # Fecha de corte anterior (25 del mes del inicio del periodo)
+        fecha_corte_anterior = self._fecha_corte_anterior(fecha_ini)
+
+        # Detectar insumos presentes en el período
+        insumo_ids_en_periodo = set()
+        for m in movimientos_filtrados:
+            iid = m.get('codigo_insumo') or m.get('insumo_id') or m.get('codigo')
+            if iid is None:
+                continue
+            try:
+                iid = int(str(iid).strip())
+                insumo_ids_en_periodo.add(iid)
+            except:
+                pass
+
+        # Obtener saldo anterior por insumo
+        self.saldo_anterior_por_insumo = {}
+        for iid in insumo_ids_en_periodo:
+            self.saldo_anterior_por_insumo[iid] = self._obtener_saldo_corte_bd(fecha_corte_anterior, contexto, iid)
+
+        # Procesa datos usando el saldo anterior como base
         self.datos = self.procesar_datos(movimientos_filtrados, fecha_ini, fecha_fin, self.dias)
 
         periodo_str = f"{fecha_ini.strftime('%d%m%Y')}_{fecha_fin.strftime('%d%m%Y')}"

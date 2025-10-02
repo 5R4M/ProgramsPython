@@ -16,6 +16,8 @@ from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, 
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.units import inch
 
+from datetime import datetime, date
+
 # Agregar el directorio raíz del proyecto al PATH de Python
 sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
@@ -203,53 +205,72 @@ class ReporteKardex:
 
     def ordenar_movimientos(self, movimientos):
         """
-        Ordena por:
-        1) fecha asc
-        2) prioridad por tipo: positivos primero, luego negativos, al final 'NO ENTREGADO', luego otros
-        Positivos: INVENTARIO INICIAL, ENTRADA NIVEL SUPERIOR, REAJUSTE (+)
-        Negativos: SALIDA NIVEL INFERIOR, REAJUSTE (-), ENTREGADO
-        Indiferente: NO ENTREGADO
+        1) Fecha (día) ascendente
+        2) Dentro del mismo día: POSITIVOS (1) -> NEGATIVOS (2) -> NO ENTREGADO (3) -> otros (4)
+        3) Desempate: hora (si existe) y por último (referencia, tipo) para estabilidad
         """
+        from datetime import datetime, date as _date
+
+        POSITIVOS = {'INVENTARIO INICIAL', 'ENTRADA NIVEL SUPERIOR', 'REAJUSTE (+)', 'REAJUSTE POSITIVO'}
+        NEGATIVOS = {'SALIDA NIVEL INFERIOR', 'REAJUSTE (-)', 'REAJUSTE NEGATIVO', 'ENTREGADO'}
+        INDIFERENTE = {'NO ENTREGADO'}
+
         def prioridad_tipo(tipo_mov):
             t = (tipo_mov or '').strip().upper()
-            if t in ('INVENTARIO INICIAL', 'ENTRADA NIVEL SUPERIOR', 'REAJUSTE (+)', 'REAJUSTE POSITIVO'):
+            if t in POSITIVOS:
                 return 1
-            if t in ('SALIDA NIVEL INFERIOR', 'REAJUSTE (-)', 'REAJUSTE NEGATIVO', 'ENTREGADO'):
+            if t in NEGATIVOS:
                 return 2
-            if t == 'NO ENTREGADO':
+            if t in INDIFERENTE:
                 return 3
-            return 4  # otros o desconocidos
+            return 4
 
-        # Normaliza fecha a comparable
-        def fecha_key(m):
-            f = m.get('fecha')
+        # Parser robusto: devuelve (fecha_dia: date, hora_tuple: (hh,mm,ss) o (99,99,99) si sin hora)
+        def parse_fecha(f):
+            if f is None or f == '':
+                return (_date.max, (99, 99, 99))
+            # datetime/date
+            try:
+                if isinstance(f, datetime):
+                    return (f.date(), (f.hour, f.minute, f.second))
+                if hasattr(f, 'strftime'):  # date
+                    return (f, (99, 99, 99))
+            except Exception:
+                pass
+            # string
             if isinstance(f, str):
-                # Intenta varios formatos comunes
-                for fmt in ('%Y-%m-%d', '%Y/%m/%d', '%d-%m-%Y', '%d/%m/%Y', '%Y-%m-%d %H:%M:%S', '%Y/%m/%d %H:%M:%S'):
+                f_str = f.strip()
+                formatos = [
+                    '%Y-%m-%d %H:%M:%S', '%Y/%m/%d %H:%M:%S',
+                    '%d/%m/%Y %H:%M:%S', '%d-%m-%Y %H:%M:%S',
+                    '%Y-%m-%d', '%Y/%m/%d',
+                    '%d/%m/%Y', '%d-%m-%Y',
+                ]
+                for fmt in formatos:
                     try:
-                        return datetime.strptime(f, fmt)
+                        dt = datetime.strptime(f_str, fmt)
+                        if 'H' in fmt:
+                            return (dt.date(), (dt.hour, dt.minute, dt.second))
+                        return (dt.date(), (99, 99, 99))
                     except Exception:
                         continue
-                return datetime.max  # si no se puede parsear, empuja al final
-            elif hasattr(f, 'timestamp'):
-                return f
-            else:
-                return datetime.max
+            # No se pudo parsear → al final
+            return (_date.max, (99, 99, 99))
 
-        return sorted(
-            movimientos,
-            key=lambda x: (fecha_key(x), prioridad_tipo(x.get('tipo_movimiento')))
-        )
+        def tie_key(m):
+            # Estabilidad extra
+            ref = str(m.get('referencia', '') or '').strip()
+            tipo = str(m.get('tipo_movimiento', '') or '').strip().upper()
+            return (ref, tipo)
+
+        def sort_key(m):
+            fecha_dia, hora = parse_fecha(m.get('fecha'))
+            prio = prioridad_tipo(m.get('tipo_movimiento'))
+            return (fecha_dia, prio, hora, tie_key(m))
+
+        return sorted(movimientos, key=sort_key)
 
     def calcular_saldo_acumulado(self, movimientos_ordenados):
-        """
-        Construye filas para PDF/Excel con:
-        - Entrada: INVENTARIO INICIAL, ENTRADA NIVEL SUPERIOR
-        - Reajuste: '+x.xx' para REAJUSTE (+), '-x.xx' para REAJUSTE (-)
-        - Salidas: SALIDA NIVEL INFERIOR, ENTREGADO
-        - Cantidad (cantidad_col): SIEMPRE la cantidad del movimiento (todos)
-        - Saldo: acumulado de +positivos y -negativos. 'NO ENTREGADO' no afecta saldo.
-        """
         saldo = 0.0
         movimientos_con_saldo = []
 
@@ -258,7 +279,6 @@ class ReporteKardex:
         INDIFERENTE = {'NO ENTREGADO'}
 
         def parse_cantidad(mov):
-            # Busca un campo cantidad válido
             posibles = [
                 'cantidad', 'cantidad_movimiento', 'cantidad_entrada', 'cantidad_salida',
                 'qty', 'quantity', 'cant', 'valor_cantidad'
@@ -269,7 +289,6 @@ class ReporteKardex:
                         return float(mov[campo])
                     except Exception:
                         pass
-            # Búsqueda flexible por claves que contengan 'cantidad'
             for k, v in mov.items():
                 if 'cantidad' in str(k).lower() and v not in (None, ''):
                     try:
@@ -285,14 +304,46 @@ class ReporteKardex:
             cantidad = parse_cantidad(mov)
 
             # Fechas
-            fecha_registro = self.formatear_fecha(mov.get('fecha', ''))
-            fecha_vencimiento = mov.get('fecha_vencimiento')
-            fecha_vencimiento = "N/A" if fecha_vencimiento in (None, '') else self.formatear_fecha(fecha_vencimiento)
+            def _fmt_ddmmyyyy(f):
+                # Devuelve dd/mm/YYYY (sin hora) o "" si no se puede
+                from datetime import datetime
+                if not f:
+                    return ""
+                if hasattr(f, 'strftime'):
+                    try:
+                        # si es datetime, tomar solo fecha
+                        if hasattr(f, 'date'):
+                            try:
+                                return f.strftime('%d/%m/%Y') if not isinstance(f, datetime) else f.date().strftime('%d/%m/%Y')
+                            except Exception:
+                                pass
+                        return f.strftime('%d/%m/%Y')
+                    except Exception:
+                        return ""
+                if isinstance(f, str):
+                    f_str = f.strip()
+                    formatos = [
+                        '%Y-%m-%d %H:%M:%S', '%Y/%m/%d %H:%M:%S',
+                        '%d/%m/%Y %H:%M:%S', '%d-%m-%Y %H:%M:%S',
+                        '%Y-%m-%d', '%Y/%m/%d',
+                        '%d/%m/%Y', '%d-%m-%Y',
+                    ]
+                    for fmt in formatos:
+                        try:
+                            dt = datetime.strptime(f_str, fmt)
+                            return dt.strftime('%d/%m/%Y')
+                        except Exception:
+                            continue
+                return ""
 
+            fecha_registro = _fmt_ddmmyyyy(mov.get('fecha', ''))
+            fv_raw = mov.get('fecha_vencimiento')
+            fecha_vencimiento = "N/A" if fv_raw in (None, '') else _fmt_ddmmyyyy(fv_raw) or "N/A"
+            
             lote_val = mov.get('lote')
             lote_val = "N/A" if lote_val in (None, '') else lote_val
 
-            # Remitente/Destinatario (para salida nivel inferior mostrar destino humano)
+            # Remitente/Destinatario (humano para salidas a nivel inferior)
             remit_dest = tipo_raw
             if tipo == 'SALIDA NIVEL INFERIOR':
                 if mov.get('distrito_destino'):
@@ -304,26 +355,31 @@ class ReporteKardex:
             entrada = ""
             salida = ""
             reajuste = ""
-            cantidad_col = self.formato_float(cantidad)  # SIEMPRE mostrar la cantidad del movimiento en esta columna
+            cantidad_col = self.formato_float(cantidad)  # SIEMPRE mostrar aquí
 
-            if tipo in ('INVENTARIO INICIAL', 'ENTRADA NIVEL SUPERIOR'):
-                entrada = self.formato_float(cantidad)
+            # INVENTARIO INICIAL: no va en 'Entrada', solo 'Cantidad', pero sí suma saldo
+            if tipo == 'INVENTARIO INICIAL':
                 saldo += cantidad
+
+            elif tipo in ('ENTRADA NIVEL SUPERIOR',):
+                entrada = self.formato_float(cantidad)  # ENTRADA sí va a 'Entrada'
+                saldo += cantidad
+
             elif tipo in ('REAJUSTE (+)', 'REAJUSTE POSITIVO'):
                 reajuste = f"+{self.formato_float(cantidad)}" if cantidad > 0 else "+0.00"
                 saldo += cantidad
+
             elif tipo in ('REAJUSTE (-)', 'REAJUSTE NEGATIVO'):
                 reajuste = f"-{self.formato_float(cantidad)}" if cantidad > 0 else "-0.00"
                 saldo -= cantidad
+
             elif tipo in ('SALIDA NIVEL INFERIOR', 'ENTREGADO'):
-                salida = self.formato_float(cantidad)
+                salida = self.formato_float(cantidad)  # SALIDAS sí van a 'Salidas'
                 saldo -= cantidad
-            elif tipo in INDIFERENTE:
-                # Mostrar cantidad de salida visualmente si deseas, pero NO afecta saldo
-                salida = self.formato_float(cantidad)
-                # saldo no cambia
-            else:
-                # Tipos desconocidos: solo reflejamos en 'cantidad' y no alteramos saldo
+
+            elif tipo in INDIFERENTE:  # NO ENTREGADO
+                # No afecta saldo, y NO debe mostrarse en 'Salidas'
+                # Solo mostrar su cantidad en 'Cantidad'
                 pass
 
             movimientos_con_saldo.append({
@@ -331,8 +387,8 @@ class ReporteKardex:
                 'referencia': mov.get('referencia', ''),
                 'tipo_movimiento': remit_dest,
                 'entrada': entrada,
-                'precio_unitario': "",   # si en futuro hay precio, aquí va
-                'valor_total': "",       # idem
+                'precio_unitario': "",
+                'valor_total': "",
                 'lote': lote_val,
                 'fecha_vencimiento': fecha_vencimiento,
                 'salida': salida,
