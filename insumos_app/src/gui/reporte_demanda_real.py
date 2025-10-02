@@ -899,6 +899,10 @@ class ReporteDemandaReal:
             worksheet.merge_range(f'A4:{ultima_columna}4', 
                 f"Generado el: {datetime.now().strftime('%d/%m/%Y %H:%M:%S')}", 
                 timestamp_format)
+            
+            # Línea con periodo logístico (fila 5)
+            if hasattr(self, 'periodo_logistico_text'):
+                worksheet.merge_range(f'A5:{ultima_columna}5', self.periodo_logistico_text, timestamp_format)
 
             filtros = [
                 f"Área: {self.combo_area.get()}",
@@ -1255,6 +1259,11 @@ class ReporteDemandaReal:
         elementos.append(Paragraph("ÁREA NOR ORIENTE", subtitle_style))
         elementos.append(Paragraph("REGISTRO DIARIO DE CONSUMO Y DEMANDA REAL", subtitle_style))
         elementos.append(Paragraph(f"Generado el: {datetime.now().strftime('%d/%m/%Y %H:%M:%S')}", timestamp_style))
+        
+        # Mostrar periodo logístico si está disponible
+        if hasattr(self, 'periodo_logistico_text'):
+            periodo_style = ParagraphStyle('PeriodoStyle', parent=estilos['Normal'], alignment=1, spaceAfter=10, fontSize=9)
+            elementos.append(Paragraph(self.periodo_logistico_text, periodo_style))
 
         left_style = ParagraphStyle('LeftAlign', alignment=0, fontSize=9, fontName='Helvetica')
         filtros = [
@@ -1442,6 +1451,11 @@ class ReporteDemandaReal:
         fecha_ini_str, fecha_fin_str = self.calcular_rango_corte_logistico(anio, mes_inicio, mes_final)
         fecha_ini = datetime.strptime(fecha_ini_str, '%d/%m/%Y')
         fecha_fin = datetime.strptime(fecha_fin_str, '%d/%m/%Y')
+
+        # Guarda el texto de periodo logístico para encabezados
+        self.periodo_logistico_text = f"Periodo logístico: {fecha_ini_str} al {fecha_fin_str}"
+        
+        
 
         if fecha_fin < fecha_ini:
             messagebox.showerror("Error", "La fecha final debe ser mayor a la inicial")

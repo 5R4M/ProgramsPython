@@ -116,13 +116,45 @@ class ReporteBalanceBodega:
     # -----------------------------
     # Formateo
     # -----------------------------
-    def formato_float(self, valor):
+    def formato_float(self, v):
         try:
-            num = float(valor)
+            num = float(v)
             return f"{num:.2f}"
-        except (ValueError, TypeError):
+        except:
             return "0.00"
+    
+    def _normalizar_tipo_mov(self, valor):
+        if not valor:
+            return 'OTRO'
+        t = str(valor).strip().upper()
+        while '  ' in t:
+            t = t.replace('  ', ' ')
+        t = (t.replace('( + )', '(+)')
+            .replace('( - )', '(-)')
+            .replace('+ )', '+)')
+            .replace('( +', '(+')
+            .replace('REAJUSTE +', 'REAJUSTE (+)')
+            .replace('REAJUSTE -', 'REAJUSTE (-)'))
+        s = t.replace(' ', '')
 
+        if ('REAJUSTE' in t and ('(+)' in t or ' POS' in t or 'POSITIVO' in t or ' + ' in t or t.endswith('+'))) or s in ('REAJUSTE(+)', 'REAJUSTE+'):
+            return 'REAJUSTE (+)'
+        if ('REAJUSTE' in t and ('(-)' in t or ' NEG' in t or 'NEGATIVO' in t or ' - ' in t or t.endswith('-'))) or s in ('REAJUSTE(-)', 'REAJUSTE-'):
+            return 'REAJUSTE (-)'
+
+        if t == 'INVENTARIO INICIAL':
+            return 'INVENTARIO INICIAL'
+        if t == 'ENTRADA NIVEL SUPERIOR':
+            return 'ENTRADA NIVEL SUPERIOR'
+        if t == 'SALIDA NIVEL INFERIOR':
+            return 'SALIDA NIVEL INFERIOR'
+        if t == 'ENTREGADO':
+            return 'ENTREGADO'
+        if t == 'NO ENTREGADO':
+            return 'NO ENTREGADO'
+
+        return 'OTRO'
+    
     # -----------------------------
     # UI principal (sin frame intermedio global, solo local)
     # -----------------------------
@@ -425,12 +457,31 @@ class ReporteBalanceBodega:
         except ValueError:
             raise ValueError("Año debe ser un número válido")
 
+        # Inicio: 26 del mes anterior al mes_inicio
         if m_ini == 1:
-            fecha_ini = datetime(anio - 1, 12, 26)
+            fecha_ini_dt = datetime(anio - 1, 12, 26)
         else:
-            fecha_ini = datetime(anio, m_ini - 1, 26)
-        fecha_fin = datetime(anio, m_fin, 25)
-        return fecha_ini.strftime('%d/%m/%Y'), fecha_fin.strftime('%d/%m/%Y')
+            fecha_ini_dt = datetime(anio, m_ini - 1, 26)
+
+        # Fin: 25 del mes_final
+        fecha_fin_dt = datetime(anio, m_fin, 25)
+
+        fecha_ini_str = fecha_ini_dt.strftime('%d/%m/%Y')
+        fecha_fin_str = fecha_fin_dt.strftime('%d/%m/%Y')
+        return fecha_ini_str, fecha_fin_str, fecha_ini_dt, fecha_fin_dt
+    
+    def _periodo_logistico_anterior(self, fecha_ini_periodo_actual):
+        # El día anterior a 26 es 25, por lo que ese día define el mes_final del periodo anterior
+        dia_previo = fecha_ini_periodo_actual - timedelta(days=1)
+        anio = dia_previo.year
+        mes_final = dia_previo.month
+        # Inicio del periodo anterior: 26 del mes previo a mes_final
+        if mes_final == 1:
+            fecha_inicio = datetime(anio - 1, 12, 26)
+        else:
+            fecha_inicio = datetime(anio, mes_final - 1, 26)
+        fecha_fin = datetime(anio, mes_final, 25)
+        return fecha_inicio, fecha_fin
 
     def actualizar_fechas_por_corte(self, event=None):
         try:
@@ -438,15 +489,53 @@ class ReporteBalanceBodega:
             mes_inicio = self.mes_inicio_var.get()
             mes_final = self.mes_final_var.get()
             if anio and mes_inicio and mes_final:
-                fecha_ini, fecha_fin = self.calcular_rango_corte_logistico(anio, mes_inicio, mes_final)
-                self.fecha_inicial.set_date(datetime.strptime(fecha_ini, '%d/%m/%Y'))
-                self.fecha_final.set_date(datetime.strptime(fecha_fin, '%d/%m/%Y'))
+                fecha_ini_str, fecha_fin_str, fecha_ini_dt, fecha_fin_dt = self.calcular_rango_corte_logistico(anio, mes_inicio, mes_final)
+                # Sincroniza los DateEntry usando los datetime
+                self.fecha_inicial.set_date(fecha_ini_dt)
+                self.fecha_final.set_date(fecha_fin_dt)
         except Exception as e:
             messagebox.showerror("Error", f"Error al calcular fechas: {str(e)}")
 
+    def obtener_saldo_final_periodo(self, insumo_id, fecha_inicio_dt, fecha_fin_dt):
+        """
+        Obtiene de la DB los movimientos del insumo en [fecha_inicio_dt, fecha_fin_dt] y
+        devuelve el saldo final aplicado al 25: + INICIAL, ENTRADA NS, REAJUSTE (+)
+                                                - SALIDA NI, ENTREGADO, REAJUSTE (-)
+        Se respetan los mismos filtros de nivel (área/distrito/servicio) del reporte actual.
+        """
+        try:
+            # Intentamos pasar filtros por nombre como en obtener_movimientos_balance
+            movimientos = obtener_movimientos_balance(
+                fecha_inicio_dt.strftime('%Y-%m-%d'),
+                fecha_fin_dt.strftime('%Y-%m-%d'),
+                area_nombre=self.combo_area.get().strip() or None,
+                distrito_nombre=self.combo_distrito.get().strip() or None,
+                tipo_servicio_desc=None,
+                servicio_nombre=None,
+                tipo_insumo_desc=self.combo_tipo_insumo.get().strip() or None,
+                insumo_nombre=None,
+                presentacion_nombre=self.combo_presentacion.get().strip() or None
+            )
+            # Filtrar por insumo_id
+            movimientos = [m for m in movimientos if m.get('codigo_insumo') == insumo_id]
+
+            saldo = 0.0
+            for mov in movimientos:
+                tipo = self._normalizar_tipo_mov(mov.get('tipo_movimiento', ''))
+                cant = float(mov.get('cantidad', 0) or 0)
+                if tipo in ('INVENTARIO INICIAL', 'ENTRADA NIVEL SUPERIOR', 'REAJUSTE (+)'):
+                    saldo += cant
+                elif tipo in ('SALIDA NIVEL INFERIOR', 'ENTREGADO', 'REAJUSTE (-)'):
+                    saldo -= cant
+            return saldo
+        except Exception as e:
+            print(f"Error obtener_saldo_final_periodo: {e}")
+            return 0.0
+    
     # -----------------------------
     # Carga de datos (áreas/insumos)
     # -----------------------------
+    
     def cargar_areas(self):
         self.areas = obtener_areas()
         if self.areas:
@@ -596,14 +685,14 @@ class ReporteBalanceBodega:
             import traceback
             traceback.print_exc()
             return {}
-
+   
     # -----------------------------
     # Procesamiento de datos
     # -----------------------------
+    
     def procesar_datos_balance(self, movimientos_raw, fecha_ini, fecha_fin):
         codigos_insumos = self.generar_codigo_insumo(movimientos_raw)
 
-        # Fallback si no hay códigos
         if not codigos_insumos:
             for mov in movimientos_raw:
                 insumo_id = mov.get('codigo_insumo')
@@ -614,12 +703,19 @@ class ReporteBalanceBodega:
 
         for mov in movimientos_raw:
             insumo_id = mov.get('codigo_insumo')
+            if insumo_id is None or str(insumo_id).strip() == '':
+                continue
+
             codigo_generado = codigos_insumos.get(insumo_id) or f"TEMP-{str(insumo_id).zfill(4)}"
             nombre_insumo = mov.get('nombre_insumo', '')
-            tipo_movimiento = str(mov.get('tipo_movimiento', '')).upper()
 
+            # Normaliza tipo
+            tipo_movimiento = self._normalizar_tipo_mov(mov.get('tipo_movimiento', ''))
+
+            # Asegura cantidad numérica
+            raw_cant = str(mov.get('cantidad', '0')).replace(',', '')
             try:
-                cantidad = float(mov.get('cantidad', 0))
+                cantidad = float(raw_cant)
             except:
                 cantidad = 0.0
 
@@ -631,48 +727,81 @@ class ReporteBalanceBodega:
                     'saldo_anterior': 0.0,
                     'entrada_nivel_superior': 0.0,
                     'salida_nivel_inferior': 0.0,
+                    # Acumuladores internos (si los necesitas aparte)
                     'reajuste_positivo': 0.0,
                     'reajuste_negativo': 0.0,
+                    # Campo neto consolidado (lo usaremos para la salida)
+                    'reajustes_neto': 0.0,
                 }
 
+            # Acumulación
             if tipo_movimiento == 'INVENTARIO INICIAL':
                 insumos_dict[codigo_generado]['saldo_anterior'] += cantidad
+
             elif tipo_movimiento == 'ENTRADA NIVEL SUPERIOR':
                 insumos_dict[codigo_generado]['entrada_nivel_superior'] += cantidad
+
             elif tipo_movimiento == 'SALIDA NIVEL INFERIOR':
                 insumos_dict[codigo_generado]['salida_nivel_inferior'] += cantidad
+
             elif tipo_movimiento == 'REAJUSTE (+)':
                 insumos_dict[codigo_generado]['reajuste_positivo'] += cantidad
+                insumos_dict[codigo_generado]['reajustes_neto'] += cantidad
+
             elif tipo_movimiento == 'REAJUSTE (-)':
                 insumos_dict[codigo_generado]['reajuste_negativo'] += cantidad
+                insumos_dict[codigo_generado]['reajustes_neto'] -= cantidad
 
-        # Saldo anterior si no hubo inventario inicial
-        for codigo, datos in insumos_dict.items():
-            if datos['saldo_anterior'] == 0:
-                saldo_anterior = self.obtener_saldo_mes_anterior(datos['insumo_id_original'], fecha_ini)
+            # Otros tipos (ENTREGADO / NO ENTREGADO / OTRO) no afectan Balance aquí
+
+        # Completar saldo anterior si no hubo inventario inicial explícito
+        # Saldo anterior = saldo de cierre del periodo logístico ANTERIOR (corte al 25)
+        fecha_inicio_periodo_anterior, fecha_fin_periodo_anterior = self._periodo_logistico_anterior(fecha_ini)
+        for _, datos in insumos_dict.items():
+            # Si hubo INVENTARIO INICIAL dentro del periodo actual, lo respetamos.
+            # Si no, tomamos el saldo final del periodo anterior desde DB:
+            if float(datos['saldo_anterior']) == 0.0:
+                saldo_anterior = self.obtener_saldo_final_periodo(
+                    datos['insumo_id_original'],
+                    fecha_inicio_periodo_anterior,
+                    fecha_fin_periodo_anterior
+                )
                 datos['saldo_anterior'] = saldo_anterior
 
+        # Construir filas de salida
         datos_procesados = []
         for codigo, datos in insumos_dict.items():
-            reajustes_netos = datos['reajuste_positivo'] - datos['reajuste_negativo']
+            reajustes_total = float(datos['reajustes_neto'])
+
             saldo_mes_siguiente = (
-                datos['saldo_anterior'] +
-                datos['entrada_nivel_superior'] -
-                datos['salida_nivel_inferior'] +
-                reajustes_netos
+                float(datos['saldo_anterior']) +
+                float(datos['entrada_nivel_superior']) -
+                float(datos['salida_nivel_inferior']) +
+                reajustes_total
             )
+
+            # Texto con signo explícito
+            if reajustes_total > 0:
+                reajustes_texto = f"+{self.formato_float(reajustes_total)}"
+            elif reajustes_total < 0:
+                reajustes_texto = self.formato_float(reajustes_total)  # Ya incluye el signo -
+            else:
+                reajustes_texto = self.formato_float(reajustes_total)
+
             datos_procesados.append({
                 'codigo_insumo': codigo,
                 'nombre_insumo': datos['nombre_insumo'],
                 'saldo_anterior': self.formato_float(datos['saldo_anterior']),
                 'entrada_nivel_superior': self.formato_float(datos['entrada_nivel_superior']),
                 'salida_nivel_inferior': self.formato_float(datos['salida_nivel_inferior']),
-                'reajustes': f"+{self.formato_float(datos['reajuste_positivo'])} -{self.formato_float(datos['reajuste_negativo'])}" if (datos['reajuste_positivo'] > 0 or datos['reajuste_negativo'] > 0) else "0.00",
-                'saldo_mes_siguiente': self.formato_float(saldo_mes_siguiente)
+                'reajuste_mas': self.formato_float(datos['reajuste_positivo']),
+                'reajuste_menos': self.formato_float(datos['reajuste_negativo']),
+                'reajustes': reajustes_texto,
+                'saldo_mes_siguiente': self.formato_float(saldo_mes_siguiente),
             })
 
         return datos_procesados
-
+    
     def obtener_saldo_mes_anterior(self, insumo_id_original, fecha_corte):
         try:
             # 90 días atrás para tener datos
@@ -708,6 +837,7 @@ class ReporteBalanceBodega:
             if self.modo_fecha_var.get() == "rango":
                 fecha_ini = datetime.strptime(self.fecha_inicial.get(), '%d/%m/%Y')
                 fecha_fin = datetime.strptime(self.fecha_final.get(), '%d/%m/%Y')
+                self.periodo_logistico_text = f"Periodo logístico: {self.fecha_inicial.get()} al {self.fecha_final.get()}"
             else:
                 anio = self.anio_var.get()
                 mes_inicio = self.mes_inicio_var.get()
@@ -715,9 +845,13 @@ class ReporteBalanceBodega:
                 if not all([anio, mes_inicio, mes_final]):
                     messagebox.showerror("Error", "Debe seleccionar Año, Mes Inicio y Mes Final")
                     return
-                fecha_ini_str, fecha_fin_str = self.calcular_rango_corte_logistico(anio, mes_inicio, mes_final)
-                fecha_ini = datetime.strptime(fecha_ini_str, '%d/%m/%Y')
-                fecha_fin = datetime.strptime(fecha_fin_str, '%d/%m/%Y')
+                fecha_ini_str, fecha_fin_str, fecha_ini_dt, fecha_fin_dt = self.calcular_rango_corte_logistico(anio, mes_inicio, mes_final)
+                fecha_ini = fecha_ini_dt
+                fecha_fin = fecha_fin_dt
+                # sincronicemos los DateEntry para coherencia visual
+                self.fecha_inicial.set_date(fecha_ini)
+                self.fecha_final.set_date(fecha_fin)
+                self.periodo_logistico_text = f"Periodo logístico: {fecha_ini_str} al {fecha_fin_str}"
 
             if fecha_fin < fecha_ini:
                 messagebox.showerror("Error", "La fecha final debe ser mayor a la inicial")
@@ -1123,6 +1257,10 @@ class ReporteBalanceBodega:
             elements.append(Paragraph("ÁREA NOR ORIENTE", subtitle_style))
             elements.append(Paragraph("BALANCE DE BODEGA", subtitle_style))
             elements.append(Paragraph(f"Generado el: {datetime.now().strftime('%d/%m/%Y %H:%M:%S')}", timestamp_style))
+            
+            if hasattr(self, 'periodo_logistico_text'):
+                periodo_style = ParagraphStyle('PeriodoStyle', parent=styles['Normal'], alignment=1, spaceAfter=12, fontSize=9)
+                elements.append(Paragraph(self.periodo_logistico_text, periodo_style))
 
             # Filtros (alineados a la izquierda)
             left_style = ParagraphStyle(name="LeftAlign", alignment=0, fontSize=9, fontName='Helvetica')
@@ -1297,6 +1435,10 @@ class ReporteBalanceBodega:
                     worksheet.merge_range(1, 0, 1, len(encabezados) - 1, "ÁREA NOR ORIENTE", subtitle_format)
                     worksheet.merge_range(2, 0, 2, len(encabezados) - 1, "BALANCE DE BODEGA", subtitle_format)
                     worksheet.merge_range(3, 0, 3, len(encabezados) - 1, f"Generado el: {datetime.now().strftime('%d/%m/%Y %H:%M:%S')}", subtitle_format)
+                    
+                    if hasattr(self, 'periodo_logistico_text'):
+                        worksheet.merge_range(4, 0, 4, len(encabezados) - 1, self.periodo_logistico_text, subtitle_format)
+                        worksheet.set_row(4, 20)
 
                     worksheet.merge_range(5, 0, 5, 1, f"Área: {self.combo_area.get()}", filtro_format)
                     worksheet.merge_range(5, 2, 5, 3, f"Distrito: {self.combo_distrito.get()}", filtro_format)

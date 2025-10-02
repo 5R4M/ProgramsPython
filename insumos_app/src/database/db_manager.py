@@ -2320,7 +2320,7 @@ def obtener_movimientos_bres(fecha_inicio, fecha_fin, area_nombre=None, distrito
 
 def obtener_movimientos_balance(fecha_inicio, fecha_fin, area_nombre=None, distrito_nombre=None, tipo_servicio_desc=None,
     servicio_nombre=None, tipo_insumo_desc=None, insumo_nombre=None,
-    presentacion_nombre=None):
+    presentacion_nombre=None, insumo_id=None):
     """
     Obtiene movimientos del balance filtrados por nivel exacto según cómo se guardan los datos
     """
@@ -2365,7 +2365,7 @@ def obtener_movimientos_balance(fecha_inicio, fecha_fin, area_nombre=None, distr
         LEFT JOIN tipo_servicio ts ON s.id_tipo_servicio = ts.id
         
         WHERE m.fecha_registro BETWEEN %s AND %s
-        AND tm.descripcion IN ('INVENTARIO INICIAL', 'REAJUSTE POSITIVO', 'REAJUSTE NEGATIVO', 'ENTRADA NIVEL SUPERIOR', 'SALIDA NIVEL INFERIOR')
+        AND tm.descripcion IN ('INVENTARIO INICIAL', 'REAJUSTE (+)', 'REAJUSTE (-)', 'ENTRADA NIVEL SUPERIOR', 'SALIDA NIVEL INFERIOR')
         """
         
         params = [fecha_inicio, fecha_fin]
@@ -2388,6 +2388,10 @@ def obtener_movimientos_balance(fecha_inicio, fecha_fin, area_nombre=None, distr
             params.append(area_nombre)
 
         # Filtros adicionales opcionales
+        if insumo_id:
+            query += " AND i.id = %s"
+            params.append(insumo_id)
+        
         if tipo_insumo_desc:
             query += " AND ti.descripcion = %s"
             params.append(tipo_insumo_desc)
