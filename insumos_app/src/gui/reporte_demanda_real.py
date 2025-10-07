@@ -45,8 +45,17 @@ from src.database.db_manager import (
     obtener_movimientos_kardex,
     conectar_db, 
     obtener_saldo_corte_logistico,
-    obtener_insumos_con_saldo
+    obtener_insumos_con_saldo,
+    agregar_columna_codigo_prefijo, 
+    asignar_prefijos_tipos_insumo
 )
+
+# Configuración automática de base de datos
+try:
+    agregar_columna_codigo_prefijo()
+    asignar_prefijos_tipos_insumo()
+except Exception:
+    pass
 
 def resource_path(relative_path):
     try:
@@ -81,7 +90,6 @@ class ReporteDemandaReal:
         self.setup_ui()
 
     def setup_styles(self):
-        # Paleta igual a IngresoInsumos/MainWindow
         self.COLORS = {
             'primary':   '#2c3e50',
             'secondary': '#34495e',
@@ -97,29 +105,52 @@ class ReporteDemandaReal:
             'header_dark': '#1f2937'
         }
 
-        # Espaciados compactos como IngresoInsumos
         self.SPACING = {
-            'section_pady': 2,
-            'section_padx': 15,
-            'card_padx': 8,
-            'card_pady': 2,
-            'header_height': 20,
-            'content_padx': 10,
-            'content_pady': 4,
-            'label_pady': 2,
-            'widget_pady': 2
+            'section_pady': 1,
+            'section_padx': 10,
+            'card_padx': 6,
+            'card_pady': 1,
+            'header_height': 18,
+            'content_padx': 8,
+            'content_pady': 2,
+            'label_pady': 1,
+            'widget_pady': 1
         }
 
-        # IMPORTANTE: No forzar temas ni redefinir estilos globales aquí
-        # Eliminado: ttk.Style().theme_use('clam')
-        # Eliminado: style.configure/map de White.*, Card.*, Primary.*, etc.
+    def mostrar_animacion_carga(self):
+        """Muestra animación de carga mientras se genera el reporte"""
+        for widget in self.pdf_body.winfo_children():
+            widget.destroy()
+        
+        loading_frame = tk.Frame(self.pdf_body, bg=self.COLORS['white'])
+        loading_frame.pack(expand=True)
+        
+        self.loading_label = tk.Label(loading_frame, text="⏳", font=('Segoe UI Emoji', 48),
+                                    fg=self.COLORS['accent'], bg=self.COLORS['white'])
+        self.loading_label.pack(pady=(50, 10))
+        
+        self.loading_text = tk.Label(loading_frame, text="Generando reporte...",
+                                    font=('Segoe UI', 11, 'bold'), fg=self.COLORS['accent'],
+                                    bg=self.COLORS['white'])
+        self.loading_text.pack()
+        
+        self.loading_dots = 0
+        self.animar_carga()
 
+    def animar_carga(self):
+        """Anima los puntos de carga"""
+        if hasattr(self, 'loading_text') and self.loading_text.winfo_exists():
+            self.loading_dots = (self.loading_dots + 1) % 4
+            dots = "." * self.loading_dots
+            self.loading_text.config(text=f"Generando reporte{dots}")
+            self.parent.after(300, self.animar_carga)
+    
     def create_titled_frame(self, parent, title, header_icon=None):
         # Contenedor tipo tarjeta sobre fondo Light
         container = tk.Frame(parent, bg=self.COLORS['light'], relief='solid', borderwidth=1)
 
         # Header compacto
-        header = tk.Frame(container, bg=self.COLORS['primary'], height=self.SPACING['header_height'])
+        header = tk.Frame(container, bg=self.COLORS['primary'], height=16) 
         header.pack(fill='x')
         header.pack_propagate(False)
 
@@ -127,20 +158,20 @@ class ReporteDemandaReal:
         if header_icon:
             tk.Label(
                 header, text=header_icon,
-                font=('Segoe UI Emoji', 9),
+                font=('Segoe UI Emoji', 8),  
                 fg=self.COLORS['white'], bg=self.COLORS['primary']
-            ).pack(side='left', padx=(10, 4))
+            ).pack(side='left', padx=(8, 3))  
 
         # Título
         tk.Label(
             header, text=title,
-            font=('Segoe UI', 8, 'bold'),
+            font=('Segoe UI', 7, 'bold'),  # ✅ Cambiar de 8 a 7
             fg=self.COLORS['white'], bg=self.COLORS['primary']
-        ).pack(side='left', padx=2, pady=2)
+        ).pack(side='left', padx=2, pady=1) 
 
         # Contenido en Light
         content = tk.Frame(container, bg=self.COLORS['light'])
-        content.pack(fill='both', expand=True, padx=10, pady=10)
+        content.pack(fill='both', expand=True, padx=6, pady=4) 
 
         return container, content
   
@@ -171,36 +202,36 @@ class ReporteDemandaReal:
         top_strip.pack_propagate(False)
         
         # Header principal (alineado a Kardex)
-        title_frame = tk.Frame(self.main_container, bg=self.COLORS['primary'], height=70)
-        title_frame.pack(fill='x', padx=0)
+        title_frame = tk.Frame(self.main_container, bg=self.COLORS['primary'], height=55)
+        title_frame.pack(fill='x', padx=0, pady=0)
         title_frame.pack_propagate(False)
 
         title_inner = tk.Frame(title_frame, bg=self.COLORS['primary'])
-        title_inner.pack(fill='both', expand=True, padx=15, pady=8)
+        title_inner.pack(fill='both', expand=True, padx=15, pady=5)
 
         tk.Label(
             title_inner,
             text="📑 Reporte Demanda Real por Servicio de Salud",
-            font=('Segoe UI', 12, 'bold'),
+            font=('Segoe UI', 9, 'bold'),
             fg=self.COLORS['white'], bg=self.COLORS['primary']
         ).pack(anchor='w')
 
         tk.Label(
             title_inner,
             text="Consulte demanda de los movimientos de los insumos",
-            font=('Segoe UI', 8),
+            font=('Segoe UI', 7),
             fg=self.COLORS['white'], bg=self.COLORS['primary']
-        ).pack(anchor='w', pady=(2, 0))
+        ).pack(anchor='w', pady=(1, 0))
 
         # Contenedor para secciones en Light (no usar estilos ttk locales)
         self.frame_combos = tk.Frame(self.main_container, bg=self.COLORS['light'])
-        self.frame_combos.pack(fill="x", expand=False, padx=5, pady=5)
+        self.frame_combos.pack(fill="both", expand=True, padx=5, pady=0)
 
         # Corte Logístico
         self.frame_corte_container, self.frame_corte_content = self.create_titled_frame(
             self.frame_combos, "🗓️ Corte Logístico", header_icon=None
         )
-        self.frame_corte_container.pack(fill="x", expand=False, pady=5)
+        self.frame_corte_container.pack(fill="x", expand=False, pady=(5, 2))
 
         # Grid de corte
         self.frame_corte_content.grid_columnconfigure(1, weight=1)  # Año
@@ -239,7 +270,7 @@ class ReporteDemandaReal:
         self.frame_ubicacion_container, self.frame_ubicacion_content = self.create_titled_frame(
             self.frame_combos, "📍 Ubicación", header_icon=None
         )
-        self.frame_ubicacion_container.pack(fill="x", expand=False, pady=5)
+        self.frame_ubicacion_container.pack(fill="x", expand=False, pady=(0, 2))
 
         self.frame_ubicacion_content.grid_columnconfigure(1, weight=1)
         self.frame_ubicacion_content.grid_columnconfigure(3, weight=1)
@@ -248,29 +279,29 @@ class ReporteDemandaReal:
 
         ttk.Label(self.frame_ubicacion_content, text="Área:", **label_style).grid(row=0, column=0, padx=5, pady=2, sticky='w')
         self.area_var = tk.StringVar()
-        self.combo_area = AutocompleteCombobox(self.frame_ubicacion_content, textvariable=self.area_var, state="normal", font=('Segoe UI', 9))
+        self.combo_area = AutocompleteCombobox(self.frame_ubicacion_content, textvariable=self.area_var, state="normal", font=('Segoe UI', 8))
         self.combo_area.grid(row=0, column=1, padx=5, pady=2, sticky='ew')
 
         ttk.Label(self.frame_ubicacion_content, text="Distrito:", **label_style).grid(row=0, column=2, padx=5, pady=2, sticky='w')
         self.distrito_var = tk.StringVar()
-        self.combo_distrito = AutocompleteCombobox(self.frame_ubicacion_content, textvariable=self.distrito_var, state="normal", font=('Segoe UI', 9))
+        self.combo_distrito = AutocompleteCombobox(self.frame_ubicacion_content, textvariable=self.distrito_var, state="normal", font=('Segoe UI', 8))
         self.combo_distrito.grid(row=0, column=3, padx=5, pady=2, sticky='ew')
 
         ttk.Label(self.frame_ubicacion_content, text="Tipo de Servicio:", **label_style).grid(row=0, column=4, padx=5, pady=2, sticky='w')
         self.tipo_servicio_var = tk.StringVar()
-        self.combo_tipo_servicio = AutocompleteCombobox(self.frame_ubicacion_content, textvariable=self.tipo_servicio_var, state="normal", font=('Segoe UI', 9))
+        self.combo_tipo_servicio = AutocompleteCombobox(self.frame_ubicacion_content, textvariable=self.tipo_servicio_var, state="normal", font=('Segoe UI', 8))
         self.combo_tipo_servicio.grid(row=0, column=5, padx=5, pady=2, sticky='ew')
 
         ttk.Label(self.frame_ubicacion_content, text="Servicio:", **label_style).grid(row=0, column=6, padx=5, pady=2, sticky='w')
         self.servicio_var = tk.StringVar()
-        self.combo_servicio = AutocompleteCombobox(self.frame_ubicacion_content, textvariable=self.servicio_var, state="normal", font=('Segoe UI', 9))
+        self.combo_servicio = AutocompleteCombobox(self.frame_ubicacion_content, textvariable=self.servicio_var, state="normal", font=('Segoe UI', 8))
         self.combo_servicio.grid(row=0, column=7, padx=5, pady=2, sticky='ew')
 
         # Insumo
         self.frame_insumo_container, self.frame_insumo_content = self.create_titled_frame(
             self.frame_combos, "💊 Insumo", header_icon=None
         )
-        self.frame_insumo_container.pack(fill="x", expand=False, pady=5)
+        self.frame_insumo_container.pack(fill="x", expand=False, pady=(0, 2))
 
         self.frame_insumo_content.grid_columnconfigure(1, weight=1)
         self.frame_insumo_content.grid_columnconfigure(3, weight=1)
@@ -278,42 +309,42 @@ class ReporteDemandaReal:
 
         ttk.Label(self.frame_insumo_content, text="Tipo de Insumo:", **label_style).grid(row=0, column=0, padx=5, pady=2, sticky='w')
         self.tipo_insumo_var = tk.StringVar()
-        self.combo_tipo_insumo = AutocompleteCombobox(self.frame_insumo_content, textvariable=self.tipo_insumo_var, state="normal", font=('Segoe UI', 9))
+        self.combo_tipo_insumo = AutocompleteCombobox(self.frame_insumo_content, textvariable=self.tipo_insumo_var, state="normal", font=('Segoe UI', 8))
         self.combo_tipo_insumo.grid(row=0, column=1, padx=5, pady=2, sticky='ew')
 
         ttk.Label(self.frame_insumo_content, text="Insumo:", **label_style).grid(row=0, column=2, padx=5, pady=2, sticky='w')
         self.insumo_var = tk.StringVar()
-        self.combo_insumo = AutocompleteCombobox(self.frame_insumo_content, textvariable=self.insumo_var, state="normal", font=('Segoe UI', 9))
+        self.combo_insumo = AutocompleteCombobox(self.frame_insumo_content, textvariable=self.insumo_var, state="normal", font=('Segoe UI', 8))
         self.combo_insumo.grid(row=0, column=3, padx=5, pady=2, sticky='ew')
 
         ttk.Label(self.frame_insumo_content, text="Presentación:", **label_style).grid(row=0, column=4, padx=5, pady=2, sticky='w')
         self.presentacion_var = tk.StringVar()
-        self.combo_presentacion = AutocompleteCombobox(self.frame_insumo_content, textvariable=self.presentacion_var, state="normal", font=('Segoe UI', 9))
+        self.combo_presentacion = AutocompleteCombobox(self.frame_insumo_content, textvariable=self.presentacion_var, state="normal", font=('Segoe UI', 8))
         self.combo_presentacion.grid(row=0, column=5, padx=5, pady=2, sticky='ew')
 
         # Visor PDF (fondo blanco)
         self.pdf_outer = tk.Frame(self.frame_combos, bg=self.COLORS['white'])
-        self.pdf_outer.pack(fill="x", expand=False, pady=5)
+        self.pdf_outer.pack(fill="both", expand=True, pady=(0, 0))  
 
         self.pdf_frame = tk.Frame(self.pdf_outer, bg=self.COLORS['white'], relief="solid", bd=1, highlightthickness=0)
-        self.pdf_frame.pack(fill="x")
-        self.pdf_frame.configure(height=350)
+        self.pdf_frame.pack(fill="both", expand=True)  
+        self.pdf_frame.configure(height=550) 
         self.pdf_frame.pack_propagate(False)
 
-        self.pdf_header = tk.Frame(self.pdf_frame, bg=self.COLORS['primary'], height=26)
+        self.pdf_header = tk.Frame(self.pdf_frame, bg=self.COLORS['primary'], height=22)
         self.pdf_header.pack(fill="x")
         self.pdf_header.pack_propagate(False)
 
         tk.Label(
             self.pdf_header,
             text="📄 Vista previa del PDF",
-            font=('Segoe UI', 9, 'bold'),
+            font=('Segoe UI', 8, 'bold'),
             fg=self.COLORS['white'], bg=self.COLORS['primary']
-        ).pack(side="left", padx=10, pady=2)
+        ).pack(side="left", padx=8, pady=1)
 
         # Cuerpo del visor
         self.pdf_body = tk.Frame(self.pdf_frame, bg=self.COLORS['white'])
-        self.pdf_body.pack(fill="both", expand=True, padx=8, pady=8)
+        self.pdf_body.pack(fill="both", expand=True, padx=6, pady=6)
 
         # Botones abajo sobre Light
         self.frame_botones = tk.Frame(self.main_container, bg=self.COLORS['light'])
@@ -565,8 +596,9 @@ class ReporteDemandaReal:
   
     def generar_codigo_insumo(self, movimientos):
         """
-        Genera códigos únicos para cada insumo basándose en su ID.
-        Ahora también acepta una lista de IDs de insumos directamente.
+        Genera códigos únicos para cada insumo con numeración consecutiva por tipo de insumo.
+        Ejemplo: LIBR-0001, LIBR-0002, LIBR-0003 para Librería
+                LIMP-0001, LIMP-0002 para Limpieza
         """
         from src.database.db_manager import conectar_db
         
@@ -587,28 +619,51 @@ class ReporteDemandaReal:
                     except:
                         pass
         
-        # Obtener información de todos los insumos
+        if not insumo_ids:
+            return codigos
+        
+        # Obtener información de todos los insumos ORDENADOS por tipo y luego por ID
         conn = conectar_db()
         if conn:
             try:
                 cursor = conn.cursor(dictionary=True)
-                for insumo_id in insumo_ids:
-                    cursor.execute("""
-                        SELECT 
-                            i.id,
-                            ti.codigo_prefijo
-                        FROM insumo i
-                        INNER JOIN tipo_insumo ti ON i.id_tipo_insumo = ti.id
-                        WHERE i.id = %s
-                    """, (insumo_id,))
+                
+                # Obtener todos los insumos con su tipo, ordenados por tipo_insumo y luego por id
+                placeholders = ','.join(['%s'] * len(insumo_ids))
+                query = f"""
+                    SELECT 
+                        i.id,
+                        i.id_tipo_insumo,
+                        ti.codigo_prefijo,
+                        ti.descripcion AS tipo_descripcion
+                    FROM insumo i
+                    INNER JOIN tipo_insumo ti ON i.id_tipo_insumo = ti.id
+                    WHERE i.id IN ({placeholders})
+                    ORDER BY ti.id, i.id
+                """
+                
+                cursor.execute(query, tuple(insumo_ids))
+                insumos_info = cursor.fetchall()
+                
+                # Agrupar por tipo de insumo y asignar números consecutivos
+                tipo_contador = {}  # {tipo_insumo_id: contador}
+                
+                for info in insumos_info:
+                    insumo_id = info['id']
+                    tipo_insumo_id = info['id_tipo_insumo']
+                    prefijo = info['codigo_prefijo'] or 'TEMP'
                     
-                    resultado = cursor.fetchone()
-                    if resultado:
-                        prefijo = resultado['codigo_prefijo'] or 'TEMP'
-                        codigo_numerico = str(insumo_id).zfill(4)
-                        codigos[insumo_id] = f"{prefijo}-{codigo_numerico}"
-                    else:
-                        codigos[insumo_id] = f"TEMP-{str(insumo_id).zfill(4)}"
+                    # Inicializar contador para este tipo si no existe
+                    if tipo_insumo_id not in tipo_contador:
+                        tipo_contador[tipo_insumo_id] = 1
+                    
+                    # Generar código con numeración consecutiva
+                    numero_consecutivo = str(tipo_contador[tipo_insumo_id]).zfill(4)
+                    codigos[insumo_id] = f"{prefijo}-{numero_consecutivo}"
+                    
+                    # Incrementar contador para este tipo
+                    tipo_contador[tipo_insumo_id] += 1
+                
             finally:
                 cursor.close()
                 conn.close()
@@ -1034,7 +1089,8 @@ class ReporteDemandaReal:
 
             fila_actual = 9
 
-            for insumo_key, valores in self.datos.items():
+            datos_ordenados = sorted(self.datos.items(), key=lambda x: x[1].get('codigo', ''))
+            for insumo_key, valores in datos_ordenados:
                 codigo_con_prefijo = valores.get('codigo', '')
                 nombre_presentacion = f"{valores.get('nombre_insumo', '')} {valores.get('presentacion', '')}".strip()
                 nombre_dividido = self.dividir_texto_en_lineas(nombre_presentacion, max_caracteres_por_linea=40)
@@ -1279,7 +1335,8 @@ class ReporteDemandaReal:
         data = [encabezado1, encabezado2]
 
         # Usar self.datos directamente
-        for insumo_key, valores in self.datos.items():
+        datos_ordenados = sorted(self.datos.items(), key=lambda x: x[1].get('codigo', ''))
+        for insumo_key, valores in datos_ordenados:
             codigo_con_prefijo = valores.get('codigo', '')
             nombre_insumo = valores.get('nombre_insumo', '')
             presentacion = valores.get('presentacion', '')
@@ -1396,6 +1453,11 @@ class ReporteDemandaReal:
         doc.build(elementos)
       
     def generar_reporte(self):
+        
+        # Mostrar animación de carga
+        self.mostrar_animacion_carga()
+        self.parent.update()
+        
         """Genera el reporte según los filtros seleccionados"""
         try:
             if not self.combo_area.get():
@@ -1521,8 +1583,6 @@ class ReporteDemandaReal:
             self.generar_pdf(movimientos_filtrados, self.temp_pdf_path)
             self.generar_vista_previa_pdf()
             
-            messagebox.showinfo("Éxito", f"Reporte generado correctamente con {len(self.datos)} insumos")
-            
         except Exception as e:
             messagebox.showerror("Error", f"Error al generar reporte: {str(e)}")
 
@@ -1561,7 +1621,7 @@ class ReporteDemandaReal:
             doc = fitz.open(self.temp_pdf_path)
             self.current_page = 0
             self.total_pages = len(doc)
-            self.zoom_level = 1.5
+            self.zoom_level = 1.0  # ✅ Cambiar zoom inicial a 1.0
 
             def display_page():
                 canvas.delete("all")
@@ -1594,7 +1654,7 @@ class ReporteDemandaReal:
 
             def fit_to_width():
                 try:
-                    canvas.update_idletasks()  # IMPORTANTE: actualizar geometría
+                    canvas.update_idletasks()
                     canvas_width = canvas.winfo_width()
                     if canvas_width > 100:
                         page = doc.load_page(self.current_page)
@@ -1607,13 +1667,13 @@ class ReporteDemandaReal:
 
             def fit_to_page():
                 try:
-                    canvas.update_idletasks()  # IMPORTANTE: actualizar geometría
+                    canvas.update_idletasks()
                     canvas_width = canvas.winfo_width()
                     canvas_height = canvas.winfo_height()
                     if canvas_width > 100 and canvas_height > 100:
                         page = doc.load_page(self.current_page)
-                        zoom_x = (canvas_width - 20) / page.rect.width
-                        zoom_y = (canvas_height - 20) / page.rect.height
+                        zoom_x = (canvas_width - 40) / page.rect.width  # ✅ Más margen
+                        zoom_y = (canvas_height - 40) / page.rect.height  # ✅ Más margen
                         zoom = min(zoom_x, zoom_y)
                         self.zoom_level = max(0.5, min(zoom, 3.0))
                         display_page()
@@ -1713,8 +1773,8 @@ class ReporteDemandaReal:
                             canvas_height = canvas_max.winfo_height()
                             if canvas_width > 100 and canvas_height > 100:
                                 page = doc.load_page(current_page_max[0])
-                                zoom_x = (canvas_width - 20) / page.rect.width
-                                zoom_y = (canvas_height - 20) / page.rect.height
+                                zoom_x = (canvas_width - 40) / page.rect.width
+                                zoom_y = (canvas_height - 40) / page.rect.height
                                 zoom = min(zoom_x, zoom_y)
                                 zoom_level_max[0] = max(0.5, min(zoom, 4.0))
                                 display_page_max()
@@ -1768,7 +1828,7 @@ class ReporteDemandaReal:
                     )
                     btn_zoom_in_max.pack(side="left", padx=5)
 
-                    ventana_max.after(100, fit_to_page_max)  # Ajustar después de renderizar
+                    ventana_max.after(100, fit_to_page_max)
 
                     display_page_max()
                     canvas_max.bind("<MouseWheel>", lambda e: canvas_max.yview_scroll(int(-1*(e.delta/120)), "units"))
@@ -1862,9 +1922,10 @@ class ReporteDemandaReal:
             btn_anterior.config(state="disabled")
             btn_siguiente.config(state="normal" if self.total_pages > 1 else "disabled")
 
-            # IMPORTANTE: Mostrar la primera página después de que todo esté renderizado
+            # ✅ AJUSTAR AUTOMÁTICAMENTE AL TAMAÑO DEL VISOR
             self.pdf_body.update_idletasks()
-            display_page()
+            canvas.update_idletasks()
+            self.parent.after(200, fit_to_page)  # ✅ Llamar después de 200ms para asegurar renderizado
 
             def on_mousewheel(event):
                 if canvas.winfo_exists():

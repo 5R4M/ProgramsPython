@@ -307,7 +307,8 @@ def crear_tablas_si_no_existen(conn):
         cursor.execute("""
         CREATE TABLE IF NOT EXISTS tipo_insumo (
         id INT AUTO_INCREMENT PRIMARY KEY,
-        descripcion VARCHAR(255) NOT NULL UNIQUE
+        descripcion VARCHAR(255) NOT NULL UNIQUE,
+        codigo_prefijo VARCHAR(10) DEFAULT NULL
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
         """)
         
@@ -2458,3 +2459,74 @@ def obtener_insumos_con_saldo(fecha_corte, contexto):
     finally:
         cursor.close()
         conn.close()
+
+def agregar_columna_codigo_prefijo():
+    """
+    Agrega la columna codigo_prefijo a la tabla tipo_insumo si no existe
+    """
+    conn = conectar_db()
+    if conn:
+        try:
+            cursor = conn.cursor()
+            
+            cursor.execute("""
+                SELECT COUNT(*) as count
+                FROM information_schema.COLUMNS
+                WHERE TABLE_SCHEMA = 'insumos'
+                AND TABLE_NAME = 'tipo_insumo'
+                AND COLUMN_NAME = 'codigo_prefijo'
+            """)
+            
+            resultado = cursor.fetchone()
+            
+            if resultado[0] == 0:
+                cursor.execute("""
+                    ALTER TABLE tipo_insumo
+                    ADD COLUMN codigo_prefijo VARCHAR(10) DEFAULT NULL
+                """)
+                conn.commit()
+                return True
+            else:
+                return True
+                
+        except Error as e:
+            conn.rollback()
+            return False
+        finally:
+            cursor.close()
+            conn.close()
+    return False
+
+def asignar_prefijos_tipos_insumo():
+    """
+    Asigna prefijos automáticos a los tipos de insumo basados en las primeras 4 letras
+    """
+    conn = conectar_db()
+    if conn:
+        try:
+            cursor = conn.cursor(dictionary=True)
+            
+            cursor.execute("SELECT id, descripcion FROM tipo_insumo")
+            tipos = cursor.fetchall()
+            
+            for tipo in tipos:
+                descripcion = tipo['descripcion'].strip().upper()
+                descripcion_limpia = ''.join(c for c in descripcion if c.isalnum())
+                prefijo = descripcion_limpia[:4].ljust(4, 'X')
+                
+                cursor.execute("""
+                    UPDATE tipo_insumo
+                    SET codigo_prefijo = %s
+                    WHERE id = %s
+                """, (prefijo, tipo['id']))
+            
+            conn.commit()
+            return True
+            
+        except Error as e:
+            conn.rollback()
+            return False
+        finally:
+            cursor.close()
+            conn.close()
+    return False
