@@ -112,6 +112,53 @@ def verificar_tablas():
         except:
             pass
 
+def agregar_columna_codigo_prefijo():
+    """Agrega la columna codigo_prefijo a tipo_insumo si no existe"""
+    config = get_db_config()
+    conn = None
+    try:
+        conn = mysql.connector.connect(
+            host=config['host'],
+            port=config['port'],
+            user=config['user'],
+            password=config['password'],
+            database=config['database']
+        )
+        cursor = conn.cursor()
+        
+        # Verificar si la columna ya existe
+        cursor.execute("""
+            SELECT COUNT(*) as count
+            FROM INFORMATION_SCHEMA.COLUMNS
+            WHERE TABLE_SCHEMA = %s
+            AND TABLE_NAME = 'tipo_insumo'
+            AND COLUMN_NAME = 'codigo_prefijo'
+        """, (config['database'],))
+        
+        resultado = cursor.fetchone()
+        
+        if resultado[0] == 0:
+            # La columna no existe, agregarla
+            cursor.execute("""
+                ALTER TABLE tipo_insumo
+                ADD COLUMN codigo_prefijo VARCHAR(10) DEFAULT 'TEMP'
+            """)
+            conn.commit()
+            return True
+        else:
+            return True
+            
+    except mysql.connector.Error as e:
+        if conn:
+            conn.rollback()
+        return False
+    finally:
+        try:
+            if conn and conn.is_connected():
+                conn.close()
+        except:
+            pass
+
 def crear_base_datos():
     """Crea las tablas en la base de datos MySQL"""
     if not asegurar_base_datos():
@@ -174,7 +221,8 @@ def crear_base_datos():
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS tipo_insumo (
                 id INT AUTO_INCREMENT PRIMARY KEY,
-                descripcion VARCHAR(255) NOT NULL UNIQUE
+                descripcion VARCHAR(255) NOT NULL UNIQUE,
+                codigo_prefijo VARCHAR(10) DEFAULT 'TEMP'
             ) ENGINE=InnoDB;
         """)
 
@@ -275,11 +323,15 @@ def crear_base_datos():
                     raise
 
         conn.commit()
-        print("Base de datos MySQL creada/verificada correctamente.")
+        cursor.close()
+        conn.close()
+        
+        # Agregar columna codigo_prefijo si no existe
+        agregar_columna_codigo_prefijo()
+        
         return True
 
     except mysql.connector.Error as e:
-        print(f"Error al crear la base de datos: {e.errno} - {e.msg}")
         return False
     finally:
         try:
@@ -288,7 +340,7 @@ def crear_base_datos():
         except:
             pass
 
-__all__ = ['crear_base_datos', 'verificar_tablas', 'asegurar_base_datos']
+__all__ = ['crear_base_datos', 'verificar_tablas', 'asegurar_base_datos', 'agregar_columna_codigo_prefijo']
 
 if __name__ == "__main__":
     if crear_base_datos():

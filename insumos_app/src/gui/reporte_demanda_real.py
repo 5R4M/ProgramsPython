@@ -43,7 +43,9 @@ from src.database.db_manager import (
     obtener_insumos_por_tipo,
     obtener_presentaciones,
     obtener_movimientos_kardex,
-    conectar_db
+    conectar_db, 
+    obtener_saldo_corte_logistico,
+    obtener_insumos_con_saldo
 )
 
 def resource_path(relative_path):
@@ -228,10 +230,10 @@ class ReporteDemandaReal:
         self.combo_mes_final.grid(row=0, column=5, padx=5, pady=2, sticky='ew')
         self.combo_mes_final.set(datetime.now().strftime("%B").capitalize())
 
-        # Eventos
-        self.parent.after_idle(lambda: self.combo_anio.bind('<<ComboboxSelected>>', self.actualizar_fechas_por_corte))
-        self.parent.after_idle(lambda: self.combo_mes_inicio.bind('<<ComboboxSelected>>', self.actualizar_fechas_por_corte))
-        self.parent.after_idle(lambda: self.combo_mes_final.bind('<<ComboboxSelected>>', self.actualizar_fechas_por_corte))
+        # Eventos - Limpiar visor al cambiar fechas
+        self.parent.after_idle(lambda: self.combo_anio.bind('<<ComboboxSelected>>', self.on_fecha_changed))
+        self.parent.after_idle(lambda: self.combo_mes_inicio.bind('<<ComboboxSelected>>', self.on_fecha_changed))
+        self.parent.after_idle(lambda: self.combo_mes_final.bind('<<ComboboxSelected>>', self.on_fecha_changed))
 
         # Ubicación
         self.frame_ubicacion_container, self.frame_ubicacion_content = self.create_titled_frame(
@@ -343,12 +345,12 @@ class ReporteDemandaReal:
         btn_close = make_btn(self.frame_botones, "Cerrar", self.cerrar_ventana, self.icon_close)
         btn_close.pack(side="right", padx=5)
 
-        # Eventos Combos
-        self.combo_area.bind('<<ComboboxSelected>>', self.cargar_distritos_por_area)
-        self.combo_distrito.bind('<<ComboboxSelected>>', self.cargar_tipos_servicio)
-        self.combo_tipo_servicio.bind('<<ComboboxSelected>>', self.cargar_servicios)
-        self.combo_tipo_insumo.bind('<<ComboboxSelected>>', self.cargar_insumos)
-        self.combo_insumo.bind('<<ComboboxSelected>>', self.actualizar_presentacion)
+        # Eventos Combos (busca esta sección en setup_ui)
+        self.combo_area.bind('<<ComboboxSelected>>', lambda e: [self.cargar_distritos_por_area(e), self.limpiar_visor_pdf(e)])
+        self.combo_distrito.bind('<<ComboboxSelected>>', lambda e: [self.cargar_tipos_servicio(e), self.limpiar_visor_pdf(e)])
+        self.combo_tipo_servicio.bind('<<ComboboxSelected>>', lambda e: [self.cargar_servicios(e), self.limpiar_visor_pdf(e)])
+        self.combo_tipo_insumo.bind('<<ComboboxSelected>>', lambda e: [self.cargar_insumos(e), self.limpiar_visor_pdf(e)])
+        self.combo_insumo.bind('<<ComboboxSelected>>', lambda e: [self.actualizar_presentacion(e), self.limpiar_visor_pdf(e)])
 
         # Cargar datos
         self.cargar_areas()
@@ -356,7 +358,67 @@ class ReporteDemandaReal:
         self.combo_distrito.set_completion_list([''])
         self.cargar_tipos_insumo()
         self.cargar_presentaciones()
-      
+    
+    def limpiar_visor_pdf(self, event=None):
+        """
+        Limpia el visor PDF cuando se cambian los filtros de fecha
+        """
+        try:
+            # Limpiar el visor PDF
+            if hasattr(self, 'pdf_body'):
+                for widget in self.pdf_body.winfo_children():
+                    widget.destroy()
+                
+                # Mostrar mensaje de "Sin vista previa"
+                mensaje_frame = tk.Frame(self.pdf_body, bg=self.COLORS['white'])
+                mensaje_frame.pack(expand=True)
+                
+                tk.Label(
+                    mensaje_frame,
+                    text="📄",
+                    font=('Segoe UI Emoji', 48),
+                    fg=self.COLORS['text_light'],
+                    bg=self.COLORS['white']
+                ).pack(pady=(50, 10))
+                
+                tk.Label(
+                    mensaje_frame,
+                    text="Seleccione los filtros y genere la vista previa",
+                    font=('Segoe UI', 11),
+                    fg=self.COLORS['text_light'],
+                    bg=self.COLORS['white']
+                ).pack()
+            
+            # Limpiar datos anteriores
+            if hasattr(self, 'datos'):
+                delattr(self, 'datos')
+            if hasattr(self, 'dias'):
+                delattr(self, 'dias')
+            if hasattr(self, 'temp_pdf_path'):
+                if os.path.exists(self.temp_pdf_path):
+                    try:
+                        os.remove(self.temp_pdf_path)
+                    except:
+                        pass
+                delattr(self, 'temp_pdf_path')
+            if hasattr(self, 'periodo_logistico_text'):
+                delattr(self, 'periodo_logistico_text')
+            if hasattr(self, 'saldo_anterior_por_insumo'):
+                delattr(self, 'saldo_anterior_por_insumo')
+            if hasattr(self, 'codigos_insumos'):
+                delattr(self, 'codigos_insumos')
+                
+        except Exception as e:
+            print(f"Error al limpiar visor PDF: {e}")
+     
+     
+    def on_fecha_changed(self, event=None):
+        """
+        Maneja el cambio de fechas: actualiza el rango y limpia el visor
+        """
+        self.actualizar_fechas_por_corte(event)
+        self.limpiar_visor_pdf(event)
+        
     def calcular_rango_corte_logistico(self, anio, mes_inicio, mes_final):
         """
         Calcula el rango de fechas para el corte logístico.
@@ -397,7 +459,6 @@ class ReporteDemandaReal:
 
             if anio and mes_inicio and mes_final:
                 fecha_ini, fecha_fin = self.calcular_rango_corte_logistico(anio, mes_inicio, mes_final)
-                print(f"Período: {fecha_ini} - {fecha_fin}")
         except Exception as e:
             messagebox.showerror("Error", f"Error al calcular fechas: {str(e)}")
 
@@ -502,82 +563,57 @@ class ReporteDemandaReal:
         except (ValueError, TypeError):
             return "0"
   
-    def generar_codigo_insumo(self, movimientos_raw):
+    def generar_codigo_insumo(self, movimientos):
         """
-        Genera códigos con prefijo por tipo de insumo.
+        Genera códigos únicos para cada insumo basándose en su ID.
+        Ahora también acepta una lista de IDs de insumos directamente.
         """
-        insumos_unicos = {}
-        for mov in movimientos_raw:
-            insumo_id_raw = mov.get('codigo_insumo') or mov.get('insumo_id') or mov.get('codigo')
-            if insumo_id_raw is None or str(insumo_id_raw).strip() == '':
-                continue
+        from src.database.db_manager import conectar_db
+        
+        codigos = {}
+        insumo_ids = set()
+        
+        # Si movimientos es una lista de IDs (enteros)
+        if movimientos and isinstance(movimientos[0], int):
+            insumo_ids = set(movimientos)
+        else:
+            # Si es una lista de diccionarios (movimientos)
+            for mov in movimientos:
+                insumo_id_raw = mov.get('codigo_insumo') or mov.get('insumo_id') or mov.get('codigo')
+                if insumo_id_raw is not None:
+                    try:
+                        insumo_id = int(str(insumo_id_raw).strip())
+                        insumo_ids.add(insumo_id)
+                    except:
+                        pass
+        
+        # Obtener información de todos los insumos
+        conn = conectar_db()
+        if conn:
             try:
-                insumo_id = int(str(insumo_id_raw).strip())
-            except:
-                continue
-
-            if insumo_id not in insumos_unicos:
-                insumos_unicos[insumo_id] = mov.get('nombre_insumo', '')
-
-        print(f"DEBUG OPT: Insumos únicos encontrados: {len(insumos_unicos)}")
-        if not insumos_unicos:
-            return {}
-
-        try:
-            conn = conectar_db()
-            if not conn:
-                print("DEBUG OPT: No se pudo conectar a la base de datos")
-                return {}
-
-            cursor = conn.cursor(dictionary=True)
-
-            query_tipos = """
-                SELECT DISTINCT ti.id as tipo_id, ti.descripcion as tipo_descripcion
-                FROM tipo_insumo ti
-                INNER JOIN insumo i ON i.id_tipo_insumo = ti.id
-                WHERE i.id IN ({})
-                ORDER BY ti.descripcion
-            """.format(','.join(['%s'] * len(insumos_unicos)))
-            
-            cursor.execute(query_tipos, list(insumos_unicos.keys()))
-            tipos_resultado = cursor.fetchall()
-
-            codigos_insumos = {}
-            
-            for tipo_info in tipos_resultado:
-                tipo_id = tipo_info['tipo_id']
-                tipo_descripcion = tipo_info['tipo_descripcion']
-                
-                query_insumos_tipo = """
-                    SELECT i.id AS insumo_id, i.nombre AS insumo_nombre
-                    FROM insumo i
-                    WHERE i.id_tipo_insumo = %s
-                    ORDER BY i.id ASC
-                """
-                cursor.execute(query_insumos_tipo, (tipo_id,))
-                todos_insumos_tipo = cursor.fetchall()
-                
-                posicion_en_tipo = {}
-                for indice, insumo in enumerate(todos_insumos_tipo, 1):
-                    posicion_en_tipo[insumo['insumo_id']] = indice
-                
-                tipo_limpio = ''.join(c for c in tipo_descripcion.strip().upper() if c.isalnum())
-                prefijo = (tipo_limpio[:4].upper() + 'XXXX')[:4] if tipo_limpio else 'XXXX'
-                
-                for insumo_id in insumos_unicos.keys():
-                    if insumo_id in posicion_en_tipo:
-                        posicion = posicion_en_tipo[insumo_id]
-                        codigos_insumos[insumo_id] = f"{prefijo}-{posicion:04d}"
-
-            conn.close()
-
-            print(f"DEBUG OPT: Códigos generados: {len(codigos_insumos)} (muestra: {list(codigos_insumos.items())[:3]})")
-            return codigos_insumos
-
-        except Exception as e:
-            print(f"DEBUG OPT: Error en generar_codigo_insumo: {e}")
-            import traceback; traceback.print_exc()
-            return {}
+                cursor = conn.cursor(dictionary=True)
+                for insumo_id in insumo_ids:
+                    cursor.execute("""
+                        SELECT 
+                            i.id,
+                            ti.codigo_prefijo
+                        FROM insumo i
+                        INNER JOIN tipo_insumo ti ON i.id_tipo_insumo = ti.id
+                        WHERE i.id = %s
+                    """, (insumo_id,))
+                    
+                    resultado = cursor.fetchone()
+                    if resultado:
+                        prefijo = resultado['codigo_prefijo'] or 'TEMP'
+                        codigo_numerico = str(insumo_id).zfill(4)
+                        codigos[insumo_id] = f"{prefijo}-{codigo_numerico}"
+                    else:
+                        codigos[insumo_id] = f"TEMP-{str(insumo_id).zfill(4)}"
+            finally:
+                cursor.close()
+                conn.close()
+        
+        return codigos
 
     def _to_datetime(self, value):
         if value is None:
@@ -609,8 +645,6 @@ class ReporteDemandaReal:
         """
         Devuelve el saldo (existencia) acumulado al cierre de 'fecha_corte_dt' (inclusive),
         consultando movimientos históricos hasta esa fecha, para el contexto dado.
-        Ajusta la consulta a tu esquema real (nombres de tablas y columnas).
-        contexto: dict con claves opcionales: distrito, tipo_servicio, servicio, presentacion
         """
         try:
             conn = conectar_db()
@@ -621,7 +655,7 @@ class ReporteDemandaReal:
             filtros = []
             params_ctx = []
 
-            # Ajusta los nombres de columnas/joins según tu BD real.
+            # Filtros de contexto
             if contexto.get('distrito'):
                 filtros.append("d.nombre = %s")
                 params_ctx.append(contexto['distrito'])
@@ -641,22 +675,24 @@ class ReporteDemandaReal:
                 SELECT
                     COALESCE(SUM(
                         CASE
-                            WHEN m.tipo_movimiento IN ('INVENTARIO INICIAL', 'ENTRADA NIVEL SUPERIOR', 'REAJUSTE (+)')
+                            WHEN tm.descripcion IN ('INVENTARIO INICIAL', 'ENTRADA NIVEL SUPERIOR', 'REAJUSTE (+)')
                                 THEN m.cantidad
-                            WHEN m.tipo_movimiento IN ('SALIDA NIVEL INFERIOR', 'REAJUSTE (-)', 'ENTREGADO')
+                            WHEN tm.descripcion IN ('SALIDA NIVEL INFERIOR', 'REAJUSTE (-)', 'ENTREGADO')
                                 THEN -m.cantidad
                             ELSE 0
                         END
                     ), 0) AS saldo
                 FROM movimiento m
-                INNER JOIN insumo i ON i.id = m.id_insumo
-                LEFT JOIN presentacion p ON p.id = i.id_presentacion
-                LEFT JOIN servicio s ON s.id = m.id_servicio
+                INNER JOIN tipo_movimiento tm ON m.tipo_movimiento_id = tm.id
+                INNER JOIN insumo i ON i.id = m.insumo_id
+                LEFT JOIN insumo_presentacion ip ON i.id = ip.insumo_id
+                LEFT JOIN presentacion p ON ip.presentacion_id = p.id
+                LEFT JOIN servicio s ON s.id = m.servicio_id
                 LEFT JOIN tipo_servicio ts ON ts.id = s.id_tipo_servicio
-                LEFT JOIN distrito d ON d.id = s.id_distrito
-                WHERE DATE(m.fecha) <= %s
-                  AND m.id_insumo = %s
-                  {where_ctx}
+                LEFT JOIN distrito d ON d.id = ts.id_distrito
+                WHERE DATE(m.fecha_registro) <= %s
+                AND m.insumo_id = %s
+                {where_ctx}
             """
 
             params = [fecha_corte_dt.strftime('%Y-%m-%d'), insumo_id] + params_ctx
@@ -667,52 +703,92 @@ class ReporteDemandaReal:
             return float(row['saldo'] or 0.0)
         except Exception as e:
             print(f"ERROR obteniendo saldo corte: {e}")
+            import traceback
+            traceback.print_exc()
             return 0.0
     
-    def procesar_datos(self, movimientos, fecha_ini, fecha_fin, dias):
+    def procesar_datos(self, movimientos, fecha_ini, fecha_fin, dias, todos_los_insumos):
         """
         Procesa movimientos para el rango [fecha_ini, fecha_fin] (corte logístico 26–25).
-        Usa self.saldo_anterior_por_insumo como base para existencia.
-        Integra códigos con prefijo.
+        Incluye TODOS los insumos con saldo, incluso si no tienen movimientos en el periodo.
         """
-        codigos_insumos = self.generar_codigo_insumo(movimientos)
-        print(f"DEBUG: Códigos generados para {len(codigos_insumos)} insumos")
+        from src.database.db_manager import conectar_db
+        
+        # USAR LOS CÓDIGOS YA GENERADOS (NO REGENERAR)
+        codigos_insumos = self.codigos_insumos
 
         insumos = {}
 
-        def agregar_si_no_existe(key, insumo_id, codigo_con_prefijo, nombre_insumo, presentacion):
-            if key not in insumos:
-                insumos[key] = {
-                    'codigo': codigo_con_prefijo,
-                    'insumo_id': insumo_id,
-                    'nombre_insumo': nombre_insumo,
-                    'presentacion': presentacion,
-                    'entregado': {dia: 0.0 for dia in dias},
-                    'no_entregado': {dia: 0.0 for dia in dias},
-                    'inventario_inicial': 0.0,
-                    'entrada_nivel_superior': 0.0,
-                    'salida_nivel_inferior': 0.0,
-                    'reajuste_positivo': 0.0,
-                    'reajuste_negativo': 0.0
-                }
+        # Obtener información de TODOS los insumos
+        conn = conectar_db()
+        if conn:
+            try:
+                cursor = conn.cursor(dictionary=True)
+                for insumo_id in todos_los_insumos:
+                    cursor.execute("""
+                        SELECT 
+                            i.id,
+                            i.nombre AS nombre_insumo,
+                            GROUP_CONCAT(DISTINCT p.nombre SEPARATOR ', ') AS presentacion
+                        FROM insumo i
+                        LEFT JOIN insumo_presentacion ip ON i.id = ip.insumo_id
+                        LEFT JOIN presentacion p ON ip.presentacion_id = p.id
+                        WHERE i.id = %s
+                        GROUP BY i.id, i.nombre
+                    """, (insumo_id,))
+                    
+                    info = cursor.fetchone()
+                    if info:
+                        codigo_con_prefijo = codigos_insumos.get(insumo_id, f"TEMP-{str(insumo_id).zfill(4)}")
+                        insumo_key = f"{codigo_con_prefijo}_{info['nombre_insumo']}_{info['presentacion'] or ''}"
+                        
+                        insumos[insumo_key] = {
+                            'codigo': codigo_con_prefijo,
+                            'insumo_id': insumo_id,
+                            'nombre_insumo': info['nombre_insumo'],
+                            'presentacion': info['presentacion'] or '',
+                            'entregado': {dia: 0.0 for dia in dias},
+                            'no_entregado': {dia: 0.0 for dia in dias},
+                            'inventario_inicial': 0.0,
+                            'entrada_nivel_superior': 0.0,
+                            'salida_nivel_inferior': 0.0,
+                            'reajuste_positivo': 0.0,
+                            'reajuste_negativo': 0.0
+                        }
+            finally:
+                cursor.close()
+                conn.close()
 
+        # Procesar movimientos del periodo
         for mov in movimientos:
-            # Identificación insumo
             insumo_id_raw = mov.get('codigo_insumo') or mov.get('insumo_id') or mov.get('codigo')
             try:
                 insumo_id = int(str(insumo_id_raw).strip()) if insumo_id_raw is not None else None
             except:
                 insumo_id = None
-            if insumo_id is None:
+            
+            if insumo_id is None or insumo_id not in todos_los_insumos:
                 continue
 
             codigo_con_prefijo = codigos_insumos.get(insumo_id, f"TEMP-{str(insumo_id).zfill(4)}")
             nombre_insumo = mov.get('nombre_insumo', '')
             presentacion = mov.get('nombre_presentacion', '')
-
             insumo_key = f"{codigo_con_prefijo}_{nombre_insumo}_{presentacion}"
 
-            # Fecha y filtro de periodo
+            # Si el insumo_key no existe, buscarlo por insumo_id
+            if insumo_key not in insumos:
+                # Buscar la clave correcta usando el insumo_id
+                insumo_key_encontrada = None
+                for key, val in insumos.items():
+                    if val['insumo_id'] == insumo_id:
+                        insumo_key_encontrada = key
+                        break
+                
+                if insumo_key_encontrada:
+                    insumo_key = insumo_key_encontrada
+                else:
+                    continue
+
             fecha_str = mov.get('fecha', '')
             if not fecha_str:
                 continue
@@ -724,34 +800,28 @@ class ReporteDemandaReal:
             dentro_periodo = (fecha_ini <= fecha_mov <= fecha_fin)
             tipo_mov = (mov.get('tipo_movimiento') or '').strip().upper()
 
-            # Normalizar cantidad a float, evitando Decimal
             try:
                 cantidad = float(mov.get('cantidad') or 0)
             except Exception:
-                # Si por algún motivo no se puede, caer a 0.0
                 cantidad = 0.0
 
             dia = fecha_mov.day
 
-            # Crea estructura si no existe
-            agregar_si_no_existe(insumo_key, insumo_id, codigo_con_prefijo, nombre_insumo, presentacion)
-
-            # Acumular SOLO si el movimiento cae dentro del periodo 26–25
-            if dentro_periodo:
-                if tipo_mov == 'ENTREGADO' and dia in dias:
-                    insumos[insumo_key]['entregado'][dia] += cantidad
-                elif tipo_mov == 'NO ENTREGADO' and dia in dias:
-                    insumos[insumo_key]['no_entregado'][dia] += cantidad
-                elif tipo_mov == 'INVENTARIO INICIAL':
-                    insumos[insumo_key]['inventario_inicial'] += cantidad
-                elif tipo_mov == 'ENTRADA NIVEL SUPERIOR':
-                    insumos[insumo_key]['entrada_nivel_superior'] += cantidad
-                elif tipo_mov == 'SALIDA NIVEL INFERIOR':
-                    insumos[insumo_key]['salida_nivel_inferior'] += cantidad
-                elif tipo_mov == 'REAJUSTE (+)':
-                    insumos[insumo_key]['reajuste_positivo'] += cantidad
-                elif tipo_mov == 'REAJUSTE (-)':
-                    insumos[insumo_key]['reajuste_negativo'] += cantidad
+            # Acumular movimientos
+            if tipo_mov == 'ENTREGADO' and dia in dias and dentro_periodo:
+                insumos[insumo_key]['entregado'][dia] += cantidad
+            elif tipo_mov == 'NO ENTREGADO' and dia in dias and dentro_periodo:
+                insumos[insumo_key]['no_entregado'][dia] += cantidad
+            elif tipo_mov == 'INVENTARIO INICIAL' and dentro_periodo:
+                insumos[insumo_key]['inventario_inicial'] += cantidad
+            elif tipo_mov == 'ENTRADA NIVEL SUPERIOR' and dentro_periodo:
+                insumos[insumo_key]['entrada_nivel_superior'] += cantidad
+            elif tipo_mov == 'SALIDA NIVEL INFERIOR' and dentro_periodo:
+                insumos[insumo_key]['salida_nivel_inferior'] += cantidad
+            elif tipo_mov == 'REAJUSTE (+)' and dentro_periodo:
+                insumos[insumo_key]['reajuste_positivo'] += cantidad
+            elif tipo_mov == 'REAJUSTE (-)' and dentro_periodo:
+                insumos[insumo_key]['reajuste_negativo'] += cantidad
 
         # Calcular totales y existencia con saldo anterior
         datos_procesados = {}
@@ -760,11 +830,13 @@ class ReporteDemandaReal:
             total_no_entregado = float(sum(float(v) for v in valores['no_entregado'].values()))
             reajuste_total = float(valores['reajuste_positivo'] - valores['reajuste_negativo'])
 
+            # OBTENER SALDO ANTERIOR
             try:
                 saldo_anterior = float(self.saldo_anterior_por_insumo.get(valores['insumo_id'], 0.0))
             except Exception:
                 saldo_anterior = 0.0
 
+            # CALCULAR EXISTENCIA
             existencia_val = float(
                 saldo_anterior +
                 float(valores['inventario_inicial']) +
@@ -792,19 +864,9 @@ class ReporteDemandaReal:
             fila_datos['Existencia'] = self.formato_valor(existencia_val)
             fila_datos['Reajuste'] = self.formato_valor(reajuste_total)
 
-            fila_datos['_valores_originales'] = {
-                'entregado': valores['entregado'],
-                'no_entregado': valores['no_entregado'],
-                'total_entregado': total_entregado,
-                'total_no_entregado': total_no_entregado,
-                'existencia': existencia_val,
-                'reajuste': reajuste_total
-            }
-
             nueva_clave = f"{valores['codigo']} - {valores['nombre_insumo']} - {valores['presentacion']}"
             datos_procesados[nueva_clave] = fila_datos
 
-        self.codigos_insumos = codigos_insumos
         return datos_procesados
 
     def exportar_excel(self):
@@ -1135,97 +1197,6 @@ class ReporteDemandaReal:
                 dias.append(fecha_iter.day)
             fecha_iter += timedelta(days=1)
 
-        codigos_insumos = self.generar_codigo_insumo(datos_movimientos)
-
-        # === Saldo anterior logístico para PDF ===
-        # Contexto tomado de los combos actuales
-        ctx_distrito = (self.combo_distrito.get() or "").strip()
-        ctx_tipo_servicio = (self.combo_tipo_servicio.get() or "").strip()
-        ctx_servicio = (self.combo_servicio.get() or "").strip()
-        ctx_presentacion = (self.combo_presentacion.get() or "").strip() if hasattr(self, 'combo_presentacion') else ""
-
-        contexto_pdf = {
-            'distrito': ctx_distrito or None,
-            'tipo_servicio': ctx_tipo_servicio or None,
-            'servicio': ctx_servicio or None,
-            'presentacion': ctx_presentacion or None,
-        }
-
-        fecha_corte_anterior_pdf = self._fecha_corte_anterior(fecha_inicio)
-
-        # Detectar insumos presentes en los datos_movimientos
-        insumo_ids_pdf = set()
-        for m in datos_movimientos:
-            iid = m.get('codigo_insumo') or m.get('insumo_id') or m.get('codigo')
-            if iid is None:
-                continue
-            try:
-                iid = int(str(iid).strip())
-                insumo_ids_pdf.add(iid)
-            except:
-                pass
-
-        saldo_anterior_por_insumo_pdf = {}
-        for iid in insumo_ids_pdf:
-            saldo_anterior_por_insumo_pdf[iid] = self._obtener_saldo_corte_bd(fecha_corte_anterior_pdf, contexto_pdf, iid)
-
-        # Inverso de códigos si lo necesitas para mapear
-        inv_codigos = {v: k for k, v in codigos_insumos.items()} if isinstance(codigos_insumos, dict) else {}
-        
-        insumos = {}
-        for mov in datos_movimientos:
-            insumo_id_raw = mov.get('codigo_insumo') or mov.get('insumo_id') or mov.get('codigo')
-            try:
-                insumo_id = int(str(insumo_id_raw).strip()) if insumo_id_raw else None
-            except:
-                insumo_id = None
-            if insumo_id is None:
-                continue
-
-            codigo_con_prefijo = codigos_insumos.get(insumo_id, f"TEMP-{str(insumo_id).zfill(4)}")
-            nombre = mov.get('nombre_insumo', '')
-            presentacion = mov.get('nombre_presentacion', '')
-            key = (codigo_con_prefijo, f"{nombre} {presentacion}".strip())
-
-            if key not in insumos:
-                insumos[key] = {
-                    'entregado': {d: 0 for d in dias},
-                    'no_entregado': {d: 0 for d in dias},
-                    'inventario_inicial': 0,
-                    'entrada_nivel_superior': 0,
-                    'salida_nivel_inferior': 0,
-                    'reajuste_positivo': 0,
-                    'reajuste_negativo': 0
-                }
-
-            fecha_mov = self._to_datetime(mov.get('fecha'))
-            if fecha_mov is None:
-                continue
-
-            dia_mov = fecha_mov.day
-            tipo = str(mov.get('tipo_movimiento', '')).upper()
-            try:
-                cantidad = float(mov.get('cantidad') or 0)
-            except Exception:
-                cantidad = 0.0
-
-            if fecha_inicio <= fecha_mov <= fecha_fin:
-                if tipo == 'ENTREGADO' and dia_mov in dias:
-                    insumos[key]['entregado'][dia_mov] += cantidad
-                elif tipo == 'NO ENTREGADO' and dia_mov in dias:
-                    insumos[key]['no_entregado'][dia_mov] += cantidad
-
-            if tipo == 'INVENTARIO INICIAL':
-                insumos[key]['inventario_inicial'] += cantidad
-            elif tipo == 'ENTRADA NIVEL SUPERIOR':
-                insumos[key]['entrada_nivel_superior'] += cantidad
-            elif tipo == 'SALIDA NIVEL INFERIOR':
-                insumos[key]['salida_nivel_inferior'] += cantidad
-            elif tipo == 'REAJUSTE (+)':
-                insumos[key]['reajuste_positivo'] += cantidad
-            elif tipo == 'REAJUSTE (-)':
-                insumos[key]['reajuste_negativo'] += cantidad
-
         doc = SimpleDocTemplate(
             ruta_pdf,
             pagesize=landscape(legal),
@@ -1260,7 +1231,6 @@ class ReporteDemandaReal:
         elementos.append(Paragraph("REGISTRO DIARIO DE CONSUMO Y DEMANDA REAL", subtitle_style))
         elementos.append(Paragraph(f"Generado el: {datetime.now().strftime('%d/%m/%Y %H:%M:%S')}", timestamp_style))
         
-        # Mostrar periodo logístico si está disponible
         if hasattr(self, 'periodo_logistico_text'):
             periodo_style = ParagraphStyle('PeriodoStyle', parent=estilos['Normal'], alignment=1, spaceAfter=10, fontSize=9)
             elementos.append(Paragraph(self.periodo_logistico_text, periodo_style))
@@ -1308,31 +1278,18 @@ class ReporteDemandaReal:
         ]
         data = [encabezado1, encabezado2]
 
-        for (codigo_con_prefijo, nombre_pres), valores in insumos.items():
-            total_entregado = sum(valores['entregado'].get(d, 0) for d in dias)
-            total_no_entregado = sum(valores['no_entregado'].get(d, 0) for d in dias)
-            reajuste_total = valores['reajuste_positivo'] - valores['reajuste_negativo']
-            
-            # Obtener insumo_id a partir del código visible si es posible
-            insumo_id_for_row = inv_codigos.get(codigo_con_prefijo, None)
-            try:
-                saldo_anterior_row = float(saldo_anterior_por_insumo_pdf.get(insumo_id_for_row, 0.0))
-            except Exception:
-                saldo_anterior_row = 0.0
+        # Usar self.datos directamente
+        for insumo_key, valores in self.datos.items():
+            codigo_con_prefijo = valores.get('codigo', '')
+            nombre_insumo = valores.get('nombre_insumo', '')
+            presentacion = valores.get('presentacion', '')
+            nombre_pres = f"{nombre_insumo} {presentacion}".strip()
 
-            total_entregado = float(sum(float(valores['entregado'].get(d, 0.0)) for d in dias))
-            total_no_entregado = float(sum(float(valores['no_entregado'].get(d, 0.0)) for d in dias))
-            reajuste_total = float(valores['reajuste_positivo'] - valores['reajuste_negativo'])
-
-            existencia = float(
-                saldo_anterior_row +
-                float(valores['inventario_inicial']) +
-                float(valores['entrada_nivel_superior']) +
-                float(valores['reajuste_positivo']) -
-                float(valores['salida_nivel_inferior']) -
-                float(valores['reajuste_negativo']) -
-                total_entregado
-            )
+            total_entregado = valores.get('Total_Entregado', 0)
+            total_no_entregado = valores.get('Total_No_Entregado', 0)
+            demanda = valores.get('Demanda', 0)
+            existencia = valores.get('Existencia', 0)
+            reajuste = valores.get('Reajuste', 0)
 
             codigo_paragraph = Paragraph(str(codigo_con_prefijo), cell_code_style)
             nombre_paragraph = Paragraph(str(nombre_pres), cell_text_style)
@@ -1342,18 +1299,21 @@ class ReporteDemandaReal:
 
             fila_entregado = [codigo_paragraph, nombre_paragraph, mov_entregado]
             for d in dias:
-                fila_entregado.append(Paragraph(str(self.formato_valor(valores['entregado'].get(d, 0))), cell_day_style))
+                valor_entregado = valores.get(f'Día_{d}_Entregado', 0)
+                fila_entregado.append(Paragraph(str(valor_entregado), cell_day_style))
+            
             fila_entregado += [
-                Paragraph(str(self.formato_valor(total_entregado)), cell_total_small),
-                Paragraph(str(self.formato_valor(total_no_entregado)), cell_total_small),
-                Paragraph(str(self.formato_valor(total_entregado + total_no_entregado)), header_subtitle_style),
-                Paragraph(str(self.formato_valor(existencia)), cell_total_small),
-                Paragraph(str(self.formato_valor(reajuste_total)), header_subtitle_style),
+                Paragraph(str(total_entregado), cell_total_small),
+                Paragraph(str(total_no_entregado), cell_total_small),
+                Paragraph(str(demanda), header_subtitle_style),
+                Paragraph(str(existencia), cell_total_small),
+                Paragraph(str(reajuste), header_subtitle_style),
             ]
 
             fila_no_entregado = [Paragraph('', cell_code_style), Paragraph('', cell_text_style), mov_no_entregado]
             for d in dias:
-                fila_no_entregado.append(Paragraph(str(self.formato_valor(valores['no_entregado'].get(d, 0))), cell_day_style))
+                valor_no_entregado = valores.get(f'Día_{d}_No_Entregado', 0)
+                fila_no_entregado.append(Paragraph(str(valor_no_entregado), cell_day_style))
             fila_no_entregado += ['', '', '', '', '']
 
             data.append(fila_entregado)
@@ -1436,119 +1396,144 @@ class ReporteDemandaReal:
         doc.build(elementos)
       
     def generar_reporte(self):
-        if not self.combo_area.get():
-            messagebox.showerror("Error", "Debe seleccionar al menos el Área")
-            return
+        """Genera el reporte según los filtros seleccionados"""
+        try:
+            if not self.combo_area.get():
+                messagebox.showerror("Error", "Debe seleccionar al menos el Área")
+                return
 
-        anio = self.anio_var.get()
-        mes_inicio = self.mes_inicio_var.get()
-        mes_final = self.mes_final_var.get()
+            anio = self.anio_var.get()
+            mes_inicio = self.mes_inicio_var.get()
+            mes_final = self.mes_final_var.get()
 
-        if not all([anio, mes_inicio, mes_final]):
-            messagebox.showerror("Error", "Debe seleccionar Año, Mes Inicio y Mes Final")
-            return
+            if not all([anio, mes_inicio, mes_final]):
+                messagebox.showerror("Error", "Debe seleccionar Año, Mes Inicio y Mes Final")
+                return
 
-        fecha_ini_str, fecha_fin_str = self.calcular_rango_corte_logistico(anio, mes_inicio, mes_final)
-        fecha_ini = datetime.strptime(fecha_ini_str, '%d/%m/%Y')
-        fecha_fin = datetime.strptime(fecha_fin_str, '%d/%m/%Y')
+            fecha_ini_str, fecha_fin_str = self.calcular_rango_corte_logistico(anio, mes_inicio, mes_final)
+            fecha_ini = datetime.strptime(fecha_ini_str, '%d/%m/%Y')
+            fecha_fin = datetime.strptime(fecha_fin_str, '%d/%m/%Y')
 
-        # Guarda el texto de periodo logístico para encabezados
-        self.periodo_logistico_text = f"Periodo logístico: {fecha_ini_str} al {fecha_fin_str}"
-        
-        
+            # Guardar texto del periodo logístico
+            self.periodo_logistico_text = f"Periodo logístico: {fecha_ini_str} al {fecha_fin_str}"
 
-        if fecha_fin < fecha_ini:
-            messagebox.showerror("Error", "La fecha final debe ser mayor a la inicial")
-            return
+            if fecha_fin < fecha_ini:
+                messagebox.showerror("Error", "La fecha final debe ser mayor a la inicial")
+                return
 
-        self.dias = []
-        fecha_iter = fecha_ini
-        while fecha_iter <= fecha_fin:
-            if fecha_iter.weekday() < 5:
-                self.dias.append(fecha_iter.day)
-            fecha_iter += timedelta(days=1)
+            # Calcular días hábiles
+            self.dias = []
+            fecha_iter = fecha_ini
+            while fecha_iter <= fecha_fin:
+                if fecha_iter.weekday() < 5:
+                    self.dias.append(fecha_iter.day)
+                fecha_iter += timedelta(days=1)
 
-        distrito_nombre = self.combo_distrito.get().strip()
-        tipo_servicio_desc = self.combo_tipo_servicio.get().strip()
-        servicio_nombre = self.combo_servicio.get().strip()
-        tipo_insumo_desc = self.combo_tipo_insumo.get().strip()
-        insumo_nombre = self.combo_insumo.get().strip()
-        presentacion_nombre = self.combo_presentacion.get().strip()
+            # Obtener filtros
+            distrito_nombre = self.combo_distrito.get().strip()
+            tipo_servicio_desc = self.combo_tipo_servicio.get().strip()
+            servicio_nombre = self.combo_servicio.get().strip()
+            tipo_insumo_desc = self.combo_tipo_insumo.get().strip()
+            insumo_nombre = self.combo_insumo.get().strip()
+            presentacion_nombre = self.combo_presentacion.get().strip()
+            area_nombre = self.combo_area.get().strip()
 
-        movimientos_raw = obtener_movimientos_kardex(
-            fecha_ini.strftime('%Y-%m-%d'),
-            fecha_fin.strftime('%Y-%m-%d'),
-            distrito_nombre if distrito_nombre else None,
-            tipo_servicio_desc if tipo_servicio_desc else None,
-            servicio_nombre if servicio_nombre else None,
-            tipo_insumo_desc if tipo_insumo_desc else None,
-            insumo_nombre if insumo_nombre else None,
-            presentacion_nombre if presentacion_nombre else None
-        )
+            # Construir contexto de filtros
+            contexto = {
+                'area': area_nombre or None,
+                'distrito': distrito_nombre or None,
+                'tipo_servicio': tipo_servicio_desc or None,
+                'servicio': servicio_nombre or None,
+                'tipo_insumo': tipo_insumo_desc or None,
+                'insumo': insumo_nombre or None,
+                'presentacion': presentacion_nombre or None,
+            }
 
-        if not movimientos_raw:
-            messagebox.showinfo("Info", "No hay datos para mostrar")
-            return
+            # === OBTENER TODOS LOS INSUMOS CON SALDO ===
+            fecha_corte_anterior = self._fecha_corte_anterior(fecha_ini)
+            
+            # Obtener insumos que tienen saldo hasta el corte anterior
+            from src.database.db_manager import obtener_insumos_con_saldo
+            insumos_con_saldo = obtener_insumos_con_saldo(fecha_corte_anterior, contexto)
 
-        movimientos_filtrados = [m for m in movimientos_raw if (m.get('tipo_movimiento', '') or '').upper() in [
-            'ENTREGADO', 'NO ENTREGADO', 'REAJUSTE (+)', 'REAJUSTE (-)', 'INVENTARIO INICIAL', 'ENTRADA NIVEL SUPERIOR', 'SALIDA NIVEL INFERIOR'
-        ]]
+            # Obtener movimientos del periodo actual
+            movimientos_raw = obtener_movimientos_kardex(
+                fecha_ini.strftime('%Y-%m-%d'),
+                fecha_fin.strftime('%Y-%m-%d'),
+                distrito_nombre if distrito_nombre else None,
+                tipo_servicio_desc if tipo_servicio_desc else None,
+                servicio_nombre if servicio_nombre else None,
+                tipo_insumo_desc if tipo_insumo_desc else None,
+                insumo_nombre if insumo_nombre else None,
+                presentacion_nombre if presentacion_nombre else None,
+                area_nombre if area_nombre else None
+            )
 
-        # === Integración de saldo anterior logístico (corte al 25) ===
-        # Construir contexto desde los filtros actuales
-        distrito_nombre = self.combo_distrito.get().strip()
-        tipo_servicio_desc = self.combo_tipo_servicio.get().strip()
-        servicio_nombre = self.combo_servicio.get().strip()
-        presentacion_nombre = self.combo_presentacion.get().strip()
+            # Filtrar solo movimientos relevantes
+            movimientos_filtrados = [m for m in movimientos_raw if (m.get('tipo_movimiento', '') or '').upper() in [
+                'ENTREGADO', 'NO ENTREGADO', 'REAJUSTE (+)', 'REAJUSTE (-)', 
+                'INVENTARIO INICIAL', 'ENTRADA NIVEL SUPERIOR', 'SALIDA NIVEL INFERIOR'
+            ]]
 
-        contexto = {
-            'distrito': distrito_nombre or None,
-            'tipo_servicio': tipo_servicio_desc or None,
-            'servicio': servicio_nombre or None,
-            'presentacion': presentacion_nombre or None,
-        }
+            # Detectar insumos únicos en el periodo actual
+            insumo_ids_en_periodo = set()
+            for m in movimientos_filtrados:
+                iid = m.get('codigo_insumo') or m.get('insumo_id') or m.get('codigo')
+                if iid is None:
+                    continue
+                try:
+                    iid = int(str(iid).strip())
+                    insumo_ids_en_periodo.add(iid)
+                except:
+                    pass
 
-        # Fecha de corte anterior (25 del mes del inicio del periodo)
-        fecha_corte_anterior = self._fecha_corte_anterior(fecha_ini)
+            # COMBINAR: insumos con saldo anterior + insumos del periodo actual
+            todos_los_insumos = set(insumos_con_saldo) | insumo_ids_en_periodo
 
-        # Detectar insumos presentes en el período
-        insumo_ids_en_periodo = set()
-        for m in movimientos_filtrados:
-            iid = m.get('codigo_insumo') or m.get('insumo_id') or m.get('codigo')
-            if iid is None:
-                continue
-            try:
-                iid = int(str(iid).strip())
-                insumo_ids_en_periodo.add(iid)
-            except:
-                pass
+            if not todos_los_insumos:
+                messagebox.showinfo("Info", "No hay datos para mostrar")
+                return
 
-        # Obtener saldo anterior por insumo
-        self.saldo_anterior_por_insumo = {}
-        for iid in insumo_ids_en_periodo:
-            self.saldo_anterior_por_insumo[iid] = self._obtener_saldo_corte_bd(fecha_corte_anterior, contexto, iid)
+            # === GENERAR CÓDIGOS PARA TODOS LOS INSUMOS ===
+            self.codigos_insumos = self.generar_codigo_insumo(list(todos_los_insumos))
 
-        # Procesa datos usando el saldo anterior como base
-        self.datos = self.procesar_datos(movimientos_filtrados, fecha_ini, fecha_fin, self.dias)
+            # Calcular saldo anterior para todos los insumos
+            self.saldo_anterior_por_insumo = {}
+            for iid in todos_los_insumos:
+                saldo = obtener_saldo_corte_logistico(fecha_corte_anterior, contexto, iid)
+                self.saldo_anterior_por_insumo[iid] = saldo
 
-        periodo_str = f"{fecha_ini.strftime('%d%m%Y')}_{fecha_fin.strftime('%d%m%Y')}"
-        self.periodo_str = periodo_str
+            # Procesar datos con el saldo anterior
+            self.datos = self.procesar_datos(movimientos_filtrados, fecha_ini, fecha_fin, self.dias, todos_los_insumos)
 
-        import tempfile
-        temp_dir = tempfile.gettempdir()
-        self.temp_pdf_path = os.path.join(temp_dir, f"vista_previa_demanda_real_{periodo_str}.pdf")
-      
-        self.generar_pdf(movimientos_filtrados, self.temp_pdf_path)
-        self.generar_vista_previa_pdf()
+            if not self.datos:
+                messagebox.showinfo("Info", "No hay datos para mostrar después del procesamiento")
+                return
+
+            # Generar PDF
+            periodo_str = f"{fecha_ini.strftime('%d%m%Y')}_{fecha_fin.strftime('%d%m%Y')}"
+            self.periodo_str = periodo_str
+
+            import tempfile
+            temp_dir = tempfile.gettempdir()
+            self.temp_pdf_path = os.path.join(temp_dir, f"vista_previa_demanda_real_{periodo_str}.pdf")
+            
+            self.generar_pdf(movimientos_filtrados, self.temp_pdf_path)
+            self.generar_vista_previa_pdf()
+            
+            messagebox.showinfo("Éxito", f"Reporte generado correctamente con {len(self.datos)} insumos")
+            
+        except Exception as e:
+            messagebox.showerror("Error", f"Error al generar reporte: {str(e)}")
 
     def generar_vista_previa_pdf(self):
         try:
-            # Limpiar visor
-            body_target = getattr(self, 'pdf_body', self.pdf_frame)
-            for widget in body_target.winfo_children():
+            # ✅ LIMPIAR VISOR AL INICIO (antes de generar la vista previa)
+            for widget in self.pdf_body.winfo_children():
                 widget.destroy()
 
-            contenedor = tk.Frame(self.pdf_frame, bg=self.COLORS['white'])
+            # Crear contenedor DENTRO de pdf_body (no pdf_frame)
+            contenedor = tk.Frame(self.pdf_body, bg=self.COLORS['white'])
             contenedor.pack(fill="both", expand=True)
 
             control_frame = tk.Frame(contenedor, bg=self.COLORS['white'])
@@ -1609,6 +1594,7 @@ class ReporteDemandaReal:
 
             def fit_to_width():
                 try:
+                    canvas.update_idletasks()  # IMPORTANTE: actualizar geometría
                     canvas_width = canvas.winfo_width()
                     if canvas_width > 100:
                         page = doc.load_page(self.current_page)
@@ -1621,6 +1607,7 @@ class ReporteDemandaReal:
 
             def fit_to_page():
                 try:
+                    canvas.update_idletasks()  # IMPORTANTE: actualizar geometría
                     canvas_width = canvas.winfo_width()
                     canvas_height = canvas.winfo_height()
                     if canvas_width > 100 and canvas_height > 100:
@@ -1721,6 +1708,7 @@ class ReporteDemandaReal:
 
                     def fit_to_page_max():
                         try:
+                            canvas_max.update_idletasks()
                             canvas_width = canvas_max.winfo_width()
                             canvas_height = canvas_max.winfo_height()
                             if canvas_width > 100 and canvas_height > 100:
@@ -1780,7 +1768,7 @@ class ReporteDemandaReal:
                     )
                     btn_zoom_in_max.pack(side="left", padx=5)
 
-                    ventana_max.bind("<Configure>", lambda e: fit_to_page_max())
+                    ventana_max.after(100, fit_to_page_max)  # Ajustar después de renderizar
 
                     display_page_max()
                     canvas_max.bind("<MouseWheel>", lambda e: canvas_max.yview_scroll(int(-1*(e.delta/120)), "units"))
@@ -1874,6 +1862,8 @@ class ReporteDemandaReal:
             btn_anterior.config(state="disabled")
             btn_siguiente.config(state="normal" if self.total_pages > 1 else "disabled")
 
+            # IMPORTANTE: Mostrar la primera página después de que todo esté renderizado
+            self.pdf_body.update_idletasks()
             display_page()
 
             def on_mousewheel(event):
