@@ -2327,7 +2327,7 @@ def obtener_saldo_corte_logistico(fecha_corte, contexto, insumo_id=None):
             cursor.execute(query, params)
             resultado = cursor.fetchone()
             saldo = float(resultado['saldo']) if resultado else 0.0
-        
+            
             return saldo
         
         # Si no se especifica insumo_id, devolver diccionario con todos los saldos
@@ -2370,9 +2370,13 @@ def obtener_saldo_corte_logistico(fecha_corte, contexto, insumo_id=None):
                 saldo = float(row['saldo']) if row['saldo'] else 0
                 saldos[insumo_id_row] = saldo
             
+            print(f"✅ Saldos calculados para {len(saldos)} insumos al {fecha_corte.strftime('%Y-%m-%d')}")
             return saldos
         
     except Exception as e:
+        print(f"ERROR obteniendo saldo corte BRES: {e}")
+        import traceback
+        traceback.print_exc()
         return 0.0 if insumo_id else {}
     finally:
         cursor.close()
@@ -2451,10 +2455,13 @@ def obtener_insumos_con_saldo(fecha_corte, contexto):
         resultados = cursor.fetchall()
         
         insumos_con_saldo = [row['insumo_id'] for row in resultados]
-        
+                
         return insumos_con_saldo
         
     except Exception as e:
+        print(f"ERROR obteniendo insumos con saldo BRES: {e}")
+        import traceback
+        traceback.print_exc()
         return []
     finally:
         cursor.close()

@@ -1629,80 +1629,80 @@ class ReporteDemandaReal:
 
     def generar_vista_previa_pdf(self):
         try:
-            # ✅ LIMPIAR VISOR AL INICIO (antes de generar la vista previa)
-            for widget in self.pdf_body.winfo_children():
-                widget.destroy()
+                # ✅ LIMPIAR VISOR AL INICIO (antes de generar la vista previa)
+                for widget in self.pdf_body.winfo_children():
+                    widget.destroy()
 
-            # Crear contenedor DENTRO de pdf_body (no pdf_frame)
-            contenedor = tk.Frame(self.pdf_body, bg=self.COLORS['white'])
-            contenedor.pack(fill="both", expand=True)
+                # Crear contenedor DENTRO de pdf_body (no pdf_frame)
+                contenedor = tk.Frame(self.pdf_body, bg=self.COLORS['white'])
+                contenedor.pack(fill="both", expand=True)
 
-            control_frame = tk.Frame(contenedor, bg=self.COLORS['white'])
-            control_frame.pack(fill="x", side="bottom", pady=5)
+                control_frame = tk.Frame(contenedor, bg=self.COLORS['white'])
+                control_frame.pack(fill="x", side="bottom", pady=5)
 
-            canvas_frame = tk.Frame(contenedor, bg=self.COLORS['white'])
-            canvas_frame.pack(side="top", fill="both", expand=True)
+                canvas_frame = tk.Frame(contenedor, bg=self.COLORS['white'])
+                canvas_frame.pack(side="top", fill="both", expand=True)
 
-            v_scrollbar = ttk.Scrollbar(canvas_frame, orient="vertical")
-            v_scrollbar.pack(side="right", fill="y")
-            h_scrollbar = ttk.Scrollbar(canvas_frame, orient="horizontal")
-            h_scrollbar.pack(side="bottom", fill="x")
+                v_scrollbar = ttk.Scrollbar(canvas_frame, orient="vertical")
+                v_scrollbar.pack(side="right", fill="y")
+                h_scrollbar = ttk.Scrollbar(canvas_frame, orient="horizontal")
+                h_scrollbar.pack(side="bottom", fill="x")
 
-            canvas = tk.Canvas(
-                canvas_frame,
-                bg=self.COLORS['white'],
-                yscrollcommand=v_scrollbar.set,
-                xscrollcommand=h_scrollbar.set,
-                highlightthickness=0
-            )
-            canvas.pack(side="left", fill="both", expand=True)
-            v_scrollbar.config(command=canvas.yview)
-            h_scrollbar.config(command=canvas.xview)
+                canvas = tk.Canvas(
+                    canvas_frame,
+                    bg=self.COLORS['white'],
+                    yscrollcommand=v_scrollbar.set,
+                    xscrollcommand=h_scrollbar.set,
+                    highlightthickness=0
+                )
+                canvas.pack(side="left", fill="both", expand=True)
+                v_scrollbar.config(command=canvas.yview)
+                h_scrollbar.config(command=canvas.xview)
 
-            doc = fitz.open(self.temp_pdf_path)
-            self.current_page = 0
-            self.total_pages = len(doc)
-            self.zoom_level = 1.0  # ✅ Cambiar zoom inicial a 1.0
+                doc = fitz.open(self.temp_pdf_path)
+                self.current_page = 0
+                self.total_pages = len(doc)
+                self.zoom_level = 1.0  # ✅ Cambiar zoom inicial a 1.0
 
-            def display_page():
-                canvas.delete("all")
-                page = doc.load_page(self.current_page)
-                pix = page.get_pixmap(matrix=fitz.Matrix(self.zoom_level, self.zoom_level))
-                img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
-                tk_img = ImageTk.PhotoImage(image=img)
-                canvas.image = tk_img
+                def display_page():
+                    canvas.delete("all")
+                    page = doc.load_page(self.current_page)
+                    pix = page.get_pixmap(matrix=fitz.Matrix(self.zoom_level, self.zoom_level))
+                    img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
+                    tk_img = ImageTk.PhotoImage(image=img)
+                    canvas.image = tk_img
 
-                canvas_width = canvas.winfo_width()
-                canvas_height = canvas.winfo_height()
-                x = max((canvas_width - pix.width) // 2, 0)
-                y = max((canvas_height - pix.height) // 2, 0)
-
-                canvas.create_image(x, y, anchor="nw", image=tk_img)
-                canvas.config(scrollregion=canvas.bbox("all"))
-                page_label.config(text=f"Página {self.current_page + 1} de {self.total_pages}")
-                zoom_label.config(text=f"Zoom: {int(self.zoom_level * 100)}%")
-
-            def ajustar_una_vez(event=None):
-                try:
                     canvas_width = canvas.winfo_width()
-                    if canvas_width > 100:
-                        page = doc.load_page(self.current_page)
-                        zoom = (canvas_width - 20) / page.rect.width
-                        self.zoom_level = max(0.5, min(zoom, 3.0))
-                        canvas.delete("all")
-                        pix = page.get_pixmap(matrix=fitz.Matrix(self.zoom_level, self.zoom_level))
-                        img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
-                        tk_img = ImageTk.PhotoImage(image=img)
-                        canvas.image = tk_img
-                        x = max((canvas_width - pix.width) // 2, 0)
-                        canvas.create_image(x, 0, anchor="nw", image=tk_img)
-                        canvas.config(scrollregion=canvas.bbox("all"))
-                        zoom_label.config(text=f"Zoom: {int(self.zoom_level * 100)}%")
-                        canvas.unbind("<Map>")  # Desvincula para que solo se ejecute una vez
-                except Exception as e:
-                    print(f"Error en ajustar_una_vez: {e}")
+                    canvas_height = canvas.winfo_height()
+                    x = max((canvas_width - pix.width) // 2, 0)
+                    y = max((canvas_height - pix.height) // 2, 0)
 
-            canvas.bind("<Map>", ajustar_una_vez)
+                    canvas.create_image(x, y, anchor="nw", image=tk_img)
+                    canvas.config(scrollregion=canvas.bbox("all"))
+                    page_label.config(text=f"Página {self.current_page + 1} de {self.total_pages}")
+                    zoom_label.config(text=f"Zoom: {int(self.zoom_level * 100)}%")
+
+                def ajustar_una_vez(event=None):
+                    try:
+                        canvas_width = canvas.winfo_width()
+                        if canvas_width > 100:
+                            page = doc.load_page(self.current_page)
+                            zoom = (canvas_width - 20) / page.rect.width
+                            self.zoom_level = max(0.5, min(zoom, 3.0))
+                            canvas.delete("all")
+                            pix = page.get_pixmap(matrix=fitz.Matrix(self.zoom_level, self.zoom_level))
+                            img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
+                            tk_img = ImageTk.PhotoImage(image=img)
+                            canvas.image = tk_img
+                            x = max((canvas_width - pix.width) // 2, 0)
+                            canvas.create_image(x, 0, anchor="nw", image=tk_img)
+                            canvas.config(scrollregion=canvas.bbox("all"))
+                            zoom_label.config(text=f"Zoom: {int(self.zoom_level * 100)}%")
+                            canvas.unbind("<Map>")  # Desvincula para que solo se ejecute una vez
+                    except Exception as e:
+                        print(f"Error en ajustar_una_vez: {e}")
+
+                canvas.bind("<Map>", ajustar_una_vez)
             
             def change_page(delta):
                 self.current_page = max(0, min(self.current_page + delta, self.total_pages - 1))

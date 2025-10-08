@@ -71,7 +71,8 @@ class ReporteBres:
             'danger':    '#e74c3c',
             'white':     '#ffffff',
             'light':     '#f7f7f7',
-            'text_dark': '#2c3e50'
+            'text_dark': '#2c3e50',
+            'text_light': '#95A5A6'
         }
 
         self.areas = []
@@ -100,6 +101,99 @@ class ReporteBres:
 
         return container, content
 
+    def create_titled_frame(self, parent, title, header_icon=None):
+        # Contenedor compacto
+        container = tk.Frame(parent, bg=self.COLORS['white'], relief='solid', borderwidth=1)
+
+        # Header más pequeño
+        header = tk.Frame(container, bg=self.COLORS['primary'], height=20)
+        header.pack(fill='x')
+        header.pack_propagate(False)
+
+        tk.Label(
+            header, text=title,
+            font=('Segoe UI', 8, 'bold'),
+            fg=self.COLORS['white'], bg=self.COLORS['primary']
+        ).pack(side='left', padx=8, pady=1)
+
+        # Contenido compacto
+        content = tk.Frame(container, bg=self.COLORS['white'])
+        content.pack(fill='both', expand=True, padx=6, pady=3)
+
+        return container, content
+
+    def mostrar_mensaje_inicial(self):
+        """Muestra mensaje inicial antes de generar vista previa"""
+        for widget in self.pdf_body.winfo_children():
+            widget.destroy()
+        
+        self._icon_size = 64
+        self._icon_direction = -1
+        
+        initial_frame = tk.Frame(self.pdf_body, bg=self.COLORS['white'])
+        initial_frame.pack(expand=True)
+        
+        self.initial_icon = tk.Label(
+            initial_frame, 
+            text="📋", 
+            font=('Segoe UI Emoji', 64),
+            fg=self.COLORS['accent'], 
+            bg=self.COLORS['white']
+        )
+        self.initial_icon.pack(pady=(80, 20))
+        
+        tk.Label(
+            initial_frame,
+            text="Seleccione los filtros y genere la vista previa",
+            font=('Segoe UI', 13, 'bold'),
+            fg=self.COLORS['text_dark'],
+            bg=self.COLORS['white']
+        ).pack(pady=(0, 8))
+        
+        tk.Label(
+            initial_frame,
+            text="Configure las fechas y filtros deseados, luego presione 'Generar Vista Previa'",
+            font=('Segoe UI', 9),
+            fg=self.COLORS['text_light'],
+            bg=self.COLORS['white']
+        ).pack(pady=(0, 5))
+
+    def mostrar_animacion_carga(self):
+        """Muestra animación de carga mientras se genera el reporte"""
+        for widget in self.pdf_body.winfo_children():
+            widget.destroy()
+        
+        loading_frame = tk.Frame(self.pdf_body, bg=self.COLORS['white'])
+        loading_frame.pack(expand=True)
+        
+        self.loading_label = tk.Label(
+            loading_frame, 
+            text="⏳", 
+            font=('Segoe UI Emoji', 48),
+            fg=self.COLORS['accent'], 
+            bg=self.COLORS['white']
+        )
+        self.loading_label.pack(pady=(50, 10))
+        
+        self.loading_text = tk.Label(
+            loading_frame, 
+            text="Generando reporte",
+            font=('Segoe UI', 11, 'bold'), 
+            fg=self.COLORS['accent'],
+            bg=self.COLORS['white']
+        )
+        self.loading_text.pack()
+        
+        tk.Label(
+            loading_frame,
+            text="Por favor espere mientras se procesa la información...",
+            font=('Segoe UI', 9),
+            fg=self.COLORS['text_light'],
+            bg=self.COLORS['white']
+        ).pack(pady=(5, 0))
+        
+        self.loading_dots = 0
+    
     def cargar_iconos(self):
         try:
             icons_path = resource_path(os.path.join('utils', 'icons'))
@@ -213,10 +307,7 @@ class ReporteBres:
 
     def _obtener_saldo_corte_bd(self, fecha_corte_dt, contexto, insumo_id):
         """
-        Devuelve el saldo (existencia) acumulado al cierre de 'fecha_corte_dt' (inclusive)
-        consultando la BD para el contexto actual y el insumo_id.
-        Ajusta nombres de tablas/columnas según tu esquema real si difiere.
-        contexto: dict con claves: area, distrito, tipo_servicio, servicio, presentacion
+        Calcula saldo acumulado hasta fecha_corte_dt CON filtros de ubicación
         """
         try:
             conn = conectar_db()
@@ -227,23 +318,27 @@ class ReporteBres:
             filtros = []
             params_ctx = []
 
-            # Ajusta a tus columnas reales de los joins de obtener_movimientos_bres
-            # Usamos los mismos nombres que ya aparecen en tus datos: area_nombre, distrito_nombre, tipo_servicio_descripcion, servicio_nombre, presentacion_nombre
-            if contexto.get('area'):
-                filtros.append("a.nombre = %s")
-                params_ctx.append(contexto['area'])
-            if contexto.get('distrito'):
-                filtros.append("d.nombre = %s")
-                params_ctx.append(contexto['distrito'])
-            if contexto.get('tipo_servicio'):
-                filtros.append("ts.descripcion = %s")
-                params_ctx.append(contexto['tipo_servicio'])
-            if contexto.get('servicio'):
-                filtros.append("s.nombre = %s")
-                params_ctx.append(contexto['servicio'])
+            # ✅ Filtros de insumo
             if contexto.get('presentacion'):
                 filtros.append("p.nombre = %s")
                 params_ctx.append(contexto['presentacion'])
+
+            # ✅ Filtros de UBICACIÓN
+            if contexto.get('area'):
+                filtros.append("a.nombre = %s")
+                params_ctx.append(contexto['area'])
+            
+            if contexto.get('distrito'):
+                filtros.append("d.nombre = %s")
+                params_ctx.append(contexto['distrito'])
+            
+            if contexto.get('tipo_servicio'):
+                filtros.append("ts.nombre = %s")
+                params_ctx.append(contexto['tipo_servicio'])
+            
+            if contexto.get('servicio'):
+                filtros.append("s.nombre = %s")
+                params_ctx.append(contexto['servicio'])
 
             where_ctx = (" AND " + " AND ".join(filtros)) if filtros else ""
 
@@ -261,25 +356,170 @@ class ReporteBres:
                 FROM movimiento m
                 INNER JOIN tipo_movimiento tm ON m.tipo_movimiento_id = tm.id
                 INNER JOIN insumo i ON i.id = m.insumo_id
-                LEFT JOIN presentacion p ON p.id = i.id_presentacion
+                LEFT JOIN insumo_presentacion ip ON ip.insumo_id = i.id
+                LEFT JOIN presentacion p ON p.id = ip.presentacion_id
+                LEFT JOIN area a ON a.id = m.area_id
+                LEFT JOIN distrito d ON d.id = m.distrito_id
                 LEFT JOIN servicio s ON s.id = m.servicio_id
                 LEFT JOIN tipo_servicio ts ON ts.id = s.id_tipo_servicio
-                LEFT JOIN distrito d ON d.id = m.distrito_id OR d.id = ts.id_distrito
-                LEFT JOIN area a ON a.id = d.id_area
                 WHERE DATE(m.fecha_registro) <= %s
-                  AND m.insumo_id = %s
-                  {where_ctx}
+                AND m.insumo_id = %s
+                {where_ctx}
             """
 
             params = [fecha_corte_dt.strftime('%Y-%m-%d'), insumo_id] + params_ctx
             cur.execute(sql, params)
             row = cur.fetchone()
+            saldo = float(row['saldo'] or 0.0)
+            
             cur.close()
             conn.close()
-            return float(row['saldo'] or 0.0)
+            return saldo
+            
         except Exception as e:
             print(f"ERROR obteniendo saldo corte BRES: {e}")
+            import traceback
+            traceback.print_exc()
             return 0.0
+    
+    def _obtener_movimientos_mes_bd(self, fecha_inicio_dt, fecha_fin_dt, contexto, insumo_id):
+        """
+        Obtiene movimientos del mes CON filtros de ubicación
+        """
+        try:
+            conn = conectar_db()
+            if not conn:
+                return []
+            cur = conn.cursor(dictionary=True)
+
+            filtros = []
+            params_ctx = []
+
+            # ✅ Filtros de insumo
+            if contexto.get('presentacion'):
+                filtros.append("p.nombre = %s")
+                params_ctx.append(contexto['presentacion'])
+
+            # ✅ Filtros de UBICACIÓN (área, distrito, servicio)
+            if contexto.get('area'):
+                filtros.append("a.nombre = %s")
+                params_ctx.append(contexto['area'])
+            
+            if contexto.get('distrito'):
+                filtros.append("d.nombre = %s")
+                params_ctx.append(contexto['distrito'])
+            
+            if contexto.get('tipo_servicio'):
+                filtros.append("ts.nombre = %s")
+                params_ctx.append(contexto['tipo_servicio'])
+            
+            if contexto.get('servicio'):
+                filtros.append("s.nombre = %s")
+                params_ctx.append(contexto['servicio'])
+
+            where_ctx = (" AND " + " AND ".join(filtros)) if filtros else ""
+
+            sql = f"""
+                SELECT
+                    m.fecha_registro,
+                    tm.descripcion AS tipo_movimiento,
+                    m.cantidad,
+                    m.observaciones,
+                    a.nombre AS area,
+                    d.nombre AS distrito,
+                    ts.nombre AS tipo_servicio,
+                    s.nombre AS servicio
+                FROM movimiento m
+                INNER JOIN tipo_movimiento tm ON m.tipo_movimiento_id = tm.id
+                INNER JOIN insumo i ON i.id = m.insumo_id
+                LEFT JOIN insumo_presentacion ip ON ip.insumo_id = i.id
+                LEFT JOIN presentacion p ON p.id = ip.presentacion_id
+                LEFT JOIN area a ON a.id = m.area_id
+                LEFT JOIN distrito d ON d.id = m.distrito_id
+                LEFT JOIN servicio s ON s.id = m.servicio_id
+                LEFT JOIN tipo_servicio ts ON ts.id = s.id_tipo_servicio
+                WHERE DATE(m.fecha_registro) BETWEEN %s AND %s
+                AND m.insumo_id = %s
+                {where_ctx}
+                ORDER BY m.fecha_registro
+            """
+
+            params = [
+                fecha_inicio_dt.strftime('%Y-%m-%d'),
+                fecha_fin_dt.strftime('%Y-%m-%d'),
+                insumo_id
+            ] + params_ctx
+
+            cur.execute(sql, params)
+            movimientos = cur.fetchall()
+            
+            cur.close()
+            conn.close()
+            return movimientos
+            
+        except Exception as e:
+            print(f"ERROR obteniendo movimientos mes BRES: {e}")
+            import traceback
+            traceback.print_exc()
+            return []
+            
+    def _obtener_insumos_con_saldo(self, fecha_corte_dt, contexto):
+        """
+        Devuelve una lista de insumo_ids que tienen saldo (existencia > 0) 
+        al cierre de 'fecha_corte_dt' para el contexto dado.
+        """
+        try:
+            conn = conectar_db()
+            if not conn:
+                return []
+            cur = conn.cursor(dictionary=True)
+
+            filtros = []
+            params_ctx = []
+
+            sql_base = """
+                SELECT DISTINCT i.id as insumo_id
+                FROM insumo i
+                INNER JOIN tipo_insumo ti ON i.id_tipo_insumo = ti.id
+                LEFT JOIN insumo_presentacion ip ON ip.insumo_id = i.id
+                LEFT JOIN presentacion p ON p.id = ip.presentacion_id
+                WHERE 1=1
+            """
+
+            if contexto.get('tipo_insumo'):
+                filtros.append("ti.descripcion = %s")
+                params_ctx.append(contexto['tipo_insumo'])
+            
+            if contexto.get('insumo'):
+                filtros.append("i.nombre = %s")
+                params_ctx.append(contexto['insumo'])
+            
+            if contexto.get('presentacion'):
+                filtros.append("p.nombre = %s")
+                params_ctx.append(contexto['presentacion'])
+
+            if filtros:
+                sql_base += " AND " + " AND ".join(filtros)
+
+            cur.execute(sql_base, params_ctx)
+            todos_insumos = cur.fetchall()
+            
+            insumos_con_saldo = []
+            for row in todos_insumos:
+                insumo_id = row['insumo_id']
+                saldo = self._obtener_saldo_corte_bd(fecha_corte_dt, contexto, insumo_id)
+                if saldo > 0:
+                    insumos_con_saldo.append(insumo_id)
+            
+            cur.close()
+            conn.close()
+            return insumos_con_saldo
+            
+        except Exception as e:
+            print(f"ERROR obteniendo insumos con saldo BRES: {e}")
+            import traceback
+            traceback.print_exc()
+            return []
     
     def _formatear_periodo_logistico(self, fecha_ini, fecha_fin):
         """
@@ -289,13 +529,12 @@ class ReporteBres:
         fin = fecha_fin.strftime('%d/%m/%Y')
         return f"Periodo logístico: {ini} – {fin}"
     
-    def procesar_datos_bres(self, movimientos_raw, fecha_ini, fecha_fin):
+    def procesar_datos_bres(self, movimientos_raw, fecha_ini, fecha_fin, todos_los_insumos=None):
         """
         Procesa BRES:
         - Usa self.saldo_anterior_por_insumo (saldo al 25 inclusive) como base.
         - Suma SOLO movimientos dentro del periodo [fecha_ini, fecha_fin] (26–25).
-        - Normaliza a float para evitar Decimal.
-        - Agrega totales por nivel según selección.
+        - Incluye TODOS los insumos con saldo, incluso sin movimientos nuevos.
         """
         # Normalizar campos y mapear tipo_servicio si viene con otra clave
         for m in movimientos_raw:
@@ -303,8 +542,67 @@ class ReporteBres:
                 m['tipo_servicio_descripcion'] = m['tipo_servicio_desc']
 
         codigos_insumos = self.generar_codigo_insumo(movimientos_raw)
-        if not codigos_insumos:
-            return []
+
+        # Si no se proporcionó lista de insumos, usar los del periodo
+        if todos_los_insumos is None:
+            todos_los_insumos = set(codigos_insumos.keys())
+
+        # === OBTENER INFORMACIÓN DE TODOS LOS INSUMOS (incluso sin movimientos) ===
+        conn = conectar_db()
+        if conn:
+            try:
+                cursor = conn.cursor(dictionary=True)
+                for insumo_id in todos_los_insumos:
+                    if insumo_id not in codigos_insumos:
+                        cursor.execute("""
+                            SELECT 
+                                i.id,
+                                i.nombre AS nombre_insumo,
+                                i.id_tipo_insumo,
+                                ti.descripcion AS tipo_insumo_descripcion,
+                                ti.codigo_prefijo,
+                                GROUP_CONCAT(p.nombre SEPARATOR ', ') AS presentacion
+                            FROM insumo i
+                            INNER JOIN tipo_insumo ti ON i.id_tipo_insumo = ti.id
+                            LEFT JOIN insumo_presentacion ip ON i.id = ip.insumo_id
+                            LEFT JOIN presentacion p ON ip.presentacion_id = p.id
+                            WHERE i.id = %s
+                            GROUP BY i.id, i.nombre, i.id_tipo_insumo, ti.descripcion, ti.codigo_prefijo
+                        """, (insumo_id,))
+                        
+                        info = cursor.fetchone()
+                        if info:
+                            # Usar codigo_prefijo de BD o generar temporal
+                            if info.get('codigo_prefijo'):
+                                prefijo = info['codigo_prefijo']
+                            else:
+                                tipo_descripcion = (info.get('tipo_insumo_descripcion') or '').strip().upper()
+                                tipo_limpio = ''.join(c for c in tipo_descripcion if c.isalnum())
+                                prefijo = (tipo_limpio[:4] if len(tipo_limpio) >= 4 else (tipo_limpio + 'XXXX')[:4]).upper()
+                            
+                            cursor.execute("""
+                                SELECT COUNT(*) + 1 as posicion
+                                FROM insumo
+                                WHERE id_tipo_insumo = %s AND id < %s
+                            """, (info['id_tipo_insumo'], insumo_id))
+                            pos = cursor.fetchone()['posicion']
+                            codigos_insumos[insumo_id] = f"{prefijo}-{str(pos).zfill(4)}"
+                            
+                            movimientos_raw.append({
+                                'codigo_insumo': insumo_id,
+                                'nombre_insumo': info['nombre_insumo'],
+                                'nombre_presentacion': info['presentacion'] or '',
+                                'tipo_movimiento': 'INVENTARIO INICIAL',
+                                'cantidad': 0,
+                                'fecha_registro': fecha_ini,
+                                'area_nombre': '',
+                                'distrito_nombre': '',
+                                'tipo_servicio_descripcion': '',
+                                'servicio_nombre': ''
+                            })
+            finally:
+                cursor.close()
+                conn.close()
 
         datos_agrupados = {}
 
@@ -754,265 +1052,214 @@ class ReporteBres:
             return 0.0
 
     def setup_ui(self):
-        # Contenedor principal local, sin tocar estilos globales
+        # Contenedor principal
         self.main_container = tk.Frame(self.parent, bg=self.COLORS['white'])
         self.main_container.pack(fill="both", expand=True)
 
-        # Franja superior azul para pegar el header al tope
+        # Franja superior
         top_strip = tk.Frame(self.main_container, bg=self.COLORS['primary'], height=6)
         top_strip.pack(fill='x', padx=0, pady=0)
         top_strip.pack_propagate(False)
         
-        # Título principal (local)
-        title_frame = tk.Frame(self.main_container, bg=self.COLORS['primary'], height=70)
+        # Título compacto
+        title_frame = tk.Frame(self.main_container, bg=self.COLORS['primary'], height=50)
         title_frame.pack(fill='x', padx=0)
         title_frame.pack_propagate(False)
         
         title_inner = tk.Frame(title_frame, bg=self.COLORS['primary'])
-        title_inner.pack(fill='both', expand=True, padx=15, pady=8)
+        title_inner.pack(fill='both', expand=True, padx=15, pady=4)
 
-        tk.Label(title_inner,
-                 text="📊 Reporte BRES",
-                 font=('Segoe UI', 12, 'bold'),
-                 fg=self.COLORS['white'],
-                 bg=self.COLORS['primary']).pack(anchor='w')
+        tk.Label(title_inner, text="📊 Reporte BRES",
+                font=('Segoe UI', 10, 'bold'),
+                fg=self.COLORS['white'],
+                bg=self.COLORS['primary']).pack(anchor='w')
 
-        tk.Label(title_inner,
-                 text="Balance, Requisición y Envío de Suministros",
-                 font=('Segoe UI', 8),
-                 fg=self.COLORS['white'],
-                 bg=self.COLORS['primary']).pack(anchor='w', pady=(2, 0))
+        tk.Label(title_inner, text="Balance, Requisición y Envío de Suministros",
+                font=('Segoe UI', 7),
+                fg=self.COLORS['white'],
+                bg=self.COLORS['primary']).pack(anchor='w', pady=(1, 0))
 
-        # Sección Fechas
+        # Fechas
         self.frame_fechas_container, self.frame_fechas = self.create_titled_frame(
-            self.main_container, "📅 Selección de Fechas/Corte Logístico"
+            self.main_container, "📅 Fechas/Corte"
         )
-        self.frame_fechas_container.pack(fill="x", padx=5, pady=5)
+        self.frame_fechas_container.pack(fill="x", padx=5, pady=2)
 
         self.modo_fecha_var = tk.StringVar(value="rango")
 
         # Rango
         self.frame_rango = tk.Frame(self.frame_fechas, bg=self.COLORS['white'])
-        self.frame_rango.pack(fill="x", padx=5, pady=2)
+        self.frame_rango.pack(fill="x", padx=3, pady=1)
         for i in range(5):
             self.frame_rango.grid_columnconfigure(i, weight=1)
 
-        ttk.Radiobutton(
-            self.frame_rango,
-            text="Rango de Fechas:",
-            variable=self.modo_fecha_var,
-            value="rango",
-            command=self.actualizar_visibilidad_fechas,
-        ).grid(row=0, column=0, padx=5, sticky='w')
+        ttk.Radiobutton(self.frame_rango, text="Rango:", variable=self.modo_fecha_var,
+                        value="rango", command=self.actualizar_visibilidad_fechas) \
+            .grid(row=0, column=0, padx=3, sticky='w')
 
-        ttk.Label(self.frame_rango, text="Fecha Inicial:") \
-            .grid(row=0, column=1, padx=5, sticky='e')
-        self.fecha_inicial = DateEntry(self.frame_rango, width=16, date_pattern='dd/mm/yyyy', state='normal')
-        self.fecha_inicial.grid(row=0, column=2, padx=5, sticky='ew')
+        ttk.Label(self.frame_rango, text="Inicial:", font=('Segoe UI', 8)) \
+            .grid(row=0, column=1, padx=3, sticky='e')
+        self.fecha_inicial = DateEntry(self.frame_rango, width=12, date_pattern='dd/mm/yyyy')
+        self.fecha_inicial.grid(row=0, column=2, padx=3, sticky='ew')
 
-        ttk.Label(self.frame_rango, text="Fecha Final:") \
-            .grid(row=0, column=3, padx=5, sticky='e')
-        self.fecha_final = DateEntry(self.frame_rango, width=16, date_pattern='dd/mm/yyyy', state='normal')
-        self.fecha_final.grid(row=0, column=4, padx=5, sticky='ew')
+        ttk.Label(self.frame_rango, text="Final:", font=('Segoe UI', 8)) \
+            .grid(row=0, column=3, padx=3, sticky='e')
+        self.fecha_final = DateEntry(self.frame_rango, width=12, date_pattern='dd/mm/yyyy')
+        self.fecha_final.grid(row=0, column=4, padx=3, sticky='ew')
 
         # Corte
         self.frame_corte = tk.Frame(self.frame_fechas, bg=self.COLORS['white'])
-        self.frame_corte.pack(fill="x", padx=5, pady=2)
-        self.frame_corte.grid_columnconfigure(2, weight=1)
-        self.frame_corte.grid_columnconfigure(4, weight=1)
-        self.frame_corte.grid_columnconfigure(6, weight=1)
+        self.frame_corte.pack(fill="x", padx=3, pady=1)
+        for i in [2, 4, 6]:
+            self.frame_corte.grid_columnconfigure(i, weight=1)
 
-        ttk.Radiobutton(
-            self.frame_corte,
-            text="Corte Logístico:",
-            variable=self.modo_fecha_var,
-            value="corte",
-            command=self.actualizar_visibilidad_fechas,
-        ).grid(row=0, column=0, padx=5, sticky='w')
+        ttk.Radiobutton(self.frame_corte, text="Corte:", variable=self.modo_fecha_var,
+                        value="corte", command=self.actualizar_visibilidad_fechas) \
+            .grid(row=0, column=0, padx=3, sticky='w')
 
-        ttk.Label(self.frame_corte, text="Año:") \
-            .grid(row=0, column=1, padx=5, sticky='w')
+        ttk.Label(self.frame_corte, text="Año:", font=('Segoe UI', 8)) \
+            .grid(row=0, column=1, padx=3, sticky='w')
         self.anio_var = tk.StringVar()
         anios = [str(a) for a in range(datetime.now().year - 5, datetime.now().year + 2)]
-        self.combo_anio = ttk.Combobox(self.frame_corte, textvariable=self.anio_var, values=anios, width=8, state="readonly")
-        self.combo_anio.grid(row=0, column=2, padx=5, sticky='ew')
+        self.combo_anio = ttk.Combobox(self.frame_corte, textvariable=self.anio_var, values=anios, width=6, state="readonly")
+        self.combo_anio.grid(row=0, column=2, padx=3, sticky='ew')
         self.combo_anio.set(str(datetime.now().year))
 
-        ttk.Label(self.frame_corte, text="Mes Inicio:") \
-            .grid(row=0, column=3, padx=5, sticky='w')
+        ttk.Label(self.frame_corte, text="Inicio:", font=('Segoe UI', 8)) \
+            .grid(row=0, column=3, padx=3, sticky='w')
         self.mes_inicio_var = tk.StringVar()
         meses = [datetime(2024, m, 1).strftime("%B").capitalize() for m in range(1, 13)]
-        self.combo_mes_inicio = ttk.Combobox(self.frame_corte, textvariable=self.mes_inicio_var, values=meses, width=12, state="readonly")
-        self.combo_mes_inicio.grid(row=0, column=4, padx=5, sticky='ew')
+        self.combo_mes_inicio = ttk.Combobox(self.frame_corte, textvariable=self.mes_inicio_var, values=meses, width=10, state="readonly")
+        self.combo_mes_inicio.grid(row=0, column=4, padx=3, sticky='ew')
 
-        ttk.Label(self.frame_corte, text="Mes Final:") \
-            .grid(row=0, column=5, padx=5, sticky='w')
+        ttk.Label(self.frame_corte, text="Final:", font=('Segoe UI', 8)) \
+            .grid(row=0, column=5, padx=3, sticky='w')
         self.mes_final_var = tk.StringVar()
-        self.combo_mes_final = ttk.Combobox(self.frame_corte, textvariable=self.mes_final_var, values=meses, width=12, state="readonly")
-        self.combo_mes_final.grid(row=0, column=6, padx=5, sticky='ew')
+        self.combo_mes_final = ttk.Combobox(self.frame_corte, textvariable=self.mes_final_var, values=meses, width=10, state="readonly")
+        self.combo_mes_final.grid(row=0, column=6, padx=3, sticky='ew')
 
         self.combo_anio.bind('<<ComboboxSelected>>', self.actualizar_fechas_por_corte)
         self.combo_mes_inicio.bind('<<ComboboxSelected>>', self.actualizar_fechas_por_corte)
         self.combo_mes_final.bind('<<ComboboxSelected>>', self.actualizar_fechas_por_corte)
-
         self.actualizar_visibilidad_fechas()
 
         # Ubicación
-        self.frame_ubicacion_container, frame_ubicacion_content = self.create_titled_frame(self.main_container, "📍 Ubicación")
-        self.frame_ubicacion_container.pack(fill="x", padx=5, pady=5)
+        self.frame_ubicacion_container, frame_ubicacion_content = self.create_titled_frame(
+            self.main_container, "📍 Ubicación"
+        )
+        self.frame_ubicacion_container.pack(fill="x", padx=5, pady=2)
 
         frame_ubicacion_content.grid_columnconfigure(1, weight=1)
         frame_ubicacion_content.grid_columnconfigure(3, weight=1)
         frame_ubicacion_content.grid_columnconfigure(5, weight=1)
         frame_ubicacion_content.grid_columnconfigure(7, weight=1)
 
-        ttk.Label(frame_ubicacion_content, text="Área:").grid(row=0, column=0, padx=5, sticky='w')
+        ttk.Label(frame_ubicacion_content, text="Área:", font=('Segoe UI', 8)).grid(row=0, column=0, padx=3, sticky='w')
         self.area_var = tk.StringVar()
-        self.combo_area = AutocompleteCombobox(frame_ubicacion_content, textvariable=self.area_var, state="normal", font=('Segoe UI', 9))
-        self.combo_area.grid(row=0, column=1, padx=5, sticky='ew')
+        self.combo_area = AutocompleteCombobox(frame_ubicacion_content, textvariable=self.area_var, font=('Segoe UI', 8))
+        self.combo_area.grid(row=0, column=1, padx=3, pady=1, sticky='ew')
 
-        ttk.Label(frame_ubicacion_content, text="Distrito:").grid(row=0, column=2, padx=5, sticky='w')
+        ttk.Label(frame_ubicacion_content, text="Distrito:", font=('Segoe UI', 8)).grid(row=0, column=2, padx=3, sticky='w')
         self.distrito_var = tk.StringVar()
-        self.combo_distrito = AutocompleteCombobox(frame_ubicacion_content, textvariable=self.distrito_var, state="normal", font=('Segoe UI', 9))
-        self.combo_distrito.grid(row=0, column=3, padx=5, sticky='ew')
+        self.combo_distrito = AutocompleteCombobox(frame_ubicacion_content, textvariable=self.distrito_var, font=('Segoe UI', 8))
+        self.combo_distrito.grid(row=0, column=3, padx=3, pady=1, sticky='ew')
 
-        ttk.Label(frame_ubicacion_content, text="Tipo de Servicio:").grid(row=0, column=4, padx=5, sticky='w')
+        ttk.Label(frame_ubicacion_content, text="Tipo Servicio:", font=('Segoe UI', 8)).grid(row=0, column=4, padx=3, sticky='w')
         self.tipo_servicio_var = tk.StringVar()
-        self.combo_tipo_servicio = AutocompleteCombobox(frame_ubicacion_content, textvariable=self.tipo_servicio_var, state="normal", font=('Segoe UI', 9))
-        self.combo_tipo_servicio.grid(row=0, column=5, padx=5, sticky='ew')
+        self.combo_tipo_servicio = AutocompleteCombobox(frame_ubicacion_content, textvariable=self.tipo_servicio_var, font=('Segoe UI', 8))
+        self.combo_tipo_servicio.grid(row=0, column=5, padx=3, pady=1, sticky='ew')
 
-        ttk.Label(frame_ubicacion_content, text="Servicio:").grid(row=0, column=6, padx=5, sticky='w')
+        ttk.Label(frame_ubicacion_content, text="Servicio:", font=('Segoe UI', 8)).grid(row=0, column=6, padx=3, sticky='w')
         self.servicio_var = tk.StringVar()
-        self.combo_servicio = AutocompleteCombobox(frame_ubicacion_content, textvariable=self.servicio_var, state="normal", font=('Segoe UI', 9))
-        self.combo_servicio.grid(row=0, column=7, padx=5, sticky='ew')
+        self.combo_servicio = AutocompleteCombobox(frame_ubicacion_content, textvariable=self.servicio_var, font=('Segoe UI', 8))
+        self.combo_servicio.grid(row=0, column=7, padx=3, pady=1, sticky='ew')
 
         # Insumo
-        self.frame_insumo_container, frame_insumo_content = self.create_titled_frame(self.main_container, "💊 Insumo")
-        self.frame_insumo_container.pack(fill="x", padx=5, pady=5)
+        self.frame_insumo_container, frame_insumo_content = self.create_titled_frame(
+            self.main_container, "💊 Insumo"
+        )
+        self.frame_insumo_container.pack(fill="x", padx=5, pady=2)
 
         frame_insumo_content.grid_columnconfigure(1, weight=1)
         frame_insumo_content.grid_columnconfigure(3, weight=1)
         frame_insumo_content.grid_columnconfigure(5, weight=1)
 
-        ttk.Label(frame_insumo_content, text="Tipo de Insumo:").grid(row=0, column=0, padx=5, sticky='w')
+        ttk.Label(frame_insumo_content, text="Tipo:", font=('Segoe UI', 8)).grid(row=0, column=0, padx=3, sticky='w')
         self.tipo_insumo_var = tk.StringVar()
-        self.combo_tipo_insumo = AutocompleteCombobox(frame_insumo_content, textvariable=self.tipo_insumo_var, state="normal", font=('Segoe UI', 9))
-        self.combo_tipo_insumo.grid(row=0, column=1, padx=5, sticky='ew')
+        self.combo_tipo_insumo = AutocompleteCombobox(frame_insumo_content, textvariable=self.tipo_insumo_var, font=('Segoe UI', 8))
+        self.combo_tipo_insumo.grid(row=0, column=1, padx=3, pady=1, sticky='ew')
 
-        ttk.Label(frame_insumo_content, text="Insumo:").grid(row=0, column=2, padx=5, sticky='w')
+        ttk.Label(frame_insumo_content, text="Insumo:", font=('Segoe UI', 8)).grid(row=0, column=2, padx=3, sticky='w')
         self.insumo_var = tk.StringVar()
-        self.combo_insumo = AutocompleteCombobox(frame_insumo_content, textvariable=self.insumo_var, state="normal", font=('Segoe UI', 9))
-        self.combo_insumo.grid(row=0, column=3, padx=5, sticky='ew')
+        self.combo_insumo = AutocompleteCombobox(frame_insumo_content, textvariable=self.insumo_var, font=('Segoe UI', 8))
+        self.combo_insumo.grid(row=0, column=3, padx=3, pady=1, sticky='ew')
 
-        ttk.Label(frame_insumo_content, text="Presentación:").grid(row=0, column=4, padx=5, sticky='w')
+        ttk.Label(frame_insumo_content, text="Presentación:", font=('Segoe UI', 8)).grid(row=0, column=4, padx=3, sticky='w')
         self.presentacion_var = tk.StringVar()
-        self.combo_presentacion = AutocompleteCombobox(frame_insumo_content, textvariable=self.presentacion_var, state="normal", font=('Segoe UI', 9))
-        self.combo_presentacion.grid(row=0, column=5, padx=5, sticky='ew')
+        self.combo_presentacion = AutocompleteCombobox(frame_insumo_content, textvariable=self.presentacion_var, font=('Segoe UI', 8))
+        self.combo_presentacion.grid(row=0, column=5, padx=3, pady=1, sticky='ew')
 
         # Nivel Máximo
-        self.frame_nivel_container, frame_nivel_content = self.create_titled_frame(self.main_container, "📈 Nivel Máximo")
-        self.frame_nivel_container.pack(fill="x", padx=5, pady=(10, 10))
+        self.frame_nivel_container, frame_nivel_content = self.create_titled_frame(
+            self.main_container, "📈 Nivel Máximo"
+        )
+        self.frame_nivel_container.pack(fill="x", padx=5, pady=2)
 
-        ttk.Label(frame_nivel_content, text="Nivel Máximo:").grid(row=0, column=0, padx=5, sticky='w')
+        ttk.Label(frame_nivel_content, text="Nivel:", font=('Segoe UI', 8)).grid(row=0, column=0, padx=3, sticky='w')
         self.nivel_maximo_var = tk.StringVar()
         niveles = [str(i) for i in range(1, 13)]
-        self.combo_nivel_maximo = ttk.Combobox(frame_nivel_content, textvariable=self.nivel_maximo_var, values=niveles, width=10, state="readonly")
-        self.combo_nivel_maximo.grid(row=0, column=1, padx=5, sticky='w')
+        self.combo_nivel_maximo = ttk.Combobox(frame_nivel_content, textvariable=self.nivel_maximo_var, values=niveles, width=8, state="readonly")
+        self.combo_nivel_maximo.grid(row=0, column=1, padx=3, pady=1, sticky='w')
         self.combo_nivel_maximo.set("6")
 
-        # Visor PDF
+        # **VISOR PDF (sin expand, con altura fija)**
         self.pdf_outer = tk.Frame(self.main_container, bg=self.COLORS['white'])
-        self.pdf_outer.pack(fill="x", expand=False, padx=5, pady=5)
+        self.pdf_outer.pack(fill="both", expand=True, padx=5, pady=3)
 
-        self.pdf_frame = tk.Frame(self.pdf_outer, bg=self.COLORS['white'], relief="solid", bd=1, highlightthickness=0)
-        self.pdf_frame.pack(fill="x")
-        self.pdf_frame.configure(height=280)
-        self.pdf_frame.pack_propagate(False)
+        self.pdf_frame = tk.Frame(self.pdf_outer, bg=self.COLORS['white'], relief="solid", bd=1)
+        self.pdf_frame.pack(fill="both", expand=True)
 
-        pdf_header = tk.Frame(self.pdf_frame, bg=self.COLORS['primary'], height=26)
+        pdf_header = tk.Frame(self.pdf_frame, bg=self.COLORS['primary'], height=22)
         pdf_header.pack(fill="x")
         pdf_header.pack_propagate(False)
 
-        tk.Label(pdf_header,
-                 text="🖼️ Vista previa del PDF",
-                 font=('Segoe UI', 9, 'bold'),
-                 fg=self.COLORS['white'],
-                 bg=self.COLORS['primary']).pack(side="left", padx=10, pady=2)
+        tk.Label(pdf_header, text="🖼️ Vista previa",
+                font=('Segoe UI', 8, 'bold'),
+                fg=self.COLORS['white'],
+                bg=self.COLORS['primary']).pack(side="left", padx=8, pady=1)
 
         self.pdf_body = tk.Frame(self.pdf_frame, bg=self.COLORS['white'])
-        self.pdf_body.pack(fill="both", expand=False, padx=8, pady=8)
+        self.pdf_body.pack(fill="both", expand=True, padx=6, pady=6)
 
-        # Botones inferiores (tk.Button locales)
+        self.mostrar_mensaje_inicial()
+
+        # **BOTONES AL FINAL (side="bottom" para que queden abajo)**
         self.frame_botones = tk.Frame(self.main_container, bg=self.COLORS['white'])
-        self.frame_botones.pack(fill="x", side="bottom", pady=(20, 10))
+        self.frame_botones.pack(side="bottom", fill="x", pady=5)
 
-        btn_font = ('Segoe UI', 9, 'bold')
-        btn_bg = self.COLORS['white']
-        btn_fg = self.COLORS['text_dark']
+        btn_font = ('Segoe UI', 8, 'bold')
+        btn_config = {'font': btn_font, 'bg': self.COLORS['white'], 'fg': self.COLORS['text_dark'],
+                    'relief': 'flat', 'borderwidth': 0, 'cursor': 'hand2', 'padx': 12, 'pady': 4}
 
-        btn_report = tk.Button(self.frame_botones,
-                               text="Generar Vista Previa",
-                               command=self.generar_vista_previa,
-                               font=btn_font, bg=btn_bg, fg=btn_fg,
-                               relief='flat', borderwidth=0,
-                               highlightthickness=0, padx=15, pady=6,
-                               cursor='hand2',
-                               image=self.icon_preview if self.icon_preview else "",
-                               compound='left' if self.icon_preview else None)
-        btn_report.pack(side="left", padx=5)
+        tk.Button(self.frame_botones, text="Vista Previa", command=self.generar_vista_previa,
+                image=self.icon_preview, compound='left', **btn_config).pack(side="left", padx=3)
+        tk.Button(self.frame_botones, text="Imprimir", command=self.imprimir_pdf,
+                image=self.icon_print, compound='left', **btn_config).pack(side="left", padx=3)
+        tk.Button(self.frame_botones, text="PDF", command=self.exportar_pdf,
+                image=self.icon_pdf, compound='left', **btn_config).pack(side="left", padx=3)
+        tk.Button(self.frame_botones, text="Excel", command=self.generar_excel_reporte,
+                image=self.icon_excel, compound='left', **btn_config).pack(side="left", padx=3)
+        tk.Button(self.frame_botones, text="Cerrar", command=self.cerrar_ventana,
+                image=self.icon_close, compound='left', **btn_config).pack(side="right", padx=3)
 
-        btn_print = tk.Button(self.frame_botones,
-                              text="Imprimir",
-                              command=self.imprimir_pdf,
-                              font=btn_font, bg=btn_bg, fg=btn_fg,
-                              relief='flat', borderwidth=0,
-                              highlightthickness=0, padx=15, pady=6,
-                              cursor='hand2',
-                              image=self.icon_print if self.icon_print else "",
-                              compound='left' if self.icon_print else None)
-        btn_print.pack(side="left", padx=5)
-
-        btn_pdf = tk.Button(self.frame_botones,
-                            text="Exportar a PDF",
-                            command=self.exportar_pdf,
-                            font=btn_font, bg=btn_bg, fg=btn_fg,
-                            relief='flat', borderwidth=0,
-                            highlightthickness=0, padx=15, pady=6,
-                            cursor='hand2',
-                            image=self.icon_pdf if self.icon_pdf else "",
-                            compound='left' if self.icon_pdf else None)
-        btn_pdf.pack(side="left", padx=5)
-
-        btn_excel = tk.Button(self.frame_botones,
-                              text="Exportar a Excel",
-                              command=self.generar_excel_reporte,
-                              font=btn_font, bg=btn_bg, fg=btn_fg,
-                              relief='flat', borderwidth=0,
-                              highlightthickness=0, padx=15, pady=6,
-                              cursor='hand2',
-                              image=self.icon_excel if self.icon_excel else "",
-                              compound='left' if self.icon_excel else None)
-        btn_excel.pack(side="left", padx=5)
-
-        btn_close = tk.Button(self.frame_botones,
-                              text="Cerrar",
-                              command=self.cerrar_ventana,
-                              font=btn_font, bg=btn_bg, fg=btn_fg,
-                              relief='flat', borderwidth=0,
-                              highlightthickness=0, padx=15, pady=6,
-                              cursor='hand2',
-                              image=self.icon_close if self.icon_close else "",
-                              compound='left' if self.icon_close else None)
-        btn_close.pack(side="right", padx=5)
-
-        # Vincular eventos de cambio
+        # Eventos
         self.combo_area.bind('<<ComboboxSelected>>', self.cargar_distritos_por_area)
         self.combo_distrito.bind('<<ComboboxSelected>>', self.cargar_tipos_servicio)
         self.combo_tipo_servicio.bind('<<ComboboxSelected>>', self.cargar_servicios)
         self.combo_tipo_insumo.bind('<<ComboboxSelected>>', self.cargar_insumos)
         self.combo_insumo.bind('<<ComboboxSelected>>', self.actualizar_presentacion)
 
-        # Cargar datos iniciales
+        # Cargar datos
         self.cargar_areas()
         self.distritos = []
         self.combo_distrito.set_completion_list([''])
@@ -1152,6 +1399,10 @@ class ReporteBres:
             self.combo_presentacion.set_completion_list(opciones)
 
     def generar_vista_previa(self):
+        # Mostrar animación
+        self.mostrar_animacion_carga()
+        self.parent.update()
+    
         try:
             if self.modo_fecha_var.get() == "rango":
                 fecha_ini = datetime.strptime(self.fecha_inicial.get(), '%d/%m/%Y')
@@ -1192,20 +1443,24 @@ class ReporteBres:
                 presentacion_nombre=self.combo_presentacion.get().strip() or None
             )
             
-            # Filtrar por rango logístico (ya obtuviste movimientos por fecha_ini/fecha_fin)
-            # Construir contexto actual para saldo anterior
+            # Construir contexto actual para saldo anterior (CON TODOS LOS FILTROS)
             contexto = {
                 'area': (self.combo_area.get() or '').strip() or None,
                 'distrito': (self.combo_distrito.get() or '').strip() or None,
                 'tipo_servicio': (self.combo_tipo_servicio.get() or '').strip() or None,
                 'servicio': (self.combo_servicio.get() or '').strip() or None,
-                'presentacion': (self.combo_presentacion.get() or '').strip() or None
+                'presentacion': (self.combo_presentacion.get() or '').strip() or None,
+                'tipo_insumo': (self.combo_tipo_insumo.get() or '').strip() or None,  # ✅ NUEVO
+                'insumo': (self.combo_insumo.get() or '').strip() or None  # ✅ NUEVO
             }
 
             # Fecha de corte: 25 del mes de fecha_ini
             fecha_corte_anterior = self._fecha_corte_anterior(fecha_ini)
 
-            # Detectar insumos presentes
+            # === OBTENER TODOS LOS INSUMOS CON SALDO ===
+            insumos_con_saldo = self._obtener_insumos_con_saldo(fecha_corte_anterior, contexto)
+
+            # Detectar insumos únicos en el periodo actual
             insumo_ids_en_periodo = set()
             for m in movimientos_raw:
                 iid = m.get('codigo_insumo')
@@ -1217,16 +1472,25 @@ class ReporteBres:
                 except:
                     pass
 
-            # Obtener saldo anterior por insumo y guardar en self para que lo use procesar_datos_bres
+            # COMBINAR: insumos con saldo anterior + insumos del periodo actual
+            todos_los_insumos = set(insumos_con_saldo) | insumo_ids_en_periodo
+
+            if not todos_los_insumos:
+                messagebox.showinfo("Info", "No hay datos para mostrar")
+                return
+
+            # Calcular saldo anterior para todos los insumos
             self.saldo_anterior_por_insumo = {}
-            for iid in insumo_ids_en_periodo:
+            for iid in todos_los_insumos:
                 self.saldo_anterior_por_insumo[iid] = self._obtener_saldo_corte_bd(fecha_corte_anterior, contexto, iid)
+
+            # Procesar datos con todos los insumos (incluso sin movimientos nuevos)
+            self.movimientos_data = self.procesar_datos_bres(movimientos_raw, fecha_ini, fecha_fin, todos_los_insumos)
 
             if not movimientos_raw:
                 messagebox.showinfo("Info", "No hay datos para mostrar")
                 return
 
-            self.movimientos_data = self.procesar_datos_bres(movimientos_raw, fecha_ini, fecha_fin)
             if not self.movimientos_data:
                 messagebox.showwarning("Sin datos", "No hay datos procesados para mostrar")
                 return
@@ -1264,7 +1528,7 @@ class ReporteBres:
             self.current_page = 0
             self.total_pages = len(doc)
             self.zoom_level = 1.5
-
+            
             def display_page():
                 canvas.delete("all")
                 page = doc.load_page(self.current_page)
@@ -1514,6 +1778,13 @@ class ReporteBres:
             btn_anterior.config(state="disabled")
             btn_siguiente.config(state="normal" if self.total_pages > 1 else "disabled")
 
+            # Ajustar zoom inicial al ancho del canvas
+            canvas.update() 
+            if canvas.winfo_width() > 100:
+                page = doc.load_page(0)
+                zoom_inicial = (canvas.winfo_width() - 40) / page.rect.width
+                self.zoom_level = max(0.5, min(zoom_inicial, 3.0))
+            
             display_page()
 
             def on_mousewheel(event):
