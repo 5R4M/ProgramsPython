@@ -122,29 +122,45 @@ class ReporteDemandaReal:
         for widget in self.pdf_body.winfo_children():
             widget.destroy()
         
+        # Resetear atributos de animación
+        self._loading_size = 64
+        self._loading_direction = -1
+        
         loading_frame = tk.Frame(self.pdf_body, bg=self.COLORS['white'])
         loading_frame.pack(expand=True)
         
-        self.loading_label = tk.Label(loading_frame, text="⏳", font=('Segoe UI Emoji', 48),
-                                    fg=self.COLORS['accent'], bg=self.COLORS['white'])
-        self.loading_label.pack(pady=(50, 10))
+        # Ícono animado con pulso
+        self.loading_icon = tk.Label(
+            loading_frame, 
+            text="⏳", 
+            font=('Segoe UI Emoji', 64),
+            fg=self.COLORS['accent'], 
+            bg=self.COLORS['white']
+        )
+        self.loading_icon.pack(pady=(80, 20))
         
-        self.loading_text = tk.Label(loading_frame, text="Generando reporte...",
-                                    font=('Segoe UI', 11, 'bold'), fg=self.COLORS['accent'],
-                                    bg=self.COLORS['white'])
-        self.loading_text.pack()
+        # Texto principal
+        self.loading_text = tk.Label(
+            loading_frame, 
+            text="Generando reporte",
+            font=('Segoe UI', 13, 'bold'), 
+            fg=self.COLORS['accent'],
+            bg=self.COLORS['white']
+        )
+        self.loading_text.pack(pady=(0, 8))
         
+        # Texto secundario
+        tk.Label(
+            loading_frame,
+            text="Por favor espere mientras se procesa la información...",
+            font=('Segoe UI', 9),
+            fg=self.COLORS['text_light'],
+            bg=self.COLORS['white']
+        ).pack(pady=(0, 5))
+        
+        # Iniciar animaciones
         self.loading_dots = 0
-        self.animar_carga()
 
-    def animar_carga(self):
-        """Anima los puntos de carga"""
-        if hasattr(self, 'loading_text') and self.loading_text.winfo_exists():
-            self.loading_dots = (self.loading_dots + 1) % 4
-            dots = "." * self.loading_dots
-            self.loading_text.config(text=f"Generando reporte{dots}")
-            self.parent.after(300, self.animar_carga)
-    
     def create_titled_frame(self, parent, title, header_icon=None):
         # Contenedor tipo tarjeta sobre fondo Light
         container = tk.Frame(parent, bg=self.COLORS['light'], relief='solid', borderwidth=1)
@@ -346,6 +362,9 @@ class ReporteDemandaReal:
         self.pdf_body = tk.Frame(self.pdf_frame, bg=self.COLORS['white'])
         self.pdf_body.pack(fill="both", expand=True, padx=6, pady=6)
 
+        # Mostrar mensaje inicial animado
+        self.mostrar_mensaje_inicial()
+        
         # Botones abajo sobre Light
         self.frame_botones = tk.Frame(self.main_container, bg=self.COLORS['light'])
         self.frame_botones.pack(fill="x", side="bottom", pady=(20, 10))
@@ -400,25 +419,8 @@ class ReporteDemandaReal:
                 for widget in self.pdf_body.winfo_children():
                     widget.destroy()
                 
-                # Mostrar mensaje de "Sin vista previa"
-                mensaje_frame = tk.Frame(self.pdf_body, bg=self.COLORS['white'])
-                mensaje_frame.pack(expand=True)
-                
-                tk.Label(
-                    mensaje_frame,
-                    text="📄",
-                    font=('Segoe UI Emoji', 48),
-                    fg=self.COLORS['text_light'],
-                    bg=self.COLORS['white']
-                ).pack(pady=(50, 10))
-                
-                tk.Label(
-                    mensaje_frame,
-                    text="Seleccione los filtros y genere la vista previa",
-                    font=('Segoe UI', 11),
-                    fg=self.COLORS['text_light'],
-                    bg=self.COLORS['white']
-                ).pack()
+                # Mostrar mensaje inicial animado
+                self.mostrar_mensaje_inicial()
             
             # Limpiar datos anteriores
             if hasattr(self, 'datos'):
@@ -441,8 +443,47 @@ class ReporteDemandaReal:
                 
         except Exception as e:
             print(f"Error al limpiar visor PDF: {e}")
-     
-     
+    
+    def mostrar_mensaje_inicial(self):
+        """Muestra mensaje inicial antes de generar vista previa"""
+        for widget in self.pdf_body.winfo_children():
+            widget.destroy()
+        
+        # Resetear atributos de animación
+        self._icon_size = 64
+        self._icon_direction = -1
+        
+        initial_frame = tk.Frame(self.pdf_body, bg=self.COLORS['white'])
+        initial_frame.pack(expand=True)
+        
+        # Ícono animado
+        self.initial_icon = tk.Label(
+            initial_frame, 
+            text="📋", 
+            font=('Segoe UI Emoji', 64),
+            fg=self.COLORS['accent'], 
+            bg=self.COLORS['white']
+        )
+        self.initial_icon.pack(pady=(80, 20))
+        
+        # Texto principal
+        tk.Label(
+            initial_frame,
+            text="Seleccione los filtros y genere la vista previa",
+            font=('Segoe UI', 13, 'bold'),
+            fg=self.COLORS['text_dark'],
+            bg=self.COLORS['white']
+        ).pack(pady=(0, 8))
+        
+        # Texto secundario
+        tk.Label(
+            initial_frame,
+            text="Configure las fechas y filtros deseados, luego presione 'Generar Vista Previa'",
+            font=('Segoe UI', 9),
+            fg=self.COLORS['text_light'],
+            bg=self.COLORS['white']
+        ).pack(pady=(0, 5))
+            
     def on_fecha_changed(self, event=None):
         """
         Maneja el cambio de fechas: actualiza el rango y limpia el visor
@@ -1641,6 +1682,28 @@ class ReporteDemandaReal:
                 page_label.config(text=f"Página {self.current_page + 1} de {self.total_pages}")
                 zoom_label.config(text=f"Zoom: {int(self.zoom_level * 100)}%")
 
+            def ajustar_una_vez(event=None):
+                try:
+                    canvas_width = canvas.winfo_width()
+                    if canvas_width > 100:
+                        page = doc.load_page(self.current_page)
+                        zoom = (canvas_width - 20) / page.rect.width
+                        self.zoom_level = max(0.5, min(zoom, 3.0))
+                        canvas.delete("all")
+                        pix = page.get_pixmap(matrix=fitz.Matrix(self.zoom_level, self.zoom_level))
+                        img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
+                        tk_img = ImageTk.PhotoImage(image=img)
+                        canvas.image = tk_img
+                        x = max((canvas_width - pix.width) // 2, 0)
+                        canvas.create_image(x, 0, anchor="nw", image=tk_img)
+                        canvas.config(scrollregion=canvas.bbox("all"))
+                        zoom_label.config(text=f"Zoom: {int(self.zoom_level * 100)}%")
+                        canvas.unbind("<Map>")  # Desvincula para que solo se ejecute una vez
+                except Exception as e:
+                    print(f"Error en ajustar_una_vez: {e}")
+
+            canvas.bind("<Map>", ajustar_una_vez)
+            
             def change_page(delta):
                 self.current_page = max(0, min(self.current_page + delta, self.total_pages - 1))
                 display_page()
@@ -1925,7 +1988,6 @@ class ReporteDemandaReal:
             # ✅ AJUSTAR AUTOMÁTICAMENTE AL TAMAÑO DEL VISOR
             self.pdf_body.update_idletasks()
             canvas.update_idletasks()
-            self.parent.after(200, fit_to_page)  # ✅ Llamar después de 200ms para asegurar renderizado
 
             def on_mousewheel(event):
                 if canvas.winfo_exists():
