@@ -36,14 +36,58 @@ def resolver_hostname_a_ip(hostname):
         return hostname
 
 def create_default_config(config_path):
-    """Crea un archivo de configuración por defecto si no existe"""
+    """Solicita configuración al usuario en lugar de usar valores hardcodeados"""
     try:
+        from tkinter import simpledialog, Tk
+        
+        # Crear ventana temporal oculta
+        root = Tk()
+        root.withdraw()
+        
+        # Solicitar datos al usuario
+        host = simpledialog.askstring(
+            "Configuración MySQL",
+            "Ingrese el hostname o IP del servidor MySQL:",
+            initialvalue="localhost"
+        )
+        
+        if not host:
+            raise Exception("Debe ingresar un hostname")
+        
+        port = simpledialog.askinteger(
+            "Configuración MySQL",
+            "Ingrese el puerto MySQL:",
+            initialvalue=3306,
+            minvalue=1,
+            maxvalue=65535
+        )
+        
+        user = simpledialog.askstring(
+            "Configuración MySQL",
+            "Ingrese el usuario MySQL:",
+            initialvalue="root"
+        )
+        
+        if not user:
+            raise Exception("Debe ingresar un usuario")
+        
+        password = simpledialog.askstring(
+            "Configuración MySQL",
+            "Ingrese la contraseña MySQL:",
+            show='*'
+        )
+        
+        if password is None:
+            raise Exception("Debe ingresar una contraseña")
+        
+        root.destroy()
+        
         config = configparser.ConfigParser()
         config['MySQL'] = {
-            'host': 'DESKTOP-KVJ8QQ3',
-            'port': '3306',
-            'admin_user': 'root',
-            'admin_pass': '0.5735', 
+            'host': host,
+            'port': str(port or 3306),
+            'admin_user': user,
+            'admin_pass': password,
             'bind_address': '0.0.0.0',
             'max_connections': '100',
             'timeout': '28800',
@@ -59,18 +103,19 @@ def create_default_config(config_path):
         with open(config_path, 'w', encoding='utf-8') as f:
             config.write(f)
         
-        print(f"Archivo de configuración por defecto creado en: {config_path}")
+        print(f"Archivo de configuración creado en: {config_path}")
         
     except Exception as e:
-        print(f"Error creando configuración por defecto: {e}")
+        print(f"Error creando configuración: {e}")
         raise
-
+    
 def get_config():
     config_path = get_config_path("mysql_config.ini")
 
-    # Crear config por defecto si no existe
+    # Si no existe, solicitar creación
     if not os.path.exists(config_path):
-        create_default_config(config_path)
+        print("❌ Archivo de configuración no encontrado")
+        raise Exception(f"Archivo de configuración no encontrado: {config_path}")
 
     config = configparser.ConfigParser()
     config.read(config_path, encoding='utf-8')
@@ -78,17 +123,40 @@ def get_config():
     if 'MySQL' not in config:
         raise Exception("No se encontró la configuración MySQL")
 
-    host = config['MySQL'].get('host', 'DESKTOP-KVJ8QQ3').strip()
-
-    if host.lower() in ('127.0.0.1', 'localhost', ''):
-        host = 'DESKTOP-KVJ8QQ3'
+    # ✅ SIN valores por defecto hardcodeados
+    host = config['MySQL'].get('host')
+    port_str = config['MySQL'].get('port')
+    user = config['MySQL'].get('admin_user')
+    password = config['MySQL'].get('admin_pass')
+    database = config['MySQL'].get('database')
+    
+    # Validar que existan
+    if not host:
+        raise Exception("Host no configurado en mysql_config.ini")
+    
+    if not port_str:
+        raise Exception("Puerto no configurado en mysql_config.ini")
+    
+    if not user:
+        raise Exception("Usuario no configurado en mysql_config.ini")
+    
+    if not password:
+        raise Exception("Contraseña no configurada en mysql_config.ini")
+    
+    if not database:
+        raise Exception("Base de datos no configurada en mysql_config.ini")
+    
+    try:
+        port = int(port_str)
+    except ValueError:
+        raise Exception(f"Puerto inválido: {port_str}")
 
     return {
-        'host': host,
-        'port': int(config['MySQL'].get('port', 3306)),
-        'user': config['MySQL'].get('admin_user', 'root'),
-        'password': config['MySQL'].get('admin_pass', ''),
-        'database': config['MySQL'].get('database', 'insumos'),
+        'host': host.strip(),
+        'port': port,
+        'user': user.strip(),
+        'password': password,
+        'database': database.strip(),
         'charset': 'utf8mb4',
         'autocommit': False,
         'use_unicode': True
@@ -1441,13 +1509,15 @@ def crear_super_usuario_si_no_existe():
     }
 
     try:
-        # Conectar directamente con valores hardcodeados
+        # ✅ Usar get_config() en lugar de valores hardcodeados
+        config = get_config()
+        
         conn = mysql.connector.connect(
-            host='DESKTOP-KVJ8QQ3',
-            port=3306,
-            user='root',
-            password='0.5735',
-            database='insumos',
+            host=config['host'],
+            port=config['port'],
+            user=config['user'],
+            password=config['password'],
+            database=config['database'],
             charset='utf8mb4',
             autocommit=False,
             use_unicode=True,
@@ -1472,8 +1542,10 @@ def crear_super_usuario_si_no_existe():
                 super_user['rol']
             ))
             conn.commit()
+            print("✅ Super usuario creado exitosamente")
     
     except Exception as e:
+        print(f"Error creando super usuario: {e}")
         if conn:
             conn.rollback()
     finally:

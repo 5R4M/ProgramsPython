@@ -14,34 +14,60 @@ def get_config_path(filename):
         return os.path.join(script_dir, filename)
 
 def load_mysql_config():
-    # Defaults seguros (tu servidor real, no localhost)
-    cfg = {
-        'host': 'DESKTOP-KVJ8QQ3',
-        'port': 3306,
-        'user': 'root',
-        'password': '0.5735',
-        'database': 'insumos'
-    }
+    """
+    Carga la configuración de MySQL desde mysql_config.ini
+    Si no existe, retorna None y debe manejarse el error
+    """
     ini_path = get_config_path("mysql_config.ini")
-    if os.path.exists(ini_path):
-        parser = configparser.ConfigParser()
+    
+    if not os.path.exists(ini_path):
+        # No existe configuración - debe crearse primero
+        print(f"❌ No se encontró archivo de configuración: {ini_path}")
+        return None
+    
+    parser = configparser.ConfigParser()
+    try:
         parser.read(ini_path, encoding='utf-8')
-        if 'MySQL' in parser:
-            section = parser['MySQL']
-            cfg['host'] = section.get('host', cfg['host'])
-            cfg['port'] = int(section.get('port', cfg['port']))
-            cfg['user'] = section.get('admin_user', cfg['user'])
-            cfg['password'] = section.get('admin_pass', cfg['password'])
-            cfg['database'] = section.get('database', cfg['database'])
+    except Exception as e:
+        print(f"❌ Error leyendo configuración: {e}")
+        return None
+    
+    if 'MySQL' not in parser:
+        print("❌ No se encontró la sección [MySQL] en la configuración")
+        return None
+    
+    section = parser['MySQL']
+    
+    # Validar que existan los campos requeridos
+    required_fields = ['host', 'admin_user', 'admin_pass']
+    for field in required_fields:
+        if not section.get(field):
+            print(f"❌ Falta el campo requerido: {field}")
+            return None
+    
+    cfg = {
+        'host': section.get('host'),
+        'port': int(section.get('port', 3306)),
+        'user': section.get('admin_user'),
+        'password': section.get('admin_pass'),
+        'database': section.get('database', 'insumos')
+    }
+    
     return cfg
 
 def get_db_config():
-    # Mantener interfaz, pero ahora leyendo del ini
+    """Mantener interfaz, pero ahora leyendo del ini"""
     return load_mysql_config()
 
 def asegurar_base_datos():
     """Asegura que la base de datos exista, si no, la crea"""
     config = get_db_config()
+    
+    # ✅ VALIDAR que config no sea None
+    if config is None:
+        print("❌ No se pudo cargar la configuración de MySQL")
+        return False
+    
     conn = None
     try:
         # Conexión sin especificar database para poder crearla
@@ -57,9 +83,10 @@ def asegurar_base_datos():
         conn.commit()
         cursor.close()
         conn.close()
+        print(f"✅ Base de datos '{dbname}' asegurada")
         return True
     except mysql.connector.Error as e:
-        print(f"Error al crear la base de datos: {e.errno} - {e.msg}")
+        print(f"❌ Error al crear la base de datos: {e.errno} - {e.msg}")
         return False
     finally:
         try:
@@ -71,6 +98,12 @@ def asegurar_base_datos():
 def verificar_tablas():
     """Verifica que todas las tablas necesarias existan"""
     config = get_db_config()
+    
+    # ✅ VALIDAR que config no sea None
+    if config is None:
+        print("❌ No se pudo cargar la configuración de MySQL")
+        return False
+    
     conn = None
     try:
         conn = mysql.connector.connect(
@@ -99,11 +132,14 @@ def verificar_tablas():
         for tabla in tablas_requeridas:
             cursor.execute(f"SHOW TABLES LIKE %s;", (tabla,))
             if not cursor.fetchone():
+                print(f"❌ Falta la tabla: {tabla}")
                 return False
+        
+        print("✅ Todas las tablas existen")
         return True
 
     except mysql.connector.Error as e:
-        print(f"Error al verificar tablas: {e.errno} - {e.msg}")
+        print(f"❌ Error al verificar tablas: {e.errno} - {e.msg}")
         return False
     finally:
         try:
@@ -115,6 +151,12 @@ def verificar_tablas():
 def agregar_columna_codigo_prefijo():
     """Agrega la columna codigo_prefijo a tipo_insumo si no existe"""
     config = get_db_config()
+    
+    # ✅ VALIDAR que config no sea None
+    if config is None:
+        print("❌ No se pudo cargar la configuración de MySQL")
+        return False
+    
     conn = None
     try:
         conn = mysql.connector.connect(
@@ -144,11 +186,14 @@ def agregar_columna_codigo_prefijo():
                 ADD COLUMN codigo_prefijo VARCHAR(10) DEFAULT 'TEMP'
             """)
             conn.commit()
+            print("✅ Columna 'codigo_prefijo' agregada")
             return True
         else:
+            print("✅ Columna 'codigo_prefijo' ya existe")
             return True
             
     except mysql.connector.Error as e:
+        print(f"❌ Error al agregar columna: {e.errno} - {e.msg}")
         if conn:
             conn.rollback()
         return False
@@ -161,10 +206,31 @@ def agregar_columna_codigo_prefijo():
 
 def crear_base_datos():
     """Crea las tablas en la base de datos MySQL"""
-    if not asegurar_base_datos():
-        raise Exception("No se pudo crear la base de datos")
-
+    
+    # ✅ VALIDAR configuración antes de continuar
     config = get_db_config()
+    if config is None:
+        print("=" * 60)
+        print("❌ ERROR: No se encontró configuración de MySQL")
+        print("=" * 60)
+        print("\nPor favor:")
+        print("1. Ejecute el instalador del SERVIDOR primero")
+        print("2. O cree manualmente el archivo mysql_config.ini")
+        print(f"\nUbicación esperada: {get_config_path('mysql_config.ini')}")
+        print("\nFormato del archivo:")
+        print("[MySQL]")
+        print("host = NOMBRE_SERVIDOR")
+        print("port = 3306")
+        print("admin_user = root")
+        print("admin_pass = tu_contraseña")
+        print("database = insumos")
+        print("=" * 60)
+        return False
+    
+    if not asegurar_base_datos():
+        print("❌ No se pudo crear la base de datos")
+        return False
+
     conn = None
     try:
         conn = mysql.connector.connect(
@@ -175,6 +241,8 @@ def crear_base_datos():
             database=config['database']
         )
         cursor = conn.cursor()
+
+        print("Creando tablas...")
 
         # Tabla ÁREA
         cursor.execute("""
@@ -308,16 +376,18 @@ def crear_base_datos():
         """)
 
         # Índices (ignora si ya existen)
-        for index_sql in [
+        indices = [
             "CREATE INDEX idx_mov_area ON movimiento(area_id);",
             "CREATE INDEX idx_mov_distrito ON movimiento(distrito_id);",
             "CREATE INDEX idx_mov_servicio ON movimiento(servicio_id);",
             "CREATE INDEX idx_mov_fecha ON movimiento(fecha_registro);"
-        ]:
+        ]
+        
+        for index_sql in indices:
             try:
                 cursor.execute(index_sql)
             except mysql.connector.Error as err:
-                if err.errno == 1061:
+                if err.errno == 1061:  # Duplicate key name
                     pass
                 else:
                     raise
@@ -326,12 +396,18 @@ def crear_base_datos():
         cursor.close()
         conn.close()
         
+        print("✅ Tablas creadas exitosamente")
+        
         # Agregar columna codigo_prefijo si no existe
         agregar_columna_codigo_prefijo()
         
+        print("=" * 60)
+        print("✅ BASE DE DATOS CONFIGURADA CORRECTAMENTE")
+        print("=" * 60)
         return True
 
     except mysql.connector.Error as e:
+        print(f"❌ Error al crear tablas: {e.errno} - {e.msg}")
         return False
     finally:
         try:
@@ -340,10 +416,15 @@ def crear_base_datos():
         except:
             pass
 
-__all__ = ['crear_base_datos', 'verificar_tablas', 'asegurar_base_datos', 'agregar_columna_codigo_prefijo']
+__all__ = ['crear_base_datos', 'verificar_tablas', 'asegurar_base_datos', 'agregar_columna_codigo_prefijo', 'get_db_config']
 
 if __name__ == "__main__":
+    print("=" * 60)
+    print("INICIALIZANDO BASE DE DATOS")
+    print("=" * 60)
+    
     if crear_base_datos():
-        print("Base de datos creada con éxito")
+        print("\n✅ Base de datos creada con éxito")
     else:
-        print("Error al crear la base de datos")
+        print("\n❌ Error al crear la base de datos")
+        sys.exit(1)

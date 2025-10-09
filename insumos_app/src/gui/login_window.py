@@ -6,6 +6,8 @@ import mysql.connector
 import sys
 import os
 
+import hashlib
+
 from PIL import Image, ImageTk
 import configparser
 import threading
@@ -148,10 +150,10 @@ def debug_paths():
 
         log(f"\n🌐 DIAGNÓSTICO DE CONECTIVIDAD:")
 
-        mysql_host = "DESKTOP-KVJ8QQ3"
+        mysql_host = None
         mysql_port = 3306
-        mysql_user = "root"
-        mysql_password = "0.5735"
+        mysql_user = None
+        mysql_password = None
 
         if config_path and os.path.exists(config_path):
             try:
@@ -159,18 +161,26 @@ def debug_paths():
                 config = configparser.ConfigParser()
                 config.read(config_path)
                 if 'MySQL' in config:
-                    mysql_host = config['MySQL'].get('host', mysql_host)
-                    mysql_port = int(config['MySQL'].get('port', mysql_port))
-                    mysql_user = config['MySQL'].get('admin_user', mysql_user)
-                    mysql_password = config['MySQL'].get('admin_pass', mysql_password)
-                    log(f"   ✅ Configuración leída desde: {config_path}")
+                    mysql_host = config['MySQL'].get('host')
+                    mysql_port = int(config['MySQL'].get('port', 3306))
+                    mysql_user = config['MySQL'].get('admin_user')
+                    mysql_password = config['MySQL'].get('admin_pass')
+                    
+                    if mysql_host and mysql_user:
+                        log(f"   ✅ Configuración leída desde: {config_path}")
+                    else:
+                        log(f"   ⚠️ Configuración incompleta en archivo")
                 else:
                     log(f"   ⚠️ Archivo config existe pero sin sección [MySQL]")
             except Exception as e:
                 log(f"   ⚠️ Error leyendo configuración: {e}")
-                log(f"   🔄 Usando valores por defecto")
         else:
-            log(f"   ℹ️ Usando configuración por defecto (config no encontrado)")
+            log(f"   ⚠️ No existe archivo de configuración")
+
+        # Validar antes de continuar
+        if not mysql_host or not mysql_user or not mysql_password:
+            log(f"   ⚠️ No se puede realizar diagnóstico sin configuración válida")
+            return
 
         log(f"   Servidor objetivo: {mysql_host}:{mysql_port}")
         log(f"   Usuario: {mysql_user}")
@@ -448,24 +458,32 @@ pause
 
 def verificar_credenciales_fallback(username, password):
     """Función fallback para verificar credenciales cuando no se puede importar el módulo"""
-    import hashlib
     try:
         config_file = get_config_path("mysql_config.ini")
         if not os.path.exists(config_file):
+            log("❌ No existe archivo de configuración")
             return None
 
         config = configparser.ConfigParser()
         config.read(config_file, encoding='utf-8')
 
         if 'MySQL' not in config:
+            log("❌ Configuración MySQL no encontrada")
             return None
 
         mysql_config = config['MySQL']
-        host = mysql_config.get('host', 'DESKTOP-KVJ8QQ3')
-        port = int(mysql_config.get('port', '3306'))
-        user = mysql_config.get('admin_user', 'root')
-        password_db = mysql_config.get('admin_pass', '')
+        
+        # ✅ SIN valores por defecto hardcodeados
+        host = mysql_config.get('host')
+        port = int(mysql_config.get('port', 3306))
+        user = mysql_config.get('admin_user')
+        password_db = mysql_config.get('admin_pass')
         database = mysql_config.get('database', 'insumos')
+        
+        # Validar que existan los valores requeridos
+        if not host or not user or not password_db:
+            log("❌ Configuración incompleta")
+            return None
 
         connection = mysql.connector.connect(
             host=host,
@@ -545,33 +563,15 @@ def verificar_mysql_y_continuar(self):
         try:
             log("Iniciando verificación de conexión MySQL...")
 
-            try:
-                debug_paths()
-            except Exception as e:
-                log(f"Error en debug_paths: {e}")
+            debug_paths()
 
             config_file = get_config_path("mysql_config.ini")
             log(f"Buscando archivo de configuración en: {config_file}")
 
-            if not config_file or not os.path.exists(config_file):
-                if getattr(sys, 'frozen', False):
-                    log("⚠️ Archivo config no encontrado en ejecutable, intentando crear uno básico...")
-                    try:
-                        self.crear_config_basico(config_file)
-                        if os.path.exists(config_file):
-                            log("✅ Archivo de configuración básico creado")
-                        else:
-                            error_msg = f"No se pudo crear archivo de configuración en: {config_file}"
-                            self.root.after(0, lambda: self.mostrar_configuracion_mysql(error_msg))
-                            return
-                    except Exception as e:
-                        error_msg = f"Error creando configuración básica: {str(e)}"
-                        self.root.after(0, lambda: self.mostrar_configuracion_mysql(error_msg))
-                        return
-                else:
-                    error_msg = f"Archivo de configuración MySQL no encontrado en: {config_file}"
-                    self.root.after(0, lambda: self.mostrar_configuracion_mysql(error_msg))
-                    return
+            if not os.path.exists(config_file):
+                error_msg = f"Archivo de configuración no encontrado: {config_file}"
+                self.root.after(0, lambda: self.mostrar_configuracion_mysql(error_msg))
+                return
 
             config = configparser.ConfigParser()
             try:
@@ -588,10 +588,25 @@ def verificar_mysql_y_continuar(self):
                 return
 
             mysql_config = config['MySQL']
-            host = mysql_config.get('host', 'DESKTOP-KVJ8QQ3')
-            port = int(mysql_config.get('port', '3306'))
-            user = mysql_config.get('admin_user', 'root')
-            password = mysql_config.get('admin_pass', '')
+
+            # SIN valores por defecto hardcodeados
+            host = mysql_config.get('host')
+            port_str = mysql_config.get('port')
+            user = mysql_config.get('admin_user')
+            password = mysql_config.get('admin_pass')
+
+            # Validar que existan
+            if not host or not port_str or not user:
+                error_msg = "Configuración MySQL incompleta (falta host, port o user)"
+                self.root.after(0, lambda: self.mostrar_configuracion_mysql(error_msg))
+                return
+
+            try:
+                port = int(port_str)
+            except ValueError:
+                error_msg = f"Puerto inválido: {port_str}"
+                self.root.after(0, lambda: self.mostrar_configuracion_mysql(error_msg))
+                return
 
             log(f"Configuración cargada: {user}@{host}:{port}")
 
@@ -723,10 +738,23 @@ def debug_mysql_connection():
 
         if 'MySQL' in config:
             mysql_config = config['MySQL']
-            host = mysql_config.get('host', 'localhost')
-            port = int(mysql_config.get('port', '3306'))
-            user = mysql_config.get('admin_user', 'root')
-            password = mysql_config.get('admin_pass', '')
+            
+            # ✅ SIN valores por defecto hardcodeados
+            host = mysql_config.get('host')
+            port_str = mysql_config.get('port')
+            user = mysql_config.get('admin_user')
+            password = mysql_config.get('admin_pass')
+            
+            # Validar que existan
+            if not host or not port_str or not user:
+                log("❌ Configuración MySQL incompleta en archivo")
+                return False
+            
+            try:
+                port = int(port_str)
+            except ValueError:
+                log(f"❌ Puerto inválido: {port_str}")
+                return False
 
             if not password:
                 log("❌ Contraseña no configurada en archivo de configuración")
@@ -769,14 +797,53 @@ def debug_mysql_connection():
     return False
 
 def crear_config_basico(self, config_file):
-    """Crea un archivo de configuración básico si no existe"""
+    """Solicita al usuario la configuración en lugar de usar valores hardcodeados"""
     try:
+        from tkinter import simpledialog
+        
+        # Solicitar datos al usuario
+        host = simpledialog.askstring(
+            "Configuración MySQL",
+            "Ingrese el hostname o IP del servidor MySQL:",
+            initialvalue="localhost"
+        )
+        
+        if not host:
+            raise Exception("Debe ingresar un hostname")
+        
+        port = simpledialog.askinteger(
+            "Configuración MySQL",
+            "Ingrese el puerto MySQL:",
+            initialvalue=3306,
+            minvalue=1,
+            maxvalue=65535
+        )
+        
+        user = simpledialog.askstring(
+            "Configuración MySQL",
+            "Ingrese el usuario MySQL:",
+            initialvalue="root"
+        )
+        
+        if not user:
+            raise Exception("Debe ingresar un usuario")
+        
+        password = simpledialog.askstring(
+            "Configuración MySQL",
+            "Ingrese la contraseña MySQL:",
+            show='*'
+        )
+        
+        if password is None:
+            raise Exception("Debe ingresar una contraseña")
+        
+        # Crear configuración con datos del usuario
         config = configparser.ConfigParser()
         config['MySQL'] = {
-            'host': 'DESKTOP-KVJ8QQ3',
-            'port': '3306',
-            'admin_user': 'root',
-            'admin_pass': '0.5735',
+            'host': host,
+            'port': str(port or 3306),
+            'admin_user': user,
+            'admin_pass': password,
             'bind_address': '0.0.0.0',
             'max_connections': '100',
             'timeout': '28800',
@@ -790,10 +857,10 @@ def crear_config_basico(self, config_file):
         with open(config_file, 'w', encoding='utf-8') as f:
             config.write(f)
 
-        log(f"✅ Archivo de configuración básico creado en: {config_file}")
+        log(f"✅ Archivo de configuración creado en: {config_file}")
 
     except Exception as e:
-        log(f"❌ Error creando configuración básica: {e}")
+        log(f"❌ Error creando configuración: {e}")
         raise
 
 def verificar_conectividad_red(host, port):
@@ -930,29 +997,31 @@ class ConfiguracionMySQL:
         config_frame.pack(fill='x', pady=(0, 20))
 
         tk.Label(config_frame, text="Host/IP del servidor:", font=('Segoe UI', 10),
-                bg='#ffffff', fg='#2c3e50').grid(row=0, column=0, sticky="w", pady=5)
-        self.host_var = tk.StringVar(value="DESKTOP-KVJ8QQ3")
+            bg='#ffffff', fg='#2c3e50').grid(row=0, column=0, sticky="w", pady=5)
+        
+        self.host_var = tk.StringVar(value="")
         self.host_entry = tk.Entry(config_frame, textvariable=self.host_var, width=25,
-                                  font=('Segoe UI', 10))
+                                font=('Segoe UI', 10))
         self.host_entry.grid(row=0, column=1, sticky="ew", pady=5, padx=(10, 0))
 
         tk.Label(config_frame, text="Puerto:", font=('Segoe UI', 10),
                 bg='#ffffff', fg='#2c3e50').grid(row=1, column=0, sticky="w", pady=5)
-        self.puerto_var = tk.StringVar(value="3306")
+        self.puerto_var = tk.StringVar(value="3306")  # Este puede quedarse
         self.puerto_entry = tk.Entry(config_frame, textvariable=self.puerto_var, width=25,
                                     font=('Segoe UI', 10))
         self.puerto_entry.grid(row=1, column=1, sticky="ew", pady=5, padx=(10, 0))
 
         tk.Label(config_frame, text="Usuario Admin:", font=('Segoe UI', 10),
                 bg='#ffffff', fg='#2c3e50').grid(row=2, column=0, sticky="w", pady=5)
-        self.admin_user_var = tk.StringVar(value="root")
+        self.admin_user_var = tk.StringVar(value="root")  # Este puede quedarse
         self.admin_user_entry = tk.Entry(config_frame, textvariable=self.admin_user_var, width=25,
                                         font=('Segoe UI', 10))
         self.admin_user_entry.grid(row=2, column=1, sticky="ew", pady=5, padx=(10, 0))
 
         tk.Label(config_frame, text="Contraseña Admin:", font=('Segoe UI', 10),
                 bg='#ffffff', fg='#2c3e50').grid(row=3, column=0, sticky="w", pady=5)
-        self.admin_pass_var = tk.StringVar()
+       
+        self.admin_pass_var = tk.StringVar(value="")
         self.admin_pass_entry = tk.Entry(config_frame, textvariable=self.admin_pass_var,
                                         show="*", width=25, font=('Segoe UI', 10))
         self.admin_pass_entry.grid(row=3, column=1, sticky="ew", pady=5, padx=(10, 0))
@@ -1044,18 +1113,24 @@ class ConfiguracionMySQL:
                 port = int(self.puerto_var.get().strip())
                 user = self.admin_user_var.get().strip()
                 password = self.admin_pass_var.get()
-
-                if not password:
-                    self.config_window.after(0, lambda: self.connection_error("Debe ingresar la contraseña del usuario root"))
+                
+                # ✅ Validar que no estén vacíos
+                if not host:
+                    self.config_window.after(0, lambda: self.connection_error("Debe ingresar el host/IP del servidor"))
+                    return
+                
+                if not user:
+                    self.config_window.after(0, lambda: self.connection_error("Debe ingresar el usuario"))
                     return
 
-                if host.lower() in ('localhost', '127.0.0.1', ''):
-                    host = 'DESKTOP-KVJ8QQ3'
+                if not password:
+                    self.config_window.after(0, lambda: self.connection_error("Debe ingresar la contraseña"))
+                    return
 
                 log(f"Probando conexión a {user}@{host}:{port}")
 
                 if not verificar_conectividad_red(host, port):
-                    self.config_window.after(0, lambda: self.connection_error("Puerto MySQL no accesible. Verifique que MySQL esté ejecutándose."))
+                    self.config_window.after(0, lambda: self.connection_error("Puerto MySQL no accesible"))
                     return
 
                 connection = mysql.connector.connect(
@@ -1116,9 +1191,12 @@ class ConfiguracionMySQL:
         self.guardar_configuracion()
         self.aplicar_configuracion_red()
 
+        # ✅ SIN reemplazo automático
         host = self.host_var.get().strip()
-        if host.lower() in ('localhost', '127.0.0.1', ''):
-            host = 'DESKTOP-KVJ8QQ3'
+        
+        if not host:
+            messagebox.showerror("Error", "Debe ingresar un host")
+            return
 
         self.result = {
             'host': host,
@@ -1135,9 +1213,12 @@ class ConfiguracionMySQL:
     def guardar_configuracion(self):
         config = configparser.ConfigParser()
 
+        # SIN reemplazo automático
         host = self.host_var.get().strip()
-        if host.lower() in ('localhost', '127.0.0.1', ''):
-            host = 'DESKTOP-KVJ8QQ3'
+        
+        if not host:
+            messagebox.showerror("Error", "Debe ingresar un host")
+            return
 
         config['MySQL'] = {
             'host': host,
@@ -1169,7 +1250,8 @@ class ConfiguracionMySQL:
 
                 if 'MySQL' in config:
                     mysql_config = config['MySQL']
-                    self.host_var.set(mysql_config.get('host', 'DESKTOP-KVJ8QQ3'))
+                    # ✅ SIN valores por defecto hardcodeados
+                    self.host_var.set(mysql_config.get('host', ''))
                     self.puerto_var.set(mysql_config.get('port', '3306'))
                     self.admin_user_var.set(mysql_config.get('admin_user', 'root'))
                     self.admin_pass_var.set(mysql_config.get('admin_pass', ''))
@@ -1250,10 +1332,25 @@ class LoginWindow:
                     return
 
                 mysql_config = config['MySQL']
-                host = mysql_config.get('host', 'DESKTOP-KVJ8QQ3')
-                port = int(mysql_config.get('port', '3306'))
-                user = mysql_config.get('admin_user', 'root')
-                password = mysql_config.get('admin_pass', '')
+                
+                # ✅ SIN valores por defecto hardcodeados
+                host = mysql_config.get('host')
+                port_str = mysql_config.get('port')
+                user = mysql_config.get('admin_user')
+                password = mysql_config.get('admin_pass')
+                
+                # Validar que existan los valores requeridos
+                if not host or not port_str or not user:
+                    error_msg = "Configuración MySQL incompleta (falta host, port o user)"
+                    self.root.after(0, lambda: self.mostrar_configuracion_mysql(error_msg))
+                    return
+                
+                try:
+                    port = int(port_str)
+                except ValueError:
+                    error_msg = f"Puerto inválido en configuración: {port_str}"
+                    self.root.after(0, lambda: self.mostrar_configuracion_mysql(error_msg))
+                    return
 
                 log(f"Configuración cargada: {user}@{host}:{port}")
 
@@ -1322,14 +1419,53 @@ class LoginWindow:
         self.root.after(500, lambda: threading.Thread(target=verificar_conexion, daemon=True).start())
 
     def crear_config_basico(self, config_file):
-        """Crea un archivo de configuración básico si no existe"""
+        """Solicita al usuario la configuración en lugar de usar valores hardcodeados"""
         try:
+            from tkinter import simpledialog
+            
+            # Solicitar datos al usuario
+            host = simpledialog.askstring(
+                "Configuración MySQL",
+                "Ingrese el hostname o IP del servidor MySQL:",
+                initialvalue="localhost"
+            )
+            
+            if not host:
+                raise Exception("Debe ingresar un hostname")
+            
+            port = simpledialog.askinteger(
+                "Configuración MySQL",
+                "Ingrese el puerto MySQL:",
+                initialvalue=3306,
+                minvalue=1,
+                maxvalue=65535
+            )
+            
+            user = simpledialog.askstring(
+                "Configuración MySQL",
+                "Ingrese el usuario MySQL:",
+                initialvalue="root"
+            )
+            
+            if not user:
+                raise Exception("Debe ingresar un usuario")
+            
+            password = simpledialog.askstring(
+                "Configuración MySQL",
+                "Ingrese la contraseña MySQL:",
+                show='*'
+            )
+            
+            if password is None:
+                raise Exception("Debe ingresar una contraseña")
+            
+            # Crear configuración con datos del usuario
             config = configparser.ConfigParser()
             config['MySQL'] = {
-                'host': 'DESKTOP-KVJ8QQ3',
-                'port': '3306',
-                'admin_user': 'root',
-                'admin_pass': '0.5735',
+                'host': host,
+                'port': str(port or 3306),
+                'admin_user': user,
+                'admin_pass': password,
                 'bind_address': '0.0.0.0',
                 'max_connections': '100',
                 'timeout': '28800',
@@ -1343,10 +1479,10 @@ class LoginWindow:
             with open(config_file, 'w', encoding='utf-8') as f:
                 config.write(f)
 
-            log(f"✅ Archivo de configuración básico creado en: {config_file}")
+            log(f"✅ Archivo de configuración creado en: {config_file}")
 
         except Exception as e:
-            log(f"❌ Error creando configuración básica: {e}")
+            log(f"❌ Error creando configuración: {e}")
             raise
 
     def mostrar_mensaje_carga(self):
@@ -1806,12 +1942,25 @@ class LoginWindow:
 
                 if 'MySQL' in config:
                     mysql_config = config['MySQL']
-                    host = mysql_config.get('host', 'DESKTOP-KVJ8QQ3')
-                    port = int(mysql_config.get('port', '3306'))
+                    # SIN valores por defecto
+                    host = mysql_config.get('host')
+                    port_str = mysql_config.get('port')
+                    
+                    if not host or not port_str:
+                        self.root.after(0, lambda: messagebox.showerror("Error de Configuración",
+                            "Configuración MySQL incompleta"))
+                        return
+                    
+                    try:
+                        port = int(port_str)
+                    except ValueError:
+                        self.root.after(0, lambda: messagebox.showerror("Error de Configuración",
+                            f"Puerto inválido: {port_str}"))
+                        return
 
                     if not verificar_conectividad_red(host, port):
                         self.root.after(0, lambda: messagebox.showerror("Error de Conexión",
-                            "No se puede conectar al servidor MySQL.\nVerifique que esté ejecutándose y accesible."))
+                            "No se puede conectar al servidor MySQL"))
                         return
 
                 try:
