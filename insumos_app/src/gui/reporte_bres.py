@@ -827,6 +827,8 @@ class ReporteBres:
                 'movimientos_individuales': {}
             })
 
+        datos_procesados.sort(key=lambda x: x['codigo_insumo'])
+        
         return datos_procesados
 
     def calcular_promedio_demanda_real(self, insumo_ids, fecha_ini, fecha_fin):
