@@ -63,6 +63,9 @@ class ReporteBres:
         self.main_window = main_window
         self.cargar_iconos()
         self.movimientos_data = None
+        
+        self._cache_promedios = {}
+        self._cache_saldos = {}
 
         # Paleta local (solo variables, no estilos globales)
         self.COLORS = {
@@ -212,7 +215,7 @@ class ReporteBres:
 
     def generar_codigo_insumo(self, movimientos_raw):
         """
-        Genera códigos únicos basados en posición relativa dentro de cada tipo (no afecta UI).
+        Genera códigos únicos basados en posición relativa dentro de cada tipo (optimizado).
         """
         insumos_unicos = {}
         for mov in movimientos_raw:
@@ -233,57 +236,40 @@ class ReporteBres:
             cursor = conn.cursor(dictionary=True)
             insumo_ids = list(insumos_unicos.keys())
             placeholders = ','.join(['%s'] * len(insumo_ids))
-            query_principal = f"""
+            
+            # ✅ UNA SOLA CONSULTA para obtener todo
+            query_optimizada = f"""
                 SELECT 
-                  i.id as insumo_id,
-                  ti.id as tipo_id,
-                  ti.descripcion as tipo_insumo_descripcion
+                    i.id as insumo_id,
+                    ti.id as tipo_id,
+                    ti.descripcion as tipo_insumo_descripcion,
+                    ti.codigo_prefijo,
+                    (SELECT COUNT(*) FROM insumo i2 
+                    WHERE i2.id_tipo_insumo = ti.id AND i2.id <= i.id) as posicion
                 FROM insumo i
                 INNER JOIN tipo_insumo ti ON i.id_tipo_insumo = ti.id
                 WHERE i.id IN ({placeholders})
-                ORDER BY ti.descripcion, i.id
+                ORDER BY ti.id, i.id
             """
-            cursor.execute(query_principal, insumo_ids)
-            resultados_principales = cursor.fetchall()
-
-            insumos_por_tipo = {}
-            for resultado in resultados_principales:
-                insumo_id = resultado['insumo_id']
-                tipo_id = resultado['tipo_id']
-                tipo_descripcion = (resultado['tipo_insumo_descripcion'] or '').strip().upper()
-
-                if tipo_id not in insumos_por_tipo:
-                    insumos_por_tipo[tipo_id] = {
-                        'descripcion': tipo_descripcion,
-                        'insumos': []
-                    }
-                insumos_por_tipo[tipo_id]['insumos'].append(insumo_id)
+            cursor.execute(query_optimizada, insumo_ids)
+            resultados = cursor.fetchall()
 
             codigos_insumos = {}
-            for tipo_id, info_tipo in insumos_por_tipo.items():
-                tipo_descripcion = info_tipo['descripcion']
-                insumos_del_reporte = info_tipo['insumos']
-
-                cursor.execute("""
-                    SELECT i.id as insumo_id
-                    FROM insumo i
-                    WHERE i.id_tipo_insumo = %s
-                    ORDER BY i.id ASC
-                """, (tipo_id,))
-                todos_insumos_tipo = cursor.fetchall()
-
-                posicion_relativa = {}
-                for indice, insumo in enumerate(todos_insumos_tipo, 1):
-                    posicion_relativa[insumo['insumo_id']] = indice
-
-                tipo_limpio = ''.join(c for c in tipo_descripcion if c.isalnum())
-                prefijo = (tipo_limpio[:4] if len(tipo_limpio) >= 4 else (tipo_limpio + 'XXXX')[:4]).upper()
-
-                for insumo_id in insumos_del_reporte:
-                    if insumo_id in posicion_relativa:
-                        posicion = posicion_relativa[insumo_id]
-                        codigo = f"{prefijo}-{posicion:04d}"
-                        codigos_insumos[insumo_id] = codigo
+            for resultado in resultados:
+                insumo_id = resultado['insumo_id']
+                tipo_descripcion = (resultado['tipo_insumo_descripcion'] or '').strip().upper()
+                codigo_prefijo = resultado['codigo_prefijo']
+                posicion = resultado['posicion']
+                
+                # Usar codigo_prefijo de BD o generar
+                if codigo_prefijo:
+                    prefijo = codigo_prefijo
+                else:
+                    tipo_limpio = ''.join(c for c in tipo_descripcion if c.isalnum())
+                    prefijo = (tipo_limpio[:4] if len(tipo_limpio) >= 4 else (tipo_limpio + 'XXXX')[:4]).upper()
+                
+                codigo = f"{prefijo}-{posicion:04d}"
+                codigos_insumos[insumo_id] = codigo
 
             conn.close()
             return codigos_insumos
@@ -307,8 +293,25 @@ class ReporteBres:
 
     def _obtener_saldo_corte_bd(self, fecha_corte_dt, contexto, insumo_id):
         """
-        Calcula saldo acumulado hasta fecha_corte_dt CON filtros de ubicación
+        Calcula saldo acumulado hasta fecha_corte_dt CON filtros de ubicación (optimizado con cache)
         """
+        # ✅ Verificar cache primero
+        cache_key = (
+            fecha_corte_dt.strftime('%Y-%m-%d'),
+            insumo_id,
+            contexto.get('presentacion'),
+            contexto.get('area'),
+            contexto.get('distrito'),
+            contexto.get('tipo_servicio'),
+            contexto.get('servicio')
+        )
+        
+        if not hasattr(self, '_cache_saldos'):
+            self._cache_saldos = {}
+        
+        if cache_key in self._cache_saldos:
+            return self._cache_saldos[cache_key]
+        
         try:
             conn = conectar_db()
             if not conn:
@@ -371,6 +374,9 @@ class ReporteBres:
             cur.execute(sql, params)
             row = cur.fetchone()
             saldo = float(row['saldo'] or 0.0)
+            
+            # ✅ Guardar en cache
+            self._cache_saldos[cache_key] = saldo
             
             cur.close()
             conn.close()
@@ -465,8 +471,7 @@ class ReporteBres:
             
     def _obtener_insumos_con_saldo(self, fecha_corte_dt, contexto):
         """
-        Devuelve una lista de insumo_ids que tienen saldo (existencia > 0) 
-        al cierre de 'fecha_corte_dt' para el contexto dado.
+        Devuelve insumos con saldo > 0 al cierre (optimizado en batch - PRE-CACHEA saldos)
         """
         try:
             conn = conectar_db()
@@ -477,39 +482,93 @@ class ReporteBres:
             filtros = []
             params_ctx = []
 
-            sql_base = """
-                SELECT DISTINCT i.id as insumo_id
+            # Filtros de insumo
+            where_insumo = ""
+            if contexto.get('tipo_insumo'):
+                filtros.append("ti.descripcion = %s")
+                params_ctx.append(contexto['tipo_insumo'])
+            if contexto.get('insumo'):
+                filtros.append("i.nombre = %s")
+                params_ctx.append(contexto['insumo'])
+            if contexto.get('presentacion'):
+                filtros.append("p.nombre = %s")
+                params_ctx.append(contexto['presentacion'])
+            
+            if filtros:
+                where_insumo = " AND " + " AND ".join(filtros)
+
+            # Filtros de ubicación
+            filtros_ubicacion = []
+            params_ubicacion = []
+            
+            if contexto.get('area'):
+                filtros_ubicacion.append("a.nombre = %s")
+                params_ubicacion.append(contexto['area'])
+            if contexto.get('distrito'):
+                filtros_ubicacion.append("d.nombre = %s")
+                params_ubicacion.append(contexto['distrito'])
+            if contexto.get('tipo_servicio'):
+                filtros_ubicacion.append("ts.nombre = %s")
+                params_ubicacion.append(contexto['tipo_servicio'])
+            if contexto.get('servicio'):
+                filtros_ubicacion.append("s.nombre = %s")
+                params_ubicacion.append(contexto['servicio'])
+            
+            where_ubicacion = (" AND " + " AND ".join(filtros_ubicacion)) if filtros_ubicacion else ""
+
+            # ✅ UNA SOLA CONSULTA para calcular todos los saldos
+            sql = f"""
+                SELECT 
+                    i.id as insumo_id,
+                    COALESCE(SUM(
+                        CASE
+                            WHEN tm.descripcion IN ('INVENTARIO INICIAL', 'ENTRADA NIVEL SUPERIOR', 'REAJUSTE (+)')
+                                THEN m.cantidad
+                            WHEN tm.descripcion IN ('SALIDA NIVEL INFERIOR', 'REAJUSTE (-)', 'ENTREGADO')
+                                THEN -m.cantidad
+                            ELSE 0
+                        END
+                    ), 0) AS saldo
                 FROM insumo i
                 INNER JOIN tipo_insumo ti ON i.id_tipo_insumo = ti.id
                 LEFT JOIN insumo_presentacion ip ON ip.insumo_id = i.id
                 LEFT JOIN presentacion p ON p.id = ip.presentacion_id
-                WHERE 1=1
+                LEFT JOIN movimiento m ON m.insumo_id = i.id AND DATE(m.fecha_registro) <= %s
+                LEFT JOIN tipo_movimiento tm ON m.tipo_movimiento_id = tm.id
+                LEFT JOIN area a ON a.id = m.area_id
+                LEFT JOIN distrito d ON d.id = m.distrito_id
+                LEFT JOIN servicio s ON s.id = m.servicio_id
+                LEFT JOIN tipo_servicio ts ON ts.id = s.id_tipo_servicio
+                WHERE 1=1 {where_insumo} {where_ubicacion}
+                GROUP BY i.id
+                HAVING saldo > 0
             """
 
-            if contexto.get('tipo_insumo'):
-                filtros.append("ti.descripcion = %s")
-                params_ctx.append(contexto['tipo_insumo'])
+            params = [fecha_corte_dt.strftime('%Y-%m-%d')] + params_ctx + params_ubicacion
+            cur.execute(sql, params)
+            resultados = cur.fetchall()
             
-            if contexto.get('insumo'):
-                filtros.append("i.nombre = %s")
-                params_ctx.append(contexto['insumo'])
+            insumos_con_saldo = [row['insumo_id'] for row in resultados]
             
-            if contexto.get('presentacion'):
-                filtros.append("p.nombre = %s")
-                params_ctx.append(contexto['presentacion'])
-
-            if filtros:
-                sql_base += " AND " + " AND ".join(filtros)
-
-            cur.execute(sql_base, params_ctx)
-            todos_insumos = cur.fetchall()
+            # ✅ PRE-CACHEAR los saldos calculados para evitar recalcularlos después
+            if not hasattr(self, '_cache_saldos'):
+                self._cache_saldos = {}
             
-            insumos_con_saldo = []
-            for row in todos_insumos:
+            cache_key_base = (
+                fecha_corte_dt.strftime('%Y-%m-%d'),
+                contexto.get('presentacion'),
+                contexto.get('area'),
+                contexto.get('distrito'),
+                contexto.get('tipo_servicio'),
+                contexto.get('servicio')
+            )
+            
+            for row in resultados:
                 insumo_id = row['insumo_id']
-                saldo = self._obtener_saldo_corte_bd(fecha_corte_dt, contexto, insumo_id)
-                if saldo > 0:
-                    insumos_con_saldo.append(insumo_id)
+                saldo = float(row['saldo'] or 0.0)
+                cache_key = (cache_key_base[0], insumo_id, cache_key_base[1], 
+                            cache_key_base[2], cache_key_base[3], cache_key_base[4], cache_key_base[5])
+                self._cache_saldos[cache_key] = saldo
             
             cur.close()
             conn.close()
@@ -520,6 +579,138 @@ class ReporteBres:
             import traceback
             traceback.print_exc()
             return []
+    
+    def _obtener_saldos_batch(self, fecha_corte_dt, contexto, lista_insumo_ids):
+        """
+        Calcula saldos para múltiples insumos en UNA SOLA consulta (SÚPER RÁPIDO para BRES)
+        """
+        if not lista_insumo_ids:
+            return {}
+        
+        # ✅ Verificar cache primero
+        if not hasattr(self, '_cache_saldos'):
+            self._cache_saldos = {}
+        
+        cache_key_base = (
+            fecha_corte_dt.strftime('%Y-%m-%d'),
+            contexto.get('presentacion'),
+            contexto.get('area'),
+            contexto.get('distrito'),
+            contexto.get('tipo_servicio'),
+            contexto.get('servicio')
+        )
+        
+        # Ver cuáles ya están en cache
+        resultados = {}
+        insumos_faltantes = []
+        
+        for iid in lista_insumo_ids:
+            cache_key = (cache_key_base[0], iid, cache_key_base[1], 
+                        cache_key_base[2], cache_key_base[3], cache_key_base[4], cache_key_base[5])
+            if cache_key in self._cache_saldos:
+                resultados[iid] = self._cache_saldos[cache_key]
+            else:
+                insumos_faltantes.append(iid)
+        
+        # Si todos están en cache, retornar
+        if not insumos_faltantes:
+            return resultados
+        
+        try:
+            conn = conectar_db()
+            if not conn:
+                # Devolver al menos los que teníamos en cache
+                for iid in insumos_faltantes:
+                    resultados[iid] = 0.0
+                return resultados
+            
+            cur = conn.cursor(dictionary=True)
+
+            placeholders = ','.join(['%s'] * len(insumos_faltantes))
+            params = [fecha_corte_dt.strftime('%Y-%m-%d')] + list(insumos_faltantes)
+
+            # Construir filtros opcionales
+            filtros = []
+            if contexto.get('presentacion'):
+                filtros.append("p.nombre = %s")
+                params.append(contexto['presentacion'])
+            if contexto.get('area'):
+                filtros.append("a.nombre = %s")
+                params.append(contexto['area'])
+            if contexto.get('distrito'):
+                filtros.append("d.nombre = %s")
+                params.append(contexto['distrito'])
+            if contexto.get('tipo_servicio'):
+                filtros.append("ts.nombre = %s")
+                params.append(contexto['tipo_servicio'])
+            if contexto.get('servicio'):
+                filtros.append("s.nombre = %s")
+                params.append(contexto['servicio'])
+
+            where_ctx = (" AND " + " AND ".join(filtros)) if filtros else ""
+
+            # ✅ UNA SOLA CONSULTA para todos los insumos faltantes
+            sql = f"""
+                SELECT
+                    m.insumo_id,
+                    COALESCE(SUM(
+                        CASE
+                            WHEN tm.descripcion IN ('INVENTARIO INICIAL', 'ENTRADA NIVEL SUPERIOR', 'REAJUSTE (+)')
+                                THEN m.cantidad
+                            WHEN tm.descripcion IN ('SALIDA NIVEL INFERIOR', 'REAJUSTE (-)', 'ENTREGADO')
+                                THEN -m.cantidad
+                            ELSE 0
+                        END
+                    ), 0) AS saldo
+                FROM movimiento m
+                INNER JOIN tipo_movimiento tm ON m.tipo_movimiento_id = tm.id
+                INNER JOIN insumo i ON i.id = m.insumo_id
+                LEFT JOIN insumo_presentacion ip ON ip.insumo_id = i.id
+                LEFT JOIN presentacion p ON p.id = ip.presentacion_id
+                LEFT JOIN area a ON a.id = m.area_id
+                LEFT JOIN distrito d ON d.id = m.distrito_id
+                LEFT JOIN servicio s ON s.id = m.servicio_id
+                LEFT JOIN tipo_servicio ts ON ts.id = s.id_tipo_servicio
+                WHERE DATE(m.fecha_registro) <= %s
+                AND m.insumo_id IN ({placeholders})
+                {where_ctx}
+                GROUP BY m.insumo_id
+            """
+
+            cur.execute(sql, params)
+            rows = cur.fetchall()
+            
+            # Procesar resultados y cachear
+            for row in rows:
+                iid = row['insumo_id']
+                saldo = float(row['saldo'] or 0.0)
+                resultados[iid] = saldo
+                
+                # Guardar en cache
+                cache_key = (cache_key_base[0], iid, cache_key_base[1], 
+                            cache_key_base[2], cache_key_base[3], cache_key_base[4], cache_key_base[5])
+                self._cache_saldos[cache_key] = saldo
+            
+            # Agregar 0.0 para insumos sin movimientos
+            for iid in insumos_faltantes:
+                if iid not in resultados:
+                    resultados[iid] = 0.0
+                    cache_key = (cache_key_base[0], iid, cache_key_base[1], 
+                                cache_key_base[2], cache_key_base[3], cache_key_base[4], cache_key_base[5])
+                    self._cache_saldos[cache_key] = 0.0
+            
+            cur.close()
+            conn.close()
+            return resultados
+            
+        except Exception as e:
+            print(f"ERROR obteniendo saldos batch BRES: {e}")
+            import traceback
+            traceback.print_exc()
+            # Retornar al menos lo que teníamos
+            for iid in insumos_faltantes:
+                resultados[iid] = 0.0
+            return resultados
     
     def _formatear_periodo_logistico(self, fecha_ini, fecha_fin):
         """
@@ -834,6 +1025,15 @@ class ReporteBres:
     def calcular_promedio_demanda_real(self, insumo_ids, fecha_ini, fecha_fin):
         if not insumo_ids:
             return {}
+        
+        # ✅ Verificar cache
+        cache_key = (tuple(sorted(insumo_ids)), fecha_ini, fecha_fin, 
+                    self.combo_area.get(), self.combo_distrito.get(),
+                    self.combo_tipo_servicio.get(), self.combo_servicio.get())
+        
+        if cache_key in self._cache_promedios:
+            return self._cache_promedios[cache_key]
+        
         try:
             conn = conectar_db()
             if not conn:
@@ -848,38 +1048,62 @@ class ReporteBres:
             servicio_sel = self.combo_servicio.get().strip() or None
 
             placeholders = ','.join(['%s'] * len(insumo_ids))
+            
+            # ✅ Simplificar consulta - evitar joins innecesarios
             query = f"""
                 SELECT 
-                  m.insumo_id,
-                  YEAR(m.fecha_registro) as anio,
-                  MONTH(m.fecha_registro) as mes,
-                  SUM(m.cantidad) as demanda_mes
+                m.insumo_id,
+                YEAR(m.fecha_registro) as anio,
+                MONTH(m.fecha_registro) as mes,
+                SUM(m.cantidad) as demanda_mes
                 FROM movimiento m
                 INNER JOIN tipo_movimiento tm ON m.tipo_movimiento_id = tm.id
-                LEFT JOIN area a_directa ON m.area_id = a_directa.id
-                LEFT JOIN distrito d_directa ON m.distrito_id = d_directa.id  
-                LEFT JOIN servicio s_directa ON m.servicio_id = s_directa.id
-                LEFT JOIN tipo_servicio ts_directa ON s_directa.id_tipo_servicio = ts_directa.id
                 WHERE m.insumo_id IN ({placeholders})
-                  AND m.fecha_registro BETWEEN %s AND %s
-                  AND tm.descripcion IN ('ENTREGADO', 'NO ENTREGADO')
+                AND m.fecha_registro BETWEEN %s AND %s
+                AND tm.descripcion IN ('ENTREGADO', 'NO ENTREGADO')
             """
             params = list(insumo_ids) + [fecha_inicio_calculo.strftime('%Y-%m-%d'), fecha_fin.strftime('%Y-%m-%d')]
 
+            # Agregar filtros de ubicación solo si están seleccionados
             if servicio_sel:
-                query += " AND a_directa.nombre = %s AND d_directa.nombre = %s AND s_directa.nombre = %s"
+                query += """
+                    AND EXISTS (
+                        SELECT 1 FROM area a, distrito d, servicio s
+                        WHERE m.area_id = a.id AND m.distrito_id = d.id AND m.servicio_id = s.id
+                        AND a.nombre = %s AND d.nombre = %s AND s.nombre = %s
+                    )
+                """
                 params.extend([area_sel, distrito_sel, servicio_sel])
             elif tipo_serv_sel:
-                query += " AND a_directa.nombre = %s AND d_directa.nombre = %s AND ts_directa.descripcion = %s"
+                query += """
+                    AND EXISTS (
+                        SELECT 1 FROM area a, distrito d, servicio s, tipo_servicio ts
+                        WHERE m.area_id = a.id AND m.distrito_id = d.id AND m.servicio_id = s.id
+                        AND s.id_tipo_servicio = ts.id
+                        AND a.nombre = %s AND d.nombre = %s AND ts.descripcion = %s
+                    )
+                """
                 params.extend([area_sel, distrito_sel, tipo_serv_sel])
             elif distrito_sel:
-                query += " AND a_directa.nombre = %s AND (d_directa.nombre = %s OR s_directa.id IN (SELECT s.id FROM servicio s INNER JOIN tipo_servicio ts ON s.id_tipo_servicio = ts.id INNER JOIN distrito d ON ts.id_distrito = d.id WHERE d.nombre = %s))"
-                params.extend([area_sel, distrito_sel, distrito_sel])
+                query += """
+                    AND EXISTS (
+                        SELECT 1 FROM area a, distrito d
+                        WHERE m.area_id = a.id AND m.distrito_id = d.id
+                        AND a.nombre = %s AND d.nombre = %s
+                    )
+                """
+                params.extend([area_sel, distrito_sel])
             elif area_sel:
-                query += " AND (a_directa.nombre = %s OR d_directa.id IN (SELECT d.id FROM distrito d INNER JOIN area a ON d.id_area = a.id WHERE a.nombre = %s) OR s_directa.id IN (SELECT s.id FROM servicio s INNER JOIN tipo_servicio ts ON s.id_tipo_servicio = ts.id INNER JOIN distrito d ON ts.id_distrito = d.id INNER JOIN area a ON d.id_area = a.id WHERE a.nombre = %s))"
-                params.extend([area_sel, area_sel, area_sel])
+                query += """
+                    AND EXISTS (
+                        SELECT 1 FROM area a
+                        WHERE m.area_id = a.id AND a.nombre = %s
+                    )
+                """
+                params.append(area_sel)
 
             query += " GROUP BY m.insumo_id, YEAR(m.fecha_registro), MONTH(m.fecha_registro)"
+            
             cursor.execute(query, params)
             resultados = cursor.fetchall()
             conn.close()
@@ -899,7 +1123,11 @@ class ReporteBres:
                     promedios[ins] = round(prom, 2)
                 else:
                     promedios[ins] = 0.0
+            
+            # ✅ Guardar en cache
+            self._cache_promedios[cache_key] = promedios
             return promedios
+            
         except Exception as e:
             print(f"DEBUG OPTIMIZED: Error calculando promedios batch: {e}")
             import traceback
@@ -1481,10 +1709,12 @@ class ReporteBres:
                 messagebox.showinfo("Info", "No hay datos para mostrar")
                 return
 
-            # Calcular saldo anterior para todos los insumos
-            self.saldo_anterior_por_insumo = {}
-            for iid in todos_los_insumos:
-                self.saldo_anterior_por_insumo[iid] = self._obtener_saldo_corte_bd(fecha_corte_anterior, contexto, iid)
+            # Calcular saldo anterior para TODOS los insumos en UNA SOLA consulta batch
+            self.saldo_anterior_por_insumo = self._obtener_saldos_batch(
+                fecha_corte_anterior, 
+                contexto, 
+                list(todos_los_insumos)
+            )
 
             # Procesar datos con todos los insumos (incluso sin movimientos nuevos)
             self.movimientos_data = self.procesar_datos_bres(movimientos_raw, fecha_ini, fecha_fin, todos_los_insumos)
@@ -2177,22 +2407,37 @@ class ReporteBres:
             return
 
         try:
+            # ✅ Limpiar TODOS los caches
+            if hasattr(self, '_cache_promedios'):
+                self._cache_promedios.clear()
+            
+            if hasattr(self, '_cache_saldos'):
+                self._cache_saldos.clear()
+            
+            # ✅ Limpiar saldo anterior por insumo
+            if hasattr(self, 'saldo_anterior_por_insumo'):
+                self.saldo_anterior_por_insumo.clear()
+            
+            # Eliminar PDF temporal
             if hasattr(self, 'temp_pdf_path') and os.path.exists(self.temp_pdf_path):
                 try:
                     os.remove(self.temp_pdf_path)
                 except Exception:
                     pass
 
+            # Desvincular eventos del canvas
             try:
                 if hasattr(self, "canvas"):
                     self.canvas.unbind_all("<MouseWheel>")
             except Exception:
                 pass
 
+            # Destruir widgets del parent
             if hasattr(self, 'parent') and self.parent:
                 for widget in self.parent.winfo_children():
                     widget.destroy()
 
+            # Mostrar pantalla de bienvenida
             if hasattr(self, "main_window") and self.main_window:
                 self.main_window.show_welcome_screen()
 

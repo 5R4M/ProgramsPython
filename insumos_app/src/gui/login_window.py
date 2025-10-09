@@ -32,12 +32,18 @@ def get_executable_dir():
         current_dir = os.path.dirname(os.path.abspath(__file__))
         return current_dir
 
-def get_config_path(filename):
-    """Siempre apunta al lado del ejecutable en modo frozen; en desarrollo al lado del script (src/gui)."""
+def get_config_path(filename="mysql_config.ini"):
+    """
+    UNA ÚNICA ubicación para el archivo de configuración:
+    - Desarrollo: src/gui/
+    - Ejecutable: junto al .exe
+    """
     if getattr(sys, 'frozen', False):
+        # Ejecutable: junto al .exe
         exe_dir = os.path.dirname(os.path.abspath(sys.executable))
         return os.path.join(exe_dir, filename)
     else:
+        # Desarrollo: src/gui/ (donde está login_window.py)
         script_dir = os.path.dirname(os.path.abspath(__file__))
         return os.path.join(script_dir, filename)
 

@@ -16,14 +16,22 @@ def resource_path(relative_path):
     return os.path.join(base_path, relative_path)
 
 def get_config_path(filename="mysql_config.ini"):
-    """Devuelve la ruta del archivo de configuración junto al ejecutable (PyInstaller) o junto al script en desarrollo."""
+    """
+    MISMA ubicación que login_window.py:
+    - Desarrollo: src/gui/
+    - Ejecutable: junto al .exe
+    """
     if getattr(sys, 'frozen', False):
+        # Ejecutable: junto al .exe
         exe_dir = os.path.dirname(os.path.abspath(sys.executable))
         return os.path.join(exe_dir, filename)
     else:
-        script_dir = os.path.dirname(os.path.abspath(__file__))
-        return os.path.join(script_dir, filename)
-
+        # Desarrollo: ir a src/gui/
+        script_dir = os.path.dirname(os.path.abspath(__file__))  # src/database/
+        src_dir = os.path.dirname(script_dir)                     # src/
+        gui_dir = os.path.join(src_dir, 'gui')                    # src/gui/
+        return os.path.join(gui_dir, filename)
+    
 def resolver_hostname_a_ip(hostname):
     """Resuelve un hostname a dirección IP"""
     try:
