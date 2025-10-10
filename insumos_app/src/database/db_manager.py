@@ -2330,8 +2330,7 @@ def obtener_movimientos_balance(fecha_inicio, fecha_fin, area_nombre=None, distr
 
 def obtener_saldo_corte_logistico(fecha_corte, contexto, insumo_id=None):
     """
-    Calcula el saldo acumulado hasta la fecha de corte (25 del mes anterior)
-    para un insumo específico o todos los insumos según el contexto de filtros aplicado
+    Calcula el saldo acumulado hasta la fecha de corte (OPTIMIZADO)
     """
     conn = conectar_db()
     if not conn:
@@ -2340,131 +2339,106 @@ def obtener_saldo_corte_logistico(fecha_corte, contexto, insumo_id=None):
     try:
         cursor = conn.cursor(dictionary=True)
         
-        # Construir filtros según el contexto
         filtros = ["DATE(m.fecha_registro) <= %s"]
         params = [fecha_corte.strftime('%Y-%m-%d')]
         
-        # Filtro específico por insumo_id si se proporciona
         if insumo_id is not None:
             filtros.append("m.insumo_id = %s")
             params.append(insumo_id)
         
-        # Filtros de ubicación
+        # Filtros optimizados
         if contexto.get('servicio'):
-            filtros.append("s.nombre = %s")
+            filtros.append("m.servicio_id = (SELECT id FROM servicio WHERE nombre = %s LIMIT 1)")
             params.append(contexto['servicio'])
         elif contexto.get('tipo_servicio'):
-            filtros.append("ts.descripcion = %s")
+            filtros.append("m.servicio_id IN (SELECT s.id FROM servicio s INNER JOIN tipo_servicio ts ON s.id_tipo_servicio = ts.id WHERE ts.descripcion = %s)")
             params.append(contexto['tipo_servicio'])
         elif contexto.get('distrito'):
-            filtros.append("d.nombre = %s")
+            filtros.append("m.distrito_id = (SELECT id FROM distrito WHERE nombre = %s LIMIT 1)")
             params.append(contexto['distrito'])
         elif contexto.get('area'):
-            filtros.append("a.nombre = %s")
+            filtros.append("m.area_id = (SELECT id FROM area WHERE nombre = %s LIMIT 1)")
             params.append(contexto['area'])
         
-        # Filtros de insumo (solo si no se especificó insumo_id)
         if not insumo_id:
             if contexto.get('tipo_insumo'):
-                filtros.append("ti.descripcion = %s")
+                filtros.append("m.insumo_id IN (SELECT i.id FROM insumo i INNER JOIN tipo_insumo ti ON i.id_tipo_insumo = ti.id WHERE ti.descripcion = %s)")
                 params.append(contexto['tipo_insumo'])
             
             if contexto.get('insumo'):
-                filtros.append("i.nombre = %s")
+                filtros.append("m.insumo_id = (SELECT id FROM insumo WHERE nombre = %s LIMIT 1)")
                 params.append(contexto['insumo'])
             
             if contexto.get('presentacion'):
-                filtros.append("p.nombre = %s")
+                filtros.append("m.insumo_id IN (SELECT ip.insumo_id FROM insumo_presentacion ip INNER JOIN presentacion p ON ip.presentacion_id = p.id WHERE p.nombre = %s)")
                 params.append(contexto['presentacion'])
         
         where_clause = " AND ".join(filtros)
         
-        # Si se solicita un insumo específico, devolver solo su saldo
         if insumo_id is not None:
             query = f"""
                 SELECT 
                     COALESCE(SUM(
                         CASE
-                            WHEN tm.descripcion IN ('INVENTARIO INICIAL', 'ENTRADA NIVEL SUPERIOR', 'REAJUSTE (+)')
-                                THEN m.cantidad
-                            WHEN tm.descripcion IN ('SALIDA NIVEL INFERIOR', 'REAJUSTE (-)', 'ENTREGADO')
-                                THEN -m.cantidad
+                            WHEN m.tipo_movimiento_id IN (
+                                SELECT id FROM tipo_movimiento 
+                                WHERE descripcion IN ('INVENTARIO INICIAL', 'ENTRADA NIVEL SUPERIOR', 'REAJUSTE (+)')
+                            ) THEN m.cantidad
+                            WHEN m.tipo_movimiento_id IN (
+                                SELECT id FROM tipo_movimiento 
+                                WHERE descripcion IN ('SALIDA NIVEL INFERIOR', 'REAJUSTE (-)', 'ENTREGADO')
+                            ) THEN -m.cantidad
                             ELSE 0
                         END
                     ), 0) AS saldo
                 FROM movimiento m
-                INNER JOIN tipo_movimiento tm ON m.tipo_movimiento_id = tm.id
-                INNER JOIN insumo i ON m.insumo_id = i.id
-                INNER JOIN tipo_insumo ti ON i.id_tipo_insumo = ti.id
-                LEFT JOIN area a ON m.area_id = a.id
-                LEFT JOIN distrito d ON m.distrito_id = d.id
-                LEFT JOIN servicio s ON m.servicio_id = s.id
-                LEFT JOIN tipo_servicio ts ON s.id_tipo_servicio = ts.id
-                LEFT JOIN insumo_presentacion ip ON i.id = ip.insumo_id
-                LEFT JOIN presentacion p ON ip.presentacion_id = p.id
                 WHERE {where_clause}
             """            
             cursor.execute(query, params)
             resultado = cursor.fetchone()
-            saldo = float(resultado['saldo']) if resultado else 0.0
-            
-            return saldo
-        
-        # Si no se especifica insumo_id, devolver diccionario con todos los saldos
+            return float(resultado['saldo']) if resultado else 0.0
         else:
             query = f"""
                 SELECT 
                     m.insumo_id,
-                    i.nombre AS nombre_insumo,
                     COALESCE(SUM(
                         CASE
-                            WHEN tm.descripcion IN ('INVENTARIO INICIAL', 'ENTRADA NIVEL SUPERIOR', 'REAJUSTE (+)')
-                                THEN m.cantidad
-                            WHEN tm.descripcion IN ('SALIDA NIVEL INFERIOR', 'REAJUSTE (-)', 'ENTREGADO')
-                                THEN -m.cantidad
+                            WHEN m.tipo_movimiento_id IN (
+                                SELECT id FROM tipo_movimiento 
+                                WHERE descripcion IN ('INVENTARIO INICIAL', 'ENTRADA NIVEL SUPERIOR', 'REAJUSTE (+)')
+                            ) THEN m.cantidad
+                            WHEN m.tipo_movimiento_id IN (
+                                SELECT id FROM tipo_movimiento 
+                                WHERE descripcion IN ('SALIDA NIVEL INFERIOR', 'REAJUSTE (-)', 'ENTREGADO')
+                            ) THEN -m.cantidad
                             ELSE 0
                         END
                     ), 0) AS saldo
                 FROM movimiento m
-                INNER JOIN tipo_movimiento tm ON m.tipo_movimiento_id = tm.id
-                INNER JOIN insumo i ON m.insumo_id = i.id
-                INNER JOIN tipo_insumo ti ON i.id_tipo_insumo = ti.id
-                LEFT JOIN area a ON m.area_id = a.id
-                LEFT JOIN distrito d ON m.distrito_id = d.id
-                LEFT JOIN servicio s ON m.servicio_id = s.id
-                LEFT JOIN tipo_servicio ts ON s.id_tipo_servicio = ts.id
-                LEFT JOIN insumo_presentacion ip ON i.id = ip.insumo_id
-                LEFT JOIN presentacion p ON ip.presentacion_id = p.id
                 WHERE {where_clause}
-                GROUP BY m.insumo_id, i.nombre
+                GROUP BY m.insumo_id
                 HAVING saldo > 0
             """
             
             cursor.execute(query, params)
             resultados = cursor.fetchall()
             
-            # Convertir a diccionario {insumo_id: saldo}
-            saldos = {}
-            for row in resultados:
-                insumo_id_row = row['insumo_id']
-                saldo = float(row['saldo']) if row['saldo'] else 0
-                saldos[insumo_id_row] = saldo
-            
-            print(f"✅ Saldos calculados para {len(saldos)} insumos al {fecha_corte.strftime('%Y-%m-%d')}")
+            saldos = {row['insumo_id']: float(row['saldo'] or 0) for row in resultados}
+            print(f"✅ Saldos para {len(saldos)} insumos al {fecha_corte.strftime('%Y-%m-%d')}")
             return saldos
         
     except Exception as e:
-        print(f"ERROR obteniendo saldo corte BRES: {e}")
+        print(f"ERROR obteniendo saldo corte: {e}")
         import traceback
         traceback.print_exc()
         return 0.0 if insumo_id else {}
     finally:
         cursor.close()
         conn.close()
-
+        
 def obtener_insumos_con_saldo(fecha_corte, contexto):
     """
-    Obtiene todos los insumos que tienen saldo hasta la fecha de corte
+    Obtiene todos los insumos que tienen saldo hasta la fecha de corte (OPTIMIZADO)
     """
     conn = conectar_db()
     if not conn:
@@ -2476,56 +2450,52 @@ def obtener_insumos_con_saldo(fecha_corte, contexto):
         filtros = ["DATE(m.fecha_registro) <= %s"]
         params = [fecha_corte.strftime('%Y-%m-%d')]
         
-        # Filtros de ubicación usando las columnas directas del movimiento
+        # Filtros de ubicación
         if contexto.get('servicio'):
-            filtros.append("s.nombre = %s")
+            filtros.append("m.servicio_id = (SELECT id FROM servicio WHERE nombre = %s LIMIT 1)")
             params.append(contexto['servicio'])
         elif contexto.get('tipo_servicio'):
-            filtros.append("ts.descripcion = %s")
+            filtros.append("m.servicio_id IN (SELECT s.id FROM servicio s INNER JOIN tipo_servicio ts ON s.id_tipo_servicio = ts.id WHERE ts.descripcion = %s)")
             params.append(contexto['tipo_servicio'])
         elif contexto.get('distrito'):
-            filtros.append("d.nombre = %s")
+            filtros.append("m.distrito_id = (SELECT id FROM distrito WHERE nombre = %s LIMIT 1)")
             params.append(contexto['distrito'])
         elif contexto.get('area'):
-            filtros.append("a.nombre = %s")
+            filtros.append("m.area_id = (SELECT id FROM area WHERE nombre = %s LIMIT 1)")
             params.append(contexto['area'])
         
         if contexto.get('tipo_insumo'):
-            filtros.append("ti.descripcion = %s")
+            filtros.append("m.insumo_id IN (SELECT i.id FROM insumo i INNER JOIN tipo_insumo ti ON i.id_tipo_insumo = ti.id WHERE ti.descripcion = %s)")
             params.append(contexto['tipo_insumo'])
         
         if contexto.get('insumo'):
-            filtros.append("i.nombre = %s")
+            filtros.append("m.insumo_id = (SELECT id FROM insumo WHERE nombre = %s LIMIT 1)")
             params.append(contexto['insumo'])
         
         if contexto.get('presentacion'):
-            filtros.append("p.nombre = %s")
+            filtros.append("m.insumo_id IN (SELECT ip.insumo_id FROM insumo_presentacion ip INNER JOIN presentacion p ON ip.presentacion_id = p.id WHERE p.nombre = %s)")
             params.append(contexto['presentacion'])
         
         where_clause = " AND ".join(filtros)
         
+        # Query optimizada sin JOINs innecesarios
         query = f"""
             SELECT 
                 m.insumo_id,
                 SUM(
                     CASE
-                        WHEN tm.descripcion IN ('INVENTARIO INICIAL', 'ENTRADA NIVEL SUPERIOR', 'REAJUSTE (+)')
-                            THEN m.cantidad
-                        WHEN tm.descripcion IN ('SALIDA NIVEL INFERIOR', 'REAJUSTE (-)', 'ENTREGADO')
-                            THEN -m.cantidad
+                        WHEN m.tipo_movimiento_id IN (
+                            SELECT id FROM tipo_movimiento 
+                            WHERE descripcion IN ('INVENTARIO INICIAL', 'ENTRADA NIVEL SUPERIOR', 'REAJUSTE (+)')
+                        ) THEN m.cantidad
+                        WHEN m.tipo_movimiento_id IN (
+                            SELECT id FROM tipo_movimiento 
+                            WHERE descripcion IN ('SALIDA NIVEL INFERIOR', 'REAJUSTE (-)', 'ENTREGADO')
+                        ) THEN -m.cantidad
                         ELSE 0
                     END
                 ) AS saldo
             FROM movimiento m
-            INNER JOIN tipo_movimiento tm ON m.tipo_movimiento_id = tm.id
-            INNER JOIN insumo i ON i.id = m.insumo_id
-            INNER JOIN tipo_insumo ti ON ti.id = i.id_tipo_insumo
-            LEFT JOIN area a ON m.area_id = a.id
-            LEFT JOIN distrito d ON m.distrito_id = d.id
-            LEFT JOIN servicio s ON m.servicio_id = s.id
-            LEFT JOIN tipo_servicio ts ON s.id_tipo_servicio = ts.id
-            LEFT JOIN insumo_presentacion ip ON i.id = ip.insumo_id
-            LEFT JOIN presentacion p ON ip.presentacion_id = p.id
             WHERE {where_clause}
             GROUP BY m.insumo_id
             HAVING saldo > 0
@@ -2535,11 +2505,11 @@ def obtener_insumos_con_saldo(fecha_corte, contexto):
         resultados = cursor.fetchall()
         
         insumos_con_saldo = [row['insumo_id'] for row in resultados]
-                
+        
         return insumos_con_saldo
         
     except Exception as e:
-        print(f"ERROR obteniendo insumos con saldo BRES: {e}")
+        print(f"ERROR obteniendo insumos con saldo: {e}")
         import traceback
         traceback.print_exc()
         return []

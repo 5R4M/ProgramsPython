@@ -637,46 +637,40 @@ class ReporteDemandaReal:
   
     def generar_codigo_insumo(self, movimientos):
         """
-        Genera códigos únicos para cada insumo con numeración consecutiva por tipo de insumo.
-        Ejemplo: LIBR-0001, LIBR-0002, LIBR-0003 para Librería
-                LIMP-0001, LIMP-0002 para Limpieza
+        Genera códigos únicos para cada insumo (OPTIMIZADO)
         """
         from src.database.db_manager import conectar_db
         
         codigos = {}
         insumo_ids = set()
         
-        # Si movimientos es una lista de IDs (enteros)
         if movimientos and isinstance(movimientos[0], int):
             insumo_ids = set(movimientos)
         else:
-            # Si es una lista de diccionarios (movimientos)
             for mov in movimientos:
                 insumo_id_raw = mov.get('codigo_insumo') or mov.get('insumo_id') or mov.get('codigo')
                 if insumo_id_raw is not None:
                     try:
-                        insumo_id = int(str(insumo_id_raw).strip())
-                        insumo_ids.add(insumo_id)
+                        insumo_ids.add(int(str(insumo_id_raw).strip()))
                     except:
                         pass
         
         if not insumo_ids:
             return codigos
         
-        # Obtener información de todos los insumos ORDENADOS por tipo y luego por ID
         conn = conectar_db()
         if conn:
             try:
                 cursor = conn.cursor(dictionary=True)
                 
-                # Obtener todos los insumos con su tipo, ordenados por tipo_insumo y luego por id
+                # Query optimizada con una sola consulta
                 placeholders = ','.join(['%s'] * len(insumo_ids))
                 query = f"""
                     SELECT 
                         i.id,
                         i.id_tipo_insumo,
-                        ti.codigo_prefijo,
-                        ti.descripcion AS tipo_descripcion
+                        COALESCE(ti.codigo_prefijo, 'TEMP') AS codigo_prefijo,
+                        ROW_NUMBER() OVER (PARTITION BY i.id_tipo_insumo ORDER BY i.id) AS numero_consecutivo
                     FROM insumo i
                     INNER JOIN tipo_insumo ti ON i.id_tipo_insumo = ti.id
                     WHERE i.id IN ({placeholders})
@@ -686,24 +680,9 @@ class ReporteDemandaReal:
                 cursor.execute(query, tuple(insumo_ids))
                 insumos_info = cursor.fetchall()
                 
-                # Agrupar por tipo de insumo y asignar números consecutivos
-                tipo_contador = {}  # {tipo_insumo_id: contador}
-                
                 for info in insumos_info:
-                    insumo_id = info['id']
-                    tipo_insumo_id = info['id_tipo_insumo']
-                    prefijo = info['codigo_prefijo'] or 'TEMP'
-                    
-                    # Inicializar contador para este tipo si no existe
-                    if tipo_insumo_id not in tipo_contador:
-                        tipo_contador[tipo_insumo_id] = 1
-                    
-                    # Generar código con numeración consecutiva
-                    numero_consecutivo = str(tipo_contador[tipo_insumo_id]).zfill(4)
-                    codigos[insumo_id] = f"{prefijo}-{numero_consecutivo}"
-                    
-                    # Incrementar contador para este tipo
-                    tipo_contador[tipo_insumo_id] += 1
+                    numero = str(info['numero_consecutivo']).zfill(4)
+                    codigos[info['id']] = f"{info['codigo_prefijo']}-{numero}"
                 
             finally:
                 cursor.close()
