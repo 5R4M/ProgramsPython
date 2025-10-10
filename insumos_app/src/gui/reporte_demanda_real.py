@@ -73,9 +73,19 @@ class ReporteDemandaReal:
         self.setup_styles()
         self.cargar_iconos()
         self.movimientos_data = None
+        
+        # CACHÉ DE IDs
+        self._cache_ids = {
+            'areas': {},
+            'distritos': {},
+            'servicios': {},
+            'tipo_movimientos': {},
+            'tipo_insumos': {},
+            'insumos': {},
+            'presentaciones': {}
+        }
+        self._cache_cargado = False
 
-        # Eliminar estilos locales que alteren globalmente
-        # (Se mantienen por compatibilidad visual, pero no se usan estilos ttk aquí)
         style = ttk.Style()
         style.configure('Enabled.TFrame', background='white')
         style.configure('Disabled.TFrame', background='#f0f0f0')
@@ -89,6 +99,58 @@ class ReporteDemandaReal:
   
         self.setup_ui()
 
+    def _cargar_cache_ids(self):
+        """Carga todos los IDs en memoria para evitar consultas repetidas"""
+        if self._cache_cargado:
+            return
+        
+        conn = conectar_db()
+        if not conn:
+            return
+        
+        try:
+            cursor = conn.cursor(dictionary=True)
+            
+            # Caché de áreas
+            cursor.execute("SELECT id, nombre FROM area")
+            self._cache_ids['areas'] = {row['nombre']: row['id'] for row in cursor.fetchall()}
+            
+            # Caché de distritos
+            cursor.execute("SELECT id, nombre FROM distrito")
+            self._cache_ids['distritos'] = {row['nombre']: row['id'] for row in cursor.fetchall()}
+            
+            # Caché de servicios
+            cursor.execute("SELECT id, nombre FROM servicio")
+            self._cache_ids['servicios'] = {row['nombre']: row['id'] for row in cursor.fetchall()}
+            
+            # Caché de tipo_movimiento
+            cursor.execute("SELECT id, descripcion FROM tipo_movimiento")
+            self._cache_ids['tipo_movimientos'] = {row['descripcion']: row['id'] for row in cursor.fetchall()}
+            
+            # Caché de tipo_insumo
+            cursor.execute("SELECT id, descripcion, codigo_prefijo FROM tipo_insumo")
+            for row in cursor.fetchall():
+                self._cache_ids['tipo_insumos'][row['descripcion']] = {
+                    'id': row['id'],
+                    'prefijo': row['codigo_prefijo']
+                }
+            
+            # Caché de insumos con tipo
+            cursor.execute("SELECT id, nombre, id_tipo_insumo FROM insumo")
+            self._cache_ids['insumos'] = {row['id']: row['id_tipo_insumo'] for row in cursor.fetchall()}
+            
+            # Caché de presentaciones
+            cursor.execute("SELECT id, nombre FROM presentacion")
+            self._cache_ids['presentaciones'] = {row['nombre']: row['id'] for row in cursor.fetchall()}
+            
+            self._cache_cargado = True
+            
+        except Exception as e:
+            print(f"Error cargando caché: {e}")
+        finally:
+            cursor.close()
+            conn.close()
+    
     def setup_styles(self):
         self.COLORS = {
             'primary':   '#2c3e50',
@@ -636,10 +698,8 @@ class ReporteDemandaReal:
             return "0"
   
     def generar_codigo_insumo(self, movimientos):
-        """
-        Genera códigos únicos para cada insumo (OPTIMIZADO)
-        """
-        from src.database.db_manager import conectar_db
+        """Genera códigos únicos para cada insumo basados en su posición real en BD"""
+        self._cargar_cache_ids()
         
         codigos = {}
         insumo_ids = set()
@@ -658,32 +718,53 @@ class ReporteDemandaReal:
         if not insumo_ids:
             return codigos
         
+        # Agrupar por tipo de insumo usando caché
+        insumos_por_tipo = {}
+        for insumo_id in insumo_ids:
+            tipo_id = self._cache_ids['insumos'].get(insumo_id)
+            if tipo_id:
+                if tipo_id not in insumos_por_tipo:
+                    insumos_por_tipo[tipo_id] = []
+                insumos_por_tipo[tipo_id].append(insumo_id)
+        
+        # Generar códigos basados en posición real en BD
         conn = conectar_db()
         if conn:
             try:
                 cursor = conn.cursor(dictionary=True)
                 
-                # Query optimizada con una sola consulta
-                placeholders = ','.join(['%s'] * len(insumo_ids))
-                query = f"""
-                    SELECT 
-                        i.id,
-                        i.id_tipo_insumo,
-                        COALESCE(ti.codigo_prefijo, 'TEMP') AS codigo_prefijo,
-                        ROW_NUMBER() OVER (PARTITION BY i.id_tipo_insumo ORDER BY i.id) AS numero_consecutivo
-                    FROM insumo i
-                    INNER JOIN tipo_insumo ti ON i.id_tipo_insumo = ti.id
-                    WHERE i.id IN ({placeholders})
-                    ORDER BY ti.id, i.id
-                """
-                
-                cursor.execute(query, tuple(insumo_ids))
-                insumos_info = cursor.fetchall()
-                
-                for info in insumos_info:
-                    numero = str(info['numero_consecutivo']).zfill(4)
-                    codigos[info['id']] = f"{info['codigo_prefijo']}-{numero}"
-                
+                for tipo_id, ids in insumos_por_tipo.items():
+                    # Obtener prefijo del caché
+                    prefijo = None
+                    for desc, data in self._cache_ids['tipo_insumos'].items():
+                        if data['id'] == tipo_id:
+                            prefijo = data['prefijo'] or 'TEMP'
+                            break
+                    
+                    if not prefijo:
+                        prefijo = 'TEMP'
+                    
+                    # OBTENER POSICIÓN REAL DE CADA INSUMO EN LA BD
+                    placeholders = ','.join(['%s'] * len(ids))
+                    query = f"""
+                        SELECT id, 
+                            ROW_NUMBER() OVER (ORDER BY id) as posicion
+                        FROM insumo
+                        WHERE id_tipo_insumo = %s
+                        AND id IN ({placeholders})
+                        ORDER BY id
+                    """
+                    
+                    cursor.execute(query, [tipo_id] + list(ids))
+                    resultados = cursor.fetchall()
+                    
+                    # Asignar código según posición real
+                    for row in resultados:
+                        insumo_id = row['id']
+                        posicion = row['posicion']
+                        numero = str(posicion).zfill(4)
+                        codigos[insumo_id] = f"{prefijo}-{numero}"
+                    
             finally:
                 cursor.close()
                 conn.close()
@@ -717,10 +798,9 @@ class ReporteDemandaReal:
         return datetime(y, m, 25)
 
     def _obtener_saldo_corte_bd(self, fecha_corte_dt, contexto, insumo_id):
-        """
-        Devuelve el saldo (existencia) acumulado al cierre de 'fecha_corte_dt' (inclusive),
-        consultando movimientos históricos hasta esa fecha, para el contexto dado.
-        """
+        """Devuelve el saldo usando IDs en caché"""
+        self._cargar_cache_ids()
+        
         try:
             conn = conectar_db()
             if not conn:
@@ -730,47 +810,61 @@ class ReporteDemandaReal:
             filtros = []
             params_ctx = []
 
-            # Filtros de contexto
+            # Usar IDs del caché en lugar de nombres
             if contexto.get('distrito'):
-                filtros.append("d.nombre = %s")
-                params_ctx.append(contexto['distrito'])
-            if contexto.get('tipo_servicio'):
-                filtros.append("ts.descripcion = %s")
-                params_ctx.append(contexto['tipo_servicio'])
+                distrito_id = self._cache_ids['distritos'].get(contexto['distrito'])
+                if distrito_id:
+                    filtros.append("m.distrito_id = %s")
+                    params_ctx.append(distrito_id)
+            
             if contexto.get('servicio'):
-                filtros.append("s.nombre = %s")
-                params_ctx.append(contexto['servicio'])
+                servicio_id = self._cache_ids['servicios'].get(contexto['servicio'])
+                if servicio_id:
+                    filtros.append("m.servicio_id = %s")
+                    params_ctx.append(servicio_id)
+            
             if contexto.get('presentacion'):
-                filtros.append("p.nombre = %s")
-                params_ctx.append(contexto['presentacion'])
+                presentacion_id = self._cache_ids['presentaciones'].get(contexto['presentacion'])
+                if presentacion_id:
+                    filtros.append("ip.presentacion_id = %s")
+                    params_ctx.append(presentacion_id)
 
             where_ctx = (" AND " + " AND ".join(filtros)) if filtros else ""
+
+            # IDs de tipo_movimiento desde caché
+            tipo_mov_entrada = [
+                self._cache_ids['tipo_movimientos'].get('INVENTARIO INICIAL'),
+                self._cache_ids['tipo_movimientos'].get('ENTRADA NIVEL SUPERIOR'),
+                self._cache_ids['tipo_movimientos'].get('REAJUSTE (+)')
+            ]
+            tipo_mov_salida = [
+                self._cache_ids['tipo_movimientos'].get('SALIDA NIVEL INFERIOR'),
+                self._cache_ids['tipo_movimientos'].get('REAJUSTE (-)'),
+                self._cache_ids['tipo_movimientos'].get('ENTREGADO')
+            ]
+            
+            tipo_mov_entrada = [x for x in tipo_mov_entrada if x]
+            tipo_mov_salida = [x for x in tipo_mov_salida if x]
 
             sql = f"""
                 SELECT
                     COALESCE(SUM(
                         CASE
-                            WHEN tm.descripcion IN ('INVENTARIO INICIAL', 'ENTRADA NIVEL SUPERIOR', 'REAJUSTE (+)')
+                            WHEN m.tipo_movimiento_id IN ({','.join(['%s']*len(tipo_mov_entrada))})
                                 THEN m.cantidad
-                            WHEN tm.descripcion IN ('SALIDA NIVEL INFERIOR', 'REAJUSTE (-)', 'ENTREGADO')
+                            WHEN m.tipo_movimiento_id IN ({','.join(['%s']*len(tipo_mov_salida))})
                                 THEN -m.cantidad
                             ELSE 0
                         END
                     ), 0) AS saldo
                 FROM movimiento m
-                INNER JOIN tipo_movimiento tm ON m.tipo_movimiento_id = tm.id
-                INNER JOIN insumo i ON i.id = m.insumo_id
-                LEFT JOIN insumo_presentacion ip ON i.id = ip.insumo_id
-                LEFT JOIN presentacion p ON ip.presentacion_id = p.id
-                LEFT JOIN servicio s ON s.id = m.servicio_id
-                LEFT JOIN tipo_servicio ts ON ts.id = s.id_tipo_servicio
-                LEFT JOIN distrito d ON d.id = ts.id_distrito
+                LEFT JOIN insumo_presentacion ip ON m.insumo_id = ip.insumo_id
                 WHERE DATE(m.fecha_registro) <= %s
                 AND m.insumo_id = %s
                 {where_ctx}
             """
 
-            params = [fecha_corte_dt.strftime('%Y-%m-%d'), insumo_id] + params_ctx
+            params = tipo_mov_entrada + tipo_mov_salida + [fecha_corte_dt.strftime('%Y-%m-%d'), insumo_id] + params_ctx
             cur.execute(sql, params)
             row = cur.fetchone()
             cur.close()
@@ -778,8 +872,6 @@ class ReporteDemandaReal:
             return float(row['saldo'] or 0.0)
         except Exception as e:
             print(f"ERROR obteniendo saldo corte: {e}")
-            import traceback
-            traceback.print_exc()
             return 0.0
     
     def procesar_datos(self, movimientos, fecha_ini, fecha_fin, dias, todos_los_insumos):
@@ -1473,12 +1565,15 @@ class ReporteDemandaReal:
         doc.build(elementos)
       
     def generar_reporte(self):
+        """Genera el reporte según los filtros seleccionados"""
         
-        # Mostrar animación de carga
+        # ✅ Cargar caché al inicio (DESPUÉS del docstring)
+        self._cargar_cache_ids()
+        
+        # ✅ Mostrar animación de carga
         self.mostrar_animacion_carga()
         self.parent.update()
         
-        """Genera el reporte según los filtros seleccionados"""
         try:
             if not self.combo_area.get():
                 messagebox.showerror("Error", "Debe seleccionar al menos el Área")
@@ -1490,6 +1585,24 @@ class ReporteDemandaReal:
 
             if not all([anio, mes_inicio, mes_final]):
                 messagebox.showerror("Error", "Debe seleccionar Año, Mes Inicio y Mes Final")
+                return
+
+            # ✅ NUEVA VALIDACIÓN: Verificar que sea el mismo período mensual
+            if not self._validar_periodo_mensual(mes_inicio, mes_final):
+                messagebox.showerror(
+                    "Error de Período",
+                    "El reporte solo puede generarse para un período mensual.\n\n"
+                    "Debe seleccionar el MISMO mes en 'Mes Inicio' y 'Mes Final'.\n\n"
+                    "Ejemplos válidos:\n"
+                    "• Mes Inicio: Septiembre, Mes Final: Septiembre\n"
+                    "  (Genera del 26/Ago al 25/Sep)\n\n"
+                    "• Mes Inicio: Octubre, Mes Final: Octubre\n"
+                    "  (Genera del 26/Sep al 25/Oct)\n\n"
+                    "Ejemplo inválido:\n"
+                    "• Mes Inicio: Septiembre, Mes Final: Octubre\n"
+                    "  (Abarca dos períodos)"
+                )
+                self.mostrar_mensaje_inicial()  # Ocultar animación de carga
                 return
 
             fecha_ini_str, fecha_fin_str = self.calcular_rango_corte_logistico(anio, mes_inicio, mes_final)
@@ -1574,6 +1687,7 @@ class ReporteDemandaReal:
 
             if not todos_los_insumos:
                 messagebox.showinfo("Info", "No hay datos para mostrar")
+                self.mostrar_mensaje_inicial()
                 return
 
             # === GENERAR CÓDIGOS PARA TODOS LOS INSUMOS ===
@@ -1590,6 +1704,7 @@ class ReporteDemandaReal:
 
             if not self.datos:
                 messagebox.showinfo("Info", "No hay datos para mostrar después del procesamiento")
+                self.mostrar_mensaje_inicial()
                 return
 
             # Generar PDF
@@ -1604,7 +1719,22 @@ class ReporteDemandaReal:
             self.generar_vista_previa_pdf()
             
         except Exception as e:
+            self.mostrar_mensaje_inicial()
             messagebox.showerror("Error", f"Error al generar reporte: {str(e)}")
+
+
+    def _validar_periodo_mensual(self, mes_inicio, mes_final):
+        """
+        Valida que mes_inicio y mes_final sean el MISMO mes.
+        El período logístico va del 26 del mes anterior al 25 del mes seleccionado.
+        """
+        try:
+            # Validación simple: ambos meses deben ser iguales
+            return mes_inicio == mes_final
+            
+        except Exception as e:
+            print(f"Error en validación de período: {e}")
+            return False
 
     def generar_vista_previa_pdf(self):
         try:
