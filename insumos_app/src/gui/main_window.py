@@ -59,6 +59,10 @@ class MainWindow:
             'exit_btn': '#17a2b8',      # Color celeste para botón salir
             'exit_hover': '#138496'     # Color celeste oscuro para hover
         }
+        
+        # Variables para controlar el sidebar
+        self.sidebar_visible = True
+        self.sidebar_width = 240
 
         # Inicializar la base de datos antes de crear la ventana
         if not self.initialize_database():
@@ -99,6 +103,7 @@ class MainWindow:
 
         # Manejar el cierre de la ventana principal
         self.root.protocol("WM_DELETE_WINDOW", self.on_closing)
+        self.setup_keyboard_shortcuts()
 
     def setup_styles(self):
         """Configura los estilos personalizados"""
@@ -352,7 +357,7 @@ class MainWindow:
     def create_layout(self):
         """Crea el layout principal de la aplicación"""
         # **SIDEBAR (MENÚ LATERAL)** - Ancho aumentado para acomodar texto completo
-        self.sidebar = ttk.Frame(self.root, style='Sidebar.TFrame', width=240)  # Aumentado a 380px
+        self.sidebar = ttk.Frame(self.root, style='Sidebar.TFrame', width=self.sidebar_width)
         self.sidebar.grid(row=0, column=0, sticky="nsew", padx=0, pady=0)
         self.sidebar.grid_propagate(False)  # Mantener ancho fijo - CRÍTICO
         self.sidebar.pack_propagate(False)   # También prevenir expansión con pack
@@ -370,28 +375,37 @@ class MainWindow:
 
         # Crear área de contenido principal
         self.create_main_content_area()
+        
+        # *** AGREGAR BOTÓN TOGGLE FLOTANTE ***
+        self.add_floating_toggle_button()
 
         # Crear barra de estado
         self.create_status_bar()
 
     def create_sidebar(self):
-        """Crea el menú lateral con botón Salir siempre visible"""
+        """Crea el menú lateral con botón toggle centrado verticalmente"""
         # Header
         header_frame = tk.Frame(self.sidebar, bg=self.COLORS['primary'], height=140)
         header_frame.pack(fill="x", pady=0)
         header_frame.pack_propagate(False)
 
+        # Logo
         if self.icons.get('logo'):
-            tk.Label(header_frame, image=self.icons['logo'], bg=self.COLORS['primary']).pack(pady=(25, 8))
+            tk.Label(header_frame, image=self.icons['logo'], 
+                    bg=self.COLORS['primary']).pack(pady=(25, 8))
         else:
             tk.Frame(header_frame, bg=self.COLORS['primary'], height=30).pack()
 
-        tk.Label(header_frame, text="SISTEMA DE GESTIÓN", font=('Segoe UI', 12, 'bold'),
-                fg=self.COLORS['white'], bg=self.COLORS['primary']).pack(pady=(5, 2))
-        tk.Label(header_frame, text="DE INSUMOS", font=('Segoe UI', 12, 'bold'),
-                fg=self.COLORS['white'], bg=self.COLORS['primary']).pack(pady=(0, 15))
+        tk.Label(header_frame, text="SISTEMA DE GESTIÓN", 
+                font=('Segoe UI', 12, 'bold'),
+                fg=self.COLORS['white'], 
+                bg=self.COLORS['primary']).pack(pady=(5, 2))
+        tk.Label(header_frame, text="DE INSUMOS", 
+                font=('Segoe UI', 12, 'bold'),
+                fg=self.COLORS['white'], 
+                bg=self.COLORS['primary']).pack(pady=(0, 15))
 
-        # Botón Salir ABAJO (estilo plano, sin fondo ni borde)
+        # Botón Salir ABAJO
         exit_frame = tk.Frame(self.sidebar, bg=self.COLORS['primary'])
         exit_frame.pack(fill="x", side="bottom", pady=(0, 20))
 
@@ -399,7 +413,7 @@ class MainWindow:
             exit_frame,
             text="  Salir del Sistema",
             font=('Segoe UI', 11, 'bold'),
-            bg=self.COLORS['primary'],          # mismo que el sidebar
+            bg=self.COLORS['primary'],
             fg=self.COLORS['white'],
             activebackground=self.COLORS['primary'],
             activeforeground=self.COLORS['white'],
@@ -411,28 +425,28 @@ class MainWindow:
         )
         if self.icons.get('salir'):
             exit_btn.config(image=self.icons['salir'], compound='left')
-
-        # ocupar ancho sin marco
         exit_btn.pack(fill="x", padx=16, pady=10)
 
-        # Hover: solo cambiar ligeramente el fondo para indicar interactivo
+        # Hover transparente para el botón salir (igual que el menú de árbol)
         def _exit_enter(e):
-            exit_btn.config(bg=self.COLORS['hover'])
+            exit_btn.config(bg=self.COLORS['secondary'])  # Cambiado de 'hover' a 'secondary'
         def _exit_leave(e):
             exit_btn.config(bg=self.COLORS['primary'])
-
         exit_btn.bind('<Enter>', _exit_enter)
         exit_btn.bind('<Leave>', _exit_leave)
 
-        # Contenedor del menú con scroll (ocupa el espacio restante)
+        # Contenedor del menú con scroll
         nav_container = tk.Frame(self.sidebar, bg=self.COLORS['primary'])
         nav_container.pack(fill="both", expand=True, padx=0, pady=10)
 
-        canvas = tk.Canvas(nav_container, bg=self.COLORS['primary'], highlightthickness=0, bd=0)
-        scrollbar = ttk.Scrollbar(nav_container, orient="vertical", command=canvas.yview)
+        canvas = tk.Canvas(nav_container, bg=self.COLORS['primary'], 
+                        highlightthickness=0, bd=0)
+        scrollbar = ttk.Scrollbar(nav_container, orient="vertical", 
+                                command=canvas.yview)
         nav_frame = tk.Frame(canvas, bg=self.COLORS['primary'])
 
-        nav_frame.bind("<Configure>", lambda e: canvas.configure(scrollregion=canvas.bbox("all")))
+        nav_frame.bind("<Configure>", 
+                    lambda e: canvas.configure(scrollregion=canvas.bbox("all")))
         canvas.create_window((0, 0), window=nav_frame, anchor="nw")
         canvas.configure(yscrollcommand=scrollbar.set)
 
@@ -440,6 +454,20 @@ class MainWindow:
         scrollbar.pack(side="right", fill="y")
 
         self.create_navigation_menu(nav_frame)
+
+        # BOTÓN TOGGLE CENTRADO VERTICALMENTE - SIN FONDO
+        toggle_btn_sidebar = tk.Label(
+            self.sidebar,
+            text="◀",
+            font=('Segoe UI', 18, 'bold'),
+            bg=self.COLORS['primary'],
+            fg=self.COLORS['white'],
+            cursor='hand2'
+        )
+        toggle_btn_sidebar.place(relx=1.0, rely=0.5, anchor='e', x=-5)
+        toggle_btn_sidebar.bind('<Button-1>', lambda e: self.toggle_sidebar())
+                
+        self.toggle_btn_sidebar = toggle_btn_sidebar
 
     def create_menu_category(self, parent, category_name, items):
         """Crea una categoría del menú con sus elementos hijo - ancho controlado"""
@@ -985,6 +1013,57 @@ class MainWindow:
         """Restaura el tamaño original de la ventana y la centra"""
         self.center_window(self.ANCHO_VENTANA, self.ALTO_VENTANA)
 
+    def toggle_sidebar(self):
+        """Alterna la visibilidad del sidebar"""
+        if self.sidebar_visible:
+            # Ocultar sidebar
+            self.sidebar.grid_forget()
+            self.sidebar_visible = False
+            # Mostrar botón flotante CENTRADO VERTICALMENTE
+            if hasattr(self, 'floating_toggle_btn'):
+                self.floating_toggle_btn.place(relx=0, rely=0.5, x=10, anchor='w')
+        else:
+            # Mostrar sidebar
+            self.sidebar.grid(row=0, column=0, sticky="nsew", padx=0, pady=0)
+            self.sidebar_visible = True
+            # Ocultar botón flotante
+            if hasattr(self, 'floating_toggle_btn'):
+                self.floating_toggle_btn.place_forget()
+        
+        self.root.update_idletasks()
+
+    def add_floating_toggle_button(self):
+        """Agrega un botón flotante centrado verticalmente que aparece cuando el sidebar está oculto"""
+        self.floating_toggle_btn = tk.Button(
+            self.main_area,
+            text="▶",
+            font=('Segoe UI', 16, 'bold'),
+            bg=self.COLORS['light'],
+            fg=self.COLORS['text_dark'],
+            activebackground=self.COLORS['light'],
+            activeforeground=self.COLORS['text_dark'],
+            relief='flat',
+            borderwidth=0,
+            highlightthickness=0,
+            width=2,
+            height=1,
+            cursor='hand2',
+            command=self.toggle_sidebar
+        )
+        
+        def on_enter(e):
+            self.floating_toggle_btn.config(bg=self.COLORS['light'], fg=self.COLORS['text_dark'])
+        def on_leave(e):
+            self.floating_toggle_btn.config(bg=self.COLORS['light'], fg=self.COLORS['text_dark'])
+        
+        self.floating_toggle_btn.bind('<Enter>', on_enter)
+        self.floating_toggle_btn.bind('<Leave>', on_leave)
+
+    def setup_keyboard_shortcuts(self):
+        """Configura atajos de teclado"""
+        self.root.bind('<F9>', lambda e: self.toggle_sidebar())
+        self.root.bind('<Control-b>', lambda e: self.toggle_sidebar())
+    
     def initialize_database(self):
         """Inicializa la base de datos y verifica su estructura en MySQL"""
         try:

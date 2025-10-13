@@ -712,9 +712,9 @@ class ReporteKardex:
         self.frame_insumo_content.config(bg=self.COLORS['light'])
         self.frame_insumo_container.pack(fill="x", expand=False, pady=(0, 2))  
 
-        self.frame_insumo_content.grid_columnconfigure(1, weight=1)
-        self.frame_insumo_content.grid_columnconfigure(3, weight=1)
-        self.frame_insumo_content.grid_columnconfigure(5, weight=1)
+        self.frame_insumo_content.grid_columnconfigure(1, weight=1, minsize=150)
+        self.frame_insumo_content.grid_columnconfigure(3, weight=3, minsize=350)
+        self.frame_insumo_content.grid_columnconfigure(5, weight=1, minsize=150)
 
         ttk.Label(self.frame_insumo_content, text="Tipo de Insumo:", **label_style).grid(row=0, column=0, padx=5, pady=2, sticky='w')
         self.tipo_insumo_var = tk.StringVar()

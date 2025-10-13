@@ -1410,9 +1410,9 @@ class ReporteBres:
         )
         self.frame_insumo_container.pack(fill="x", padx=5, pady=2)
 
-        frame_insumo_content.grid_columnconfigure(1, weight=1)
-        frame_insumo_content.grid_columnconfigure(3, weight=1)
-        frame_insumo_content.grid_columnconfigure(5, weight=1)
+        frame_insumo_content.grid_columnconfigure(1, weight=1, minsize=150)
+        frame_insumo_content.grid_columnconfigure(3, weight=3, minsize=350)
+        frame_insumo_content.grid_columnconfigure(5, weight=1, minsize=150)
 
         ttk.Label(frame_insumo_content, text="Tipo:", font=('Segoe UI', 8)).grid(row=0, column=0, padx=3, sticky='w')
         self.tipo_insumo_var = tk.StringVar()

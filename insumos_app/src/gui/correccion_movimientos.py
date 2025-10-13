@@ -336,16 +336,16 @@ class CorreccionMovimientos:
             self.icon_limpiar = None
             self.icon_guardar = None
 
-    def create_titled_frame(self, parent, title, content_padx=10, content_pady=10):
+    def create_titled_frame(self, parent, title, content_padx=10, content_pady=6):
         container = tk.Frame(parent, bg=self.COLORS['light'], relief='solid', borderwidth=1)
 
-        header = tk.Frame(container, bg=self.COLORS['primary'], height=20)
+        header = tk.Frame(container, bg=self.COLORS['primary'], height=18)
         header.pack(fill='x')
         header.pack_propagate(False)
 
-        label = tk.Label(header, text=title, font=('Segoe UI', 8, 'bold'),
+        label = tk.Label(header, text=title, font=('Segoe UI', 7, 'bold'),
                         fg=self.COLORS['white'], bg=self.COLORS['primary'])
-        label.pack(side='left', padx=10, pady=2)
+        label.pack(side='left', padx=8, pady=1)
 
         # contenido en Light (antes estaba en blanco)
         content = tk.Frame(container, bg=self.COLORS['light'])
@@ -419,7 +419,7 @@ class CorreccionMovimientos:
         self.frame_fechas_container.pack(fill="x", expand=False, pady=5, padx=5)
 
         self.frame_rango = ttk.Frame(self.frame_fechas, style='Light.TFrame')
-        self.frame_rango.pack(fill="x", expand=False, padx=5, pady=8)
+        self.frame_rango.pack(fill="x", expand=False, padx=5, pady=4)
 
         self.frame_rango.grid_columnconfigure(0, weight=0, minsize=80)
         self.frame_rango.grid_columnconfigure(1, weight=1, minsize=120)
@@ -431,7 +431,7 @@ class CorreccionMovimientos:
         self.frame_rango.grid_columnconfigure(7, weight=1, minsize=40)
 
         label_style = {'style': 'Light.TLabel'}
-        padding_config = {'pady': 8}
+        padding_config = {'pady': 4}
 
         ttk.Label(self.frame_rango, text="Fecha Inicial:", **label_style).grid(
             row=0, column=0, padx=(10, 4), sticky='w', **padding_config
@@ -472,7 +472,7 @@ class CorreccionMovimientos:
         )
         self.frame_combos1_container.config(bg=self.COLORS['light'])
         self.frame_combos1.config(bg=self.COLORS['light'])
-        self.frame_combos1_container.pack(fill="x", expand=False, padx=0, pady=5)
+        self.frame_combos1_container.pack(fill="x", expand=False, padx=0, pady=8)
 
         self.frame_combos1.grid_columnconfigure(0, weight=0, minsize=80)
         self.frame_combos1.grid_columnconfigure(1, weight=1, minsize=120)
@@ -519,15 +519,14 @@ class CorreccionMovimientos:
         self.frame_combos2.config(bg=self.COLORS['light'])
         self.frame_combos2_container.pack(fill="x", expand=False, padx=0, pady=5)
 
-        self.frame_combos2.grid_columnconfigure(0, weight=0, minsize=80)
-        self.frame_combos2.grid_columnconfigure(1, weight=1, minsize=120)
-        self.frame_combos2.grid_columnconfigure(2, weight=0, minsize=80)
-        self.frame_combos2.grid_columnconfigure(3, weight=1, minsize=120)
-        self.frame_combos2.grid_columnconfigure(4, weight=0, minsize=100)
-        self.frame_combos2.grid_columnconfigure(5, weight=1, minsize=120)
-        self.frame_combos2.grid_columnconfigure(6, weight=0, minsize=80)
-        self.frame_combos2.grid_columnconfigure(7, weight=1, minsize=120)
+        # Nueva configuración de columnas con más ancho
+        self.frame_combos2.grid_columnconfigure(0, weight=0, minsize=100)
+        self.frame_combos2.grid_columnconfigure(1, weight=2, minsize=200)  # Aumentado
+        self.frame_combos2.grid_columnconfigure(2, weight=0, minsize=20)   # Espaciador
+        self.frame_combos2.grid_columnconfigure(3, weight=0, minsize=100)
+        self.frame_combos2.grid_columnconfigure(4, weight=2, minsize=200)  # Aumentado
 
+        # Primera fila: Tipo Insumo e Insumo
         ttk.Label(self.frame_combos2, text="Tipo\nInsumo:", **label_style).grid(
             row=0, column=0, padx=(20, 8), sticky='w', **padding_config
         )
@@ -535,12 +534,15 @@ class CorreccionMovimientos:
         self.combo_tipo_insumo = AutocompleteCombobox(self.frame_combos2, textvariable=self.tipo_insumo_var, state="normal", font=('Segoe UI', 9))
         self.combo_tipo_insumo.grid(row=0, column=1, padx=8, sticky='ew', **padding_config)
 
+        # Espaciador
+        ttk.Label(self.frame_combos2, text="", **label_style).grid(row=0, column=2, padx=4)
+
         ttk.Label(self.frame_combos2, text="Insumo:", **label_style).grid(
-            row=0, column=2, padx=8, sticky='w', **padding_config
+            row=0, column=3, padx=8, sticky='w', **padding_config
         )
         self.insumo_var = tk.StringVar()
         self.combo_insumo = AutocompleteCombobox(self.frame_combos2, textvariable=self.insumo_var, state="normal", font=('Segoe UI', 9))
-        self.combo_insumo.grid(row=0, column=3, padx=8, sticky='ew', **padding_config)
+        self.combo_insumo.grid(row=0, column=4, padx=(8, 20), sticky='ew', **padding_config)
 
         # Tooltip para mostrar el nombre completo del Insumo
         self.tooltip_insumo = HoverTooltip(
@@ -550,24 +552,28 @@ class CorreccionMovimientos:
             show_only_if_clipped=True
         )
 
+        # Segunda fila: Presentación y Tipo Movimiento
         ttk.Label(self.frame_combos2, text="Presentación:", **label_style).grid(
-            row=0, column=4, padx=8, sticky='w', **padding_config
+            row=1, column=0, padx=(20, 8), sticky='w', **padding_config
         )
         self.presentacion_var = tk.StringVar()
         self.combo_presentacion = AutocompleteCombobox(self.frame_combos2, textvariable=self.presentacion_var, state="normal", font=('Segoe UI', 9))
         self.combo_presentacion.config(completevalues=[''])
-        self.combo_presentacion.grid(row=0, column=5, padx=8, sticky='ew', **padding_config)
+        self.combo_presentacion.grid(row=1, column=1, padx=8, sticky='ew', **padding_config)
+
+        # Espaciador
+        ttk.Label(self.frame_combos2, text="", **label_style).grid(row=1, column=2, padx=4)
 
         ttk.Label(self.frame_combos2, text="Tipo\nMovimiento:", **label_style).grid(
-            row=0, column=6, padx=8, sticky='w', **padding_config
+            row=1, column=3, padx=8, sticky='w', **padding_config
         )
         self.tipo_movimiento_var = tk.StringVar()
         self.combo_tipo_movimiento = AutocompleteCombobox(self.frame_combos2, textvariable=self.tipo_movimiento_var, state="normal", font=('Segoe UI', 9))
-        self.combo_tipo_movimiento.grid(row=0, column=7, padx=(8, 20), sticky='ew', **padding_config)
+        self.combo_tipo_movimiento.grid(row=1, column=4, padx=(8, 20), sticky='ew', **padding_config)
 
         # Botones de búsqueda
         self.frame_botones_busqueda = tk.Frame(self.frame_principal, bg=self.COLORS['light'])
-        self.frame_botones_busqueda.pack(fill="x", pady=5)
+        self.frame_botones_busqueda.pack(fill="x", pady=8)
 
         self.btn_buscar = tk.Button(self.frame_botones_busqueda,
             text="Buscar Movimientos",
@@ -580,8 +586,8 @@ class CorreccionMovimientos:
             relief='flat',
             borderwidth=0,
             highlightthickness=0,
-            padx=15,
-            pady=6,
+            padx=12,
+            pady=5,
             cursor='hand2')
         self.btn_buscar.pack(side="left", padx=5)
 
@@ -596,8 +602,8 @@ class CorreccionMovimientos:
             relief='flat',
             borderwidth=0,
             highlightthickness=0,
-            padx=15,
-            pady=6,
+            padx=12,
+            pady=5,
             cursor='hand2')
         self.btn_limpiar.pack(side="left", padx=5)
 
@@ -629,7 +635,7 @@ class CorreccionMovimientos:
         self.frame_treeview_container, self.frame_treeview = self.create_titled_frame(
             self.frame_principal, "📊 Resultados", content_padx=5, content_pady=5
         )
-        self.frame_treeview_container.pack(fill="x", expand=False, padx=5, pady=5)
+        self.frame_treeview_container.pack(fill="x", expand=False, padx=5, pady=8)
 
         self.tree_frame = tk.Frame(self.frame_treeview, bg=self.COLORS['light'], relief='solid', borderwidth=1)
         self.tree_frame.pack(fill="x", expand=False, padx=5, pady=5)
@@ -724,7 +730,7 @@ class CorreccionMovimientos:
 
         # Botones de acción
         self.frame_botones_accion = tk.Frame(self.frame_principal, bg=self.COLORS['light'])
-        self.frame_botones_accion.pack(fill="x", pady=10)
+        self.frame_botones_accion.pack(fill="x", pady=12)
 
         btn_padx = 10
         btn_pady = 6
