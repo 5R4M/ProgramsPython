@@ -83,6 +83,7 @@ class ReporteBalanceBodega:
         self.insumo_var = tk.StringVar()
         self.presentacion_var = tk.StringVar()
         self.nivel_maximo_var = tk.StringVar(value="6")
+        self.desglose_var = tk.BooleanVar(value=False)
         
         self.current_page = 0
         self.total_pages = 0
@@ -763,7 +764,7 @@ class ReporteBalanceBodega:
         )
         self.frame_nivel_container.config(bg=self.COLORS['light'])
         frame_nivel_content.config(bg=self.COLORS['light'])
-        self.frame_nivel_container.pack(fill="x", padx=5, pady=2)  
+        self.frame_nivel_container.pack(fill="x", padx=5, pady=2)
 
         ttk.Label(frame_nivel_content, text="Nivel Máximo:").grid(row=0, column=0, padx=3, pady=2, sticky='w')
         self.nivel_maximo_var = tk.StringVar()
@@ -771,6 +772,13 @@ class ReporteBalanceBodega:
         self.combo_nivel_maximo = ttk.Combobox(frame_nivel_content, textvariable=self.nivel_maximo_var, values=niveles, width=10, state="readonly")
         self.combo_nivel_maximo.grid(row=0, column=1, padx=3, pady=2, sticky='w')
         self.combo_nivel_maximo.set("6")
+
+        # NUEVO: Checkbox para desglose
+        ttk.Checkbutton(
+            frame_nivel_content, 
+            text="Detalle de Salidas por Distrito o Servicio", 
+            variable=self.desglose_var
+        ).grid(row=0, column=2, padx=15, pady=2, sticky='w')
 
         # Visor PDF - AUMENTAR TAMAÑO VERTICAL
         self.pdf_outer = tk.Frame(self.main_container, bg=self.COLORS['light'])
@@ -1136,11 +1144,10 @@ class ReporteBalanceBodega:
     def procesar_datos_balance(self, movimientos_raw, fecha_ini, fecha_fin, todos_los_insumos=None):
         codigos_insumos = self.generar_codigo_insumo(movimientos_raw)
 
-        # Si no se proporcionó lista, usar los del periodo
         if todos_los_insumos is None:
             todos_los_insumos = set(codigos_insumos.keys())
 
-        # === AGREGAR INSUMOS SIN MOVIMIENTOS ===
+        # Agregar insumos sin movimientos
         conn = conectar_db()
         if conn:
             try:
@@ -1161,7 +1168,6 @@ class ReporteBalanceBodega:
                         
                         info = cursor.fetchone()
                         if info:
-                            # Generar código
                             if info.get('codigo_prefijo'):
                                 prefijo = info['codigo_prefijo']
                             else:
@@ -1177,7 +1183,6 @@ class ReporteBalanceBodega:
                             pos = cursor.fetchone()['posicion']
                             codigos_insumos[insumo_id] = f"{prefijo}-{str(pos).zfill(4)}"
                             
-                            # Agregar movimiento ficticio
                             movimientos_raw.append({
                                 'codigo_insumo': insumo_id,
                                 'nombre_insumo': info['nombre_insumo'],
@@ -1189,6 +1194,22 @@ class ReporteBalanceBodega:
                 cursor.close()
                 conn.close()
 
+        # Determinar si se debe desglosar
+        desglosar = self.desglose_var.get()
+        nivel = None
+        destinos = []
+        
+        if desglosar:
+            area_sel = self.combo_area.get().strip()
+            distrito_sel = self.combo_distrito.get().strip()
+            
+            if area_sel and not distrito_sel:
+                nivel = 'area'
+                destinos = self.obtener_destinos_salida(movimientos_raw, 'area')
+            elif distrito_sel:
+                nivel = 'distrito'
+                destinos = self.obtener_destinos_salida(movimientos_raw, 'distrito')
+
         insumos_dict = {}
 
         for mov in movimientos_raw:
@@ -1198,7 +1219,6 @@ class ReporteBalanceBodega:
 
             codigo_generado = codigos_insumos.get(insumo_id) or f"TEMP-{str(insumo_id).zfill(4)}"
             nombre_insumo = mov.get('nombre_insumo', '')
-
             tipo_movimiento = self._normalizar_tipo_mov(mov.get('tipo_movimiento', ''))
 
             raw_cant = str(mov.get('cantidad', '0')).replace(',', '')
@@ -1219,6 +1239,11 @@ class ReporteBalanceBodega:
                     'reajuste_negativo': 0.0,
                     'reajustes_neto': 0.0,
                 }
+                
+                # Inicializar columnas de destinos si hay desglose
+                if desglosar and destinos:
+                    for destino in destinos:
+                        insumos_dict[codigo_generado][f'salida_{destino}'] = 0.0
 
             # Acumulación
             if tipo_movimiento == 'INVENTARIO INICIAL':
@@ -1229,6 +1254,18 @@ class ReporteBalanceBodega:
 
             elif tipo_movimiento == 'SALIDA NIVEL INFERIOR':
                 insumos_dict[codigo_generado]['salida_nivel_inferior'] += cantidad
+                
+                # Si hay desglose, distribuir por destino
+                if desglosar and destinos:
+                    if nivel == 'area':
+                        destino = mov.get('distrito_destino', '')
+                    elif nivel == 'distrito':
+                        destino = mov.get('servicio_destino', '')
+                    else:
+                        destino = ''
+                    
+                    if destino and f'salida_{destino}' in insumos_dict[codigo_generado]:
+                        insumos_dict[codigo_generado][f'salida_{destino}'] += cantidad
 
             elif tipo_movimiento == 'REAJUSTE (+)':
                 insumos_dict[codigo_generado]['reajuste_positivo'] += cantidad
@@ -1238,10 +1275,9 @@ class ReporteBalanceBodega:
                 insumos_dict[codigo_generado]['reajuste_negativo'] += cantidad
                 insumos_dict[codigo_generado]['reajustes_neto'] -= cantidad
 
-        # === ASIGNAR SALDO ANTERIOR DESDE BD ===
+        # Asignar saldo anterior desde BD
         for codigo, datos in insumos_dict.items():
             insumo_id = datos['insumo_id_original']
-            # Si no hubo inventario inicial explícito, usar saldo calculado
             if float(datos['saldo_anterior']) == 0.0:
                 saldo_bd = self.saldo_anterior_por_insumo.get(insumo_id, 0.0)
                 datos['saldo_anterior'] = saldo_bd
@@ -1265,7 +1301,7 @@ class ReporteBalanceBodega:
             else:
                 reajustes_texto = self.formato_float(reajustes_total)
 
-            datos_procesados.append({
+            fila = {
                 'codigo_insumo': codigo,
                 'nombre_insumo': datos['nombre_insumo'],
                 'saldo_anterior': self.formato_float(datos['saldo_anterior']),
@@ -1275,11 +1311,43 @@ class ReporteBalanceBodega:
                 'reajuste_menos': self.formato_float(datos['reajuste_negativo']),
                 'reajustes': reajustes_texto,
                 'saldo_mes_siguiente': self.formato_float(saldo_mes_siguiente),
-            })
+            }
+            
+            # Agregar columnas de destinos si hay desglose
+            if desglosar and destinos:
+                for destino in destinos:
+                    fila[f'salida_{destino}'] = self.formato_float(datos.get(f'salida_{destino}', 0.0))
+            
+            datos_procesados.append(fila)
 
         datos_procesados.sort(key=lambda x: x['codigo_insumo'])
-                
+        
+        # Guardar lista de destinos para usarla en generación de PDF/Excel
+        self.destinos_desglose = destinos if (desglosar and destinos) else []
+        
         return datos_procesados
+    
+    def obtener_destinos_salida(self, movimientos_raw, nivel):
+        """
+        Obtiene los destinos únicos de SALIDA NIVEL INFERIOR
+        - Si nivel = 'area': retorna distritos
+        - Si nivel = 'distrito': retorna servicios
+        """
+        destinos = set()
+        
+        for mov in movimientos_raw:
+            tipo_mov = self._normalizar_tipo_mov(mov.get('tipo_movimiento', ''))
+            if tipo_mov == 'SALIDA NIVEL INFERIOR':
+                if nivel == 'area':
+                    destino = mov.get('distrito_destino')
+                    if destino:
+                        destinos.add(destino)
+                elif nivel == 'distrito':
+                    destino = mov.get('servicio_destino')
+                    if destino:
+                        destinos.add(destino)
+        
+        return sorted(list(destinos))
     
     def obtener_saldo_mes_anterior(self, insumo_id_original, fecha_corte):
         try:
@@ -1341,10 +1409,6 @@ class ReporteBalanceBodega:
                 else:
                     self.lbl_periodo_logistico_ui.config(text=periodo_txt)
                 
-                self.fecha_inicial.set_date(fecha_ini)
-                self.fecha_final.set_date(fecha_fin)
-                self.periodo_logistico_text = f"Periodo logístico: {fecha_ini_str} al {fecha_fin_str}"
-
             if fecha_fin < fecha_ini:
                 messagebox.showerror("Error", "La fecha final debe ser mayor a la inicial")
                 return
@@ -1403,6 +1467,26 @@ class ReporteBalanceBodega:
             # Procesar datos con TODOS los insumos
             self.movimientos_data = self.procesar_datos_balance(movimientos_raw, fecha_ini, fecha_fin, todos_los_insumos)
 
+            # NUEVA VALIDACIÓN: Verificar si hay desglose pero no hay destinos
+            if self.desglose_var.get() and (not hasattr(self, 'destinos_desglose') or not self.destinos_desglose):
+                area_sel = self.combo_area.get().strip()
+                distrito_sel = self.combo_distrito.get().strip()
+                
+                if area_sel and not distrito_sel:
+                    mensaje = "No se encontraron salidas a nivel inferior hacia distritos en el periodo seleccionado.\n\n"
+                    mensaje += "El reporte se mostrará sin desglose por destinos."
+                    messagebox.showwarning("Sin datos de desglose", mensaje)
+                elif distrito_sel:
+                    mensaje = "No se encontraron salidas a nivel inferior hacia servicios en el periodo seleccionado.\n\n"
+                    mensaje += "El reporte se mostrará sin desglose por destinos."
+                    messagebox.showwarning("Sin datos de desglose", mensaje)
+                
+                # Desmarcar el checkbox automáticamente
+                self.desglose_var.set(False)
+                
+                # Reprocesar sin desglose
+                self.movimientos_data = self.procesar_datos_balance(movimientos_raw, fecha_ini, fecha_fin, todos_los_insumos)
+            
             if not self.movimientos_data:
                 messagebox.showwarning("Sin datos", "No hay datos procesados para mostrar")
                 return
@@ -1784,6 +1868,7 @@ class ReporteBalanceBodega:
     # -----------------------------
     # Generación PDF
     # -----------------------------
+    
     def generar_pdf(self, ruta_pdf, es_vista_previa=False):
         if not self.movimientos_data:
             messagebox.showwarning("Advertencia", "No hay datos para mostrar")
@@ -1809,16 +1894,14 @@ class ReporteBalanceBodega:
             elements.append(Paragraph("ÁREA NOR ORIENTE", subtitle_style))
             elements.append(Paragraph("BALANCE DE BODEGA", subtitle_style))
             elements.append(Paragraph(f"Generado el: {datetime.now().strftime('%d/%m/%Y %H:%M:%S')}", timestamp_style))
-            
-            # Agregar debajo el periodo logístico (26–25) o el rango seleccionado
+
+            # SOLO UNA VEZ el periodo logístico
             try:
                 if self.modo_fecha_var.get() == "corte" and self.mes_inicio_var.get() and self.mes_final_var.get() and self.anio_var.get():
-                    # Reconstruir fechas a partir del corte
-                    fecha_ini_str, fecha_fin_str = self.calcular_rango_corte_logistico(self.anio_var.get(), self.mes_inicio_var.get(), self.mes_final_var.get())
+                    fecha_ini_str, fecha_fin_str, _, _ = self.calcular_rango_corte_logistico(self.anio_var.get(), self.mes_inicio_var.get(), self.mes_final_var.get())
                     _fi = datetime.strptime(fecha_ini_str, '%d/%m/%Y')
                     _ff = datetime.strptime(fecha_fin_str, '%d/%m/%Y')
                 else:
-                    # Tomar del rango manual
                     _fi = datetime.strptime(self.fecha_inicial.get(), '%d/%m/%Y')
                     _ff = datetime.strptime(self.fecha_final.get(), '%d/%m/%Y')
 
@@ -1832,7 +1915,7 @@ class ReporteBalanceBodega:
                 periodo_style = ParagraphStyle('PeriodoStyle', parent=styles['Normal'], alignment=1, spaceAfter=12, fontSize=9)
                 elements.append(Paragraph(self.periodo_logistico_text, periodo_style))
 
-            # Filtros (alineados a la izquierda)
+            # Filtros
             left_style = ParagraphStyle(name="LeftAlign", alignment=0, fontSize=9, fontName='Helvetica')
             filtros = [
                 f"Área: {self.combo_area.get()}",
@@ -1852,39 +1935,96 @@ class ReporteBalanceBodega:
             elements.append(table_filtros)
             elements.append(Spacer(1, 24))
 
+            # Headers dinámicos MÁS COMPACTOS
             headers = [
                 'Código',
-                'Descripción\ndel Insumo',
+                'Descripción',
                 'Saldo\nAnterior',
-                'Entradas\nNivel\nSuperior',
-                'Salida\nNivel\nInferior',
-                'Reajustes\n(+) (-)',
-                'Saldo Mes\nSiguiente'
+                'Entrada\nNivel\nSuperior'
             ]
 
+            # Si hay desglose, agregar columnas de destinos con nombres completos en 3 líneas
+            if hasattr(self, 'destinos_desglose') and self.destinos_desglose:
+                for destino in self.destinos_desglose:
+                    # Dividir nombre en palabras para distribuir en 3 líneas
+                    palabras = destino.split()
+                    if len(palabras) == 1:
+                        # Si es una sola palabra, intentar partir por longitud
+                        if len(destino) > 20:
+                            tercio = len(destino) // 3
+                            linea1 = destino[:tercio]
+                            linea2 = destino[tercio:tercio*2]
+                            linea3 = destino[tercio*2:]
+                            nombre_formateado = f'{linea1}\n{linea2}\n{linea3}'
+                        else:
+                            nombre_formateado = destino
+                    elif len(palabras) == 2:
+                        nombre_formateado = f'{palabras[0]}\n{palabras[1]}\n'
+                    elif len(palabras) >= 3:
+                        # Distribuir palabras en 3 líneas
+                        palabras_por_linea = len(palabras) // 3
+                        if palabras_por_linea == 0:
+                            palabras_por_linea = 1
+                        linea1 = ' '.join(palabras[:palabras_por_linea])
+                        linea2 = ' '.join(palabras[palabras_por_linea:palabras_por_linea*2])
+                        linea3 = ' '.join(palabras[palabras_por_linea*2:])
+                        nombre_formateado = f'{linea1}\n{linea2}\n{linea3}'
+                    else:
+                        nombre_formateado = destino
+                    
+                    headers.append(nombre_formateado)
+            else:
+                headers.append('Salida\nNivel\nInferior')
+
+            headers.extend([
+                'Reajuste\n(+)(-)',
+                'Saldo\nMes\nSiguiente'
+            ])
+
             data = [headers]
+            
             for mov in self.movimientos_data:
                 row = [
                     mov.get('codigo_insumo', ''),
                     self.dividir_texto_en_lineas(mov.get('nombre_insumo', ''), 30),
                     mov.get('saldo_anterior', ''),
-                    mov.get('entrada_nivel_superior', ''),
-                    mov.get('salida_nivel_inferior', ''),
+                    mov.get('entrada_nivel_superior', '')
+                ]
+                
+                # Si hay desglose, agregar columnas de destinos
+                if hasattr(self, 'destinos_desglose') and self.destinos_desglose:
+                    for destino in self.destinos_desglose:
+                        row.append(mov.get(f'salida_{destino}', '0.00'))
+                else:
+                    row.append(mov.get('salida_nivel_inferior', ''))
+                
+                row.extend([
                     mov.get('reajustes', ''),
                     mov.get('saldo_mes_siguiente', '')
-                ]
+                ])
+                
                 data.append(row)
 
+            # Anchos de columna dinámicos MÁS AJUSTADOS
             colWidths = [
-                0.7*inch,  # Código
-                3.0*inch,  # Descripción
-                1.0*inch,  # Saldo Anterior
-                1.0*inch,  # Entradas NS
-                1.0*inch,  # Salida NI
-                1.2*inch,  # Reajustes
-                1.0*inch   # Saldo Siguiente
+                0.6*inch,  # Código (reducido)
+                2.5*inch,  # Descripción (reducido)
+                0.7*inch,  # Saldo Anterior (reducido)
+                0.7*inch   # Entradas NS (reducido)
             ]
 
+            # Si hay desglose, distribuir espacio entre destinos
+            if hasattr(self, 'destinos_desglose') and self.destinos_desglose:
+                ancho_por_destino = 1.0*inch  # Un poco más ancho para nombres completos
+                colWidths.extend([ancho_por_destino] * len(self.destinos_desglose))
+            else:
+                colWidths.append(0.8*inch)  # Salida NI
+
+            colWidths.extend([
+                0.8*inch,  # Reajustes (reducido)
+                0.8*inch   # Saldo Siguiente (reducido)
+            ])
+            
             table = Table(data, colWidths=colWidths, repeatRows=1)
             table_style = [
                 ('BACKGROUND', (0,0), (-1,0), colors.lightblue),
@@ -1934,15 +2074,58 @@ class ReporteBalanceBodega:
             with pd.ExcelWriter(full_path, engine='xlsxwriter') as writer:
                 workbook = writer.book
 
-                columnas = [
-                    'codigo_insumo', 'nombre_insumo', 'saldo_anterior', 'entrada_nivel_superior',
-                    'salida_nivel_inferior', 'reajustes', 'saldo_mes_siguiente'
+                columnas_base = [
+                    'codigo_insumo', 'nombre_insumo', 'saldo_anterior', 'entrada_nivel_superior'
                 ]
-                encabezados = [
-                    'Código', 'Descripción\ndel Insumo', 'Saldo\nAnterior', 'Entradas\nNivel\nSuperior',
-                    'Salida\nNivel\nInferior', 'Reajustes\n(+) (-)', 'Saldo Mes\nSiguiente'
+
+                encabezados_base = [
+                    'Código', 'Descripción', 'Saldo\nAnterior', 'Entrada\nNivel\nSuperior'
                 ]
-                col_widths = [10, 35, 10, 12, 12, 12, 12]
+
+                col_widths_base = [10, 30, 8, 8]
+
+                # Si hay desglose, agregar columnas de destinos con nombres completos
+                if hasattr(self, 'destinos_desglose') and self.destinos_desglose:
+                    for destino in self.destinos_desglose:
+                        columnas_base.append(f'salida_{destino}')
+                        # Dividir nombre en 3 líneas
+                        palabras = destino.split()
+                        if len(palabras) == 1:
+                            if len(destino) > 20:
+                                tercio = len(destino) // 3
+                                linea1 = destino[:tercio]
+                                linea2 = destino[tercio:tercio*2]
+                                linea3 = destino[tercio*2:]
+                                nombre_formateado = f'{linea1}\n{linea2}\n{linea3}'
+                            else:
+                                nombre_formateado = destino
+                        elif len(palabras) == 2:
+                            nombre_formateado = f'{palabras[0]}\n{palabras[1]}\n'
+                        elif len(palabras) >= 3:
+                            palabras_por_linea = len(palabras) // 3
+                            if palabras_por_linea == 0:
+                                palabras_por_linea = 1
+                            linea1 = ' '.join(palabras[:palabras_por_linea])
+                            linea2 = ' '.join(palabras[palabras_por_linea:palabras_por_linea*2])
+                            linea3 = ' '.join(palabras[palabras_por_linea*2:])
+                            nombre_formateado = f'{linea1}\n{linea2}\n{linea3}'
+                        else:
+                            nombre_formateado = destino
+                        
+                        encabezados_base.append(nombre_formateado)
+                        col_widths_base.append(15)  # Más ancho para nombres completos
+                else:
+                    columnas_base.append('salida_nivel_inferior')
+                    encabezados_base.append('Salida\nNivel\nInferior')
+                    col_widths_base.append(8)
+
+                columnas_base.extend(['reajustes', 'saldo_mes_siguiente'])
+                encabezados_base.extend(['Reajuste\n(+)(-)', 'Saldo\nMes\nSiguiente'])
+                col_widths_base.extend([8, 8])
+
+                columnas = columnas_base
+                encabezados = encabezados_base
+                col_widths = col_widths_base
 
                 for hoja_num in range(0, total_movimientos, filas_por_hoja):
                     nombre_hoja = f"BRES_{hoja_num // filas_por_hoja + 1}"
@@ -1971,7 +2154,7 @@ class ReporteBalanceBodega:
                     })
                     header_format = workbook.add_format({
                         'bold': True, 'align': 'center', 'valign': 'vcenter',
-                        'font_size': 9, 'bg_color': '#ADD8E6', 'font_color': 'black',
+                        'font_size': 8, 'bg_color': '#ADD8E6', 'font_color': 'black',
                         'border': 1, 'text_wrap': True, 'font_name': 'Segoe UI'
                     })
                     filtro_format = workbook.add_format({
@@ -1997,7 +2180,7 @@ class ReporteBalanceBodega:
                     worksheet.set_row(1, 25)
                     worksheet.set_row(2, 25)
                     worksheet.set_row(3, 20)
-                    worksheet.set_row(fila_inicio - 1, 60)
+                    worksheet.set_row(fila_inicio - 1, 50)
                     worksheet.set_row(5, 25)
 
                     worksheet.merge_range(0, 0, 0, len(encabezados) - 1,
@@ -2009,7 +2192,7 @@ class ReporteBalanceBodega:
                     # Fila 4 para el periodo logístico
                     try:
                         if self.modo_fecha_var.get() == "corte" and self.mes_inicio_var.get() and self.mes_final_var.get() and self.anio_var.get():
-                            fi_str, ff_str = self.calcular_rango_corte_logistico(self.anio_var.get(), self.mes_inicio_var.get(), self.mes_final_var.get())
+                            fi_str, ff_str, _, _ = self.calcular_rango_corte_logistico(self.anio_var.get(), self.mes_inicio_var.get(), self.mes_final_var.get())
                             _fi = datetime.strptime(fi_str, '%d/%m/%Y')
                             _ff = datetime.strptime(ff_str, '%d/%m/%Y')
                         else:
@@ -2018,6 +2201,7 @@ class ReporteBalanceBodega:
 
                         periodo_txt = self._formatear_periodo_logistico(_fi, _ff)
                         worksheet.merge_range(4, 0, 4, len(encabezados) - 1, periodo_txt, subtitle_format)
+                        worksheet.set_row(4, 20)
                     except Exception:
                         pass
                                         
@@ -2036,9 +2220,9 @@ class ReporteBalanceBodega:
 
                     for row_offset, row_data in enumerate(df.values):
                         for col_num, cell_value in enumerate(row_data):
-                            if encabezados[col_num] == 'Descripción\ndel Insumo':
+                            if encabezados[col_num] == 'Descripción':
                                 worksheet.write(fila_inicio + row_offset, col_num, cell_value, cell_format_wrap)
-                            elif encabezados[col_num] != 'Reajustes\n(+) (-)' and col_num > 2:
+                            elif encabezados[col_num] not in ['Reaj.\n(+)(-)', 'Código'] and col_num > 1:
                                 try:
                                     val = float(cell_value)
                                     worksheet.write_number(fila_inicio + row_offset, col_num, val, cell_format_number)
