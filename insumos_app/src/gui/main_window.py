@@ -376,9 +376,6 @@ class MainWindow:
         # Crear área de contenido principal
         self.create_main_content_area()
         
-        # *** AGREGAR BOTÓN TOGGLE FLOTANTE ***
-        self.add_floating_toggle_button()
-
         # Crear barra de estado
         self.create_status_bar()
 
@@ -405,17 +402,35 @@ class MainWindow:
                 fg=self.COLORS['white'], 
                 bg=self.COLORS['primary']).pack(pady=(0, 15))
 
-        # Botón Salir ABAJO
-        exit_frame = tk.Frame(self.sidebar, bg=self.COLORS['primary'])
-        exit_frame.pack(fill="x", side="bottom", pady=(0, 20))
+        # Contenedor para botones inferiores (toggle y salir)
+        bottom_buttons_frame = tk.Frame(self.sidebar, bg=self.COLORS['primary'])
+        bottom_buttons_frame.pack(fill="x", side="bottom", pady=(0, 20))
 
+        # Botón para ocultar menú con texto y flecha
+        self.toggle_menu_btn = tk.Button(
+            bottom_buttons_frame,
+            text="◀ Ocultar menú",
+            font=('Segoe UI', 11, 'bold'),
+            bg=self.COLORS['primary'],
+            fg=self.COLORS['white'],
+            activebackground=self.COLORS['secondary'],
+            activeforeground=self.COLORS['white'],
+            relief='flat',
+            borderwidth=0,
+            highlightthickness=0,
+            cursor='hand2',
+            command=self.toggle_sidebar
+        )
+        self.toggle_menu_btn.pack(fill="x", padx=16, pady=(0, 10))
+
+        # Botón Salir debajo del toggle
         exit_btn = tk.Button(
-            exit_frame,
+            bottom_buttons_frame,
             text="  Salir del Sistema",
             font=('Segoe UI', 11, 'bold'),
             bg=self.COLORS['primary'],
             fg=self.COLORS['white'],
-            activebackground=self.COLORS['primary'],
+            activebackground=self.COLORS['secondary'],
             activeforeground=self.COLORS['white'],
             relief='flat',
             borderwidth=0,
@@ -425,17 +440,25 @@ class MainWindow:
         )
         if self.icons.get('salir'):
             exit_btn.config(image=self.icons['salir'], compound='left')
-        exit_btn.pack(fill="x", padx=16, pady=10)
+        exit_btn.pack(fill="x", padx=16)
 
-        # Hover transparente para el botón salir (igual que el menú de árbol)
-        def _exit_enter(e):
-            exit_btn.config(bg=self.COLORS['secondary'])  # Cambiado de 'hover' a 'secondary'
-        def _exit_leave(e):
+        # Hover para toggle_menu_btn
+        def on_toggle_enter(e):
+            self.toggle_menu_btn.config(bg=self.COLORS['secondary'])
+        def on_toggle_leave(e):
+            self.toggle_menu_btn.config(bg=self.COLORS['primary'])
+        self.toggle_menu_btn.bind('<Enter>', on_toggle_enter)
+        self.toggle_menu_btn.bind('<Leave>', on_toggle_leave)
+
+        # Hover para exit_btn
+        def on_exit_enter(e):
+            exit_btn.config(bg=self.COLORS['secondary'])
+        def on_exit_leave(e):
             exit_btn.config(bg=self.COLORS['primary'])
-        exit_btn.bind('<Enter>', _exit_enter)
-        exit_btn.bind('<Leave>', _exit_leave)
+        exit_btn.bind('<Enter>', on_exit_enter)
+        exit_btn.bind('<Leave>', on_exit_leave)
 
-        # Contenedor del menú con scroll
+        # Contenedor del menú con scroll (antes del bottom_buttons_frame)
         nav_container = tk.Frame(self.sidebar, bg=self.COLORS['primary'])
         nav_container.pack(fill="both", expand=True, padx=0, pady=10)
 
@@ -455,22 +478,7 @@ class MainWindow:
 
         self.create_navigation_menu(nav_frame)
 
-        # BOTÓN TOGGLE CENTRADO VERTICALMENTE - SIN FONDO
-        toggle_btn_sidebar = tk.Label(
-            self.sidebar,
-            text="◀",
-            font=('Segoe UI', 18, 'bold'),
-            bg=self.COLORS['primary'],
-            fg=self.COLORS['white'],
-            cursor='hand2'
-        )
-        toggle_btn_sidebar.place(relx=1.0, rely=0.5, anchor='e', x=-5)
-        toggle_btn_sidebar.bind('<Button-1>', lambda e: self.toggle_sidebar())
-                
-        self.toggle_btn_sidebar = toggle_btn_sidebar
-
     def create_menu_category(self, parent, category_name, items):
-        """Crea una categoría del menú con sus elementos hijo - ancho controlado"""
         # Frame principal de la categoría con ancho máximo
         category_frame = tk.Frame(parent, bg=self.COLORS['primary'])
         category_frame.pack(fill="x", pady=2)
@@ -483,14 +491,33 @@ class MainWindow:
         header_frame.pack(fill="x")
         
         # Crear el botón de expansión/colapso
-        expand_button = tk.Label(header_frame, 
-                            text="▶", 
-                            font=('Segoe UI', 10),
-                            fg=self.COLORS['white'],
-                            bg=self.COLORS['primary'],
-                            width=2,
-                            cursor='hand2')
+        expand_button = tk.Button(
+            header_frame,
+            text="▶",
+            font=('Segoe UI', 10),
+            fg=self.COLORS['white'],
+            bg=self.COLORS['primary'],
+            activeforeground=self.COLORS['hover'],
+            activebackground=self.COLORS['primary'],
+            relief='flat',
+            borderwidth=0,
+            highlightthickness=0,
+            width=2,
+            cursor='hand2'
+        )
         expand_button.pack(side="left", padx=(15, 5))
+
+        # Opcional: efecto hover para cambiar el color del texto
+        def on_enter(e):
+            if not self.menu_expanded[category_name]:
+                expand_button.config(fg=self.COLORS['hover'])
+
+        def on_leave(e):
+            if not self.menu_expanded[category_name]:
+                expand_button.config(fg=self.COLORS['white'])
+
+        expand_button.bind('<Enter>', on_enter)
+        expand_button.bind('<Leave>', on_leave)
         
         # Label del título de la categoría con texto truncado si es necesario
         category_label = tk.Label(header_frame,
@@ -503,7 +530,7 @@ class MainWindow:
         category_label.pack(side="left", fill="x", expand=True, padx=(0, 15))
         
         # Frame para los elementos hijo (inicialmente oculto) con ancho controlado
-        submenu_frame = tk.Frame(category_frame, bg=self.COLORS['secondary'])
+        submenu_frame = tk.Frame(category_frame, bg=self.COLORS['primary'], relief='flat', borderwidth=0)
         self.submenu_frames[category_name] = submenu_frame
         
         # Agregar elementos hijo
@@ -532,6 +559,10 @@ class MainWindow:
                 expand_button.config(bg=self.COLORS['primary'])
                 category_label.config(bg=self.COLORS['primary'])
         
+        # Guardar referencias para poder desvincular/vincular
+        header_frame._on_enter = on_header_enter
+        header_frame._on_leave = on_header_leave
+
         header_frame.bind('<Enter>', on_header_enter)
         header_frame.bind('<Leave>', on_header_leave)
         expand_button.bind('<Enter>', on_header_enter)
@@ -613,37 +644,55 @@ class MainWindow:
             widget.bind('<Button-1>', on_item_click)
 
     def toggle_menu_category(self, category_name, expand_button, submenu_frame):
-        """Alterna el estado de expansión/colapso de una categoría del menú - sin efectos de sombra"""
         is_expanded = self.menu_expanded[category_name]
-        
+        parent_frame = expand_button.master
+
         if is_expanded:
             # Colapsar
             submenu_frame.pack_forget()
             expand_button.config(text="▶")
             self.menu_expanded[category_name] = False
-            
-            # SIMPLIFICAR: Solo restaurar colores del header sin efectos adicionales
-            parent_frame = expand_button.master
+
+            # Restaurar colores del header
             parent_frame.config(bg=self.COLORS['primary'])
             expand_button.config(bg=self.COLORS['primary'])
             for child in parent_frame.winfo_children():
                 if isinstance(child, tk.Label) and child != expand_button:
                     child.config(bg=self.COLORS['primary'])
+
+            # Volver a vincular eventos hover
+            parent_frame.bind('<Enter>', parent_frame._on_enter)
+            parent_frame.bind('<Leave>', parent_frame._on_leave)
+            expand_button.bind('<Enter>', parent_frame._on_enter)
+            expand_button.bind('<Leave>', parent_frame._on_leave)
+            for widget in parent_frame.winfo_children():
+                if widget != expand_button:
+                    widget.bind('<Enter>', parent_frame._on_enter)
+                    widget.bind('<Leave>', parent_frame._on_leave)
+
         else:
             # Expandir
-            submenu_frame.pack(fill="x", pady=(0, 5))
+            submenu_frame.pack(fill="x")
             expand_button.config(text="▼")
             self.menu_expanded[category_name] = True
-            
-            # SIMPLIFICAR: Solo cambiar colores necesarios
-            parent_frame = expand_button.master
+
+            # Cambiar colores del header
             parent_frame.config(bg=self.COLORS['secondary'])
             expand_button.config(bg=self.COLORS['secondary'])
             for child in parent_frame.winfo_children():
                 if isinstance(child, tk.Label) and child != expand_button:
                     child.config(bg=self.COLORS['secondary'])
-        
-        # Actualizar layout sin animación adicional
+
+            # Desvincular eventos hover para desactivar hover mientras está expandido
+            parent_frame.unbind('<Enter>')
+            parent_frame.unbind('<Leave>')
+            expand_button.unbind('<Enter>')
+            expand_button.unbind('<Leave>')
+            for widget in parent_frame.winfo_children():
+                if widget != expand_button:
+                    widget.unbind('<Enter>')
+                    widget.unbind('<Leave>')
+
         self.sidebar.update_idletasks()
 
     def animate_menu_transition(self):
@@ -740,7 +789,7 @@ class MainWindow:
         self.main_content_frame.grid_columnconfigure(0, weight=1)
 
     def create_status_bar(self):
-        """Crea la barra de estado"""
+        """Crea la barra de estado con botón mostrar menú a la izquierda, usuario/servidor en el centro y fecha a la derecha"""
         # Información del usuario
         nombre_usuario = self.usuario.get('nombre_completo', self.usuario.get('username', 'Usuario'))
         rol_usuario = self.usuario.get('rol', '')
@@ -750,23 +799,64 @@ class MainWindow:
         config = get_config()
         nombre_servidor = config.get('host', 'Servidor desconocido')
 
+        import datetime
+        fecha_actual = datetime.datetime.now().strftime("%d/%m/%Y")
+
+        self.status_bar.config(padding=5)
+
+        # Botón mostrar menú (izquierda)
+        self.show_menu_btn = tk.Button(
+            self.status_bar,
+            text="▶ Mostrar menú",
+            font=('Segoe UI', 10, 'bold'),
+            bg=self.COLORS['secondary'],
+            fg=self.COLORS['white'],
+            activebackground=self.COLORS['primary'],
+            activeforeground=self.COLORS['white'],
+            relief='flat',
+            borderwidth=0,
+            highlightthickness=0,
+            cursor='hand2',
+            command=self.toggle_sidebar
+        )
+        self.show_menu_btn.pack(side="left", padx=(10,5), pady=2)
+
+        # Mostrar u ocultar botón según estado inicial del sidebar
+        if self.sidebar_visible:
+            self.show_menu_btn.pack_forget()
+
+        # Etiqueta usuario y servidor (centro)
         self.user_label = ttk.Label(
             self.status_bar,
             text=f"👤 Usuario: {nombre_usuario} ({rol_usuario})    🖥️ Servidor: {nombre_servidor}",
             style='StatusBar.TLabel'
         )
-        self.user_label.pack(side="left")
+        self.user_label.pack(side="left", padx=10)
 
-        # Información adicional (fecha, hora, etc.)
-        import datetime
-        fecha_actual = datetime.datetime.now().strftime("%d/%m/%Y")
+        # Etiqueta versión (centro derecha)
+        self.version_label = ttk.Label(
+            self.status_bar,
+            text="Versión: 1.1",
+            style='StatusBar.TLabel'
+        )
+        self.version_label.pack(side="left", padx=10)
 
+        # Etiqueta fecha (derecha)
         self.date_label = ttk.Label(
             self.status_bar,
             text=f"📅 {fecha_actual}",
             style='StatusBar.TLabel'
         )
-        self.date_label.pack(side="right")
+        self.date_label.pack(side="right", padx=10)
+
+        # Hover para el botón mostrar menú
+        def on_enter(e):
+            self.show_menu_btn.config(bg=self.COLORS['primary'])
+        def on_leave(e):
+            self.show_menu_btn.config(bg=self.COLORS['secondary'])
+
+        self.show_menu_btn.bind('<Enter>', on_enter)
+        self.show_menu_btn.bind('<Leave>', on_leave)
 
     def show_welcome_screen(self):
         """Muestra la pantalla de bienvenida mejorada con mejor alineación"""
@@ -1014,50 +1104,22 @@ class MainWindow:
         self.center_window(self.ANCHO_VENTANA, self.ALTO_VENTANA)
 
     def toggle_sidebar(self):
-        """Alterna la visibilidad del sidebar"""
         if self.sidebar_visible:
             # Ocultar sidebar
             self.sidebar.grid_forget()
             self.sidebar_visible = False
-            # Mostrar botón flotante CENTRADO VERTICALMENTE
-            if hasattr(self, 'floating_toggle_btn'):
-                self.floating_toggle_btn.place(relx=0, rely=0.5, x=10, anchor='w')
+
+            # Mostrar botón en barra de estado
+            self.show_menu_btn.pack(side="right", padx=10, pady=2)
         else:
             # Mostrar sidebar
             self.sidebar.grid(row=0, column=0, sticky="nsew", padx=0, pady=0)
             self.sidebar_visible = True
-            # Ocultar botón flotante
-            if hasattr(self, 'floating_toggle_btn'):
-                self.floating_toggle_btn.place_forget()
-        
-        self.root.update_idletasks()
 
-    def add_floating_toggle_button(self):
-        """Agrega un botón flotante centrado verticalmente que aparece cuando el sidebar está oculto"""
-        self.floating_toggle_btn = tk.Button(
-            self.main_area,
-            text="▶",
-            font=('Segoe UI', 16, 'bold'),
-            bg=self.COLORS['light'],
-            fg=self.COLORS['text_dark'],
-            activebackground=self.COLORS['light'],
-            activeforeground=self.COLORS['text_dark'],
-            relief='flat',
-            borderwidth=0,
-            highlightthickness=0,
-            width=2,
-            height=1,
-            cursor='hand2',
-            command=self.toggle_sidebar
-        )
-        
-        def on_enter(e):
-            self.floating_toggle_btn.config(bg=self.COLORS['light'], fg=self.COLORS['text_dark'])
-        def on_leave(e):
-            self.floating_toggle_btn.config(bg=self.COLORS['light'], fg=self.COLORS['text_dark'])
-        
-        self.floating_toggle_btn.bind('<Enter>', on_enter)
-        self.floating_toggle_btn.bind('<Leave>', on_leave)
+            # Ocultar botón en barra de estado
+            self.show_menu_btn.pack_forget()
+
+        self.root.update_idletasks()
 
     def setup_keyboard_shortcuts(self):
         """Configura atajos de teclado"""
