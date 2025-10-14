@@ -999,6 +999,38 @@ class ReporteBres:
 
             cantidad_maxima = f(promedio_mensual * nivel_maximo)
             cantidad_solicitar = f(cantidad_maxima - saldo_mes_siguiente)
+            
+            if nivel_servicio or nivel_tipo_servicio:
+                # SERVICIOS: nivel más bajo (no hay salidas inferiores)
+                existencia_fisica = (
+                    float(datos['saldo_anterior_servicios']) +
+                    float(datos['entradas_nivel_superior_servicios']) -
+                    float(datos['entregado_servicios']) +
+                    float(datos['reajustes_servicios'])
+                )
+            
+            elif nivel_distrito:
+                # DISTRITO: solo datos de nivel distrito (sin incluir servicios subordinados)
+                existencia_fisica = (
+                    float(datos['saldo_anterior_distritos']) +
+                    float(datos['entradas_nivel_superior_distritos']) -
+                    float(datos['salidas_nivel_inferior_distritos']) -
+                    float(datos['entregado_distritos']) +
+                    float(datos['reajustes_distritos'])
+                )
+            
+            elif nivel_area:
+                # ÁREA: solo datos de nivel área (sin incluir distritos subordinados)
+                existencia_fisica = (
+                    float(datos['saldo_anterior_area']) +
+                    float(datos['entradas_nivel_superior_area']) -
+                    float(datos['salidas_nivel_inferior_area']) +
+                    float(datos['reajustes_area'])
+                )
+            
+            else:
+                # Sin filtro: usar el saldo consolidado total
+                existencia_fisica = saldo_mes_siguiente
 
             datos_procesados.append({
                 'codigo_insumo': codigo,
@@ -1010,7 +1042,7 @@ class ReporteBres:
                 'demanda': self.formato_float(demanda_total),
                 'reajustes': f"{'+' if reajustes_total >= 0 else ''}{self.formato_float(reajustes_total)}",
                 'saldo_mes_siguiente': self.formato_float(saldo_mes_siguiente),
-                'existencia_fisica': self.formato_float(saldo_mes_siguiente),
+                'existencia_fisica': self.formato_float(existencia_fisica),
                 'promedio_mensual': self.formato_float(promedio_mensual),
                 'meses_existencia': self.formato_float(meses_existencia),
                 'cantidad_maxima': self.formato_float(cantidad_maxima),
