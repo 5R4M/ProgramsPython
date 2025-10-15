@@ -1,7 +1,7 @@
 import tkinter as tk
 from tkinter import ttk, messagebox
 from tkcalendar import DateEntry
-from datetime import datetime
+from datetime import datetime, date
 import sys
 import os
 from ttkwidgets.autocomplete import AutocompleteCombobox
@@ -1023,8 +1023,10 @@ class CorreccionMovimientos:
 
         rows = []
         for mov in data:
-            fecha_venc = mov.get('fecha_vencimiento') or "N/A"
-            lote = mov.get('lote') or "N/A"
+            # Cambio: usar cadena vacía en lugar de "N/A" para mantener consistencia
+            fecha_venc = mov.get('fecha_vencimiento') or ""
+            lote = mov.get('lote') or ""
+            
             rows.append((
                 mov.get('id', ''),                          # ID
                 mov.get('fecha', ''),                       # Fecha
@@ -1034,8 +1036,8 @@ class CorreccionMovimientos:
                 mov.get('referencia', '') or "",            # Referencia
                 mov.get('servicio_nombre', '') or "",       # Servicio
                 mov.get('tipo_movimiento', '') or "",       # Tipo de Movimiento
-                lote,                                       # Lote
-                fecha_venc,                                 # Fecha Vencimiento
+                lote,                                       # Lote (CAMBIO: vacío en lugar de N/A)
+                fecha_venc,                                 # Fecha Vencimiento (CAMBIO: vacío en lugar de N/A)
                 self.formato_float(mov.get('cantidad', 0)), # Cantidad
                 mov.get('insumo_nombre', '') or "",         # Insumo
                 mov.get('distrito_salida', '') or "",       # Distrito Salida
@@ -1104,25 +1106,25 @@ class CorreccionMovimientos:
         win.geometry(f"{W}x{H}+{x}+{y}")
         win.resizable(True, True)
 
-        # Helper tarjeta
-        def card(parent, title, pad=(20, 15), header_h=26):
+        # Helper tarjeta - COMPACTA EN ALTURA
+        def card(parent, title, pad=(20, 6), header_h=22):
             cont = tk.Frame(parent, bg=self.COLORS['light'], relief='solid', borderwidth=1)
             cont.pack(fill="x", padx=pad[0], pady=pad[1])
             header = tk.Frame(cont, bg=self.COLORS['primary'], height=header_h)
             header.pack(fill='x')
             header.pack_propagate(False)
             tk.Label(header, text=title, font=('Segoe UI', 9, 'bold'),
-                    fg=self.COLORS['white'], bg=self.COLORS['primary']).pack(side='left', padx=10, pady=4)
+                    fg=self.COLORS['white'], bg=self.COLORS['primary']).pack(side='left', padx=10, pady=2)
             content = tk.Frame(cont, bg=self.COLORS['light'])
-            content.pack(fill='x', padx=12, pady=8)
+            content.pack(fill='x', padx=12, pady=4)
             return cont, content
 
-        header_frame = tk.Frame(win, bg=self.COLORS['primary'], height=44)
-        header_frame.pack(fill="x", padx=20, pady=(20, 0))
+        header_frame = tk.Frame(win, bg=self.COLORS['primary'], height=40)
+        header_frame.pack(fill="x", padx=20, pady=(10, 6))
         header_frame.pack_propagate(False)
         tk.Label(
             header_frame, text="EDITAR MOVIMIENTO",
-            font=('Segoe UI', 16, 'bold'), bg=self.COLORS['primary'], fg='white'
+            font=('Segoe UI', 14, 'bold'), bg=self.COLORS['primary'], fg='white'
         ).pack(expand=True)
 
         # Vars
@@ -1144,37 +1146,44 @@ class CorreccionMovimientos:
         insumo_nombre = (movimiento.get('insumo_nombre') or "").strip()
         presentacion_var = tk.StringVar(value=(movimiento.get('presentacion') or movimiento.get('nombre_presentacion') or "").strip())
 
-        # Detalles
+        # DETALLES
         _, det = card(win, "📋 Detalles del Movimiento")
         for c in range(6):
             det.grid_columnconfigure(c, weight=1)
 
-        ttk.Label(det, text="Fecha de Registro:", style='Light.TLabel').grid(row=0, column=0, padx=5, pady=8, sticky='w')
+        ttk.Label(det, text="Fecha de Registro:", style='Light.TLabel').grid(row=0, column=0, padx=5, pady=4, sticky='w')
         fecha_entry = DateEntry(det, width=25, date_pattern='dd/mm/yyyy', style='Light.DateEntry')
-        fecha_entry.grid(row=0, column=1, padx=5, pady=8, sticky='ew')
-        try:
+        fecha_entry.grid(row=0, column=1, padx=5, pady=4, sticky='ew')
+        
+        def cargar_fecha_registro():
             if fecha_db:
-                # si viene como yyyy-mm-dd
-                fecha_entry.set_date(datetime.strptime(fecha_db, '%Y-%m-%d'))
-        except Exception:
-            # si ya viene dd/mm/yyyy
-            try:
-                fecha_entry.set_date(datetime.strptime(fecha_db, '%d/%m/%Y'))
-            except Exception:
-                pass
+                try:
+                    if isinstance(fecha_db, (datetime, date)):
+                        fecha_entry.set_date(fecha_db)
+                    else:
+                        try:
+                            fecha_obj = datetime.strptime(str(fecha_db), '%Y-%m-%d')
+                            fecha_entry.set_date(fecha_obj)
+                        except ValueError:
+                            fecha_obj = datetime.strptime(str(fecha_db), '%d/%m/%Y')
+                            fecha_entry.set_date(fecha_obj)
+                except Exception as e:
+                    print(f"Error cargando fecha de registro: {e}, valor: {fecha_db}, tipo: {type(fecha_db)}")
+        
+        det.after(50, cargar_fecha_registro)
 
-        ttk.Label(det, text="Referencia:", style='Light.TLabel').grid(row=0, column=2, padx=5, pady=8, sticky='w')
+        ttk.Label(det, text="Referencia:", style='Light.TLabel').grid(row=0, column=2, padx=5, pady=4, sticky='w')
         ref_entry = ttk.Entry(det, textvariable=ref_var, width=27)
-        ref_entry.grid(row=0, column=3, padx=5, pady=8, sticky='ew')
+        ref_entry.grid(row=0, column=3, padx=5, pady=4, sticky='ew')
 
-        ttk.Label(det, text="Tipo Movimiento:", style='Light.TLabel').grid(row=0, column=4, padx=5, pady=8, sticky='w')
+        ttk.Label(det, text="Tipo Movimiento:", style='Light.TLabel').grid(row=0, column=4, padx=5, pady=4, sticky='w')
         tipo_mov_cb = AutocompleteCombobox(det, textvariable=tipo_mov_var, width=25, state="normal")
-        tipo_mov_cb.grid(row=0, column=5, padx=5, pady=8, sticky='ew')
+        tipo_mov_cb.grid(row=0, column=5, padx=5, pady=4, sticky='ew')
         det.after_idle(lambda: tipo_mov_cb.set_completion_list(cache.get_tipos_movimiento_names() or []))
 
-        ttk.Label(det, text="Lote:", style='Light.TLabel').grid(row=1, column=0, padx=5, pady=8, sticky='w')
+        ttk.Label(det, text="Lote:", style='Light.TLabel').grid(row=1, column=0, padx=5, pady=4, sticky='w')
         lote_row = tk.Frame(det, bg=self.COLORS['light'])
-        lote_row.grid(row=1, column=1, padx=5, pady=8, sticky='ew')
+        lote_row.grid(row=1, column=1, padx=5, pady=4, sticky='ew')
         lote_row.columnconfigure(0, weight=1)
         lote_entry = ttk.Entry(lote_row, textvariable=lote_var, width=22)
         lote_entry.grid(row=0, column=0, sticky='ew')
@@ -1188,9 +1197,9 @@ class CorreccionMovimientos:
         chk_sin_lote.grid(row=0, column=1, padx=(8, 0), sticky='w')
         lote_entry.config(state=('disabled' if sin_lote_var.get() else 'normal'))
 
-        ttk.Label(det, text="Fecha Vencimiento:", style='Light.TLabel').grid(row=1, column=2, padx=5, pady=8, sticky='w')
+        ttk.Label(det, text="Fecha Vencimiento:", style='Light.TLabel').grid(row=1, column=2, padx=5, pady=4, sticky='w')
         fv_row = tk.Frame(det, bg=self.COLORS['light'])
-        fv_row.grid(row=1, column=3, padx=5, pady=8, sticky='w')
+        fv_row.grid(row=1, column=3, padx=5, pady=4, sticky='w')
         fecha_venc_entry = DateEntry(fv_row, width=15, date_pattern='dd/mm/yyyy', style='Light.DateEntry')
         fecha_venc_entry.pack(side='left')
         chk_sin_fv = tk.Checkbutton(
@@ -1201,40 +1210,120 @@ class CorreccionMovimientos:
             highlightthickness=0, bd=0
         )
         chk_sin_fv.pack(side='left', padx=(8, 0))
-        try:
+        
+        def cargar_fecha_vencimiento():
             if fv_db:
-                fecha_venc_entry.set_date(datetime.strptime(fv_db, '%Y-%m-%d'))
-        except Exception:
-            try:
-                fecha_venc_entry.set_date(datetime.strptime(fv_db, '%d/%m/%Y'))
-            except Exception:
-                pass
-        fecha_venc_entry.config(state=('disabled' if sin_fecha_var.get() else 'normal'))
+                try:
+                    if isinstance(fv_db, (datetime, date)):
+                        fecha_venc_entry.set_date(fv_db)
+                    else:
+                        try:
+                            fv_obj = datetime.strptime(str(fv_db), '%Y-%m-%d')
+                            fecha_venc_entry.set_date(fv_obj)
+                        except ValueError:
+                            fv_obj = datetime.strptime(str(fv_db), '%d/%m/%Y')
+                            fecha_venc_entry.set_date(fv_obj)
+                except Exception as e:
+                    print(f"Error cargando fecha vencimiento: {e}, valor: {fv_db}, tipo: {type(fv_db)}")
+            
+            fecha_venc_entry.config(state=('disabled' if sin_fecha_var.get() else 'normal'))
+        
+        fv_row.after(50, cargar_fecha_vencimiento)
 
-        ttk.Label(det, text="Cantidad:", style='Light.TLabel').grid(row=1, column=4, padx=5, pady=8, sticky='w')
+        ttk.Label(det, text="Cantidad:", style='Light.TLabel').grid(row=1, column=4, padx=5, pady=4, sticky='w')
         cantidad_entry = ttk.Entry(det, textvariable=cantidad_var, width=27)
-        cantidad_entry.grid(row=1, column=5, padx=5, pady=8, sticky='ew')
+        cantidad_entry.grid(row=1, column=5, padx=5, pady=4, sticky='ew')
 
-        ttk.Label(det, text="Observaciones:", style='Light.TLabel').grid(row=2, column=0, padx=5, pady=8, sticky='w')
+        ttk.Label(det, text="Observaciones:", style='Light.TLabel').grid(row=2, column=0, padx=5, pady=4, sticky='w')
         obs_entry = ttk.Entry(det, textvariable=obs_var, width=80)
-        obs_entry.grid(row=2, column=1, columnspan=5, padx=5, pady=8, sticky='ew')
+        obs_entry.grid(row=2, column=1, columnspan=5, padx=5, pady=4, sticky='ew')
 
-        # Insumo
+        # SALIDA NIVEL INFERIOR
+        salida_container, salida_content = card(win, "🔄 Salida Nivel Inferior", pad=(20, 6))
+        
+        for c in range(4):
+            salida_content.grid_columnconfigure(c, weight=1)
+        
+        ttk.Label(salida_content, text="Distrito Salida:", style='Light.TLabel').grid(row=0, column=0, padx=5, pady=4, sticky='w')
+        distrito_salida_var = tk.StringVar()
+        distrito_salida_cb = AutocompleteCombobox(salida_content, textvariable=distrito_salida_var, width=30, state="disabled")
+        distrito_salida_cb.grid(row=0, column=1, padx=5, pady=4, sticky='ew')
+        
+        ttk.Label(salida_content, text="Servicio Salida:", style='Light.TLabel').grid(row=0, column=2, padx=5, pady=4, sticky='w')
+        servicio_salida_var = tk.StringVar()
+        servicio_salida_cb = AutocompleteCombobox(salida_content, textvariable=servicio_salida_var, width=30, state="disabled")
+        servicio_salida_cb.grid(row=0, column=3, padx=5, pady=4, sticky='ew')
+        
+        distrito_salida_inicial = (movimiento.get('distrito_salida') or '').strip()
+        servicio_salida_inicial = (movimiento.get('servicio_salida') or '').strip()
+        if distrito_salida_inicial:
+            distrito_salida_var.set(distrito_salida_inicial)
+        if servicio_salida_inicial:
+            servicio_salida_var.set(servicio_salida_inicial)
+        
+        def on_tipo_movimiento_change(*args):
+            tipo_seleccionado = (tipo_mov_var.get() or '').strip().upper()
+            if tipo_seleccionado == "SALIDA NIVEL INFERIOR":
+                distrito_salida_cb.config(state="normal")
+                servicio_salida_cb.config(state="normal")
+                
+                distritos_salida = cache.get_distritos_names()
+                distrito_salida_cb.set_completion_list([''] + distritos_salida)
+                
+                if distrito_salida_inicial:
+                    distrito_id = cache.distrito_id(distrito_salida_inicial)
+                    if distrito_id:
+                        tipos_serv = cache.get_tipos_servicio_por_distrito(distrito_id) or []
+                        servicios = []
+                        for ts in tipos_serv:
+                            servicios.extend(cache.get_servicios_por_tipo(ts['id']) or [])
+                        servicio_salida_cb.set_completion_list([''] + [s['nombre'] for s in servicios])
+            else:
+                distrito_salida_cb.config(state="disabled")
+                servicio_salida_cb.config(state="disabled")
+                distrito_salida_var.set('')
+                servicio_salida_var.set('')
+        
+        def on_distrito_salida_change(*args):
+            if distrito_salida_cb.cget('state') == 'disabled':
+                return
+                
+            distrito_nombre = (distrito_salida_var.get() or '').strip()
+            if not distrito_nombre:
+                servicio_salida_cb.set_completion_list([''])
+                servicio_salida_var.set('')
+                return
+            
+            distrito_id = cache.distrito_id(distrito_nombre)
+            if distrito_id:
+                tipos_serv = cache.get_tipos_servicio_por_distrito(distrito_id) or []
+                servicios = []
+                for ts in tipos_serv:
+                    servicios.extend(cache.get_servicios_por_tipo(ts['id']) or [])
+                servicio_salida_cb.set_completion_list([''] + [s['nombre'] for s in servicios])
+            else:
+                servicio_salida_cb.set_completion_list([''])
+        
+        tipo_mov_var.trace_add('write', on_tipo_movimiento_change)
+        distrito_salida_var.trace_add('write', on_distrito_salida_change)
+        win.after(100, on_tipo_movimiento_change)
+        
+        # INSUMO
         _, ins = card(win, "💊 Insumo")
         for c in range(4):
             ins.grid_columnconfigure(c, weight=1)
 
-        ttk.Label(ins, text="Insumo:", style='Light.TLabel').grid(row=0, column=0, padx=5, pady=8, sticky='w')
+        ttk.Label(ins, text="Insumo:", style='Light.TLabel').grid(row=0, column=0, padx=5, pady=4, sticky='w')
         insumo_wrap = tk.Label(
             ins, text=(movimiento.get('insumo_nombre') or ""),
             bg=self.COLORS['light'], fg=self.COLORS['text_dark'],
             font=('Segoe UI', 9), justify='left', anchor='w', wraplength=420
         )
-        insumo_wrap.grid(row=0, column=1, padx=5, pady=8, sticky='ew')
+        insumo_wrap.grid(row=0, column=1, padx=5, pady=4, sticky='ew')
 
-        ttk.Label(ins, text="Presentación:", style='Light.TLabel').grid(row=0, column=2, padx=5, pady=8, sticky='w')
+        ttk.Label(ins, text="Presentación:", style='Light.TLabel').grid(row=0, column=2, padx=5, pady=4, sticky='w')
         presentacion_cb = AutocompleteCombobox(ins, textvariable=presentacion_var, width=25, state="normal")
-        presentacion_cb.grid(row=0, column=3, padx=5, pady=8, sticky='ew')
+        presentacion_cb.grid(row=0, column=3, padx=5, pady=4, sticky='ew')
 
         def cargar_presentacion_insumo():
             try:
@@ -1242,8 +1331,6 @@ class CorreccionMovimientos:
                 if preset:
                     presentacion_cb.set_completion_list([preset])
                     return
-                # Resolver presentación a partir del catálogo cacheado
-                # construimos un índice una sola vez
                 if getattr(self, '_idx_insumos_por_nombre', None) is None:
                     def build_and_set():
                         self._idx_insumos_por_nombre = {}
@@ -1269,26 +1356,28 @@ class CorreccionMovimientos:
 
         ins.after_idle(cargar_presentacion_insumo)
 
-        # Ubicación (solo lectura)
+        # UBICACIÓN
         _, ubi = card(win, "📍 Ubicación")
         for c in range(4):
             ubi.grid_columnconfigure(c, weight=1)
 
-        ttk.Label(ubi, text="Área:", style='Light.TLabel').grid(row=0, column=0, padx=5, pady=6, sticky='w')
-        ttk.Label(ubi, text=movimiento.get('area_nombre', '') or "", style='Light.TLabel').grid(row=0, column=1, padx=5, pady=6, sticky='w')
-        ttk.Label(ubi, text="Distrito:", style='Light.TLabel').grid(row=0, column=2, padx=5, pady=6, sticky='w')
-        ttk.Label(ubi, text=movimiento.get('distrito_nombre', '') or "", style='Light.TLabel').grid(row=0, column=3, padx=5, pady=6, sticky='w')
+        ttk.Label(ubi, text="Área:", style='Light.TLabel').grid(row=0, column=0, padx=5, pady=4, sticky='w')
+        ttk.Label(ubi, text=movimiento.get('area_nombre', '') or "", style='Light.TLabel').grid(row=0, column=1, padx=5, pady=4, sticky='w')
+        ttk.Label(ubi, text="Distrito:", style='Light.TLabel').grid(row=0, column=2, padx=5, pady=4, sticky='w')
+        ttk.Label(ubi, text=movimiento.get('distrito_nombre', '') or "", style='Light.TLabel').grid(row=0, column=3, padx=5, pady=4, sticky='w')
 
-        ttk.Label(ubi, text="Tipo de Servicio:", style='Light.TLabel').grid(row=1, column=0, padx=5, pady=6, sticky='w')
-        ttk.Label(ubi, text=movimiento.get('tipo_servicio_desc', '') or "", style='Light.TLabel').grid(row=1, column=1, padx=5, pady=6, sticky='w')
-        ttk.Label(ubi, text="Servicio:", style='Light.TLabel').grid(row=1, column=2, padx=5, pady=6, sticky='w')
-        ttk.Label(ubi, text=movimiento.get('servicio_nombre', '') or "", style='Light.TLabel').grid(row=1, column=3, padx=5, pady=6, sticky='w')
+        ttk.Label(ubi, text="Tipo de Servicio:", style='Light.TLabel').grid(row=1, column=0, padx=5, pady=4, sticky='w')
+        ttk.Label(ubi, text=movimiento.get('tipo_servicio_desc', '') or "", style='Light.TLabel').grid(row=1, column=1, padx=5, pady=4, sticky='w')
+        ttk.Label(ubi, text="Servicio:", style='Light.TLabel').grid(row=1, column=2, padx=5, pady=4, sticky='w')
+        ttk.Label(ubi, text=movimiento.get('servicio_nombre', '') or "", style='Light.TLabel').grid(row=1, column=3, padx=5, pady=4, sticky='w')
 
-        # Botones guardar/cerrar
-        btns_frame = tk.Frame(win, bg=self.COLORS['light'])
-        btns_frame.pack(fill="x", padx=20, pady=24)
+        # BOTONES FIJOS EN PARTE INFERIOR
+        btns_frame = tk.Frame(win, bg=self.COLORS['light'], height=50)
+        btns_frame.pack(side="bottom", fill="x", padx=20, pady=10)
+        btns_frame.pack_propagate(False)
+        
         btns_inner = tk.Frame(btns_frame, bg=self.COLORS['light'])
-        btns_inner.pack(anchor='center')
+        btns_inner.pack(expand=True)
 
         def validar():
             try:
@@ -1337,6 +1426,14 @@ class CorreccionMovimientos:
                 fv_val = None if sin_fecha_var.get() else fecha_venc_entry.get_date().strftime('%Y-%m-%d')
                 cantidad_val = float(cantidad_var.get().strip() or "0")
 
+                # IMPORTANTE: Limpiar distrito_salida y servicio_salida si NO es SALIDA NIVEL INFERIOR
+                distrito_salida_val = None
+                servicio_salida_val = None
+                
+                if tipo_mov_val.upper() == "SALIDA NIVEL INFERIOR":
+                    distrito_salida_val = (distrito_salida_var.get() or '').strip() or None
+                    servicio_salida_val = (servicio_salida_var.get() or '').strip() or None
+                
                 datos_actualizados = {
                     'id': movimiento['id'],
                     'fecha': fecha_val,
@@ -1345,14 +1442,72 @@ class CorreccionMovimientos:
                     'lote': lote_val,
                     'fecha_vencimiento': fv_val,
                     'cantidad': cantidad_val,
-                    'observaciones': obs_var.get()
+                    'observaciones': obs_var.get(),
+                    'distrito_salida': distrito_salida_val,
+                    'servicio_salida': servicio_salida_val
                 }
 
+                # Guardar en base de datos
                 actualizar_movimiento(datos_actualizados['id'], datos_actualizados)
+
+                # PASO 1: Actualizar los datos en memoria (self.movimientos_data)
+                for i, mov in enumerate(self.movimientos_data):
+                    if str(mov['id']) == str(movimiento['id']):
+                        # Actualizar todos los campos
+                        self.movimientos_data[i]['fecha'] = fecha_val
+                        self.movimientos_data[i]['referencia'] = datos_actualizados['referencia']
+                        self.movimientos_data[i]['tipo_movimiento'] = tipo_mov_val
+                        self.movimientos_data[i]['lote'] = lote_val if lote_val else ""
+                        self.movimientos_data[i]['fecha_vencimiento'] = fv_val if fv_val else ""
+                        self.movimientos_data[i]['cantidad'] = cantidad_val
+                        self.movimientos_data[i]['observaciones'] = datos_actualizados['observaciones']
+                        self.movimientos_data[i]['distrito_salida'] = distrito_salida_val if distrito_salida_val else ""
+                        self.movimientos_data[i]['servicio_salida'] = servicio_salida_val if servicio_salida_val else ""
+                        break
+
+                # PASO 2: Actualizar la fila en el TreeView
+                for item in self.tree.get_children():
+                    item_values = self.tree.item(item, 'values')
+                    if str(item_values[0]) == str(movimiento['id']):  # Comparar por ID
+                        # Convertir fechas al formato DD/MM/YYYY para el TreeView
+                        try:
+                            fecha_mostrar = datetime.strptime(fecha_val, '%Y-%m-%d').strftime('%d/%m/%Y')
+                        except Exception:
+                            fecha_mostrar = fecha_val
+                        
+                        fv_mostrar = ""
+                        if fv_val:
+                            try:
+                                fv_mostrar = datetime.strptime(fv_val, '%Y-%m-%d').strftime('%d/%m/%Y')
+                            except Exception:
+                                fv_mostrar = fv_val
+                        
+                        # Construir la nueva fila con los datos actualizados
+                        # IMPORTANTE: Usar item_values[índice] para mantener los valores que no cambian
+                        new_values = (
+                            datos_actualizados['id'],                           # ID
+                            fecha_mostrar,                                      # Fecha (ACTUALIZADO)
+                            item_values[2],                                     # Área (mantener valor actual del tree)
+                            item_values[3],                                     # Distrito (mantener valor actual del tree)
+                            item_values[4],                                     # Tipo Servicio (mantener valor actual del tree)
+                            datos_actualizados['referencia'],                   # Referencia (ACTUALIZADO)
+                            item_values[6],                                     # Servicio (mantener valor actual del tree)
+                            tipo_mov_val,                                       # Tipo Movimiento (ACTUALIZADO)
+                            lote_val if lote_val else "",                       # Lote (ACTUALIZADO)
+                            fv_mostrar,                                         # Fecha Vencimiento (ACTUALIZADO)
+                            self.formato_float(cantidad_val),                   # Cantidad (ACTUALIZADO)
+                            item_values[11],                                    # Insumo (mantener valor actual del tree)
+                            distrito_salida_val if distrito_salida_val else "", # Distrito Salida (ACTUALIZADO)
+                            servicio_salida_val if servicio_salida_val else "", # Servicio Salida (ACTUALIZADO)
+                            datos_actualizados['observaciones']                 # Observaciones (ACTUALIZADO)
+                        )
+                        # Actualizar la fila del TreeView
+                        self.tree.item(item, values=new_values)
+                        break
 
                 messagebox.showinfo("Éxito", "Movimiento actualizado correctamente")
                 win.destroy()
-                self.buscar_movimientos()
+                
             except Exception as e:
                 messagebox.showerror("Error", f"Error al actualizar movimiento: {str(e)}")
 
