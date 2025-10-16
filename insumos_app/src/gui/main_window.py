@@ -24,6 +24,7 @@ from src.gui.reporte_demanda_real import ReporteDemandaReal
 from src.gui.reporte_bres import ReporteBres
 from src.gui.reporte_balance_bodega import ReporteBalanceBodega
 from src.gui.configurar_servidor import ConfigurarServidor
+from src.gui.reporte_cantidad_solicitada import ReporteCantidadSolicitada
 from src.gui.importar_exportar_manager import ImportarExportarManager, crear_gestor_importar_exportar
 
 def resource_path(relative_path):
@@ -257,6 +258,7 @@ class MainWindow:
             'demanda': 'demanda-real.png',
             'correcciones': 'correcion.png',
             'bres': 'bres.png',
+            'cantidad_solicitada': 'cantidad_solicitada.png',
             'balance': 'balance.png',
             'salir': 'salir.png',
             'logo': 'logo.png'
@@ -349,6 +351,7 @@ class MainWindow:
                 ("Reporte Kardex", self.load_reporte_kardex, 'kardex'),
                 ("Reporte Demanda Real", self.load_reporte_demanda_real, 'demanda'),
                 ("Reporte BRES", self.load_reporte_bres, 'bres'),
+                ("Reporte Cantidad Solicitada", self.load_reporte_cantidad_solicitada, 'cantidad_solicitada'),
                 ("Reporte Balance Bodega", self.load_reporte_balance_bodega, 'balance'),
             ]
         
@@ -1285,7 +1288,15 @@ class MainWindow:
         self.clear_content_frame()
         self.reset_window_size()
         self.pantalla_actual = ReporteBres(self.main_content_frame, self)
-        
+    
+    def load_reporte_cantidad_solicitada(self):
+        if not self.verify_database_connection():
+            messagebox.showerror("Error", "No se puede conectar a la base de datos")
+            return
+        self.clear_content_frame()
+        self.reset_window_size()
+        self.pantalla_actual = ReporteCantidadSolicitada(self.main_content_frame, self)
+    
     def load_reporte_balance_bodega(self):
         if not self.verify_database_connection():
             messagebox.showerror("Error", "No se puede conectar a la base de datos")

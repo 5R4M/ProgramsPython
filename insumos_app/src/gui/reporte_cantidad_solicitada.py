@@ -42,7 +42,7 @@ def resource_path(relative_path):
         base_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
     return os.path.join(base_path, relative_path)
 
-class ReporteBres:
+class ReporteCantidadSolicitada:
     # Definir las columnas como atributo de la clase
     COLUMNAS = [
         'Código Insumo', 'Nombre del Insumo', 'Saldo Anterior', 'Entradas Nivel Superior',
@@ -719,8 +719,8 @@ class ReporteBres:
         ini = fecha_ini.strftime('%d/%m/%Y')
         fin = fecha_fin.strftime('%d/%m/%Y')
         return f"Periodo logístico: {ini} – {fin}"
-    
-    def procesar_datos_bres(self, movimientos_raw, fecha_ini, fecha_fin, todos_los_insumos=None):
+
+    def procesar_datos_cantidad_solicitada(self, movimientos_raw, fecha_ini, fecha_fin, todos_los_insumos=None):
         """
         Procesa BRES:
         - Usa self.saldo_anterior_por_insumo (saldo al 25 inclusive) como base.
@@ -1331,12 +1331,12 @@ class ReporteBres:
         title_inner = tk.Frame(title_frame, bg=self.COLORS['primary'])
         title_inner.pack(fill='both', expand=True, padx=15, pady=4)
 
-        tk.Label(title_inner, text="📊 Reporte BRES",
+        tk.Label(title_inner, text="📊 Reporte Cantidad Solicitada",
                 font=('Segoe UI', 10, 'bold'),
                 fg=self.COLORS['white'],
                 bg=self.COLORS['primary']).pack(anchor='w')
 
-        tk.Label(title_inner, text="Balance, Requisición y Envío de Suministros",
+        tk.Label(title_inner, text="Cantidad Solicitada según demanda real y niveles máximos",
                 font=('Segoe UI', 7),
                 fg=self.COLORS['white'],
                 bg=self.COLORS['primary']).pack(anchor='w', pady=(1, 0))
@@ -1661,16 +1661,10 @@ class ReporteBres:
             self.combo_presentacion.set_completion_list(opciones)
 
     def generar_vista_previa(self):
-        # Deshabilitar botón para evitar múltiples clics rápidos
-        for child in self.frame_botones.winfo_children():
-            if child.cget('text') == "Vista Previa":
-                child.config(state='disabled')
-                break
-
         # Mostrar animación
         self.mostrar_animacion_carga()
         self.parent.update()
-
+    
         try:
             if self.modo_fecha_var.get() == "rango":
                 fecha_ini = datetime.strptime(self.fecha_inicial.get(), '%d/%m/%Y')
@@ -1685,8 +1679,10 @@ class ReporteBres:
                 fecha_ini_str, fecha_fin_str = self.calcular_rango_corte_logistico(anio, mes_inicio, mes_final)
                 fecha_ini = datetime.strptime(fecha_ini_str, '%d/%m/%Y')
                 fecha_fin = datetime.strptime(fecha_fin_str, '%d/%m/%Y')
-
+                
                 periodo_txt = self._formatear_periodo_logistico(fecha_ini, fecha_fin)
+                # Si quieres, colócalo en algún lugar de tu UI:
+                # Por ejemplo, crear una etiqueta en self.pdf_outer arriba del visor:
                 if not hasattr(self, 'lbl_periodo_logistico_ui'):
                     self.lbl_periodo_logistico_ui = tk.Label(self.pdf_outer, text=periodo_txt, bg=self.COLORS['white'], fg=self.COLORS['text_dark'], font=('Segoe UI', 9, 'italic'))
                     self.lbl_periodo_logistico_ui.pack(anchor='w', padx=5, pady=(0, 4))
@@ -1708,21 +1704,25 @@ class ReporteBres:
                 insumo_nombre=self.combo_insumo.get().strip() or None,
                 presentacion_nombre=self.combo_presentacion.get().strip() or None
             )
-
+            
+            # Construir contexto actual para saldo anterior (CON TODOS LOS FILTROS)
             contexto = {
                 'area': (self.combo_area.get() or '').strip() or None,
                 'distrito': (self.combo_distrito.get() or '').strip() or None,
                 'tipo_servicio': (self.combo_tipo_servicio.get() or '').strip() or None,
                 'servicio': (self.combo_servicio.get() or '').strip() or None,
                 'presentacion': (self.combo_presentacion.get() or '').strip() or None,
-                'tipo_insumo': (self.combo_tipo_insumo.get() or '').strip() or None,
-                'insumo': (self.combo_insumo.get() or '').strip() or None
+                'tipo_insumo': (self.combo_tipo_insumo.get() or '').strip() or None,  # ✅ NUEVO
+                'insumo': (self.combo_insumo.get() or '').strip() or None  # ✅ NUEVO
             }
 
+            # Fecha de corte: 25 del mes de fecha_ini
             fecha_corte_anterior = self._fecha_corte_anterior(fecha_ini)
 
+            # === OBTENER TODOS LOS INSUMOS CON SALDO ===
             insumos_con_saldo = self._obtener_insumos_con_saldo(fecha_corte_anterior, contexto)
 
+            # Detectar insumos únicos en el periodo actual
             insumo_ids_en_periodo = set()
             for m in movimientos_raw:
                 iid = m.get('codigo_insumo')
@@ -1734,19 +1734,22 @@ class ReporteBres:
                 except:
                     pass
 
+            # COMBINAR: insumos con saldo anterior + insumos del periodo actual
             todos_los_insumos = set(insumos_con_saldo) | insumo_ids_en_periodo
 
             if not todos_los_insumos:
                 messagebox.showinfo("Info", "No hay datos para mostrar")
                 return
 
+            # Calcular saldo anterior para TODOS los insumos en UNA SOLA consulta batch
             self.saldo_anterior_por_insumo = self._obtener_saldos_batch(
-                fecha_corte_anterior,
-                contexto,
+                fecha_corte_anterior, 
+                contexto, 
                 list(todos_los_insumos)
             )
 
-            self.movimientos_data = self.procesar_datos_bres(movimientos_raw, fecha_ini, fecha_fin, todos_los_insumos)
+            # Procesar datos con todos los insumos (incluso sin movimientos nuevos)
+            self.movimientos_data = self.procesar_datos_cantidad_solicitada(movimientos_raw, fecha_ini, fecha_fin, todos_los_insumos)
 
             if not movimientos_raw:
                 messagebox.showinfo("Info", "No hay datos para mostrar")
@@ -1761,7 +1764,6 @@ class ReporteBres:
             self.temp_pdf_path = os.path.join(temp_dir, "vista_previa_bres.pdf")
             self.generar_pdf(self.temp_pdf_path, es_vista_previa=True)
 
-            # Destruir contenido previo del pdf_body
             for w in self.pdf_body.winfo_children():
                 w.destroy()
 
@@ -1780,35 +1782,30 @@ class ReporteBres:
             h_scrollbar.pack(side="bottom", fill="x")
 
             canvas = tk.Canvas(canvas_frame, bg=self.COLORS['white'],
-                            yscrollcommand=v_scrollbar.set,
-                            xscrollcommand=h_scrollbar.set)
+                               yscrollcommand=v_scrollbar.set,
+                               xscrollcommand=h_scrollbar.set)
             canvas.pack(side="left", fill="both", expand=True)
             v_scrollbar.config(command=canvas.yview)
             h_scrollbar.config(command=canvas.xview)
-
-            # Guardar referencia para evitar acceso a widget destruido
-            self.canvas = canvas
 
             doc = fitz.open(self.temp_pdf_path)
             self.current_page = 0
             self.total_pages = len(doc)
             self.zoom_level = 1.5
-
+            
             def display_page():
-                if not self.canvas.winfo_exists():
-                    return
-                self.canvas.delete("all")
+                canvas.delete("all")
                 page = doc.load_page(self.current_page)
                 pix = page.get_pixmap(matrix=fitz.Matrix(self.zoom_level, self.zoom_level))
                 img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
                 tk_img = ImageTk.PhotoImage(image=img)
-                self.canvas.image = tk_img
-                cw = self.canvas.winfo_width()
-                ch = self.canvas.winfo_height()
+                canvas.image = tk_img
+                cw = canvas.winfo_width()
+                ch = canvas.winfo_height()
                 x = max((cw - pix.width) // 2, 0)
                 y = max((ch - pix.height) // 2, 0)
-                self.canvas.create_image(x, y, anchor="nw", image=tk_img)
-                self.canvas.config(scrollregion=self.canvas.bbox("all"))
+                canvas.create_image(x, y, anchor="nw", image=tk_img)
+                canvas.config(scrollregion=canvas.bbox("all"))
                 page_label.config(text=f"Página {self.current_page + 1} de {self.total_pages}")
                 zoom_label.config(text=f"Zoom: {int(self.zoom_level * 100)}%")
 
@@ -1825,9 +1822,7 @@ class ReporteBres:
 
             def fit_to_width():
                 try:
-                    if not self.canvas.winfo_exists():
-                        return
-                    cw = self.canvas.winfo_width()
+                    cw = canvas.winfo_width()
                     if cw > 100:
                         page = doc.load_page(self.current_page)
                         zoom = (cw - 20) / page.rect.width
@@ -1838,10 +1833,8 @@ class ReporteBres:
 
             def fit_to_page():
                 try:
-                    if not self.canvas.winfo_exists():
-                        return
-                    cw = self.canvas.winfo_width()
-                    ch = self.canvas.winfo_height()
+                    cw = canvas.winfo_width()
+                    ch = canvas.winfo_height()
                     if cw > 100 and ch > 100:
                         page = doc.load_page(self.current_page)
                         zoom_x = (cw - 20) / page.rect.width
@@ -1870,17 +1863,17 @@ class ReporteBres:
                     control_top_frame.pack(fill="x", pady=5)
 
                     btn_cerrar_max = tk.Button(control_top_frame, text="✕ Cerrar Vista Maximizada",
-                                            command=ventana_max.destroy,
-                                            bg=self.COLORS['danger'], fg='white',
-                                            font=('Segoe UI', 10, 'bold'), relief='flat', borderwidth=0, cursor='hand2',
-                                            pady=8, padx=15)
+                                               command=ventana_max.destroy,
+                                               bg=self.COLORS['danger'], fg='white',
+                                               font=('Segoe UI', 10, 'bold'), relief='flat', borderwidth=0, cursor='hand2',
+                                               pady=8, padx=15)
                     btn_cerrar_max.pack(side="right", padx=10)
 
                     btn_abrir_externo = tk.Button(control_top_frame, text="📄 Abrir en App Externa",
-                                                command=self.abrir_pdf_externo,
-                                                bg=self.COLORS['primary'], fg='white',
-                                                font=('Segoe UI', 10, 'bold'), relief='flat', borderwidth=0, cursor='hand2',
-                                                pady=8, padx=15)
+                                                  command=self.abrir_pdf_externo,
+                                                  bg=self.COLORS['primary'], fg='white',
+                                                  font=('Segoe UI', 10, 'bold'), relief='flat', borderwidth=0, cursor='hand2',
+                                                  pady=8, padx=15)
                     btn_abrir_externo.pack(side="right", padx=5)
 
                     canvas_max_frame = tk.Frame(main_frame, bg=self.COLORS['white'])
@@ -1892,7 +1885,7 @@ class ReporteBres:
                     v_scroll_max.pack(side="right", fill="y")
 
                     canvas_max = tk.Canvas(canvas_max_frame, xscrollcommand=h_scroll_max.set, yscrollcommand=v_scroll_max.set,
-                                        bg=self.COLORS['white'], highlightthickness=0)
+                                           bg=self.COLORS['white'], highlightthickness=0)
                     canvas_max.pack(side="left", fill="both", expand=True)
 
                     h_scroll_max.config(command=canvas_max.xview)
@@ -1944,31 +1937,31 @@ class ReporteBres:
                             print(f"Error en fit_to_page_max: {e}")
 
                     btn_prev_max = tk.Button(control_max_frame, text="◀◀ Anterior", command=lambda: change_page_max(-1),
-                                            bg=self.COLORS['white'], fg=self.COLORS['text_dark'],
-                                            font=('Segoe UI', 11, 'bold'), relief='flat', borderwidth=1, cursor='hand2',
-                                            pady=5, padx=15)
+                                             bg=self.COLORS['white'], fg=self.COLORS['text_dark'],
+                                             font=('Segoe UI', 11, 'bold'), relief='flat', borderwidth=1, cursor='hand2',
+                                             pady=5, padx=15)
                     btn_prev_max.pack(side="left", padx=5)
 
                     page_label_max = tk.Label(control_max_frame, text=f"Página 1 de {self.total_pages}",
-                                            bg=self.COLORS['white'], fg=self.COLORS['text_dark'],
-                                            font=('Segoe UI', 11, 'bold'))
+                                              bg=self.COLORS['white'], fg=self.COLORS['text_dark'],
+                                              font=('Segoe UI', 11, 'bold'))
                     page_label_max.pack(side="left", padx=10)
 
                     btn_next_max = tk.Button(control_max_frame, text="Siguiente ▶▶", command=lambda: change_page_max(1),
-                                            bg=self.COLORS['white'], fg=self.COLORS['text_dark'],
-                                            font=('Segoe UI', 11, 'bold'), relief='flat', borderwidth=1, cursor='hand2',
-                                            pady=5, padx=15)
+                                             bg=self.COLORS['white'], fg=self.COLORS['text_dark'],
+                                             font=('Segoe UI', 11, 'bold'), relief='flat', borderwidth=1, cursor='hand2',
+                                             pady=5, padx=15)
                     btn_next_max.pack(side="left", padx=5)
 
                     btn_zoom_out_max = tk.Button(control_max_frame, text="🔍− Alejar", command=lambda: change_zoom_max(-0.25),
-                                                bg=self.COLORS['white'], fg=self.COLORS['text_dark'],
-                                                font=('Segoe UI', 10, 'bold'), relief='flat', borderwidth=1, cursor='hand2',
-                                                pady=5, padx=10)
+                                                 bg=self.COLORS['white'], fg=self.COLORS['text_dark'],
+                                                 font=('Segoe UI', 10, 'bold'), relief='flat', borderwidth=1, cursor='hand2',
+                                                 pady=5, padx=10)
                     btn_zoom_out_max.pack(side="left", padx=5)
 
                     zoom_label_max = tk.Label(control_max_frame, text=f"Zoom: {int(zoom_level_max[0] * 100)}%",
-                                            bg=self.COLORS['white'], fg=self.COLORS['text_dark'],
-                                            font=('Segoe UI', 10, 'bold'))
+                                              bg=self.COLORS['white'], fg=self.COLORS['text_dark'],
+                                              font=('Segoe UI', 10, 'bold'))
                     zoom_label_max.pack(side="left", padx=5)
 
                     btn_zoom_in_max = tk.Button(control_max_frame, text="🔍+ Acercar", command=lambda: change_zoom_max(0.25),
@@ -1989,35 +1982,35 @@ class ReporteBres:
                     messagebox.showerror("Error", f"Error al maximizar reporte: {str(e)}")
 
             btn_anterior = tk.Button(control_frame, text="◀", command=lambda: change_page(-1),
-                                    bg=self.COLORS['white'], fg=self.COLORS['text_dark'],
-                                    font=('Segoe UI', 10, 'bold'), relief='flat', borderwidth=0, cursor='hand2',
-                                    activebackground=self.COLORS['white'], activeforeground=self.COLORS['text_dark'])
+                                     bg=self.COLORS['white'], fg=self.COLORS['text_dark'],
+                                     font=('Segoe UI', 10, 'bold'), relief='flat', borderwidth=0, cursor='hand2',
+                                     activebackground=self.COLORS['white'], activeforeground=self.COLORS['text_dark'])
             btn_anterior.pack(side="left", padx=(10, 2), pady=2)
 
             page_label = tk.Label(control_frame, text=f"Página 1 de {self.total_pages}",
-                                bg=self.COLORS['white'], fg=self.COLORS['text_dark'],
-                                font=('Segoe UI', 10, 'bold'))
+                                  bg=self.COLORS['white'], fg=self.COLORS['text_dark'],
+                                  font=('Segoe UI', 10, 'bold'))
             page_label.pack(side="left", padx=2, pady=2)
 
             btn_siguiente = tk.Button(control_frame, text="▶", command=lambda: change_page(1),
-                                    bg=self.COLORS['white'], fg=self.COLORS['text_dark'],
-                                    font=('Segoe UI', 10, 'bold'), relief='flat', borderwidth=0, cursor='hand2',
-                                    activebackground=self.COLORS['white'], activeforeground=self.COLORS['text_dark'])
+                                      bg=self.COLORS['white'], fg=self.COLORS['text_dark'],
+                                      font=('Segoe UI', 10, 'bold'), relief='flat', borderwidth=0, cursor='hand2',
+                                      activebackground=self.COLORS['white'], activeforeground=self.COLORS['text_dark'])
             btn_siguiente.pack(side="left", padx=2, pady=2)
 
             separator = tk.Label(control_frame, text="|",
-                                bg=self.COLORS['white'], fg=self.COLORS['text_dark'],
-                                font=('Segoe UI', 12, 'bold'))
+                                 bg=self.COLORS['white'], fg=self.COLORS['text_dark'],
+                                 font=('Segoe UI', 12, 'bold'))
             separator.pack(side="left", padx=5, pady=2)
 
             btn_zoom_out = tk.Button(control_frame, text="🔍−", command=lambda: change_zoom(-0.25),
-                                    bg=self.COLORS['white'], fg=self.COLORS['text_dark'],
-                                    font=('Segoe UI', 9, 'bold'), relief='flat', borderwidth=0, cursor='hand2')
+                                     bg=self.COLORS['white'], fg=self.COLORS['text_dark'],
+                                     font=('Segoe UI', 9, 'bold'), relief='flat', borderwidth=0, cursor='hand2')
             btn_zoom_out.pack(side="left", padx=2, pady=2)
 
             zoom_label = tk.Label(control_frame, text=f"Zoom: {int(self.zoom_level * 100)}%",
-                                bg=self.COLORS['white'], fg=self.COLORS['text_dark'],
-                                font=('Segoe UI', 9, 'bold'))
+                                  bg=self.COLORS['white'], fg=self.COLORS['text_dark'],
+                                  font=('Segoe UI', 9, 'bold'))
             zoom_label.pack(side="left", padx=2, pady=2)
 
             btn_zoom_in = tk.Button(control_frame, text="🔍+", command=lambda: change_zoom(0.25),
@@ -2026,54 +2019,48 @@ class ReporteBres:
             btn_zoom_in.pack(side="left", padx=2, pady=2)
 
             separator2 = tk.Label(control_frame, text="|",
-                                bg=self.COLORS['white'], fg=self.COLORS['text_dark'],
-                                font=('Segoe UI', 12, 'bold'))
+                                  bg=self.COLORS['white'], fg=self.COLORS['text_dark'],
+                                  font=('Segoe UI', 12, 'bold'))
             separator2.pack(side="left", padx=5, pady=2)
 
             btn_fit_width = tk.Button(control_frame, text="↔ Ajustar Ancho", command=fit_to_width,
-                                    bg=self.COLORS['white'], fg=self.COLORS['text_dark'],
-                                    font=('Segoe UI', 9, 'bold'), relief='flat', borderwidth=0, cursor='hand2')
+                                      bg=self.COLORS['white'], fg=self.COLORS['text_dark'],
+                                      font=('Segoe UI', 9, 'bold'), relief='flat', borderwidth=0, cursor='hand2')
             btn_fit_width.pack(side="left", padx=2, pady=2)
 
             btn_fit_page = tk.Button(control_frame, text="⛶ Ajustar Página", command=fit_to_page,
-                                    bg=self.COLORS['white'], fg=self.COLORS['text_dark'],
-                                    font=('Segoe UI', 9, 'bold'), relief='flat', borderwidth=0, cursor='hand2')
+                                     bg=self.COLORS['white'], fg=self.COLORS['text_dark'],
+                                     font=('Segoe UI', 9, 'bold'), relief='flat', borderwidth=0, cursor='hand2')
             btn_fit_page.pack(side="left", padx=2, pady=2)
 
             btn_maximizar = tk.Button(control_frame, text="🔳 Maximizar", command=maximizar_reporte,
-                                    bg=self.COLORS['primary'], fg='white',
-                                    font=('Segoe UI', 10, 'bold'), relief='flat', borderwidth=0, cursor='hand2',
-                                    pady=4, padx=12)
+                                      bg=self.COLORS['primary'], fg='white',
+                                      font=('Segoe UI', 10, 'bold'), relief='flat', borderwidth=0, cursor='hand2',
+                                      pady=4, padx=12)
             btn_maximizar.pack(side="left", padx=5, pady=2)
 
             btn_anterior.config(state="disabled")
             btn_siguiente.config(state="normal" if self.total_pages > 1 else "disabled")
 
-            canvas.update()
-            if canvas.winfo_exists() and canvas.winfo_width() > 100:
+            # Ajustar zoom inicial al ancho del canvas
+            canvas.update() 
+            if canvas.winfo_width() > 100:
                 page = doc.load_page(0)
                 zoom_inicial = (canvas.winfo_width() - 40) / page.rect.width
                 self.zoom_level = max(0.5, min(zoom_inicial, 3.0))
-
+            
             display_page()
 
             def on_mousewheel(event):
-                if self.canvas.winfo_exists():
-                    self.canvas.yview_scroll(int(-1*(event.delta/120)), "units")
-            self.canvas.bind("<MouseWheel>", on_mousewheel)
+                if canvas.winfo_exists():
+                    canvas.yview_scroll(int(-1*(event.delta/120)), "units")
+            canvas.bind("<MouseWheel>", on_mousewheel)
 
         except Exception as e:
             import traceback
             error_detallado = traceback.format_exc()
             print(f"Error detallado:\n{error_detallado}")
             messagebox.showerror("Error", f"Error al generar reporte:\n{str(e)}")
-
-        finally:
-            # Rehabilitar botón
-            for child in self.frame_botones.winfo_children():
-                if child.cget('text') == "Vista Previa":
-                    child.config(state='normal')
-                    break
 
     def abrir_pdf_externo(self):
         try:
