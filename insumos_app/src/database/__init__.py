@@ -94,7 +94,7 @@ def asegurar_base_datos():
         try:
             if conn and conn.is_connected():
                 conn.close()
-        except:
+        except:  # noqa: E722
             pass
         
 def verificar_tablas():
@@ -130,7 +130,7 @@ def verificar_tablas():
         ]
 
         for tabla in tablas_requeridas:
-            cursor.execute(f"SHOW TABLES LIKE %s;", (tabla,))
+            cursor.execute("SHOW TABLES LIKE %s;", (tabla,))
             if not cursor.fetchone():
                 return False
         
@@ -142,7 +142,7 @@ def verificar_tablas():
         try:
             if conn and conn.is_connected():
                 conn.close()
-        except:
+        except:  # noqa: E722
             pass
 
 def agregar_columna_codigo_prefijo():
@@ -191,7 +191,7 @@ def agregar_columna_codigo_prefijo():
         try:
             if conn and conn.is_connected():
                 conn.close()
-        except:
+        except:  # noqa: E722
             pass
 
 def crear_base_datos():
@@ -371,13 +371,13 @@ def crear_base_datos():
         
         return True
 
-    except mysql.connector.Error as e:
+    except mysql.connector.Error:
         return False
     finally:
         try:
             if conn and conn.is_connected():
                 conn.close()
-        except:
+        except:  # noqa: E722
             pass
 
 __all__ = ['crear_base_datos', 'verificar_tablas', 'asegurar_base_datos', 'agregar_columna_codigo_prefijo', 'get_db_config']

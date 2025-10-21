@@ -1,15 +1,12 @@
-# -*- coding: utf-8 -*-
-# Reporte Balance de Bodega (limpio, sin estilos globales, alineado a Reporte BRES)
-
-from calendar import month_name
 import tkinter as tk
 from tkinter import ttk, messagebox
 from tkcalendar import DateEntry
 import pandas as pd
-from datetime import datetime, timedelta
+from datetime import datetime
 import sys
 import os
 from ttkwidgets.autocomplete import AutocompleteCombobox
+from datetime import timedelta
 
 # PDF/Imágenes
 from reportlab.lib import colors
@@ -29,8 +26,7 @@ from src.database.db_manager import (
     obtener_areas,
     obtener_tipos_insumo,
     obtener_insumos_por_tipo,
-    obtener_presentaciones,
-    obtener_movimientos_balance
+    obtener_presentaciones
 )
 
 def resource_path(relative_path):
@@ -246,6 +242,109 @@ class ReporteBalanceBodega:
             self.icon_excel = None
             self.icon_close = None
 
+    def _derivar_nivel_y_filtros(self):
+        # Deriva el nivel según los combos y retorna un dict para construir WHEREs coherentes
+        area = (self.combo_area.get() or '').strip() or None
+        distrito = (self.combo_distrito.get() or '').strip() or None
+
+        if distrito:
+            return {
+                'nivel': 'distrito',
+                'area': None,
+                'distrito': distrito,
+            }
+        elif area:
+            return {
+                'nivel': 'area',
+                'area': area,
+                'distrito': None,
+            }
+        else:
+            return {
+                'nivel': 'general',
+                'area': None,
+                'distrito': None,
+            }
+    
+    def obtener_movimientos_balance(self, fecha_ini_dt, fecha_fin_dt, contexto):
+        conn = self._get_conn()
+        if conn is None:
+            return []
+        cur = conn.cursor(dictionary=True)
+
+        nivel_info = self._derivar_nivel_y_filtros()
+
+        where = []
+        params = []
+
+        # Rango del periodo
+        where.append("DATE(m.fecha_registro) BETWEEN %s AND %s")
+        params.extend([fecha_ini_dt.strftime('%Y-%m-%d'), fecha_fin_dt.strftime('%Y-%m-%d')])
+
+        # Filtro por nivel
+        if nivel_info['nivel'] == 'area' and nivel_info['area']:
+            where.append("a.nombre = %s")
+            params.append(nivel_info['area'])
+            where.append("m.distrito_id IS NULL")
+        elif nivel_info['nivel'] == 'distrito' and nivel_info['distrito']:
+            where.append("d.nombre = %s")
+            params.append(nivel_info['distrito'])
+            where.append("m.servicio_id IS NULL")
+
+        # Filtros por insumo
+        if contexto.get('tipo_insumo'):
+            where.append("ti.descripcion = %s")
+            params.append(contexto['tipo_insumo'])
+
+        if contexto.get('insumo'):
+            where.append("i.nombre = %s")
+            params.append(contexto['insumo'])
+
+        # Presentación por EXISTS
+        presentacion = contexto.get('presentacion')
+        if presentacion:
+            where.append("""
+                EXISTS (
+                    SELECT 1
+                    FROM insumo_presentacion ip2
+                    JOIN presentacion p2 ON p2.id = ip2.presentacion_id
+                    WHERE ip2.insumo_id = m.insumo_id
+                    AND p2.nombre = %s
+                )
+            """)
+            params.append(presentacion)
+
+        where_sql = " AND ".join(where)
+
+        sql = f"""
+            SELECT
+                m.insumo_id AS codigo_insumo,
+                i.nombre AS nombre_insumo,
+                ti.descripcion AS tipo_insumo,
+                a.nombre AS area_nombre,
+                d.nombre AS distrito_nombre,
+                tm.descripcion AS tipo_movimiento,
+                m.cantidad,
+                m.fecha_registro,
+                d_salida.nombre AS distrito_destino,
+                s_salida.nombre AS servicio_destino
+            FROM movimiento m
+            JOIN insumo i ON i.id = m.insumo_id
+            JOIN tipo_insumo ti ON ti.id = i.id_tipo_insumo
+            JOIN tipo_movimiento tm ON tm.id = m.tipo_movimiento_id
+            LEFT JOIN area a ON a.id = m.area_id
+            LEFT JOIN distrito d ON d.id = m.distrito_id
+            LEFT JOIN distrito d_salida ON d_salida.id = m.salida_distrito_id
+            LEFT JOIN servicio s_salida ON s_salida.id = m.salida_servicio_id
+            WHERE {where_sql}
+            ORDER BY m.fecha_registro, m.id
+        """
+
+        cur.execute(sql, params)
+        rows = cur.fetchall()
+        cur.close()
+        return rows
+    
     def _fecha_corte_anterior(self, fecha_inicio_periodo):
         """
         Devuelve un datetime del día 25 del mismo mes de 'fecha_inicio_periodo'.
@@ -263,305 +362,217 @@ class ReporteBalanceBodega:
         fin = fecha_fin.strftime('%d/%m/%Y')
         return f"Periodo logístico: {ini} – {fin}"
 
-    def _obtener_saldo_corte_bd(self, fecha_corte_dt, contexto, insumo_id):
-        """
-        Calcula saldo acumulado hasta fecha_corte_dt CON filtros de ubicación (optimizado con cache)
-        """
-        # ✅ Verificar cache primero
-        cache_key = (
-            fecha_corte_dt.strftime('%Y-%m-%d'),
-            insumo_id,
-            contexto.get('presentacion'),
-            contexto.get('area'),
-            contexto.get('distrito')
-        )
-        
-        if not hasattr(self, '_cache_saldos'):
-            self._cache_saldos = {}
-        
-        if cache_key in self._cache_saldos:
-            return self._cache_saldos[cache_key]
-        
+    def _get_conn(self):
         try:
-            conn = conectar_db()
-            if not conn:
-                return 0.0
-            cur = conn.cursor(dictionary=True)
+            if self.db is None or not self.db.is_connected():
+                self.db = conectar_db()
+        except Exception:
+            self.db = conectar_db()
+        return self.db
+    
+    def _obtener_saldo_corte_bd(self, fecha_corte_dt, contexto, insumo_id):
+        conn = self._get_conn()
+        cur = conn.cursor(dictionary=True)
 
-            params = [fecha_corte_dt.strftime('%Y-%m-%d'), insumo_id]
+        nivel_info = self._derivar_nivel_y_filtros()
 
-            # ✅ Construir filtros solo si existen
-            where_clauses = []
-            if contexto.get('presentacion'):
-                where_clauses.append("p.nombre = %s")
-                params.append(contexto['presentacion'])
-            if contexto.get('area'):
-                where_clauses.append("a.nombre = %s")
-                params.append(contexto['area'])
-            if contexto.get('distrito'):
-                where_clauses.append("d.nombre = %s")
-                params.append(contexto['distrito'])
+        where = [
+            "m.insumo_id = %s",
+            "DATE(m.fecha_registro) <= %s"
+        ]
+        params = [insumo_id, fecha_corte_dt.strftime('%Y-%m-%d')]
 
-            where_ctx = (" AND " + " AND ".join(where_clauses)) if where_clauses else ""
+        # Filtro por nivel
+        if nivel_info['nivel'] == 'area' and nivel_info['area']:
+            where.append("a.nombre = %s")
+            params.append(nivel_info['area'])
+            where.append("m.distrito_id IS NULL")
+        elif nivel_info['nivel'] == 'distrito' and nivel_info['distrito']:
+            where.append("d.nombre = %s")
+            params.append(nivel_info['distrito'])
+            where.append("m.servicio_id IS NULL")
 
-            # ✅ Consulta simplificada
-            sql = f"""
-                SELECT
-                    COALESCE(SUM(
-                        CASE
-                            WHEN tm.descripcion IN ('INVENTARIO INICIAL', 'ENTRADA NIVEL SUPERIOR', 'REAJUSTE (+)')
-                                THEN m.cantidad
-                            WHEN tm.descripcion IN ('SALIDA NIVEL INFERIOR', 'REAJUSTE (-)', 'ENTREGADO')
-                                THEN -m.cantidad
-                            ELSE 0
-                        END
-                    ), 0) AS saldo
-                FROM movimiento m
-                INNER JOIN tipo_movimiento tm ON m.tipo_movimiento_id = tm.id
-                LEFT JOIN insumo_presentacion ip ON ip.insumo_id = m.insumo_id
-                LEFT JOIN presentacion p ON p.id = ip.presentacion_id
-                LEFT JOIN area a ON a.id = m.area_id
-                LEFT JOIN distrito d ON d.id = m.distrito_id
-                WHERE DATE(m.fecha_registro) <= %s
-                AND m.insumo_id = %s
-                {where_ctx}
-            """
+        # Filtros por insumo/tipo/presentación
+        if contexto.get('tipo_insumo'):
+            where.append("ti.descripcion = %s")
+            params.append(contexto['tipo_insumo'])
 
-            cur.execute(sql, params)
-            row = cur.fetchone()
-            saldo = float(row['saldo'] or 0.0)
-            
-            # ✅ Guardar en cache
-            self._cache_saldos[cache_key] = saldo
-            
-            cur.close()
-            conn.close()
-            return saldo
-            
-        except Exception as e:
-            print(f"ERROR obteniendo saldo corte: {e}")
-            import traceback
-            traceback.print_exc()
-            return 0.0
+        if contexto.get('insumo'):
+            where.append("i.nombre = %s")
+            params.append(contexto['insumo'])
+
+        if contexto.get('presentacion'):
+            where.append("""
+                EXISTS (
+                    SELECT 1
+                    FROM insumo_presentacion ip2
+                    JOIN presentacion p2 ON p2.id = ip2.presentacion_id
+                    WHERE ip2.insumo_id = m.insumo_id
+                    AND p2.nombre = %s
+                )
+            """)
+            params.append(contexto['presentacion'])
+
+        where_sql = " AND ".join(where)
+
+        sql = f"""
+            SELECT
+                SUM(
+                    CASE
+                        WHEN tm.descripcion IN ('ENTRADA NIVEL SUPERIOR', 'INVENTARIO INICIAL', 'REAJUSTE (+)')
+                            THEN m.cantidad
+                        WHEN tm.descripcion IN ('SALIDA NIVEL INFERIOR', 'REAJUSTE (-)')
+                            THEN -m.cantidad
+                        ELSE 0
+                    END
+                ) AS saldo
+            FROM movimiento m
+            JOIN insumo i ON i.id = m.insumo_id
+            JOIN tipo_insumo ti ON ti.id = i.id_tipo_insumo
+            JOIN tipo_movimiento tm ON tm.id = m.tipo_movimiento_id
+            LEFT JOIN area a ON a.id = m.area_id
+            LEFT JOIN distrito d ON d.id = m.distrito_id
+            WHERE {where_sql}
+        """
+
+        cur.execute(sql, params)
+        row = cur.fetchone()
+        cur.close()
+        return (row['saldo'] or 0) if row and row['saldo'] is not None else 0
 
     def _obtener_insumos_con_saldo(self, fecha_corte_dt, contexto):
+        conn = self._get_conn()
+        cur = conn.cursor(dictionary=True)
+
+        nivel_info = self._derivar_nivel_y_filtros()
+
+        where = ["DATE(m.fecha_registro) <= %s"]
+        params = [fecha_corte_dt.strftime('%Y-%m-%d')]
+
+        # Filtro por nivel
+        if nivel_info['nivel'] == 'area' and nivel_info['area']:
+            where.append("a.nombre = %s")
+            params.append(nivel_info['area'])
+            where.append("m.distrito_id IS NULL")
+        elif nivel_info['nivel'] == 'distrito' and nivel_info['distrito']:
+            where.append("d.nombre = %s")
+            params.append(nivel_info['distrito'])
+            where.append("m.servicio_id IS NULL")
+
+        # Filtros por insumo
+        if contexto.get('tipo_insumo'):
+            where.append("ti.descripcion = %s")
+            params.append(contexto['tipo_insumo'])
+
+        if contexto.get('insumo'):
+            where.append("i.nombre = %s")
+            params.append(contexto['insumo'])
+
+        # Presentación
+        if contexto.get('presentacion'):
+            where.append("""
+                EXISTS (
+                    SELECT 1
+                    FROM insumo_presentacion ip2
+                    JOIN presentacion p2 ON p2.id = ip2.presentacion_id
+                    WHERE ip2.insumo_id = m.insumo_id
+                    AND p2.nombre = %s
+                )
+            """)
+            params.append(contexto['presentacion'])
+
+        where_sql = " AND ".join(where)
+
+        sql = f"""
+            SELECT DISTINCT m.insumo_id
+            FROM movimiento m
+            JOIN insumo i ON i.id = m.insumo_id
+            JOIN tipo_insumo ti ON ti.id = i.id_tipo_insumo
+            LEFT JOIN area a ON a.id = m.area_id
+            LEFT JOIN distrito d ON d.id = m.distrito_id
+            WHERE {where_sql}
         """
-        Devuelve insumos con saldo > 0 al corte (optimizado en batch - MUY RÁPIDO)
-        """
-        try:
-            conn = conectar_db()
-            if not conn:
-                return []
-            cur = conn.cursor(dictionary=True)
 
-            filtros = []
-            params_ctx = []
+        cur.execute(sql, params)
+        rows = cur.fetchall()
+        cur.close()
 
-            # Filtros de insumo
-            where_insumo = ""
-            if contexto.get('tipo_insumo'):
-                filtros.append("ti.descripcion = %s")
-                params_ctx.append(contexto['tipo_insumo'])
-            if contexto.get('insumo'):
-                filtros.append("i.nombre = %s")
-                params_ctx.append(contexto['insumo'])
-            if contexto.get('presentacion'):
-                filtros.append("p.nombre = %s")
-                params_ctx.append(contexto['presentacion'])
-            
-            if filtros:
-                where_insumo = " AND " + " AND ".join(filtros)
+        return {r['insumo_id'] for r in rows}
 
-            # Filtros de ubicación
-            filtros_ubicacion = []
-            params_ubicacion = []
-            
-            if contexto.get('area'):
-                filtros_ubicacion.append("a.nombre = %s")
-                params_ubicacion.append(contexto['area'])
-            if contexto.get('distrito'):
-                filtros_ubicacion.append("d.nombre = %s")
-                params_ubicacion.append(contexto['distrito'])
-            
-            where_ubicacion = (" AND " + " AND ".join(filtros_ubicacion)) if filtros_ubicacion else ""
-
-            # ✅ UNA SOLA CONSULTA para calcular todos los saldos
-            sql = f"""
-                SELECT 
-                    i.id as insumo_id,
-                    COALESCE(SUM(
-                        CASE
-                            WHEN tm.descripcion IN ('INVENTARIO INICIAL', 'ENTRADA NIVEL SUPERIOR', 'REAJUSTE (+)')
-                                THEN m.cantidad
-                            WHEN tm.descripcion IN ('SALIDA NIVEL INFERIOR', 'REAJUSTE (-)', 'ENTREGADO')
-                                THEN -m.cantidad
-                            ELSE 0
-                        END
-                    ), 0) AS saldo
-                FROM insumo i
-                INNER JOIN tipo_insumo ti ON i.id_tipo_insumo = ti.id
-                LEFT JOIN insumo_presentacion ip ON ip.insumo_id = i.id
-                LEFT JOIN presentacion p ON p.id = ip.presentacion_id
-                LEFT JOIN movimiento m ON m.insumo_id = i.id AND DATE(m.fecha_registro) <= %s
-                LEFT JOIN tipo_movimiento tm ON m.tipo_movimiento_id = tm.id
-                LEFT JOIN area a ON a.id = m.area_id
-                LEFT JOIN distrito d ON d.id = m.distrito_id
-                WHERE 1=1 {where_insumo} {where_ubicacion}
-                GROUP BY i.id
-                HAVING saldo > 0
-            """
-
-            params = [fecha_corte_dt.strftime('%Y-%m-%d')] + params_ctx + params_ubicacion
-            cur.execute(sql, params)
-            resultados = cur.fetchall()
-            
-            insumos_con_saldo = [row['insumo_id'] for row in resultados]
-            
-            # ✅ CACHEAR los saldos para evitar recalcularlos después
-            if not hasattr(self, '_cache_saldos'):
-                self._cache_saldos = {}
-            
-            cache_key_base = (
-                fecha_corte_dt.strftime('%Y-%m-%d'),
-                contexto.get('presentacion'),
-                contexto.get('area'),
-                contexto.get('distrito')
-            )
-            
-            for row in resultados:
-                insumo_id = row['insumo_id']
-                saldo = float(row['saldo'] or 0.0)
-                cache_key = (cache_key_base[0], insumo_id, cache_key_base[1], cache_key_base[2], cache_key_base[3])
-                self._cache_saldos[cache_key] = saldo
-            
-            cur.close()
-            conn.close()
-            return insumos_con_saldo
-            
-        except Exception as e:
-            print(f"ERROR obteniendo insumos con saldo: {e}")
-            import traceback
-            traceback.print_exc()
-            return []
-     
-    def _obtener_saldos_batch(self, fecha_corte_dt, contexto, lista_insumo_ids):
-        """
-        Calcula saldos para múltiples insumos en UNA SOLA consulta (SÚPER RÁPIDO)
-        """
-        if not lista_insumo_ids:
+    def _obtener_saldos_batch(self, fecha_corte_dt, contexto, insumos_ids):
+        if not insumos_ids:
             return {}
-        
-        # ✅ Verificar cache primero
-        if not hasattr(self, '_cache_saldos'):
-            self._cache_saldos = {}
-        
-        cache_key_base = (
-            fecha_corte_dt.strftime('%Y-%m-%d'),
-            contexto.get('presentacion'),
-            contexto.get('area'),
-            contexto.get('distrito')
-        )
-        
-        # Ver cuáles ya están en cache
-        resultados = {}
-        insumos_faltantes = []
-        
-        for iid in lista_insumo_ids:
-            cache_key = (cache_key_base[0], iid, cache_key_base[1], cache_key_base[2], cache_key_base[3])
-            if cache_key in self._cache_saldos:
-                resultados[iid] = self._cache_saldos[cache_key]
-            else:
-                insumos_faltantes.append(iid)
-        
-        # Si todos están en cache, retornar
-        if not insumos_faltantes:
-            return resultados
-        
-        try:
-            conn = conectar_db()
-            if not conn:
-                # Devolver al menos los que teníamos en cache
-                for iid in insumos_faltantes:
-                    resultados[iid] = 0.0
-                return resultados
-            
-            cur = conn.cursor(dictionary=True)
 
-            placeholders = ','.join(['%s'] * len(insumos_faltantes))
-            params = [fecha_corte_dt.strftime('%Y-%m-%d')] + list(insumos_faltantes)
+        conn = self._get_conn()
+        cur = conn.cursor(dictionary=True)
 
-            # Construir filtros opcionales
-            where_clauses = []
-            if contexto.get('presentacion'):
-                where_clauses.append("p.nombre = %s")
-                params.append(contexto['presentacion'])
-            if contexto.get('area'):
-                where_clauses.append("a.nombre = %s")
-                params.append(contexto['area'])
-            if contexto.get('distrito'):
-                where_clauses.append("d.nombre = %s")
-                params.append(contexto['distrito'])
+        nivel_info = self._derivar_nivel_y_filtros()
 
-            where_ctx = (" AND " + " AND ".join(where_clauses)) if where_clauses else ""
+        where = [
+            f"m.insumo_id IN ({','.join(['%s'] * len(insumos_ids))})",
+            "DATE(m.fecha_registro) <= %s"
+        ]
+        params = list(insumos_ids) + [fecha_corte_dt.strftime('%Y-%m-%d')]
 
-            # ✅ UNA SOLA CONSULTA para todos los insumos faltantes
-            sql = f"""
-                SELECT
-                    m.insumo_id,
-                    COALESCE(SUM(
-                        CASE
-                            WHEN tm.descripcion IN ('INVENTARIO INICIAL', 'ENTRADA NIVEL SUPERIOR', 'REAJUSTE (+)')
-                                THEN m.cantidad
-                            WHEN tm.descripcion IN ('SALIDA NIVEL INFERIOR', 'REAJUSTE (-)', 'ENTREGADO')
-                                THEN -m.cantidad
-                            ELSE 0
-                        END
-                    ), 0) AS saldo
-                FROM movimiento m
-                INNER JOIN tipo_movimiento tm ON m.tipo_movimiento_id = tm.id
-                LEFT JOIN insumo_presentacion ip ON ip.insumo_id = m.insumo_id
-                LEFT JOIN presentacion p ON p.id = ip.presentacion_id
-                LEFT JOIN area a ON a.id = m.area_id
-                LEFT JOIN distrito d ON d.id = m.distrito_id
-                WHERE DATE(m.fecha_registro) <= %s
-                AND m.insumo_id IN ({placeholders})
-                {where_ctx}
-                GROUP BY m.insumo_id
-            """
+        if nivel_info['nivel'] == 'area' and nivel_info['area']:
+            where.append("a.nombre = %s")
+            params.append(nivel_info['area'])
+            where.append("m.distrito_id IS NULL")
+        elif nivel_info['nivel'] == 'distrito' and nivel_info['distrito']:
+            where.append("d.nombre = %s")
+            params.append(nivel_info['distrito'])
+            where.append("m.servicio_id IS NULL")
 
-            cur.execute(sql, params)
-            rows = cur.fetchall()
-            
-            # Procesar resultados y cachear
-            for row in rows:
-                iid = row['insumo_id']
-                saldo = float(row['saldo'] or 0.0)
-                resultados[iid] = saldo
-                
-                # Guardar en cache
-                cache_key = (cache_key_base[0], iid, cache_key_base[1], cache_key_base[2], cache_key_base[3])
-                self._cache_saldos[cache_key] = saldo
-            
-            # Agregar 0.0 para insumos sin movimientos
-            for iid in insumos_faltantes:
-                if iid not in resultados:
-                    resultados[iid] = 0.0
-                    cache_key = (cache_key_base[0], iid, cache_key_base[1], cache_key_base[2], cache_key_base[3])
-                    self._cache_saldos[cache_key] = 0.0
-            
-            cur.close()
-            conn.close()
-            return resultados
-            
-        except Exception as e:
-            print(f"ERROR obteniendo saldos batch: {e}")
-            import traceback
-            traceback.print_exc()
-            # Retornar al menos lo que teníamos
-            for iid in insumos_faltantes:
-                resultados[iid] = 0.0
-            return resultados
-       
+        if contexto.get('tipo_insumo'):
+            where.append("ti.descripcion = %s")
+            params.append(contexto['tipo_insumo'])
+
+        if contexto.get('insumo'):
+            where.append("i.nombre = %s")
+            params.append(contexto['insumo'])
+
+        if contexto.get('presentacion'):
+            where.append("""
+                EXISTS (
+                    SELECT 1
+                    FROM insumo_presentacion ip2
+                    JOIN presentacion p2 ON p2.id = ip2.presentacion_id
+                    WHERE ip2.insumo_id = m.insumo_id
+                    AND p2.nombre = %s
+                )
+            """)
+            params.append(contexto['presentacion'])
+
+        where_sql = " AND ".join(where)
+
+        sql = f"""
+            SELECT
+                m.insumo_id,
+                SUM(
+                    CASE
+                        WHEN tm.descripcion IN ('ENTRADA NIVEL SUPERIOR', 'INVENTARIO INICIAL', 'REAJUSTE (+)')
+                            THEN m.cantidad
+                        WHEN tm.descripcion IN ('SALIDA NIVEL INFERIOR', 'REAJUSTE (-)')
+                            THEN -m.cantidad
+                        ELSE 0
+                    END
+                ) AS saldo
+            FROM movimiento m
+            JOIN insumo i ON i.id = m.insumo_id
+            JOIN tipo_insumo ti ON ti.id = i.id_tipo_insumo
+            JOIN tipo_movimiento tm ON tm.id = m.tipo_movimiento_id
+            LEFT JOIN area a ON a.id = m.area_id
+            LEFT JOIN distrito d ON d.id = m.distrito_id
+            WHERE {where_sql}
+            GROUP BY m.insumo_id
+        """
+
+        cur.execute(sql, params)
+        rows = cur.fetchall()
+        cur.close()
+
+        return {r['insumo_id']: (r['saldo'] or 0) for r in rows}
+        
     # -----------------------------
     # Formateo
     # -----------------------------
@@ -569,7 +580,7 @@ class ReporteBalanceBodega:
         try:
             num = float(v)
             return f"{num:.2f}"
-        except:
+        except:  # noqa: E722
             return "0.00"
     
     def _normalizar_tipo_mov(self, valor):
@@ -603,6 +614,20 @@ class ReporteBalanceBodega:
             return 'NO ENTREGADO'
 
         return 'OTRO'
+    
+    # ==== BEGIN PATCH: handler toggle desglose ====
+    def on_toggle_desglose(self, *args):
+        try:
+            # Limpiar caches y estados dependientes
+            if hasattr(self, '_cache_saldos'):
+                self._cache_saldos.clear()
+            if hasattr(self, '_cache_codigos'):
+                self._cache_codigos.clear()
+            # Resetear destinos del desglose
+            self.destinos_desglose = []
+        except Exception as e:
+            print(f"[DEBUG] on_toggle_desglose error: {e}")
+    # ==== END PATCH ====
     
     # -----------------------------
     # UI principal (sin frame intermedio global, solo local)
@@ -773,12 +798,16 @@ class ReporteBalanceBodega:
         self.combo_nivel_maximo.grid(row=0, column=1, padx=3, pady=2, sticky='w')
         self.combo_nivel_maximo.set("6")
 
-        # NUEVO: Checkbox para desglose
+        # ==== BEGIN PATCH: Checkbutton desglose con trace ====
         ttk.Checkbutton(
             frame_nivel_content, 
             text="Detalle de Salidas por Distrito o Servicio", 
             variable=self.desglose_var
         ).grid(row=0, column=2, padx=15, pady=2, sticky='w')
+
+        # Vincular cambio de estado del check para limpiar caches/estados
+        self.desglose_var.trace_add('write', lambda *a: self.on_toggle_desglose())
+        # ==== END PATCH ====
 
         # Visor PDF - AUMENTAR TAMAÑO VERTICAL
         self.pdf_outer = tk.Frame(self.main_container, bg=self.COLORS['light'])
@@ -926,19 +955,6 @@ class ReporteBalanceBodega:
         fecha_fin_str = fecha_fin_dt.strftime('%d/%m/%Y')
         return fecha_ini_str, fecha_fin_str, fecha_ini_dt, fecha_fin_dt
     
-    def _periodo_logistico_anterior(self, fecha_ini_periodo_actual):
-        # El día anterior a 26 es 25, por lo que ese día define el mes_final del periodo anterior
-        dia_previo = fecha_ini_periodo_actual - timedelta(days=1)
-        anio = dia_previo.year
-        mes_final = dia_previo.month
-        # Inicio del periodo anterior: 26 del mes previo a mes_final
-        if mes_final == 1:
-            fecha_inicio = datetime(anio - 1, 12, 26)
-        else:
-            fecha_inicio = datetime(anio, mes_final - 1, 26)
-        fecha_fin = datetime(anio, mes_final, 25)
-        return fecha_inicio, fecha_fin
-
     def actualizar_fechas_por_corte(self, event=None):
         try:
             anio = self.anio_var.get()
@@ -951,42 +967,6 @@ class ReporteBalanceBodega:
                 self.fecha_final.set_date(fecha_fin_dt)
         except Exception as e:
             messagebox.showerror("Error", f"Error al calcular fechas: {str(e)}")
-
-    def obtener_saldo_final_periodo(self, insumo_id, fecha_inicio_dt, fecha_fin_dt):
-        """
-        Obtiene de la DB los movimientos del insumo en [fecha_inicio_dt, fecha_fin_dt] y
-        devuelve el saldo final aplicado al 25: + INICIAL, ENTRADA NS, REAJUSTE (+)
-                                                - SALIDA NI, ENTREGADO, REAJUSTE (-)
-        Se respetan los mismos filtros de nivel (área/distrito/servicio) del reporte actual.
-        """
-        try:
-            # Intentamos pasar filtros por nombre como en obtener_movimientos_balance
-            movimientos = obtener_movimientos_balance(
-                fecha_inicio_dt.strftime('%Y-%m-%d'),
-                fecha_fin_dt.strftime('%Y-%m-%d'),
-                area_nombre=self.combo_area.get().strip() or None,
-                distrito_nombre=self.combo_distrito.get().strip() or None,
-                tipo_servicio_desc=None,
-                servicio_nombre=None,
-                tipo_insumo_desc=self.combo_tipo_insumo.get().strip() or None,
-                insumo_nombre=None,
-                presentacion_nombre=self.combo_presentacion.get().strip() or None
-            )
-            # Filtrar por insumo_id
-            movimientos = [m for m in movimientos if m.get('codigo_insumo') == insumo_id]
-
-            saldo = 0.0
-            for mov in movimientos:
-                tipo = self._normalizar_tipo_mov(mov.get('tipo_movimiento', ''))
-                cant = float(mov.get('cantidad', 0) or 0)
-                if tipo in ('INVENTARIO INICIAL', 'ENTRADA NIVEL SUPERIOR', 'REAJUSTE (+)'):
-                    saldo += cant
-                elif tipo in ('SALIDA NIVEL INFERIOR', 'ENTREGADO', 'REAJUSTE (-)'):
-                    saldo -= cant
-            return saldo
-        except Exception as e:
-            print(f"Error obtener_saldo_final_periodo: {e}")
-            return 0.0
     
     # -----------------------------
     # Carga de datos (áreas/insumos)
@@ -1224,7 +1204,7 @@ class ReporteBalanceBodega:
             raw_cant = str(mov.get('cantidad', '0')).replace(',', '')
             try:
                 cantidad = float(raw_cant)
-            except:
+            except:  # noqa: E722
                 cantidad = 0.0
 
             if codigo_generado not in insumos_dict:
@@ -1240,22 +1220,17 @@ class ReporteBalanceBodega:
                     'reajustes_neto': 0.0,
                 }
                 
-                # Inicializar columnas de destinos si hay desglose
                 if desglosar and destinos:
                     for destino in destinos:
                         insumos_dict[codigo_generado][f'salida_{destino}'] = 0.0
 
-            # Acumulación
-            if tipo_movimiento == 'INVENTARIO INICIAL':
-                insumos_dict[codigo_generado]['saldo_anterior'] += cantidad
-
-            elif tipo_movimiento == 'ENTRADA NIVEL SUPERIOR':
+            # ✅ Incluir INVENTARIO INICIAL como entrada del periodo logístico
+            if tipo_movimiento in ('INVENTARIO INICIAL', 'ENTRADA NIVEL SUPERIOR'):
                 insumos_dict[codigo_generado]['entrada_nivel_superior'] += cantidad
 
             elif tipo_movimiento == 'SALIDA NIVEL INFERIOR':
                 insumos_dict[codigo_generado]['salida_nivel_inferior'] += cantidad
                 
-                # Si hay desglose, distribuir por destino
                 if desglosar and destinos:
                     if nivel == 'area':
                         destino = mov.get('distrito_destino', '')
@@ -1275,18 +1250,19 @@ class ReporteBalanceBodega:
                 insumos_dict[codigo_generado]['reajuste_negativo'] += cantidad
                 insumos_dict[codigo_generado]['reajustes_neto'] -= cantidad
 
-        # Asignar saldo anterior desde BD
+        # ✅ ASIGNAR SALDO ANTERIOR DESDE BD (calculado hasta el 25 del mes de inicio)
         for codigo, datos in insumos_dict.items():
             insumo_id = datos['insumo_id_original']
-            if float(datos['saldo_anterior']) == 0.0:
-                saldo_bd = self.saldo_anterior_por_insumo.get(insumo_id, 0.0)
-                datos['saldo_anterior'] = saldo_bd
+            # Usar el saldo calculado hasta la fecha de corte anterior
+            saldo_bd = self.saldo_anterior_por_insumo.get(insumo_id, 0.0)
+            datos['saldo_anterior'] = saldo_bd
 
         # Construir filas de salida
         datos_procesados = []
         for codigo, datos in insumos_dict.items():
             reajustes_total = float(datos['reajustes_neto'])
 
+            # ✅ CÁLCULO CORRECTO DEL SALDO MES SIGUIENTE
             saldo_mes_siguiente = (
                 float(datos['saldo_anterior']) +
                 float(datos['entrada_nivel_superior']) -
@@ -1313,7 +1289,6 @@ class ReporteBalanceBodega:
                 'saldo_mes_siguiente': self.formato_float(saldo_mes_siguiente),
             }
             
-            # Agregar columnas de destinos si hay desglose
             if desglosar and destinos:
                 for destino in destinos:
                     fila[f'salida_{destino}'] = self.formato_float(datos.get(f'salida_{destino}', 0.0))
@@ -1322,7 +1297,6 @@ class ReporteBalanceBodega:
 
         datos_procesados.sort(key=lambda x: x['codigo_insumo'])
         
-        # Guardar lista de destinos para usarla en generación de PDF/Excel
         self.destinos_desglose = destinos if (desglosar and destinos) else []
         
         return datos_procesados
@@ -1349,32 +1323,6 @@ class ReporteBalanceBodega:
         
         return sorted(list(destinos))
     
-    def obtener_saldo_mes_anterior(self, insumo_id_original, fecha_corte):
-        try:
-            # 90 días atrás para tener datos
-            fecha_mes_anterior = fecha_corte - timedelta(days=90)
-            movimientos = obtener_movimientos_balance(
-                fecha_mes_anterior.strftime('%Y-%m-%d'),
-                (fecha_corte - timedelta(days=1)).strftime('%Y-%m-%d'),
-                self.combo_distrito.get().strip() or None,
-                None,
-                None
-            )
-            movimientos_insumo = [m for m in movimientos if m.get('codigo_insumo') == insumo_id_original]
-
-            saldo = 0.0
-            for mov in movimientos_insumo:
-                tipo = str(mov.get('tipo_movimiento', '')).upper()
-                cantidad = float(mov.get('cantidad', 0))
-                if tipo in ['INVENTARIO INICIAL', 'ENTRADA NIVEL SUPERIOR', 'REAJUSTE (+)']:
-                    saldo += cantidad
-                elif tipo in ['ENTREGADO', 'SALIDA NIVEL INFERIOR', 'REAJUSTE (-)']:
-                    saldo -= cantidad
-            return saldo
-        except Exception as e:
-            print(f"Error obteniendo saldo mes anterior: {e}")
-            return 0.0
-
     # -----------------------------
     # Generar Vista Previa (visor local)
     # -----------------------------
@@ -1383,6 +1331,16 @@ class ReporteBalanceBodega:
             # MOSTRAR LOADING
             self.show_loading()
             self.parent.update_idletasks()
+            
+            # ==== BEGIN PATCH: reset de caches/estados por corrida ====
+            # Limpiar caches volátiles en cada generación para evitar residuos entre modos (con/sin desglose)
+            if hasattr(self, '_cache_saldos'):
+                self._cache_saldos.clear()
+            if hasattr(self, '_cache_codigos'):
+                self._cache_codigos.clear()
+            # Asegurar que destinos_desglose se recalcula en esta corrida
+            self.destinos_desglose = []
+            # ==== END PATCH ====
             
             # Fechas
             if self.modo_fecha_var.get() == "rango":
@@ -1401,8 +1359,6 @@ class ReporteBalanceBodega:
                 fecha_fin = fecha_fin_dt
                 
                 periodo_txt = self._formatear_periodo_logistico(fecha_ini, fecha_fin)
-                # Si quieres, colócalo en algún lugar de tu UI:
-                # Por ejemplo, crear una etiqueta en self.pdf_outer arriba del visor:
                 if not hasattr(self, 'lbl_periodo_logistico_ui'):
                     self.lbl_periodo_logistico_ui = tk.Label(self.pdf_outer, text=periodo_txt, bg=self.COLORS['light'], fg=self.COLORS['text_dark'], font=('Segoe UI', 9, 'italic'))
                     self.lbl_periodo_logistico_ui.pack(anchor='w', padx=5, pady=(0, 4))
@@ -1413,15 +1369,20 @@ class ReporteBalanceBodega:
                 messagebox.showerror("Error", "La fecha final debe ser mayor a la inicial")
                 return
 
-            # Obtener movimientos del periodo actual
-            movimientos_raw = obtener_movimientos_balance(
-                fecha_ini.strftime('%Y-%m-%d'),
-                fecha_fin.strftime('%Y-%m-%d'),
-                area_nombre=self.combo_area.get().strip() or None,
-                distrito_nombre=self.combo_distrito.get().strip() or None,
-                tipo_insumo_desc=self.combo_tipo_insumo.get().strip() or None,
-                insumo_nombre=self.combo_insumo.get().strip() or None,
-                presentacion_nombre=self.combo_presentacion.get().strip() or None
+            # Construir contexto primero
+            contexto = {
+                'area': (self.combo_area.get() or '').strip() or None,
+                'distrito': (self.combo_distrito.get() or '').strip() or None,
+                'presentacion': (self.combo_presentacion.get() or '').strip() or None,
+                'tipo_insumo': (self.combo_tipo_insumo.get() or '').strip() or None,
+                'insumo': (self.combo_insumo.get() or '').strip() or None
+            }
+
+            # Usar el método de la clase
+            movimientos_raw = self.obtener_movimientos_balance(
+                fecha_ini,  # pasa datetime
+                fecha_fin,
+                contexto
             )
 
             # Construir contexto con TODOS los filtros
@@ -1433,10 +1394,10 @@ class ReporteBalanceBodega:
                 'insumo': (self.combo_insumo.get() or '').strip() or None
             }
 
-            # Fecha de corte anterior (25 del mes de inicio)
-            fecha_corte_anterior = self._fecha_corte_anterior(fecha_ini)
+            # ✅ Calcular saldo hasta UN DÍA ANTES del inicio del periodo
+            fecha_corte_anterior = fecha_ini - timedelta(days=1)
 
-            # === OBTENER TODOS LOS INSUMOS CON SALDO ANTERIOR ===
+            # Obtener insumos con saldo
             insumos_con_saldo = self._obtener_insumos_con_saldo(fecha_corte_anterior, contexto)
 
             # Detectar insumos con movimientos en el periodo actual
@@ -1447,26 +1408,32 @@ class ReporteBalanceBodega:
                     try:
                         iid = int(str(iid).strip())
                         insumo_ids_en_periodo.add(iid)
-                    except:
+                    except:  # noqa: E722
                         pass
 
-            # COMBINAR: insumos con saldo + insumos del periodo
+            # Combinar
             todos_los_insumos = set(insumos_con_saldo) | insumo_ids_en_periodo
 
             if not todos_los_insumos:
                 messagebox.showinfo("Info", "No hay datos para mostrar")
                 return
 
-            # Calcular saldo anterior para TODOS los insumos en UNA SOLA consulta batch
+            # ✅ CRÍTICO: Calcular saldo anterior ANTES de procesar datos
             self.saldo_anterior_por_insumo = self._obtener_saldos_batch(
-                fecha_corte_anterior, 
+                fecha_corte_anterior,
                 contexto, 
                 list(todos_los_insumos)
             )
 
-            # Procesar datos con TODOS los insumos
-            self.movimientos_data = self.procesar_datos_balance(movimientos_raw, fecha_ini, fecha_fin, todos_los_insumos)
+            # ✅ AHORA SÍ procesar datos (con saldos ya calculados)
+            self.movimientos_data = self.procesar_datos_balance(
+                movimientos_raw, 
+                fecha_ini, 
+                fecha_fin, 
+                todos_los_insumos
+            )
 
+            # ==== BEGIN PATCH: sin destinos en desglose (limpiar, recalcular una sola vez) ====
             # NUEVA VALIDACIÓN: Verificar si hay desglose pero no hay destinos
             if self.desglose_var.get() and (not hasattr(self, 'destinos_desglose') or not self.destinos_desglose):
                 area_sel = self.combo_area.get().strip()
@@ -1484,8 +1451,33 @@ class ReporteBalanceBodega:
                 # Desmarcar el checkbox automáticamente
                 self.desglose_var.set(False)
                 
+                # Limpiar caches y destinos (importante limpiar códigos también)
+                self._cache_saldos.clear()
+                self._cache_codigos.clear()
+                self.destinos_desglose = []
+                
+                # Recalcular insumos y saldo anterior UNA sola vez
+                insumos_con_saldo = self._obtener_insumos_con_saldo(fecha_corte_anterior, contexto)
+                insumo_ids_en_periodo = set()
+                for m in movimientos_raw:
+                    iid = m.get('codigo_insumo')
+                    if iid is not None:
+                        try:
+                            iid = int(str(iid).strip())
+                            insumo_ids_en_periodo.add(iid)
+                        except:  # noqa: E722
+                            pass
+                todos_los_insumos = set(insumos_con_saldo) | insumo_ids_en_periodo
+
+                self.saldo_anterior_por_insumo = self._obtener_saldos_batch(
+                    fecha_corte_anterior,
+                    contexto, 
+                    list(todos_los_insumos)
+                )
+                
                 # Reprocesar sin desglose
                 self.movimientos_data = self.procesar_datos_balance(movimientos_raw, fecha_ini, fecha_fin, todos_los_insumos)
+            # ==== END PATCH ====
             
             if not self.movimientos_data:
                 messagebox.showwarning("Sin datos", "No hay datos procesados para mostrar")
@@ -1810,6 +1802,8 @@ class ReporteBalanceBodega:
             print(f"Error detallado:\n{error_detallado}")
             messagebox.showerror("Error", f"Error al generar reporte:\n{str(e)}")
 
+    
+    
     # -----------------------------
     # Abrir/Imprimir/Exportar
     # -----------------------------
@@ -2226,7 +2220,7 @@ class ReporteBalanceBodega:
                                 try:
                                     val = float(cell_value)
                                     worksheet.write_number(fila_inicio + row_offset, col_num, val, cell_format_number)
-                                except:
+                                except:  # noqa: E722
                                     worksheet.write(fila_inicio + row_offset, col_num, cell_value, cell_format_center)
                             else:
                                 worksheet.write(fila_inicio + row_offset, col_num, cell_value, cell_format_center)

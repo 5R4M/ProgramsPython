@@ -2,9 +2,7 @@ import configparser
 import mysql.connector
 from mysql.connector import Error
 import os
-from datetime import datetime
 import sys
-import shutil
 import socket
 
 def resource_path(relative_path):
@@ -217,7 +215,7 @@ def conectar_db():
         # Primero intentar crear la base de datos si no existe
         try:
             crear_base_datos_si_no_existe()
-        except Error as db_create_error:
+        except Error:
             # Continuar intentando conectar de todas formas
             pass
         
@@ -237,13 +235,13 @@ def conectar_db():
         # Crear tablas si no existen
         try:
             crear_tablas_si_no_existen(conn)
-        except Error as table_error:
+        except Error:
             # Continuar si hay error al crear tablas
             pass
         
         return conn
         
-    except Error as e:
+    except Error:
         # Manejo silencioso de errores - solo retornar None
         # Si necesitas debug, puedes descomentar la siguiente línea:
         # print(f"Error al conectar a la base de datos: {e}")
@@ -266,7 +264,7 @@ def debug_mysql_connection():
         
         # Verificar que el puerto sea entero
         if not isinstance(config['port'], int):
-            print(f"⚠️ ADVERTENCIA: Puerto no es entero, convirtiendo...")
+            print("⚠️ ADVERTENCIA: Puerto no es entero, convirtiendo...")
             config['port'] = int(config['port'])
         
         # Probar conexión básica de red
@@ -285,7 +283,7 @@ def debug_mysql_connection():
             return
         
         # Probar conexión MySQL sin base de datos
-        print(f"\n2. Probando conexión MySQL sin base de datos...")
+        print("\n2. Probando conexión MySQL sin base de datos...")
         try:
             conn = mysql.connector.connect(
                 host=config['host'],
@@ -304,7 +302,7 @@ def debug_mysql_connection():
             return
         
         # Probar conexión completa
-        print(f"\n3. Probando conexión completa con base de datos...")
+        print("\n3. Probando conexión completa con base de datos...")
         try:
             conn = mysql.connector.connect(
                 host=config['host'],
@@ -475,7 +473,7 @@ def crear_tablas_si_no_existen(conn):
         
         conn.commit()
     
-    except Error as e:
+    except Error:
         conn.rollback()
     finally:
         cursor.close()
@@ -1922,141 +1920,6 @@ def eliminar_movimiento(mov_id):
     
 # ---- OPERACIONES BRES----
 
-def obtener_movimientos_historicos(codigo_insumo, fecha_inicio, fecha_fin, distrito=None, tipo_servicio=None, servicio=None):
-    """
-    Obtiene los movimientos históricos de un insumo específico para calcular promedios
-    """
-    conn = conectar_db()
-    if not conn:
-        return []
-
-    try:
-        cursor = conn.cursor(dictionary=True)
-        
-        # Query base para obtener movimientos históricos
-        query = """
-        SELECT 
-        tm.descripcion as tipo_movimiento,
-        m.cantidad,
-        m.fecha_registro as fecha,
-        i.lote as codigo_insumo,
-        i.nombre as nombre_insumo
-        FROM movimiento m
-        INNER JOIN insumo i ON m.insumo_id = i.id
-        INNER JOIN tipo_movimiento tm ON m.tipo_movimiento_id = tm.id
-        LEFT JOIN servicio s ON m.servicio_id = s.id
-        LEFT JOIN tipo_servicio ts ON s.id_tipo_servicio = ts.id
-        LEFT JOIN distrito d ON ts.id_distrito = d.id
-        WHERE i.lote = %s
-        AND m.fecha_registro BETWEEN %s AND %s
-        AND tm.descripcion IN ('ENTREGADO', 'NO ENTREGADO')
-        """
-        
-        params = [codigo_insumo, fecha_inicio, fecha_fin]
-        
-        # Agregar filtros opcionales
-        if distrito:
-            query += " AND d.nombre = %s"
-            params.append(distrito)
-        
-        if tipo_servicio:
-            query += " AND ts.descripcion = %s"
-            params.append(tipo_servicio)
-        
-        if servicio:
-            query += " AND s.nombre = %s"
-            params.append(servicio)
-        
-        query += " ORDER BY m.fecha_registro"
-        
-        cursor.execute(query, params)
-        resultados = cursor.fetchall()
-        
-        # Convertir a lista de diccionarios
-        movimientos = []
-        for row in resultados:
-            movimientos.append({
-            'tipo_movimiento': row['tipo_movimiento'],
-            'cantidad': float(row['cantidad']) if row['cantidad'] else 0,
-            'fecha': row['fecha'],
-            'codigo_insumo': row['codigo_insumo'],
-            'nombre_insumo': row['nombre_insumo']
-            })
-        
-        return movimientos
-    
-    except Error as e:
-        print(f"Error al obtener movimientos históricos: {e}")
-        return []
-    finally:
-        cursor.close()
-        conn.close()
-
-def obtener_demanda_por_meses(codigo_insumo, fecha_inicio, fecha_fin, distrito=None, tipo_servicio=None, servicio=None):
-    """
-    Obtiene la demanda agrupada por mes para calcular promedios más precisos
-    """
-    conn = conectar_db()
-    if not conn:
-        return []
-
-    try:
-        cursor = conn.cursor(dictionary=True)
-        
-        query = """
-        SELECT 
-        YEAR(m.fecha_registro) as anio,
-        MONTH(m.fecha_registro) as mes,
-        SUM(m.cantidad) as demanda_total
-        FROM movimiento m
-        INNER JOIN insumo i ON m.insumo_id = i.id
-        INNER JOIN tipo_movimiento tm ON m.tipo_movimiento_id = tm.id
-        LEFT JOIN servicio s ON m.servicio_id = s.id
-        LEFT JOIN tipo_servicio ts ON s.id_tipo_servicio = ts.id
-        LEFT JOIN distrito d ON ts.id_distrito = d.id
-        WHERE i.lote = %s
-        AND m.fecha_registro BETWEEN %s AND %s
-        AND tm.descripcion IN ('ENTREGADO', 'NO ENTREGADO')
-        """
-        
-        params = [codigo_insumo, fecha_inicio, fecha_fin]
-        
-        # Agregar filtros opcionales
-        if distrito:
-            query += " AND d.nombre = %s"
-            params.append(distrito)
-        
-        if tipo_servicio:
-            query += " AND ts.descripcion = %s"
-            params.append(tipo_servicio)
-        
-        if servicio:
-            query += " AND s.nombre = %s"
-            params.append(servicio)
-        
-        query += " GROUP BY YEAR(m.fecha_registro), MONTH(m.fecha_registro) ORDER BY anio, mes"
-        
-        cursor.execute(query, params)
-        resultados = cursor.fetchall()
-        
-        # Convertir a lista de diccionarios
-        demanda_mensual = []
-        for row in resultados:
-            demanda_mensual.append({
-            'anio': int(row['anio']),
-            'mes': int(row['mes']),
-            'demanda_total': float(row['demanda_total']) if row['demanda_total'] else 0
-            })
-        
-        return demanda_mensual
-    
-    except Error as e:
-        print(f"Error al obtener demanda por meses: {e}")
-        return []
-    finally:
-        cursor.close()
-        conn.close()
-
 def obtener_movimientos_bres(fecha_inicio, fecha_fin, area_nombre=None, distrito_nombre=None, tipo_servicio_desc=None,
     servicio_nombre=None, tipo_insumo_desc=None, insumo_nombre=None,
     presentacion_nombre=None):
@@ -2201,131 +2064,6 @@ def obtener_movimientos_bres(fecha_inicio, fecha_fin, area_nombre=None, distrito
         cursor.close()
         conn.close()
 
-# ---- OPERACIONES BALANCE----
-
-def obtener_movimientos_balance(fecha_inicio, fecha_fin, area_nombre=None, distrito_nombre=None, tipo_servicio_desc=None,
-    servicio_nombre=None, tipo_insumo_desc=None, insumo_nombre=None,
-    presentacion_nombre=None, insumo_id=None):
-    """
-    Obtiene movimientos del balance filtrados por nivel exacto según cómo se guardan los datos
-    """
-    
-    try:
-        conn = conectar_db()
-        if not conn:
-            return []
-        
-        cursor = conn.cursor(dictionary=True)
-        
-        query = """
-        SELECT
-        m.fecha_registro AS fecha,
-        m.referencia,
-        tm.descripcion AS tipo_movimiento,
-        m.cantidad,
-        m.lote,
-        m.fecha_vencimiento,
-        m.observaciones,
-        d_salida.nombre AS distrito_destino,
-        s_salida.nombre AS servicio_destino,
-        i.nombre AS nombre_insumo,
-        i.id AS codigo_insumo,
-        COALESCE(p.nombre, '') AS presentacion,
-        a.nombre AS area_nombre,
-        d.nombre AS distrito_nombre,
-        ts.descripcion AS tipo_servicio_descripcion,
-        s.nombre AS servicio_nombre
-        FROM movimiento m
-        JOIN tipo_movimiento tm ON m.tipo_movimiento_id = tm.id
-        LEFT JOIN insumo i ON m.insumo_id = i.id
-        LEFT JOIN tipo_insumo ti ON i.id_tipo_insumo = ti.id
-        LEFT JOIN insumo_presentacion ip ON i.id = ip.insumo_id
-        LEFT JOIN presentacion p ON ip.presentacion_id = p.id
-        LEFT JOIN distrito d_salida ON m.salida_distrito_id = d_salida.id
-        LEFT JOIN servicio s_salida ON m.salida_servicio_id = s_salida.id
-        
-        LEFT JOIN area a ON m.area_id = a.id
-        LEFT JOIN distrito d ON m.distrito_id = d.id
-        LEFT JOIN servicio s ON m.servicio_id = s.id
-        LEFT JOIN tipo_servicio ts ON s.id_tipo_servicio = ts.id
-        
-        WHERE m.fecha_registro BETWEEN %s AND %s
-        AND tm.descripcion IN ('INVENTARIO INICIAL', 'REAJUSTE (+)', 'REAJUSTE (-)', 'ENTRADA NIVEL SUPERIOR', 'SALIDA NIVEL INFERIOR')
-        """
-        
-        params = [fecha_inicio, fecha_fin]
-        
-        # Determinar el nivel más específico seleccionado
-        if servicio_nombre:
-            query += " AND s.nombre = %s"
-            params.append(servicio_nombre)
-        
-        elif tipo_servicio_desc:
-            query += " AND ts.descripcion = %s"
-            params.append(tipo_servicio_desc)
-        
-        elif distrito_nombre:
-            query += " AND d.nombre = %s AND m.servicio_id IS NULL"
-            params.append(distrito_nombre)
-        
-        elif area_nombre:
-            query += " AND a.nombre = %s AND m.distrito_id IS NULL"
-            params.append(area_nombre)
-
-        # Filtros adicionales opcionales
-        if insumo_id:
-            query += " AND i.id = %s"
-            params.append(insumo_id)
-        
-        if tipo_insumo_desc:
-            query += " AND ti.descripcion = %s"
-            params.append(tipo_insumo_desc)
-
-        if insumo_nombre:
-            query += " AND i.nombre = %s"
-            params.append(insumo_nombre)
-
-        if presentacion_nombre:
-            query += " AND p.nombre = %s"
-            params.append(presentacion_nombre)
-
-        query += " ORDER BY m.fecha_registro"
-        
-        cursor.execute(query, params)
-        resultados = cursor.fetchall()
-        
-        movimientos = []
-        for row in resultados:
-            movimientos.append({
-                'fecha': row['fecha'],
-                'referencia': row['referencia'],
-                'tipo_movimiento': row['tipo_movimiento'],
-                'cantidad': float(row['cantidad']) if row['cantidad'] else 0,
-                'lote': row['lote'],
-                'fecha_vencimiento': row['fecha_vencimiento'],
-                'observaciones': row['observaciones'],
-                'distrito_destino': row['distrito_destino'],
-                'servicio_destino': row['servicio_destino'],
-                'nombre_insumo': row['nombre_insumo'],
-                'codigo_insumo': row['codigo_insumo'],
-                'presentacion': row['presentacion'],
-                'area_nombre': row['area_nombre'],
-                'distrito_nombre': row['distrito_nombre'],
-                'tipo_servicio_descripcion': row['tipo_servicio_descripcion'],
-                'servicio_nombre': row['servicio_nombre']
-            })
-
-        return movimientos
-
-    except Exception as e:
-        print(f"Error en obtener_movimientos_balance: {e}")
-        import traceback
-        traceback.print_exc()
-        return []
-    finally:
-        cursor.close()
-        conn.close()
-
 # ---- OPERACIONES DEMANDA----
 
 def obtener_saldo_corte_logistico(fecha_corte, contexto, insumo_id=None):
@@ -2393,7 +2131,8 @@ def obtener_saldo_corte_logistico(fecha_corte, contexto, insumo_id=None):
                     ), 0) AS saldo
                 FROM movimiento m
                 WHERE {where_clause}
-            """            
+            """
+            
             cursor.execute(query, params)
             resultado = cursor.fetchone()
             return float(resultado['saldo']) if resultado else 0.0
@@ -2424,7 +2163,6 @@ def obtener_saldo_corte_logistico(fecha_corte, contexto, insumo_id=None):
             resultados = cursor.fetchall()
             
             saldos = {row['insumo_id']: float(row['saldo'] or 0) for row in resultados}
-            print(f"✅ Saldos para {len(saldos)} insumos al {fecha_corte.strftime('%Y-%m-%d')}")
             return saldos
         
     except Exception as e:
@@ -2546,7 +2284,7 @@ def agregar_columna_codigo_prefijo():
             else:
                 return True
                 
-        except Error as e:
+        except Error:
             conn.rollback()
             return False
         finally:
@@ -2580,7 +2318,7 @@ def asignar_prefijos_tipos_insumo():
             conn.commit()
             return True
             
-        except Error as e:
+        except Error:
             conn.rollback()
             return False
         finally:

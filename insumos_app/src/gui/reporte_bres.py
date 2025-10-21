@@ -1,11 +1,8 @@
-# Imports existentes
-from calendar import month_name
 import tkinter as tk
 from tkinter import ttk, messagebox
 from tkcalendar import DateEntry
 import pandas as pd
 from datetime import datetime, timedelta
-import locale
 import sys
 import os
 from ttkwidgets.autocomplete import AutocompleteCombobox
@@ -104,7 +101,7 @@ class ReporteBres:
 
         return container, content
 
-    def create_titled_frame(self, parent, title, header_icon=None):
+    def create_titled_frame(self, parent, title, header_icon=None):  # noqa: F811
         # Contenedor compacto
         container = tk.Frame(parent, bg=self.COLORS['white'], relief='solid', borderwidth=1)
 
@@ -806,7 +803,7 @@ class ReporteBres:
         def f(x):
             try:
                 return float(x)
-            except:
+            except:  # noqa: E722
                 return 0.0
 
         for mov in movimientos_raw:
@@ -819,7 +816,7 @@ class ReporteBres:
 
             area = mov.get('area_nombre', '')
             distrito = mov.get('distrito_nombre', '')
-            tipo_servicio = mov.get('tipo_servicio_descripcion', '')
+            mov.get('tipo_servicio_descripcion', '')
             servicio = mov.get('servicio_nombre', '')
 
             tipo_movimiento = str(mov.get('tipo_movimiento', '')).strip().upper()
@@ -835,9 +832,9 @@ class ReporteBres:
                 else:
                     try:
                         fecha_mov = datetime.strptime(str(fecha_str), '%Y-%m-%d')
-                    except:
+                    except:  # noqa: E722
                         fecha_mov = datetime.strptime(str(fecha_str), '%d/%m/%Y')
-            except:
+            except:  # noqa: E722
                 continue
 
             if not (fecha_ini <= fecha_mov <= fecha_fin):
@@ -1731,7 +1728,7 @@ class ReporteBres:
                 try:
                     iid = int(str(iid).strip())
                     insumo_ids_en_periodo.add(iid)
-                except:
+                except:  # noqa: E722
                     pass
 
             todos_los_insumos = set(insumos_con_saldo) | insumo_ids_en_periodo
@@ -2395,7 +2392,7 @@ class ReporteBres:
                                 try:
                                     val = float(cell_value)
                                     worksheet.write_number(fila_inicio + row_offset, col_num, val, cell_format_number)
-                                except:
+                                except:  # noqa: E722
                                     worksheet.write(fila_inicio + row_offset, col_num, cell_value, cell_format_center)
                             else:
                                 worksheet.write(fila_inicio + row_offset, col_num, cell_value, cell_format_center)
