@@ -346,10 +346,8 @@ class ReporteBres:
                 SELECT
                     COALESCE(SUM(
                         CASE
-                            WHEN tm.descripcion IN ('INVENTARIO INICIAL', 'ENTRADA NIVEL SUPERIOR', 'REAJUSTE (+)')
-                                THEN m.cantidad
-                            WHEN tm.descripcion IN ('SALIDA NIVEL INFERIOR', 'REAJUSTE (-)', 'ENTREGADO')
-                                THEN -m.cantidad
+                            WHEN UPPER(REPLACE(REPLACE(tm.descripcion, '  ', ' '), '  ', ' ')) IN ('INVENTARIO INICIAL','ENTRADA NIVEL SUPERIOR','REAJUSTE (+)') THEN m.cantidad
+                            WHEN UPPER(REPLACE(REPLACE(tm.descripcion, '  ', ' '), '  ', ' ')) IN ('SALIDA NIVEL INFERIOR','REAJUSTE (-)','ENTREGADO') THEN -m.cantidad
                             ELSE 0
                         END
                     ), 0) AS saldo
@@ -519,10 +517,8 @@ class ReporteBres:
                     i.id as insumo_id,
                     COALESCE(SUM(
                         CASE
-                            WHEN tm.descripcion IN ('INVENTARIO INICIAL', 'ENTRADA NIVEL SUPERIOR', 'REAJUSTE (+)')
-                                THEN m.cantidad
-                            WHEN tm.descripcion IN ('SALIDA NIVEL INFERIOR', 'REAJUSTE (-)', 'ENTREGADO')
-                                THEN -m.cantidad
+                            WHEN UPPER(REPLACE(REPLACE(tm.descripcion, '  ', ' '), '  ', ' ')) IN ('INVENTARIO INICIAL','ENTRADA NIVEL SUPERIOR','REAJUSTE (+)') THEN m.cantidad
+                            WHEN UPPER(REPLACE(REPLACE(tm.descripcion, '  ', ' '), '  ', ' ')) IN ('SALIDA NIVEL INFERIOR','REAJUSTE (-)','ENTREGADO') THEN -m.cantidad
                             ELSE 0
                         END
                     ), 0) AS saldo
@@ -652,10 +648,8 @@ class ReporteBres:
                     m.insumo_id,
                     COALESCE(SUM(
                         CASE
-                            WHEN tm.descripcion IN ('INVENTARIO INICIAL', 'ENTRADA NIVEL SUPERIOR', 'REAJUSTE (+)')
-                                THEN m.cantidad
-                            WHEN tm.descripcion IN ('SALIDA NIVEL INFERIOR', 'REAJUSTE (-)', 'ENTREGADO')
-                                THEN -m.cantidad
+                            WHEN UPPER(REPLACE(REPLACE(tm.descripcion, '  ', ' '), '  ', ' ')) IN ('INVENTARIO INICIAL','ENTRADA NIVEL SUPERIOR','REAJUSTE (+)') THEN m.cantidad
+                            WHEN UPPER(REPLACE(REPLACE(tm.descripcion, '  ', ' '), '  ', ' ')) IN ('SALIDA NIVEL INFERIOR','REAJUSTE (-)','ENTREGADO') THEN -m.cantidad
                             ELSE 0
                         END
                     ), 0) AS saldo
@@ -716,6 +710,35 @@ class ReporteBres:
         ini = fecha_ini.strftime('%d/%m/%Y')
         fin = fecha_fin.strftime('%d/%m/%Y')
         return f"Periodo logístico: {ini} – {fin}"
+    
+    def _normalizar_tipo_mov(self, valor):
+        if not valor:
+            return 'OTRO'
+        t = str(valor).strip().upper()
+        while '  ' in t:
+            t = t.replace('  ', ' ')
+        t = (t.replace('( + )', '(+)')
+            .replace('( - )', '(-)')
+            .replace('+ )', '+)')
+            .replace('( +', '(+')
+            .replace('REAJUSTE +', 'REAJUSTE (+)')
+            .replace('REAJUSTE -', 'REAJUSTE (-)'))
+        s = t.replace(' ', '')
+        if ('REAJUSTE' in t and ('(+)' in t or ' POS' in t or 'POSITIVO' in t or ' + ' in t or t.endswith('+'))) or s in ('REAJUSTE(+)', 'REAJUSTE+'):
+            return 'REAJUSTE (+)'
+        if ('REAJUSTE' in t and ('(-)' in t or ' NEG' in t or 'NEGATIVO' in t or ' - ' in t or t.endswith('-'))) or s in ('REAJUSTE(-)', 'REAJUSTE-'):
+            return 'REAJUSTE (-)'
+        if t == 'INVENTARIO INICIAL':
+            return 'INVENTARIO INICIAL'
+        if t == 'ENTRADA NIVEL SUPERIOR':
+            return 'ENTRADA NIVEL SUPERIOR'
+        if t == 'SALIDA NIVEL INFERIOR':
+            return 'SALIDA NIVEL INFERIOR'
+        if t == 'ENTREGADO':
+            return 'ENTREGADO'
+        if t == 'NO ENTREGADO':
+            return 'NO ENTREGADO'
+        return 'OTRO'
     
     def procesar_datos_bres(self, movimientos_raw, fecha_ini, fecha_fin, todos_los_insumos=None):
         """
@@ -819,7 +842,7 @@ class ReporteBres:
             mov.get('tipo_servicio_descripcion', '')
             servicio = mov.get('servicio_nombre', '')
 
-            tipo_movimiento = str(mov.get('tipo_movimiento', '')).strip().upper()
+            tipo_movimiento = self._normalizar_tipo_mov(mov.get('tipo_movimiento', ''))
 
             # Fecha: solo sumar si está dentro [fecha_ini, fecha_fin]
             fecha_str = mov.get('fecha_registro') or mov.get('fecha')
@@ -846,7 +869,6 @@ class ReporteBres:
                 datos_agrupados[codigo] = {
                     'nombre_insumo': nombre,
                     'insumo_id': insumo_id,
-                    # saldos base: tomar de self.saldo_anterior_por_insumo por insumo_id
                     'saldo_anterior_area': 0.0,
                     'saldo_anterior_distritos': 0.0,
                     'saldo_anterior_servicios': 0.0,
@@ -862,6 +884,10 @@ class ReporteBres:
                     'reajustes_area': 0.0,
                     'reajustes_distritos': 0.0,
                     'reajustes_servicios': 0.0,
+                    # NUEVO: INI dentro del periodo se guarda aparte
+                    'ini_en_periodo_area': 0.0,
+                    'ini_en_periodo_distritos': 0.0,
+                    'ini_en_periodo_servicios': 0.0,
                     '_saldo_base_asignado': False
                 }
 
@@ -891,13 +917,13 @@ class ReporteBres:
 
             # Acumulación por tipo dentro del periodo
             if tipo_movimiento == 'INVENTARIO INICIAL':
-                # Inventario inicial cae dentro del periodo si fue registrado dentro del rango
+                # NO tocar saldo_anterior_* con INI del periodo; guardarlo aparte para cierre
                 if es_nivel_area:
-                    datos_agrupados[codigo]['saldo_anterior_area'] += cantidad
+                    datos_agrupados[codigo]['ini_en_periodo_area'] += cantidad
                 elif es_nivel_distrito:
-                    datos_agrupados[codigo]['saldo_anterior_distritos'] += cantidad
+                    datos_agrupados[codigo]['ini_en_periodo_distritos'] += cantidad
                 elif es_nivel_servicio:
-                    datos_agrupados[codigo]['saldo_anterior_servicios'] += cantidad
+                    datos_agrupados[codigo]['ini_en_periodo_servicios'] += cantidad
 
             elif tipo_movimiento == 'ENTRADA NIVEL SUPERIOR':
                 if es_nivel_area:
@@ -934,6 +960,7 @@ class ReporteBres:
                     datos_agrupados[codigo]['reajustes_servicios'] += cantidad
 
             elif tipo_movimiento == 'REAJUSTE (-)':
+                # Importante: acumular negativo UNA sola vez
                 if es_nivel_area:
                     datos_agrupados[codigo]['reajustes_area'] -= cantidad
                 elif es_nivel_distrito:
@@ -947,15 +974,19 @@ class ReporteBres:
 
         datos_procesados = []
         for codigo, datos in datos_agrupados.items():
-            # Totales por nivel según la selección actual de combos
-            if nivel_servicio:
-                saldo_anterior_total = f(datos['saldo_anterior_servicios'])
-                entradas_nivel_superior_total = f(datos['entradas_nivel_superior_servicios'])
-                entregado_total = f(datos['entregado_servicios'])
-                no_entregado_total = f(datos['no_entregado_servicios'])
-                reajustes_total = f(datos['reajustes_servicios'])
+            
+            # Consolidar INVENTARIO INICIAL del periodo activo en un acumulador explícito
+            _inventario_inicial_total_en_periodo = (
+                float(datos['ini_en_periodo_area']) +
+                float(datos['ini_en_periodo_distritos']) +
+                float(datos['ini_en_periodo_servicios'])
+            )
+                        
+            # Totales por nivel (Saldo Anterior = saldo al corte sin INVENTARIO INICIAL del periodo)
+            # Nota: 'f' es tu helper de formateo/decimal y 'datos' ya contiene los agregados necesarios.
 
-            elif nivel_tipo_servicio:
+            if nivel_servicio or nivel_tipo_servicio:
+                # Servicio: ENTRADAS NS tal como está registrada (sin restar nada)
                 saldo_anterior_total = f(datos['saldo_anterior_servicios'])
                 entradas_nivel_superior_total = f(datos['entradas_nivel_superior_servicios'])
                 entregado_total = f(datos['entregado_servicios'])
@@ -963,28 +994,112 @@ class ReporteBres:
                 reajustes_total = f(datos['reajustes_servicios'])
 
             elif nivel_distrito:
+                # Distrito:
+                # ENTRADA NS (mostrada) = ENTRADA NS (DISTRITO) − SALIDA NIVEL INFERIOR (DISTRITO) + SUMA ENTRADAS NS (SERVICIOS)
+                # Asegúrate de que 'salidas_nivel_inferior_distritos' represente las salidas hechas desde cada distrito hacia su nivel inferior
+                entradas_nivel_superior_total = f(
+                    datos['entradas_nivel_superior_distritos']
+                    - datos['salidas_nivel_inferior_distritos']
+                    + datos['entradas_nivel_superior_servicios']
+                )
+
+                # Saldo anterior total (mantén tu definición si separaste INVENTARIO INICIAL)
                 saldo_anterior_total = f(datos['saldo_anterior_distritos'] + datos['saldo_anterior_servicios'])
-                entradas_nivel_superior_total = f(datos['entradas_nivel_superior_distritos'] + datos['entradas_nivel_superior_servicios'] - datos['salidas_nivel_inferior_distritos'])
+
+                # Resto de agregados
                 entregado_total = f(datos['entregado_distritos'] + datos['entregado_servicios'])
                 no_entregado_total = f(datos['no_entregado_distritos'] + datos['no_entregado_servicios'])
                 reajustes_total = f(datos['reajustes_distritos'] + datos['reajustes_servicios'])
 
             elif nivel_area:
-                saldo_anterior_total = f(datos['saldo_anterior_area'] + datos['saldo_anterior_distritos'] + datos['saldo_anterior_servicios'])
-                entradas_nivel_superior_total = f(datos['entradas_nivel_superior_area'] + datos['entradas_nivel_superior_distritos'] - datos['salidas_nivel_inferior_area'])
+                # ENTRADAS NS mostrada (regla de presentación): bodega + distritos, neteando salidas NI del área
+                entradas_nivel_superior_total = f(
+                    datos['entradas_nivel_superior_area']
+                    - datos['salidas_nivel_inferior_area']
+                    + datos['entradas_nivel_superior_distritos']
+                )
+
+                # Saldo anterior del área: SOLO el de bodega, sin sumar distritos/servicios
+                saldo_anterior_total = f(datos['saldo_anterior_area'])
+
+                # Agregados visuales
                 entregado_total = f(datos['entregado_distritos'] + datos['entregado_servicios'])
                 no_entregado_total = f(datos['no_entregado_distritos'] + datos['no_entregado_servicios'])
                 reajustes_total = f(datos['reajustes_area'] + datos['reajustes_distritos'] + datos['reajustes_servicios'])
 
             else:
-                saldo_anterior_total = f(datos['saldo_anterior_area'] + datos['saldo_anterior_distritos'] + datos['saldo_anterior_servicios'])
-                entradas_nivel_superior_total = f(datos['entradas_nivel_superior_area'] + datos['entradas_nivel_superior_distritos'] + datos['entradas_nivel_superior_servicios'] - datos['salidas_nivel_inferior_area'] - datos['salidas_nivel_inferior_distritos'])
+                # Consolidado: usa identidad del área para evitar doble conteo
+                entradas_nivel_superior_total = f(
+                    datos['entradas_nivel_superior_area']
+                    - datos['salidas_nivel_inferior_area']
+                    + datos['entradas_nivel_superior_distritos']
+                )
+                saldo_anterior_total = f(datos['saldo_anterior_area'])
+
                 entregado_total = f(datos['entregado_distritos'] + datos['entregado_servicios'])
                 no_entregado_total = f(datos['no_entregado_distritos'] + datos['no_entregado_servicios'])
                 reajustes_total = f(datos['reajustes_area'] + datos['reajustes_distritos'] + datos['reajustes_servicios'])
 
-            saldo_mes_siguiente = f(saldo_anterior_total + entradas_nivel_superior_total - entregado_total + reajustes_total)
+            # Saldo Mes Siguiente (presentación contable, NO restar salidas NI)
+            if nivel_servicio or nivel_tipo_servicio:
+                saldo_mes_siguiente = f(
+                    float(datos['saldo_anterior_servicios'])
+                    + float(datos['entradas_nivel_superior_servicios'])
+                    - float(datos['entregado_servicios'])  # si no quieres que 'entregado' afecte el saldo contable, quítalo
+                    + float(datos['reajustes_servicios'])
+                    + float(datos['ini_en_periodo_servicios'])
+                )
+
+            elif nivel_distrito:
+                saldo_mes_siguiente = f(
+                    float(datos['saldo_anterior_distritos'])
+                    + float(datos['entradas_nivel_superior_distritos'])
+                    # - float(datos['salidas_nivel_inferior_distritos'])  # NO restar
+                    - float(datos['entregado_distritos'])  # si no aplica al saldo contable en tu diseño, quítalo
+                    + float(datos['reajustes_distritos'])
+                    + float(datos['ini_en_periodo_distritos'])
+                )
+
+            elif nivel_area:
+                saldo_mes_siguiente = f(
+                    float(datos['saldo_anterior_area'])
+                    + float(datos['entradas_nivel_superior_area'])
+                    # - float(datos['salidas_nivel_inferior_area'])  # NO restar
+                    + float(datos['reajustes_area'])
+                    + float(datos['ini_en_periodo_area'])
+                )
+
+            else:
+                # Consolidado = identidad del área
+                saldo_mes_siguiente = f(
+                    float(datos['saldo_anterior_area'])
+                    + float(datos['entradas_nivel_superior_area'])
+                    # - float(datos['salidas_nivel_inferior_area'])  # NO restar
+                    + float(datos['reajustes_area'])
+                    + float(datos['ini_en_periodo_area'])
+                )
+             
+            # Detectar si hubo movimientos que deban afectar el saldo contable (sin contar salidas NI)
+            hubo_mov_contable = any([
+                datos['entradas_nivel_superior_area'], datos['entradas_nivel_superior_distritos'], datos['entradas_nivel_superior_servicios'],
+                datos['reajustes_area'], datos['reajustes_distritos'], datos['reajustes_servicios'],
+                datos['ini_en_periodo_area'], datos['ini_en_periodo_distritos'], datos['ini_en_periodo_servicios']
+            ])
+
+            if not hubo_mov_contable:
+                # Congelar Saldo Mes Siguiente = Saldo Anterior del nivel de presentación
+                if nivel_servicio or nivel_tipo_servicio:
+                    saldo_mes_siguiente = f(datos['saldo_anterior_servicios'])
+                elif nivel_distrito:
+                    saldo_mes_siguiente = f(datos['saldo_anterior_distritos'])
+                elif nivel_area:
+                    saldo_mes_siguiente = f(datos['saldo_anterior_area'])
+                else:
+                    saldo_mes_siguiente = f(datos['saldo_anterior_area'])
+                            
+            # Demanda solo visual: Entregado + No Entregado
             demanda_total = f(entregado_total + no_entregado_total)
+            # ==== END PATCH ====
 
             promedio_mensual = f(promedios_batch.get(datos['insumo_id'], 0.0))
             meses_existencia = f((saldo_mes_siguiente / promedio_mensual) if promedio_mensual > 0 else 0.0)
@@ -997,37 +1112,40 @@ class ReporteBres:
             cantidad_maxima = f(promedio_mensual * nivel_maximo)
             cantidad_solicitar = f(cantidad_maxima - saldo_mes_siguiente)
             
+            # Existencia Física = stock real en el nivel (mismas reglas contables)
             if nivel_servicio or nivel_tipo_servicio:
-                # SERVICIOS: nivel más bajo (no hay salidas inferiores)
                 existencia_fisica = (
-                    float(datos['saldo_anterior_servicios']) +
-                    float(datos['entradas_nivel_superior_servicios']) -
-                    float(datos['entregado_servicios']) +
-                    float(datos['reajustes_servicios'])
+                    float(datos['saldo_anterior_servicios'])
+                    + float(datos['ini_en_periodo_servicios'])
+                    + float(datos['entradas_nivel_superior_servicios'])
+                    - float(datos['entregado_servicios'])
+                    + float(datos['reajustes_servicios'])
                 )
-            
             elif nivel_distrito:
-                # DISTRITO: solo datos de nivel distrito (sin incluir servicios subordinados)
                 existencia_fisica = (
-                    float(datos['saldo_anterior_distritos']) +
-                    float(datos['entradas_nivel_superior_distritos']) -
-                    float(datos['salidas_nivel_inferior_distritos']) -
-                    float(datos['entregado_distritos']) +
-                    float(datos['reajustes_distritos'])
+                    float(datos['saldo_anterior_distritos'])
+                    + float(datos['ini_en_periodo_distritos'])
+                    + float(datos['entradas_nivel_superior_distritos'])
+                    - float(datos['salidas_nivel_inferior_distritos'])
+                    - float(datos['entregado_distritos'])
+                    + float(datos['reajustes_distritos'])
                 )
-            
             elif nivel_area:
-                # ÁREA: solo datos de nivel área (sin incluir distritos subordinados)
                 existencia_fisica = (
-                    float(datos['saldo_anterior_area']) +
-                    float(datos['entradas_nivel_superior_area']) -
-                    float(datos['salidas_nivel_inferior_area']) +
-                    float(datos['reajustes_area'])
+                    float(datos['saldo_anterior_area'])
+                    + float(datos['ini_en_periodo_area'])
+                    + float(datos['entradas_nivel_superior_area'])
+                    - float(datos['salidas_nivel_inferior_area'])
+                    + float(datos['reajustes_area'])
                 )
-            
             else:
-                # Sin filtro: usar el saldo consolidado total
-                existencia_fisica = saldo_mes_siguiente
+                existencia_fisica = (
+                    float(datos['saldo_anterior_area'])
+                    + float(datos['ini_en_periodo_area'])
+                    + float(datos['entradas_nivel_superior_area'])
+                    - float(datos['salidas_nivel_inferior_area'])
+                    + float(datos['reajustes_area'])
+                )
 
             datos_procesados.append({
                 'codigo_insumo': codigo,
@@ -1658,6 +1776,14 @@ class ReporteBres:
             self.combo_presentacion.set_completion_list(opciones)
 
     def generar_vista_previa(self):
+        # LIMPIEZA DE CACHES
+        if hasattr(self, '_cache_saldos') and isinstance(self._cache_saldos, dict):
+            self._cache_saldos.clear()
+        if hasattr(self, '_cache_promedios') and isinstance(self._cache_promedios, dict):
+            self._cache_promedios.clear()
+        if hasattr(self, '_cache_insumos_con_saldo') and isinstance(self._cache_insumos_con_saldo, dict):
+            self._cache_insumos_con_saldo.clear()
+                    
         # Deshabilitar botón para evitar múltiples clics rápidos
         for child in self.frame_botones.winfo_children():
             if child.cget('text') == "Vista Previa":
