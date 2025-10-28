@@ -189,7 +189,7 @@ def crear_base_datos_si_no_existe():
             connection_timeout=10
         )
         
-        cursor = conn.cursor()
+        cursor = conn.cursor(buffered=True)
         
         # Crear base de datos si no existe
         cursor.execute(f"CREATE DATABASE IF NOT EXISTS {database_name} CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci")
@@ -314,7 +314,7 @@ def debug_mysql_connection():
             )
             print("✅ Conexión completa exitosa")
             
-            cursor = conn.cursor()
+            cursor = conn.cursor(buffered=True)
             cursor.execute("SELECT VERSION()")
             version = cursor.fetchone()[0]
             print(f"📊 Versión MySQL: {version}")
@@ -334,7 +334,7 @@ def debug_mysql_connection():
 def crear_tablas_si_no_existen(conn):
     """Crea todas las tablas necesarias si no existen"""
     try:
-        cursor = conn.cursor()
+        cursor = conn.cursor(buffered=True)
         
         # Tabla area
         cursor.execute("""
@@ -484,7 +484,7 @@ def obtener_areas():
     conn = conectar_db()
     if conn:
         try:
-            cursor = conn.cursor(dictionary=True)
+            cursor = conn.cursor(dictionary=True, buffered=True)
             cursor.execute("SELECT id, nombre FROM area ORDER BY nombre")
             return cursor.fetchall()
         except Error as e:
@@ -498,7 +498,7 @@ def agregar_area(nombre):
     conn = conectar_db()
     if conn:
         try:
-            cursor = conn.cursor(dictionary=True)
+            cursor = conn.cursor(dictionary=True, buffered=True)
             cursor.execute("SELECT id FROM area WHERE nombre = %s", (nombre,))
             existente = cursor.fetchone()
             if existente:
@@ -518,7 +518,7 @@ def actualizar_area(id_area, nuevo_nombre):
     conn = conectar_db()
     if conn:
         try:
-            cursor = conn.cursor()
+            cursor = conn.cursor(buffered=True)
             cursor.execute("UPDATE area SET nombre = %s WHERE id = %s", (nuevo_nombre, id_area))
             conn.commit()
             return cursor.rowcount > 0
@@ -534,7 +534,7 @@ def eliminar_area(id_area):
     conn = conectar_db()
     if conn:
         try:
-            cursor = conn.cursor(dictionary=True)
+            cursor = conn.cursor(dictionary=True, buffered=True)
             # Eliminar distritos y cascada servicios
             cursor.execute("SELECT id FROM distrito WHERE id_area = %s", (id_area,))
             distritos = cursor.fetchall()
@@ -557,7 +557,7 @@ def obtener_distritos():
     conn = conectar_db()
     if conn:
         try:
-            cursor = conn.cursor(dictionary=True)
+            cursor = conn.cursor(dictionary=True, buffered=True)
             cursor.execute("""
             SELECT d.id, d.nombre, a.nombre AS area_nombre
             FROM distrito d
@@ -576,7 +576,7 @@ def obtener_distritos_por_area(id_area):
     conn = conectar_db()
     if conn:
         try:
-            cursor = conn.cursor(dictionary=True)
+            cursor = conn.cursor(dictionary=True, buffered=True)
             cursor.execute("""
             SELECT id, nombre FROM distrito WHERE id_area = %s ORDER BY nombre
             """, (id_area,))
@@ -592,7 +592,7 @@ def agregar_distrito(nombre, id_area=None):
     conn = conectar_db()
     if conn:
         try:
-            cursor = conn.cursor(dictionary=True)
+            cursor = conn.cursor(dictionary=True, buffered=True)
             cursor.execute("SELECT id FROM distrito WHERE nombre = %s AND id_area = %s", (nombre, id_area))
             existente = cursor.fetchone()
             if existente:
@@ -612,7 +612,7 @@ def actualizar_distrito(id_distrito, nuevo_nombre, id_area=None):
     conn = conectar_db()
     if conn:
         try:
-            cursor = conn.cursor()
+            cursor = conn.cursor(buffered=True)
             if id_area is not None:
                 cursor.execute("UPDATE distrito SET nombre = %s, id_area = %s WHERE id = %s", (nuevo_nombre, id_area, id_distrito))
             else:
@@ -631,7 +631,7 @@ def eliminar_distrito(id_distrito):
     conn = conectar_db()
     if conn:
         try:
-            cursor = conn.cursor(dictionary=True)
+            cursor = conn.cursor(dictionary=True, buffered=True)
             cursor.execute("SELECT id FROM tipo_servicio WHERE id_distrito = %s", (id_distrito,))
             tipos_servicio = cursor.fetchall()
             for tipo in tipos_servicio:
@@ -653,7 +653,7 @@ def obtener_tipos_servicio_por_distrito(id_distrito):
     conn = conectar_db()
     if conn:
         try:
-            cursor = conn.cursor(dictionary=True)
+            cursor = conn.cursor(dictionary=True, buffered=True)
             cursor.execute("SELECT id, descripcion FROM tipo_servicio WHERE id_distrito = %s ORDER BY descripcion", (id_distrito,))
             return cursor.fetchall()
         except Error as e:
@@ -667,7 +667,7 @@ def agregar_tipo_servicio(id_distrito, descripcion):
     conn = conectar_db()
     if conn:
         try:
-            cursor = conn.cursor()
+            cursor = conn.cursor(buffered=True)
             cursor.execute("INSERT INTO tipo_servicio (id_distrito, descripcion) VALUES (%s, %s)", (id_distrito, descripcion))
             conn.commit()
             return cursor.lastrowid
@@ -683,7 +683,7 @@ def actualizar_tipo_servicio(id_tipo_servicio, nueva_descripcion):
     conn = conectar_db()
     if conn:
         try:
-            cursor = conn.cursor()
+            cursor = conn.cursor(buffered=True)
             cursor.execute("UPDATE tipo_servicio SET descripcion = %s WHERE id = %s", (nueva_descripcion, id_tipo_servicio))
             conn.commit()
             return cursor.rowcount > 0
@@ -699,7 +699,7 @@ def eliminar_tipo_servicio(id_tipo_servicio):
     conn = conectar_db()
     if conn:
         try:
-            cursor = conn.cursor()
+            cursor = conn.cursor(buffered=True)
             cursor.execute("DELETE FROM servicio WHERE id_tipo_servicio = %s", (id_tipo_servicio,))
             cursor.execute("DELETE FROM tipo_servicio WHERE id = %s", (id_tipo_servicio,))
             conn.commit()
@@ -718,7 +718,7 @@ def obtener_servicios_por_tipo(id_tipo_servicio):
     conn = conectar_db()
     if conn:
         try:
-            cursor = conn.cursor(dictionary=True)
+            cursor = conn.cursor(dictionary=True, buffered=True)
             cursor.execute("SELECT id, nombre FROM servicio WHERE id_tipo_servicio = %s ORDER BY nombre", (id_tipo_servicio,))
             return cursor.fetchall()
         except Error as e:
@@ -732,7 +732,7 @@ def agregar_servicio(id_tipo_servicio, nombre):
     conn = conectar_db()
     if conn:
         try:
-            cursor = conn.cursor()
+            cursor = conn.cursor(buffered=True)
             cursor.execute("INSERT INTO servicio (id_tipo_servicio, nombre) VALUES (%s, %s)", (id_tipo_servicio, nombre))
             conn.commit()
             return cursor.lastrowid
@@ -748,7 +748,7 @@ def actualizar_servicio(id_servicio, nuevo_nombre):
     conn = conectar_db()
     if conn:
         try:
-            cursor = conn.cursor()
+            cursor = conn.cursor(buffered=True)
             cursor.execute("UPDATE servicio SET nombre = %s WHERE id = %s", (nuevo_nombre, id_servicio))
             conn.commit()
             return cursor.rowcount > 0
@@ -764,7 +764,7 @@ def eliminar_servicio(id_servicio):
     conn = conectar_db()
     if conn:
         try:
-            cursor = conn.cursor()
+            cursor = conn.cursor(buffered=True)
             cursor.execute("DELETE FROM servicio WHERE id = %s", (id_servicio,))
             conn.commit()
             return cursor.rowcount > 0
@@ -782,7 +782,7 @@ def obtener_tipos_insumo():
     conn = conectar_db()
     if conn:
         try:
-            cursor = conn.cursor(dictionary=True)
+            cursor = conn.cursor(dictionary=True, buffered=True)
             cursor.execute("SELECT id, descripcion FROM tipo_insumo ORDER BY descripcion")
             return cursor.fetchall()
         except Error as e:
@@ -796,7 +796,7 @@ def agregar_tipo_insumo(descripcion):
     conn = conectar_db()
     if conn:
         try:
-            cursor = conn.cursor(dictionary=True)
+            cursor = conn.cursor(dictionary=True, buffered=True)
             cursor.execute("SELECT id FROM tipo_insumo WHERE descripcion = %s", (descripcion,))
             existente = cursor.fetchone()
             if existente:
@@ -816,7 +816,7 @@ def actualizar_tipo_insumo(id_tipo_insumo, nueva_descripcion):
     conn = conectar_db()
     if conn:
         try:
-            cursor = conn.cursor()
+            cursor = conn.cursor(buffered=True)
             cursor.execute("UPDATE tipo_insumo SET descripcion = %s WHERE id = %s", (nueva_descripcion, id_tipo_insumo))
             conn.commit()
             return cursor.rowcount > 0
@@ -832,7 +832,7 @@ def eliminar_tipo_insumo(id_tipo_insumo):
     conn = conectar_db()
     if conn:
         try:
-            cursor = conn.cursor(dictionary=True)
+            cursor = conn.cursor(dictionary=True, buffered=True)
             # Eliminar insumos relacionados y sus relaciones con presentaciones
             cursor.execute("SELECT id FROM insumo WHERE id_tipo_insumo = %s", (id_tipo_insumo,))
             insumos = cursor.fetchall()
@@ -855,7 +855,7 @@ def obtener_presentaciones():
     conn = conectar_db()
     if conn:
         try:
-            cursor = conn.cursor(dictionary=True)
+            cursor = conn.cursor(dictionary=True, buffered=True)
             cursor.execute("SELECT id, nombre FROM presentacion ORDER BY nombre")
             return cursor.fetchall()
         except Error as e:
@@ -869,7 +869,7 @@ def agregar_presentacion(nombre):
     conn = conectar_db()
     if conn:
         try:
-            cursor = conn.cursor(dictionary=True)
+            cursor = conn.cursor(dictionary=True, buffered=True)
             cursor.execute("SELECT id FROM presentacion WHERE nombre = %s", (nombre,))
             existente = cursor.fetchone()
             if existente:
@@ -889,7 +889,7 @@ def actualizar_presentacion(id_presentacion, nuevo_nombre):
     conn = conectar_db()
     if conn:
         try:
-            cursor = conn.cursor()
+            cursor = conn.cursor(buffered=True)
             cursor.execute("UPDATE presentacion SET nombre = %s WHERE id = %s", (nuevo_nombre, id_presentacion))
             conn.commit()
             return cursor.rowcount > 0
@@ -905,7 +905,7 @@ def eliminar_presentacion(id_presentacion):
     conn = conectar_db()
     if conn:
         try:
-            cursor = conn.cursor(dictionary=True)
+            cursor = conn.cursor(dictionary=True, buffered=True)
             # Verificar si hay insumos asociados en la tabla intermedia
             cursor.execute("SELECT COUNT(*) as count FROM insumo_presentacion WHERE presentacion_id = %s", (id_presentacion,))
             resultado = cursor.fetchone()
@@ -929,7 +929,7 @@ def obtener_insumos_por_tipo(id_tipo_insumo):
     conn = conectar_db()
     if conn:
         try:
-            cursor = conn.cursor(dictionary=True)
+            cursor = conn.cursor(dictionary=True, buffered=True)
             # Obtener insumos y sus presentaciones concatenadas
             cursor.execute("""
             SELECT i.id, i.nombre, i.lote, i.fecha_vencimiento, t.descripcion as tipo_insumo,
@@ -954,7 +954,7 @@ def agregar_insumo(nombre, lote, id_presentacion, fecha_vencimiento, id_tipo_ins
     conn = conectar_db()
     if conn:
         try:
-            cursor = conn.cursor()
+            cursor = conn.cursor(buffered=True)
             cursor.execute("""
             INSERT INTO insumo (nombre, lote, fecha_vencimiento, id_tipo_insumo)
             VALUES (%s, %s, %s, %s)""", (nombre, lote, fecha_vencimiento, id_tipo_insumo))
@@ -978,7 +978,7 @@ def actualizar_insumo(id_insumo, nombre, lote, id_presentacion, fecha_vencimient
     conn = conectar_db()
     if conn:
         try:
-            cursor = conn.cursor()
+            cursor = conn.cursor(buffered=True)
             cursor.execute("""
             UPDATE insumo
             SET nombre = %s, lote = %s, fecha_vencimiento = %s, id_tipo_insumo = %s
@@ -1001,7 +1001,7 @@ def obtener_insumo_por_id(id_insumo):
     conn = conectar_db()
     if conn:
         try:
-            cursor = conn.cursor(dictionary=True)
+            cursor = conn.cursor(dictionary=True, buffered=True)
             cursor.execute("""
             SELECT i.id, i.nombre, i.lote, i.fecha_vencimiento, i.id_tipo_insumo,
             t.descripcion as tipo_insumo,
@@ -1025,7 +1025,7 @@ def obtener_insumo_por_nombre(nombre, id_tipo_insumo):
     conn = conectar_db()
     if conn:
         try:
-            cursor = conn.cursor(dictionary=True)
+            cursor = conn.cursor(dictionary=True, buffered=True)
             cursor.execute("""
             SELECT id, nombre FROM insumo WHERE nombre = %s AND id_tipo_insumo = %s
             """, (nombre, id_tipo_insumo))
@@ -1041,7 +1041,7 @@ def eliminar_insumo(id_insumo):
     conn = conectar_db()
     if conn:
         try:
-            cursor = conn.cursor()
+            cursor = conn.cursor(buffered=True)
             cursor.execute("DELETE FROM insumo_presentacion WHERE insumo_id = %s", (id_insumo,))
             cursor.execute("DELETE FROM insumo WHERE id = %s", (id_insumo,))
             conn.commit()
@@ -1060,7 +1060,7 @@ def obtener_tipos_movimiento():
     conn = conectar_db()
     if conn:
         try:
-            cursor = conn.cursor(dictionary=True)
+            cursor = conn.cursor(dictionary=True, buffered=True)
             cursor.execute("SELECT id, descripcion FROM tipo_movimiento ORDER BY descripcion")
             return cursor.fetchall()
         except Error as e:
@@ -1074,7 +1074,7 @@ def agregar_tipo_movimiento(descripcion):
     conn = conectar_db()
     if conn:
         try:
-            cursor = conn.cursor()
+            cursor = conn.cursor(buffered=True)
             cursor.execute("INSERT INTO tipo_movimiento (descripcion) VALUES (%s)", (descripcion,))
             conn.commit()
             return cursor.lastrowid
@@ -1090,7 +1090,7 @@ def actualizar_tipo_movimiento(id_tipo, descripcion):
     conn = conectar_db()
     if conn:
         try:
-            cursor = conn.cursor()
+            cursor = conn.cursor(buffered=True)
             cursor.execute("UPDATE tipo_movimiento SET descripcion = %s WHERE id = %s", (descripcion, id_tipo))
             conn.commit()
             return cursor.rowcount > 0
@@ -1106,7 +1106,7 @@ def eliminar_tipo_movimiento(id_tipo):
     conn = conectar_db()
     if conn:
         try:
-            cursor = conn.cursor()
+            cursor = conn.cursor(buffered=True)
             cursor.execute("DELETE FROM tipo_movimiento WHERE id = %s", (id_tipo,))
             conn.commit()
             return cursor.rowcount > 0
@@ -1133,7 +1133,7 @@ def guardar_movimiento(movimiento_data):
     conn = conectar_db()
     if conn:
         try:
-            cursor = conn.cursor()
+            cursor = conn.cursor(buffered=True)
             fecha_registro = movimiento_data['fecha_registro'].strftime('%Y-%m-%d')
             fecha_vencimiento = (
             movimiento_data['fecha_vencimiento'].strftime('%Y-%m-%d')
@@ -1196,7 +1196,7 @@ def obtener_id_area(nombre_area):
     conn = conectar_db()
     if conn:
         try:
-            cursor = conn.cursor(dictionary=True)
+            cursor = conn.cursor(dictionary=True, buffered=True)
             cursor.execute("SELECT id FROM area WHERE nombre = %s", (nombre_area,))
             resultado = cursor.fetchone()
             return resultado['id'] if resultado else None
@@ -1211,7 +1211,7 @@ def obtener_id_distrito(nombre_distrito):
     conn = conectar_db()
     if conn:
         try:
-            cursor = conn.cursor(dictionary=True)
+            cursor = conn.cursor(dictionary=True, buffered=True)
             cursor.execute("SELECT id FROM distrito WHERE nombre = %s", (nombre_distrito,))
             resultado = cursor.fetchone()
             return resultado['id'] if resultado else None
@@ -1226,7 +1226,7 @@ def obtener_id_insumo(nombre_insumo, id_tipo_insumo):
     conn = conectar_db()
     if conn:
         try:
-            cursor = conn.cursor(dictionary=True)
+            cursor = conn.cursor(dictionary=True, buffered=True)
             cursor.execute("SELECT id FROM insumo WHERE nombre = %s AND id_tipo_insumo = %s", (nombre_insumo, id_tipo_insumo))
             resultado = cursor.fetchone()
             return resultado['id'] if resultado else None
@@ -1241,7 +1241,7 @@ def obtener_id_presentacion(nombre_presentacion):
     conn = conectar_db()
     if conn:
         try:
-            cursor = conn.cursor(dictionary=True)
+            cursor = conn.cursor(dictionary=True, buffered=True)
             cursor.execute("SELECT id FROM presentacion WHERE nombre = %s", (nombre_presentacion,))
             resultado = cursor.fetchone()
             return resultado['id'] if resultado else None
@@ -1256,7 +1256,7 @@ def obtener_id_servicio(nombre_servicio):
     conn = conectar_db()
     if conn:
         try:
-            cursor = conn.cursor(dictionary=True)
+            cursor = conn.cursor(dictionary=True, buffered=True)
             cursor.execute("SELECT id FROM servicio WHERE nombre = %s", (nombre_servicio,))
             resultado = cursor.fetchone()
             return resultado['id'] if resultado else None
@@ -1271,7 +1271,7 @@ def obtener_id_tipo_insumo(descripcion_tipo_insumo):
     conn = conectar_db()
     if conn:
         try:
-            cursor = conn.cursor(dictionary=True)
+            cursor = conn.cursor(dictionary=True, buffered=True)
             cursor.execute("SELECT id FROM tipo_insumo WHERE descripcion = %s", (descripcion_tipo_insumo,))
             resultado = cursor.fetchone()
             return resultado['id'] if resultado else None
@@ -1286,7 +1286,7 @@ def obtener_id_tipo_movimiento(descripcion_tipo_movimiento):
     conn = conectar_db()
     if conn:
         try:
-            cursor = conn.cursor(dictionary=True)
+            cursor = conn.cursor(dictionary=True, buffered=True)
             cursor.execute("SELECT id FROM tipo_movimiento WHERE descripcion = %s", (descripcion_tipo_movimiento,))
             resultado = cursor.fetchone()
             return resultado['id'] if resultado else None
@@ -1301,7 +1301,7 @@ def obtener_id_tipo_servicio(descripcion_tipo_servicio):
     conn = conectar_db()
     if conn:
         try:
-            cursor = conn.cursor(dictionary=True)
+            cursor = conn.cursor(dictionary=True, buffered=True)
             cursor.execute("SELECT id FROM tipo_servicio WHERE descripcion = %s", (descripcion_tipo_servicio,))
             resultado = cursor.fetchone()
             return resultado['id'] if resultado else None
@@ -1333,7 +1333,7 @@ def verificar_tablas():
     if not conn:
         return False
     try:
-        cursor = conn.cursor()
+        cursor = conn.cursor(buffered=True)
         tablas = [
             'area',
             'distrito',
@@ -1369,7 +1369,7 @@ def obtener_movimientos_kardex(fecha_inicio, fecha_fin, distrito_nombre=None, ti
         return []
 
     try:
-        cursor = conn.cursor(dictionary=True)
+        cursor = conn.cursor(dictionary=True, buffered=True)
 
         query = """
         SELECT
@@ -1533,7 +1533,7 @@ def crear_super_usuario_si_no_existe():
         if not conn:
             return
             
-        cursor = conn.cursor(dictionary=True)
+        cursor = conn.cursor(dictionary=True, buffered=True)
         cursor.execute('SELECT id FROM usuarios WHERE username = %s', (super_user['username'],))
         
         if not cursor.fetchone():
@@ -1565,7 +1565,7 @@ def existe_usuario(username):
     conn = conectar_db()
     if conn:
         try:
-            cursor = conn.cursor(dictionary=True)
+            cursor = conn.cursor(dictionary=True, buffered=True)
             cursor.execute("SELECT id FROM usuarios WHERE username = %s", (username,))
             resultado = cursor.fetchone()
             return resultado is not None
@@ -1588,7 +1588,7 @@ def verificar_credenciales(username, password):
         if not conn:
             raise Exception("No se pudo establecer conexión con la base de datos MySQL. Verifique la configuración.")
         
-        cursor = conn.cursor(dictionary=True)
+        cursor = conn.cursor(dictionary=True, buffered=True)
 
         # Hash de la contraseña ingresada
         password_hash = hashlib.sha256(password.encode()).hexdigest()
@@ -1626,7 +1626,7 @@ def obtener_usuarios():
     conn = conectar_db()
     if conn:
         try:
-            cursor = conn.cursor(dictionary=True)
+            cursor = conn.cursor(dictionary=True, buffered=True)
             cursor.execute("SELECT id, username, nombre_completo, rol, activo FROM usuarios WHERE rol != 'super_admin'")
             usuarios = cursor.fetchall()
             return usuarios
@@ -1639,7 +1639,7 @@ def crear_usuario(username, password, nombre_completo, rol, activo=1):
     conn = conectar_db()
     if conn:
         try:
-            cursor = conn.cursor()
+            cursor = conn.cursor(buffered=True)
             cursor.execute(
             "INSERT INTO usuarios (username, password, nombre_completo, rol, activo) VALUES (%s, %s, %s, %s, %s)",
             (username, hashlib.sha256(password.encode()).hexdigest(), nombre_completo, rol, activo)
@@ -1657,7 +1657,7 @@ def actualizar_usuario(id_usuario, nombre_completo, rol, activo):
     conn = conectar_db()
     if conn:
         try:
-            cursor = conn.cursor()
+            cursor = conn.cursor(buffered=True)
             cursor.execute(
             "UPDATE usuarios SET nombre_completo=%s, rol=%s, activo=%s WHERE id=%s",
             (nombre_completo, rol, activo, id_usuario)
@@ -1676,7 +1676,7 @@ def cambiar_password_usuario(id_usuario, new_password):
     conn = conectar_db()
     if conn:
         try:
-            cursor = conn.cursor()
+            cursor = conn.cursor(buffered=True)
             cursor.execute(
             "UPDATE usuarios SET password=%s WHERE id=%s",
             (hashlib.sha256(new_password.encode()).hexdigest(), id_usuario)
@@ -1694,7 +1694,7 @@ def eliminar_usuario(id_usuario):
     conn = conectar_db()
     if conn:
         try:
-            cursor = conn.cursor()
+            cursor = conn.cursor(buffered=True)
             cursor.execute("DELETE FROM usuarios WHERE id=%s", (id_usuario,))
             conn.commit()
             return True
@@ -1716,7 +1716,7 @@ def buscar_movimientos_por_filtros(
         return []
 
     try:
-        cursor = conn.cursor(dictionary=True)
+        cursor = conn.cursor(dictionary=True, buffered=True)
 
         # Manejar valores vacíos
         area = area if area else None
@@ -1824,7 +1824,7 @@ def actualizar_movimiento(mov_id, nuevos_datos):
         return False
 
     try:
-        cursor = conn.cursor(dictionary=True)
+        cursor = conn.cursor(dictionary=True, buffered=True)
 
         # Primero obtenemos los datos actuales del movimiento
         cursor.execute("SELECT * FROM movimiento WHERE id = %s", (mov_id,))
@@ -1906,7 +1906,7 @@ def eliminar_movimiento(mov_id):
         return False
 
     try:
-        cursor = conn.cursor()
+        cursor = conn.cursor(buffered=True)
         cursor.execute("DELETE FROM movimiento WHERE id = %s", (mov_id,))
         conn.commit()
         return cursor.rowcount > 0
@@ -1928,7 +1928,7 @@ def obtener_movimientos_bres(fecha_inicio, fecha_fin, area_nombre=None, distrito
         return []
 
     try:
-        cursor = conn.cursor(dictionary=True)
+        cursor = conn.cursor(dictionary=True, buffered=True)
 
         query = """
         SELECT
@@ -2075,7 +2075,7 @@ def obtener_saldo_corte_logistico(fecha_corte, contexto, insumo_id=None):
         return 0.0 if insumo_id else {}
     
     try:
-        cursor = conn.cursor(dictionary=True)
+        cursor = conn.cursor(dictionary=True, buffered=True)
         
         filtros = ["DATE(m.fecha_registro) <= %s"]
         params = [fecha_corte.strftime('%Y-%m-%d')]
@@ -2183,7 +2183,7 @@ def obtener_insumos_con_saldo(fecha_corte, contexto):
         return []
     
     try:
-        cursor = conn.cursor(dictionary=True)
+        cursor = conn.cursor(dictionary=True, buffered=True)
         
         filtros = ["DATE(m.fecha_registro) <= %s"]
         params = [fecha_corte.strftime('%Y-%m-%d')]
@@ -2262,7 +2262,7 @@ def agregar_columna_codigo_prefijo():
     conn = conectar_db()
     if conn:
         try:
-            cursor = conn.cursor()
+            cursor = conn.cursor(buffered=True)
             
             cursor.execute("""
                 SELECT COUNT(*) as count
@@ -2299,7 +2299,7 @@ def asignar_prefijos_tipos_insumo():
     conn = conectar_db()
     if conn:
         try:
-            cursor = conn.cursor(dictionary=True)
+            cursor = conn.cursor(dictionary=True, buffered=True)
             
             cursor.execute("SELECT id, descripcion FROM tipo_insumo")
             tipos = cursor.fetchall()

@@ -107,7 +107,7 @@ class HoverTooltip:
 # Agregar el directorio raíz del proyecto al PATH de Python
 sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
-from src.database.db_manager import (
+from src.database.db_manager import (  # noqa: E402
     obtener_areas,
     obtener_distritos_por_area,
     obtener_distritos,
@@ -116,11 +116,7 @@ from src.database.db_manager import (
     obtener_tipos_insumo,
     obtener_insumos_por_tipo,
     obtener_tipos_movimiento,
-    obtener_id_distrito,
-    obtener_id_tipo_servicio,
     obtener_id_servicio,
-    obtener_id_tipo_insumo,
-    obtener_id_insumo,
     obtener_id_presentacion,
     obtener_id_tipo_movimiento,
     guardar_movimiento
@@ -446,7 +442,7 @@ class IngresoInsumos:
             self.icon_servicio = tk.PhotoImage(file=os.path.join(icons_path, "servicio_1.png")).subsample(3, 3)
 
             self.icon_agregar = tk.PhotoImage(file=os.path.join(icons_path, "agregar.png")).subsample(2, 2)
-            self.icon_editar = tk.PhotoImage(file(os.path.join(icons_path, "editar.png"))).subsample(2, 2) if False else tk.PhotoImage(file=os.path.join(icons_path, "editar.png")).subsample(2, 2)
+            self.icon_editar = tk.PhotoImage(file(os.path.join(icons_path, "editar.png"))).subsample(2, 2) if False else tk.PhotoImage(file=os.path.join(icons_path, "editar.png")).subsample(2, 2)  # noqa: F821
             self.icon_eliminar = tk.PhotoImage(file=os.path.join(icons_path, "eliminar.png")).subsample(2, 2)
             self.icon_guardar = tk.PhotoImage(file=os.path.join(icons_path, "guardar.png")).subsample(2, 2)
             self.icon_cerrar = tk.PhotoImage(file=os.path.join(icons_path, "cerrar.png")).subsample(2, 2)
@@ -1036,7 +1032,7 @@ class IngresoInsumos:
         Calcula el saldo acumulado en BD para el insumo dado, restringido al nivel:
         - area: area_id
         - distrito: area_id + distrito_id
-        - servicio: area_id + distrito_id + tipo_servicio_id + servicio_id
+        - servicio: area_id + distrito_id + servicio_id
         saldo = sum(positivos) - sum(negativos)
         """
         if not insumo_id or not area_id:
@@ -1056,15 +1052,13 @@ class IngresoInsumos:
             params_where.append(distrito_id)
 
         if nivel == 'servicio':
-            if not tipo_servicio_id or not servicio_id:
+            if not servicio_id:
                 return 0.0
-            condiciones.append("m.tipo_servicio_id = %s")
             condiciones.append("m.servicio_id = %s")
-            params_where.extend([tipo_servicio_id, servicio_id])
+            params_where.append(servicio_id)
 
         where_clause = " AND ".join(condiciones)
 
-        # Importante: primero los 3 de positivos, luego 3 de negativos, luego los del WHERE
         sql = f"""
             SELECT
                 COALESCE(SUM(CASE WHEN UPPER(TRIM(tm.descripcion)) IN (%s, %s, %s) THEN m.cantidad ELSE 0 END), 0)
@@ -1083,13 +1077,12 @@ class IngresoInsumos:
             conn = conectar_db()
             if not conn:
                 return 0.0
-            cur = conn.cursor()
+            cur = conn.cursor(buffered=True)
             cur.execute(sql, params)
             row = cur.fetchone()
             return float(row[0]) if row and row[0] is not None else 0.0
         except Exception as e:
-            # Opcional: print para debug
-            # print("Error _obtener_saldo_actual:", e)
+            print(f"Error _obtener_saldo_actual: {e}")
             return 0.0
         finally:
             try:
@@ -1098,10 +1091,12 @@ class IngresoInsumos:
             except Exception:
                 pass
     
-    def _saldo_virtual_treeview(self, nivel, area_id, distrito_id, tipo_servicio_id, servicio_id, insumo_id):
+    def _saldo_virtual_treeview(self, nivel, area_id, distrito_id, tipo_servicio_id, servicio_id, insumo_id, excluir_item=None):
         """
         Suma el saldo de los movimientos en el TreeView (no guardados en BD) que aplican
         al mismo contexto e insumo. Usa la misma lógica de positivos/negativos.
+        
+        excluir_item: ID del item del TreeView a excluir del cálculo (para evitar contar dos veces)
         """
         if not insumo_id or not area_id:
             return 0.0
@@ -1112,11 +1107,15 @@ class IngresoInsumos:
 
         saldo = 0.0
         for item in self.tree.get_children():
+            # Excluir el item especificado
+            if excluir_item and item == excluir_item:
+                continue
+                
             vals = self.tree.item(item)['values']
             try:
                 tipo_mov_desc = norm(vals[2])
                 insumo_nombre = (vals[3] or '').strip()
-                presentacion_nombre = (vals[4] or '').strip()
+                presentacion_nombre = (vals[4] or '').strip()  # noqa: F841
                 servicio_nombre = (vals[5] or '').strip()
                 cantidad = float(vals[8])
                 tipo_insumo_desc = (vals[12] or '').strip()
@@ -2359,8 +2358,8 @@ class IngresoInsumos:
 
             self.tree.item(selected_item, values=nuevos_valores)
             self.ajustar_ancho_columnas_automatico()
-            _on_close_editor()
             messagebox.showinfo("Éxito", "Movimiento actualizado correctamente", parent=editar_ventana)
+            _on_close_editor()
 
         frame_botones = tk.Frame(scrollable_frame, bg=self.COLORS['light'])
         frame_botones.pack(fill="x", padx=14, pady=8)
@@ -2471,7 +2470,7 @@ class IngresoInsumos:
                 if desc_up in NEGATIVOS:
                     nivel_val = self.nivel_bodega_var.get()  # nivel de la pantalla al guardar
                     saldo_bd = self._obtener_saldo_actual(nivel_val, area_id, distrito_id, tipo_servicio_id, servicio_id, insumo_id)
-                    saldo_virtual = self._saldo_virtual_treeview(nivel_val, area_id, distrito_id, tipo_servicio_id, servicio_id, insumo_id)
+                    saldo_virtual = self._saldo_virtual_treeview(nivel_val, area_id, distrito_id, tipo_servicio_id, servicio_id, insumo_id, excluir_item=item)  # <-- AGREGADO excluir_item=item
                     saldo_total_estimado = saldo_bd + saldo_virtual
 
                     if saldo_bd <= 0:

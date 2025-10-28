@@ -1,5 +1,4 @@
 # Imports existentes
-from calendar import month_name
 import tkinter as tk
 from tkinter import ttk, messagebox
 from tkcalendar import DateEntry
@@ -11,12 +10,10 @@ from ttkwidgets.autocomplete import AutocompleteCombobox
 
 # Nuevos imports para PDF
 from reportlab.lib import colors
-from reportlab.lib.pagesizes import letter, landscape, legal
+from reportlab.lib.pagesizes import landscape, legal
 from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.units import inch
-
-from datetime import datetime, date
 
 # Agregar el directorio raíz del proyecto al PATH de Python
 sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
@@ -366,8 +363,6 @@ class ReporteKardex:
         saldo = 0.0
         movimientos_con_saldo = []
 
-        POSITIVOS = {'INVENTARIO INICIAL', 'ENTRADA NIVEL SUPERIOR', 'REAJUSTE (+)', 'REAJUSTE POSITIVO'}
-        NEGATIVOS = {'SALIDA NIVEL INFERIOR', 'REAJUSTE (-)', 'REAJUSTE NEGATIVO', 'ENTREGADO'}
         INDIFERENTE = {'NO ENTREGADO'}
 
         def parse_cantidad(mov):
@@ -438,10 +433,11 @@ class ReporteKardex:
             # Remitente/Destinatario (humano para salidas a nivel inferior)
             remit_dest = tipo_raw
             if tipo == 'SALIDA NIVEL INFERIOR':
-                if mov.get('distrito_destino'):
-                    remit_dest = mov.get('distrito_destino')
-                elif mov.get('servicio_destino'):
+                # Priorizar servicio_destino sobre distrito_destino
+                if mov.get('servicio_destino'):
                     remit_dest = mov.get('servicio_destino')
+                elif mov.get('distrito_destino'):
+                    remit_dest = mov.get('distrito_destino')
 
             # Columnas
             entrada = ""
@@ -538,7 +534,7 @@ class ReporteKardex:
         if hasattr(self, 'temp_pdf_path') and os.path.exists(self.temp_pdf_path):
             try:
                 os.remove(self.temp_pdf_path)
-            except:
+            except:  # noqa: E722
                 pass
         # Destruir contenedor principal si existe
         if hasattr(self, 'main_container'):
@@ -1046,7 +1042,8 @@ class ReporteKardex:
                 return
 
             # --- Generar PDF temporal ---
-            import tempfile, fitz
+            import tempfile
+            import fitz
             from PIL import Image, ImageTk
 
             temp_dir = tempfile.gettempdir()
@@ -1524,8 +1521,8 @@ class ReporteKardex:
             styles = getSampleStyleSheet()
             elements = []
 
-            title_style = ParagraphStyle('CustomTitle', parent=styles['Heading1'], alignment=TA_CENTER, spaceAfter=6, fontSize=12)
-            subtitle_style = ParagraphStyle('CustomSubtitle', parent=styles['Heading2'], alignment=TA_CENTER, spaceAfter=4, fontSize=10)
+            ParagraphStyle('CustomTitle', parent=styles['Heading1'], alignment=TA_CENTER, spaceAfter=6, fontSize=12)
+            ParagraphStyle('CustomSubtitle', parent=styles['Heading2'], alignment=TA_CENTER, spaceAfter=4, fontSize=10)
             filtro_style = ParagraphStyle('FiltroStyle', parent=styles['Normal'], alignment=TA_LEFT, fontSize=9, leading=11, spaceAfter=0)
             referencia_style = ParagraphStyle('ReferenciaStyle', parent=styles['Normal'], alignment=TA_CENTER, fontSize=8, leading=10)
             observaciones_style = ParagraphStyle('ObservacionesStyle', parent=styles['Normal'], alignment=TA_CENTER, fontSize=8, leading=10)
