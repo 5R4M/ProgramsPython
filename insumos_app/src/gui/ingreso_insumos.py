@@ -2194,8 +2194,30 @@ class IngresoInsumos:
             if valores[11]:
                 observaciones_entry.insert(0, valores[11])
 
-            edit_salida_distrito_var.set(valores[9] if valores[9] else '')
-            edit_salida_servicio_var.set(valores[10] if valores[10] else '')
+            # Cargar datos de Salida a Nivel Inferior
+            salida_distrito_nombre = valores[9] if valores[9] else ''
+            salida_servicio_nombre = valores[10] if valores[10] else ''
+
+            edit_salida_distrito_var.set(salida_distrito_nombre)
+
+            # Si hay distrito de salida, cargar sus tipos de servicio
+            if salida_distrito_nombre:
+                salida_distrito_id = cache.distrito_id(salida_distrito_nombre)
+                if salida_distrito_id:
+                    tipos_servicio_salida = cache.get_tipos_servicio_por_distrito(salida_distrito_id) or []
+                    salida_tipo_servicio_cb.set_completion_list([ts['descripcion'] for ts in tipos_servicio_salida])
+                    
+                    # Si hay servicio de salida, encontrar su tipo de servicio
+                    if salida_servicio_nombre:
+                        # Buscar el tipo de servicio del servicio de salida
+                        for ts in tipos_servicio_salida:
+                            servicios_del_tipo = cache.get_servicios_por_tipo(ts['id']) or []
+                            if any(s['nombre'] == salida_servicio_nombre for s in servicios_del_tipo):
+                                edit_salida_tipo_servicio_var.set(ts['descripcion'])
+                                salida_servicio_cb.set_completion_list([s['nombre'] for s in servicios_del_tipo])
+                                break
+
+            edit_salida_servicio_var.set(salida_servicio_nombre)
 
             actualizar_estado_salida_nivel_inferior_edit()
 

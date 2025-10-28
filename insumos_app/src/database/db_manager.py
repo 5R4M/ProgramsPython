@@ -1144,9 +1144,6 @@ def guardar_movimiento(movimiento_data):
             area_id = movimiento_data.get('area_id')
             distrito_id = movimiento_data.get('distrito_id')
 
-            # Imprimir para depuración
-            print(f"Guardando movimiento con area_id={area_id}, distrito_id={distrito_id}, servicio_id={movimiento_data.get('servicio_id')}")
-
             cursor.execute("""
             INSERT INTO movimiento (
             fecha_registro,
@@ -2325,3 +2322,147 @@ def asignar_prefijos_tipos_insumo():
             cursor.close()
             conn.close()
     return False
+
+def obtener_movimientos_cantidad_solicitada(fecha_inicio, fecha_fin, area_nombre=None, distrito_nombre=None, tipo_servicio_desc=None,
+    servicio_nombre=None, tipo_insumo_desc=None, insumo_nombre=None,
+    presentacion_nombre=None):
+    conn = conectar_db()
+    if not conn:
+        return []
+
+    try:
+        cursor = conn.cursor(dictionary=True, buffered=True)
+
+        query = """
+        SELECT
+        m.fecha_registro AS fecha,
+        m.referencia,
+        tm.descripcion AS tipo_movimiento,
+        m.cantidad,
+        m.lote,
+        m.fecha_vencimiento,
+        m.observaciones,
+        d_salida.nombre AS distrito_destino,
+        s_salida.nombre AS servicio_destino,
+        i.nombre AS nombre_insumo,
+        i.id AS codigo_insumo,
+        COALESCE(p.nombre, '') AS presentacion,
+        a.nombre AS area_nombre,
+        d.nombre AS distrito_nombre,
+        ts.descripcion AS tipo_servicio_descripcion,
+        s.nombre AS servicio_nombre
+        FROM movimiento m
+        JOIN tipo_movimiento tm ON m.tipo_movimiento_id = tm.id
+        LEFT JOIN insumo i ON m.insumo_id = i.id
+        LEFT JOIN tipo_insumo ti ON i.id_tipo_insumo = ti.id
+        LEFT JOIN insumo_presentacion ip ON i.id = ip.insumo_id
+        LEFT JOIN presentacion p ON ip.presentacion_id = p.id
+        LEFT JOIN distrito d_salida ON m.salida_distrito_id = d_salida.id
+        LEFT JOIN servicio s_salida ON m.salida_servicio_id = s_salida.id
+
+        LEFT JOIN area a ON m.area_id = a.id
+        LEFT JOIN distrito d ON m.distrito_id = d.id
+        LEFT JOIN servicio s ON m.servicio_id = s.id
+        LEFT JOIN tipo_servicio ts ON s.id_tipo_servicio = ts.id
+
+        WHERE m.fecha_registro BETWEEN %s AND %s
+        """
+
+        params = [fecha_inicio, fecha_fin]
+
+        # **LÓGICA DE FILTRADO MEJORADA PARA CONSOLIDACIÓN**
+        if servicio_nombre:
+            # Nivel SERVICIO: solo movimientos del servicio específico
+            query += " AND s.nombre = %s"
+            params.append(servicio_nombre)
+
+        elif tipo_servicio_desc:
+            # Nivel TIPO SERVICIO: todos los servicios del tipo
+            query += " AND ts.descripcion = %s"
+            params.append(tipo_servicio_desc)
+
+        elif distrito_nombre:
+            # Nivel DISTRITO: incluir movimientos del distrito Y de todos sus servicios
+            query += """ AND (
+            d.nombre = %s OR 
+            s.id IN (
+            SELECT serv.id 
+            FROM servicio serv 
+            INNER JOIN tipo_servicio ts_inner ON serv.id_tipo_servicio = ts_inner.id 
+            INNER JOIN distrito d_inner ON ts_inner.id_distrito = d_inner.id 
+            WHERE d_inner.nombre = %s
+            )
+            )"""
+            params.extend([distrito_nombre, distrito_nombre])
+
+        elif area_nombre:
+            # Nivel ÁREA: incluir movimientos del área Y de todos sus distritos Y servicios
+            query += """ AND (
+            a.nombre = %s OR 
+            d.id IN (
+            SELECT dist.id 
+            FROM distrito dist 
+            INNER JOIN area a_inner ON dist.id_area = a_inner.id 
+            WHERE a_inner.nombre = %s
+            ) OR
+            s.id IN (
+            SELECT serv.id 
+            FROM servicio serv 
+            INNER JOIN tipo_servicio ts_inner ON serv.id_tipo_servicio = ts_inner.id 
+            INNER JOIN distrito d_inner ON ts_inner.id_distrito = d_inner.id 
+            INNER JOIN area a_inner ON d_inner.id_area = a_inner.id 
+            WHERE a_inner.nombre = %s
+            )
+            )"""
+            params.extend([area_nombre, area_nombre, area_nombre])
+
+        # Filtros adicionales opcionales
+        if tipo_insumo_desc:
+            query += " AND ti.descripcion = %s"
+            params.append(tipo_insumo_desc)
+
+        if insumo_nombre:
+            query += " AND i.nombre = %s"
+            params.append(insumo_nombre)
+
+        if presentacion_nombre:
+            # Buscar la presentación en la tabla intermedia
+            query += " AND p.nombre = %s"
+            params.append(presentacion_nombre)
+
+        query += " ORDER BY m.fecha_registro"
+
+        cursor.execute(query, params)
+        resultados = cursor.fetchall()
+
+        movimientos = []
+        for row in resultados:
+            movimientos.append({
+            'fecha': row['fecha'],
+            'referencia': row['referencia'],
+            'tipo_movimiento': row['tipo_movimiento'],
+            'cantidad': float(row['cantidad']) if row['cantidad'] else 0,
+            'lote': row['lote'],
+            'fecha_vencimiento': row['fecha_vencimiento'],
+            'observaciones': row['observaciones'],
+            'distrito_destino': row['distrito_destino'],
+            'servicio_destino': row['servicio_destino'],
+            'nombre_insumo': row['nombre_insumo'],
+            'codigo_insumo': row['codigo_insumo'],
+            'presentacion': row['presentacion'],
+            'area_nombre': row['area_nombre'],
+            'distrito_nombre': row['distrito_nombre'],
+            'tipo_servicio_descripcion': row['tipo_servicio_descripcion'],
+            'servicio_nombre': row['servicio_nombre']
+            })
+
+        return movimientos
+
+    except Exception as e:
+        print(f"Error en obtener_movimientos_bres: {e}")
+        import traceback
+        traceback.print_exc()
+        return []
+    finally:
+        cursor.close()
+        conn.close()
