@@ -1243,7 +1243,7 @@ class ReporteCantidadSolicitada:
                 return float(x)
             except:  # noqa: E722
                 return 0.0
-                  
+                
         for mov in movimientos_raw:
             insumo_id = mov.get('codigo_insumo')
             if insumo_id is None or str(insumo_id).strip() == '':
@@ -1383,9 +1383,9 @@ class ReporteCantidadSolicitada:
                 elif es_nivel_servicio:
                     datos_agrupados[codigo]['reajustes_servicios'] -= cantidad
 
-        # Promedios
+        # Promedios (usar el cálculo pre-existente como en procesar_datos_bres)
         insumo_ids = [datos['insumo_id'] for datos in datos_agrupados.values() if datos['insumo_id'] is not None]
-        self.calcular_promedio_demanda_real(insumo_ids, fecha_ini, fecha_fin)
+        promedios_por_insumo = self.calcular_promedio_demanda_real(insumo_ids, fecha_ini, fecha_fin) or {}
 
         datos_procesados = []
         for codigo, datos in datos_agrupados.items():
@@ -1487,29 +1487,41 @@ class ReporteCantidadSolicitada:
             dias_periodo = (fecha_fin - fecha_ini).days + 1
             numero_meses = max(1, dias_periodo / 30.44)  # Promedio de días por mes
 
-            # 2. Promedio Mensual de Demanda Real (usando demanda_total de la tabla)
-            if numero_meses > 0:
-                promedio_mensual = demanda_total / numero_meses
-            else:
-                promedio_mensual = 0.0
+            # 2. Promedio Mensual de Demanda Real: usar promedio histórico pre-calculado
+            promedio_mensual = float(promedios_por_insumo.get(insumo_id, 0.0))
 
-            # 3. Meses de Existencia Disponible (usando existencia_fisica de la tabla)
+            # Fallback opcional: si no hay histórico y prefieres un valor basado en demanda_total/días
+            if promedio_mensual == 0.0 and numero_meses > 0:
+                promedio_mensual = demanda_total / numero_meses
+
+            # 3. Meses de Existencia Disponible (Saldo Mes Siguiente / Promedio Mensual Demanda Real)
             if promedio_mensual > 0:
-                meses_existencia = existencia_fisica / promedio_mensual
+                meses_existencia = saldo_mes_siguiente / promedio_mensual
             else:
                 meses_existencia = 0.0
 
-            # 4. Obtener nivel máximo
+            # 4. Obtener nivel máximo desde el Combo (robusto y con fallback)
+            nivel_raw = (self.combo_nivel_maximo.get() or self.nivel_maximo_var.get() or "").strip()
             try:
-                nivel_maximo = float(self.nivel_maximo_var.get()) if self.nivel_maximo_var.get() else 6.0
+                nivel_maximo = int(float(nivel_raw)) if nivel_raw != "" else 1
+                if nivel_maximo <= 0:
+                    nivel_maximo = 1
             except Exception:
-                nivel_maximo = 6.0
+                nivel_maximo = 1
 
             # 5. Cantidad Máxima (usando promedio_mensual calculado)
             cantidad_maxima = promedio_mensual * nivel_maximo
 
-            # 6. Cantidad a Solicitar (usando saldo_mes_siguiente de la tabla)
-            cantidad_solicitar = max(0.0, cantidad_maxima - saldo_mes_siguiente)
+            # 6. Cantidad a Solicitar = Cantidad Máxima - Existencia Física
+            # Se resta la EXISTENCIA FÍSICA (cálculo interno) de la CANTIDAD MÁXIMA.
+            # Si el resultado es negativo, lo dejamos negativo para indicar "NO DEBE SOLICITAR".
+            try:
+                existencia_fisica_val = float(existencia_fisica)
+            except Exception:
+                existencia_fisica_val = 0.0
+
+            cantidad_solicitar_raw = cantidad_maxima - existencia_fisica_val
+            cantidad_solicitar = round(cantidad_solicitar_raw, 2)
 
             # ✅ CALCULAR cantidad a solicitar por cada ubicación dinámica
             for ubicacion in ubicaciones_dinamicas:

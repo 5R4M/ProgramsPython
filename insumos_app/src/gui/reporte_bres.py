@@ -5,6 +5,7 @@ import pandas as pd
 from datetime import datetime, timedelta
 import sys
 import os
+import calendar
 from ttkwidgets.autocomplete import AutocompleteCombobox
 
 # Nuevos imports para PDF
@@ -1164,9 +1165,9 @@ class ReporteBres:
                 elif es_nivel_servicio:
                     datos_agrupados[codigo]['reajustes_servicios'] -= cantidad
 
-        # Promedios
+        # Promedios (guardar el resultado para usarlo abajo)
         insumo_ids = [datos['insumo_id'] for datos in datos_agrupados.values() if datos['insumo_id'] is not None]
-        self.calcular_promedio_demanda_real(insumo_ids, fecha_ini, fecha_fin)
+        promedios_por_insumo = self.calcular_promedio_demanda_real(insumo_ids, fecha_ini, fecha_fin) or {}
 
         datos_procesados = []
         for codigo, datos in datos_agrupados.items():
@@ -1264,33 +1265,53 @@ class ReporteBres:
 
             # ✅ CALCULAR COLUMNAS DERIVADAS CON LOS DATOS VISIBLES EN LA TABLA
 
-            # 1. Calcular número de meses del periodo
+            # 1. Calcular número de meses del periodo (se mantiene para fallback)
             dias_periodo = (fecha_fin - fecha_ini).days + 1
-            numero_meses = max(1, dias_periodo / 30.44)  # Promedio de días por mes
+            numero_meses = max(1, dias_periodo / 30.44)
 
-            # 2. Promedio Mensual de Demanda Real (usando demanda_total de la tabla)
-            if numero_meses > 0:
+            # 2. Promedio Mensual de Demanda Real: usar promedio histórico pre-calculado
+            #    calcular_promedio_demanda_real debe devolver un dict {insumo_id: promedio_mensual}
+            promedio_mensual = float(promedios_por_insumo.get(insumo_id, 0.0))
+
+            # Fallback opcional: si no hay histórico y prefieres un valor basado en demanda_total/días
+            if promedio_mensual == 0.0 and numero_meses > 0:
                 promedio_mensual = demanda_total / numero_meses
-            else:
-                promedio_mensual = 0.0
 
-            # 3. Meses de Existencia Disponible (usando existencia_fisica de la tabla)
+            # 3. Meses de Existencia Disponible (Saldo Mes Siguiente / Promedio Mensual Demanda Real)
             if promedio_mensual > 0:
-                meses_existencia = existencia_fisica / promedio_mensual
+                meses_existencia = saldo_mes_siguiente / promedio_mensual
             else:
                 meses_existencia = 0.0
 
-            # 4. Obtener nivel máximo
+            # 4. Obtener nivel máximo desde el Combo (robusto y con fallback)
+            # Preferimos leer desde el widget visible (combo_nivel_maximo), si no está, usamos la var.
+            nivel_raw = (self.combo_nivel_maximo.get() or self.nivel_maximo_var.get() or "").strip()
+
             try:
-                nivel_maximo = float(self.nivel_maximo_var.get()) if self.nivel_maximo_var.get() else 6.0
+                # Convertir a entero (permitir si el usuario puso "6.0" u "06")
+                nivel_maximo = int(float(nivel_raw)) if nivel_raw != "" else 1
+                # Evitar valores no razonables
+                if nivel_maximo <= 0:
+                    nivel_maximo = 1
             except Exception:
-                nivel_maximo = 6.0
+                # Fallback seguro: 1 mes por defecto (cambiar a 6 si prefieres)
+                nivel_maximo = 1
 
             # 5. Cantidad Máxima (usando promedio_mensual calculado)
             cantidad_maxima = promedio_mensual * nivel_maximo
 
-            # 6. Cantidad a Solicitar (usando saldo_mes_siguiente de la tabla)
-            cantidad_solicitar = max(0.0, cantidad_maxima - saldo_mes_siguiente)
+            # 6. Cantidad a Solicitar = Cantidad Máxima - Existencia Física
+            # Se resta la EXISTENCIA FÍSICA (columna visible) de la CANTIDAD MÁXIMA.
+            # Si el resultado es negativo, lo dejamos negativo para indicar "NO DEBE SOLICITAR".
+            try:
+                existencia_fisica_val = float(existencia_fisica)
+            except Exception:
+                existencia_fisica_val = 0.0
+
+            cantidad_solicitar_raw = cantidad_maxima - existencia_fisica_val
+
+            # Redondear a 2 decimales (manteniendo el signo negativo si existe)
+            cantidad_solicitar = round(cantidad_solicitar_raw, 2)
 
             # ✅ AGREGAR A DATOS PROCESADOS
             datos_procesados.append({
@@ -1316,24 +1337,64 @@ class ReporteBres:
         return datos_procesados
     
     def calcular_promedio_demanda_real(self, insumo_ids, fecha_ini, fecha_fin):
+        """
+        Calcula promedio mensual de demanda real sobre 3 periodos logísticos:
+        - p0: fecha_ini .. fecha_fin (periodo actual, p.ej. 26/M-1 .. 25/M)
+        - p1: periodo inmediatamente anterior (26/M-2 .. 25/M-1)
+        - p2: dos periodos atrás (26/M-3 .. 25/M-2)
+
+        Retorna dict {insumo_id: promedio (float, 2 decimales)}.
+        """
         if not insumo_ids:
             return {}
-        
-        # ✅ Verificar cache
-        cache_key = (tuple(sorted(insumo_ids)), fecha_ini, fecha_fin, 
+
+        # Cache key
+        cache_key = (tuple(sorted(insumo_ids)), fecha_ini, fecha_fin,
                     self.combo_area.get(), self.combo_distrito.get(),
                     self.combo_tipo_servicio.get(), self.combo_servicio.get())
-        
+
         if cache_key in self._cache_promedios:
             return self._cache_promedios[cache_key]
-        
+
+        # Helper: desplazar meses hacia atrás manteniendo día (usado para obtener '26' de meses previos)
+        def shift_month(dt, months_back):
+            """
+            Devuelve una fecha con el mismo 'day' (p. ej. 26) trasladada `months_back` meses hacia atrás.
+            Si el mes resultante tiene menos días, usa el último día del mes.
+            """
+            year = dt.year
+            month = dt.month - months_back
+            while month <= 0:
+                month += 12
+                year -= 1
+            last_day = calendar.monthrange(year, month)[1]
+            day = min(dt.day, last_day)
+            return datetime(year, month, day)
+
         try:
             conn = conectar_db()
             if not conn:
                 return {}
             cursor = conn.cursor(dictionary=True, buffered=True)
 
-            fecha_inicio_calculo = fecha_fin - timedelta(days=90)
+            # Periodos logísticos:
+            p0_start = fecha_ini
+            p0_end = fecha_fin
+
+            # p1: empieza un mes antes en día=26, termina un día antes de p0_start
+            p1_end = p0_start - timedelta(days=1)
+            p1_start = shift_month(p0_start, 1)  # 26 del mes anterior
+            # p2: dos meses antes
+            p2_end = p1_start - timedelta(days=1)
+            p2_start = shift_month(p0_start, 2)
+
+            # Asegurar que las fechas tienen hora 00:00:00 / se usan solo fechas
+            p0s = p0_start.strftime('%Y-%m-%d')
+            p0e = p0_end.strftime('%Y-%m-%d')
+            p1s = p1_start.strftime('%Y-%m-%d')
+            p1e = p1_end.strftime('%Y-%m-%d')
+            p2s = p2_start.strftime('%Y-%m-%d')
+            p2e = p2_end.strftime('%Y-%m-%d')
 
             area_sel = self.combo_area.get().strip() or None
             distrito_sel = self.combo_distrito.get().strip() or None
@@ -1341,23 +1402,24 @@ class ReporteBres:
             servicio_sel = self.combo_servicio.get().strip() or None
 
             placeholders = ','.join(['%s'] * len(insumo_ids))
-            
-            # ✅ Simplificar consulta - evitar joins innecesarios
+
+            # Consulta: para cada insumo devolver suma en cada uno de los 3 periodos
             query = f"""
-                SELECT 
-                m.insumo_id,
-                YEAR(m.fecha_registro) as anio,
-                MONTH(m.fecha_registro) as mes,
-                SUM(m.cantidad) as demanda_mes
+                SELECT
+                    m.insumo_id,
+                    SUM(CASE WHEN DATE(m.fecha_registro) BETWEEN %s AND %s THEN m.cantidad ELSE 0 END) AS demanda_p2,
+                    SUM(CASE WHEN DATE(m.fecha_registro) BETWEEN %s AND %s THEN m.cantidad ELSE 0 END) AS demanda_p1,
+                    SUM(CASE WHEN DATE(m.fecha_registro) BETWEEN %s AND %s THEN m.cantidad ELSE 0 END) AS demanda_p0
                 FROM movimiento m
                 INNER JOIN tipo_movimiento tm ON m.tipo_movimiento_id = tm.id
                 WHERE m.insumo_id IN ({placeholders})
-                AND m.fecha_registro BETWEEN %s AND %s
                 AND tm.descripcion IN ('ENTREGADO', 'NO ENTREGADO')
             """
-            params = list(insumo_ids) + [fecha_inicio_calculo.strftime('%Y-%m-%d'), fecha_fin.strftime('%Y-%m-%d')]
 
-            # Agregar filtros de ubicación solo si están seleccionados
+            # Params: p2_start,p2_end, p1_start,p1_end, p0_start,p0_end AFTER insumo_ids
+            params = [p2s, p2e, p1s, p1e, p0s, p0e] + list(insumo_ids)
+
+            # Agregar filtros de ubicación solo si seleccionados (mantener la misma lógica de tu código)
             if servicio_sel:
                 query += """
                     AND EXISTS (
@@ -1395,37 +1457,44 @@ class ReporteBres:
                 """
                 params.append(area_sel)
 
-            query += " GROUP BY m.insumo_id, YEAR(m.fecha_registro), MONTH(m.fecha_registro)"
-            
+            query += " GROUP BY m.insumo_id"
+
             cursor.execute(query, params)
-            resultados = cursor.fetchall()
-            conn.close()
+            rows = cursor.fetchall()
 
-            demandas_por_insumo = {}
-            for r in resultados:
-                ins = r['insumo_id']
-                val = float(r['demanda_mes']) if r['demanda_mes'] else 0.0
-                demandas_por_insumo.setdefault(ins, []).append(val)
-
+            # Inicializar con ceros (si no hay filas en la consulta, se considera 0 en todos los periodos)
             promedios = {}
             for ins in insumo_ids:
-                if ins in demandas_por_insumo:
-                    arr = demandas_por_insumo[ins]
-                    ult = arr[-3:] if len(arr) >= 3 else arr
-                    prom = sum(ult) / len(ult) if ult else 0.0
-                    promedios[ins] = round(prom, 2)
-                else:
-                    promedios[ins] = 0.0
-            
-            # ✅ Guardar en cache
+                promedios[ins] = 0.0
+
+            # Llenar con resultados
+            for r in rows:
+                ins = r['insumo_id']
+                # Notar: demanda_p2 es el más antiguo (p2), demanda_p1 intermedio, demanda_p0 actual
+                d2 = float(r.get('demanda_p2') or 0.0)
+                d1 = float(r.get('demanda_p1') or 0.0)
+                d0 = float(r.get('demanda_p0') or 0.0)
+                prom = round((d2 + d1 + d0) / 3.0, 2)
+                promedios[ins] = prom
+
+            # Guardar en cache
             self._cache_promedios[cache_key] = promedios
             return promedios
-            
+
         except Exception as e:
-            print(f"DEBUG OPTIMIZED: Error calculando promedios batch: {e}")
+            print(f"DEBUG OPTIMIZED: Error calculando promedios batch (logístico): {e}")
             import traceback
             traceback.print_exc()
             return {}
+        finally:
+            try:
+                cursor.close()
+            except Exception:
+                pass
+            try:
+                conn.close()
+            except Exception:
+                pass
 
     def obtener_demanda_mes(self, insumo_id, fecha_inicio, fecha_fin):
         conn = None
@@ -1733,7 +1802,8 @@ class ReporteBres:
         niveles = [str(i) for i in range(1, 13)]
         self.combo_nivel_maximo = ttk.Combobox(frame_nivel_content, textvariable=self.nivel_maximo_var, values=niveles, width=8, state="readonly")
         self.combo_nivel_maximo.grid(row=0, column=1, padx=3, pady=1, sticky='w')
-        self.combo_nivel_maximo.set("6")
+        
+        self.combo_nivel_maximo.set("1")
 
         # **VISOR PDF (sin expand, con altura fija)**
         self.pdf_outer = tk.Frame(self.main_container, bg=self.COLORS['white'])
