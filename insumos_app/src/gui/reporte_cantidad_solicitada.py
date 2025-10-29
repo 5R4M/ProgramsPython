@@ -5,6 +5,7 @@ import pandas as pd
 from datetime import datetime, timedelta
 import sys
 import os
+import calendar
 from ttkwidgets.autocomplete import AutocompleteCombobox
 
 # Nuevos imports para PDF
@@ -888,220 +889,6 @@ class ReporteCantidadSolicitada:
                 'servicio': None
             }
     
-    def _obtener_ubicaciones_dinamicas(self, nivel_info):
-        """
-        Obtiene la lista de ubicaciones (distritos o servicios) según el nivel
-        """
-        try:
-            conn = conectar_db()
-            if not conn:
-                return []
-            
-            cursor = conn.cursor(dictionary=True, buffered=True)
-            ubicaciones = []
-            
-            if nivel_info['nivel'] == 'area' and nivel_info['area']:
-                # Mostrar DISTRITOS del área
-                query = """
-                    SELECT DISTINCT d.nombre
-                    FROM distrito d
-                    INNER JOIN area a ON d.id_area = a.id
-                    WHERE a.nombre = %s
-                    ORDER BY d.nombre
-                """
-                cursor.execute(query, (nivel_info['area'],))
-                ubicaciones = [row['nombre'] for row in cursor.fetchall()]
-                
-            elif nivel_info['nivel'] == 'distrito' and nivel_info['distrito']:
-                # Mostrar SERVICIOS del distrito
-                query = """
-                    SELECT DISTINCT s.nombre
-                    FROM servicio s
-                    INNER JOIN tipo_servicio ts ON s.id_tipo_servicio = ts.id
-                    INNER JOIN distrito d ON ts.id_distrito = d.id
-                    WHERE d.nombre = %s
-                    ORDER BY s.nombre
-                """
-                cursor.execute(query, (nivel_info['distrito'],))
-                ubicaciones = [row['nombre'] for row in cursor.fetchall()]
-            
-            cursor.close()
-            conn.close()
-            return ubicaciones
-            
-        except Exception as e:
-            print(f"Error obteniendo ubicaciones dinámicas: {e}")
-            return []
-
-    def _calcular_cantidad_solicitar_por_ubicacion(self, insumo_id, ubicacion, nivel_info, fecha_ini, fecha_fin):
-        """
-        ✅ VERSIÓN OPTIMIZADA: Calcula cantidad a solicitar usando UNA SOLA consulta SQL
-        """
-        cache_key = (insumo_id, ubicacion, fecha_ini, fecha_fin)
-        
-        if not hasattr(self, '_cache_solicitar_ubicacion'):
-            self._cache_solicitar_ubicacion = {}
-        
-        if cache_key in self._cache_solicitar_ubicacion:
-            return self._cache_solicitar_ubicacion[cache_key]
-        
-        try:
-            conn = conectar_db()
-            if not conn:
-                return 0.0
-            
-            cursor = conn.cursor(dictionary=True, buffered=True)
-            
-            # Construir filtros según nivel
-            where_clauses = ["m.insumo_id = %s"]
-            params = [insumo_id]
-            
-            if nivel_info['nivel'] == 'area':
-                # Calcular para DISTRITO específico
-                where_clauses.append("d.nombre = %s")
-                params.append(ubicacion)
-                where_clauses.append("m.servicio_id IS NULL")
-            elif nivel_info['nivel'] == 'distrito':
-                # Calcular para SERVICIO específico
-                where_clauses.append("s.nombre = %s")
-                params.append(ubicacion)
-            
-            where_sql = " AND ".join(where_clauses)
-            
-            # ✅ UNA SOLA CONSULTA que obtiene TODO lo necesario
-            query = f"""
-                SELECT 
-                    -- Saldo anterior (hasta un día antes del periodo)
-                    COALESCE(SUM(
-                        CASE 
-                            WHEN DATE(m.fecha_registro) < %s THEN
-                                CASE
-                                    WHEN UPPER(REPLACE(tm.descripcion, '  ', ' ')) = 'ENTRADA NIVEL SUPERIOR' THEN m.cantidad
-                                    WHEN UPPER(tm.descripcion) LIKE '%%REAJUSTE%%' AND UPPER(tm.descripcion) LIKE '%%(+)%%' THEN m.cantidad
-                                    WHEN UPPER(REPLACE(tm.descripcion, '  ', ' ')) = 'ENTREGADO' THEN -m.cantidad
-                                    WHEN UPPER(tm.descripcion) LIKE '%%REAJUSTE%%' AND UPPER(tm.descripcion) LIKE '%%(-%%' THEN -m.cantidad
-                                    ELSE 0
-                                END
-                            ELSE 0
-                        END
-                    ), 0) as saldo_anterior,
-                    
-                    -- Movimientos del periodo
-                    COALESCE(SUM(
-                        CASE 
-                            WHEN DATE(m.fecha_registro) BETWEEN %s AND %s THEN
-                                CASE
-                                    WHEN UPPER(REPLACE(tm.descripcion, '  ', ' ')) = 'ENTRADA NIVEL SUPERIOR' THEN m.cantidad
-                                    ELSE 0
-                                END
-                            ELSE 0
-                        END
-                    ), 0) as entradas_periodo,
-                    
-                    COALESCE(SUM(
-                        CASE 
-                            WHEN DATE(m.fecha_registro) BETWEEN %s AND %s THEN
-                                CASE
-                                    WHEN UPPER(tm.descripcion) LIKE '%%REAJUSTE%%' AND UPPER(tm.descripcion) LIKE '%%(+)%%' THEN m.cantidad
-                                    WHEN UPPER(tm.descripcion) LIKE '%%REAJUSTE%%' AND UPPER(tm.descripcion) LIKE '%%(-%%' THEN -m.cantidad
-                                    ELSE 0
-                                END
-                            ELSE 0
-                        END
-                    ), 0) as reajustes_periodo,
-                    
-                    COALESCE(SUM(
-                        CASE 
-                            WHEN DATE(m.fecha_registro) BETWEEN %s AND %s THEN
-                                CASE
-                                    WHEN UPPER(REPLACE(tm.descripcion, '  ', ' ')) = 'ENTREGADO' THEN m.cantidad
-                                    ELSE 0
-                                END
-                            ELSE 0
-                        END
-                    ), 0) as entregado_periodo,
-                    
-                    COALESCE(SUM(
-                        CASE 
-                            WHEN DATE(m.fecha_registro) BETWEEN %s AND %s THEN
-                                CASE
-                                    WHEN UPPER(REPLACE(tm.descripcion, '  ', ' ')) IN ('ENTREGADO', 'NO ENTREGADO') THEN m.cantidad
-                                    ELSE 0
-                                END
-                            ELSE 0
-                        END
-                    ), 0) as demanda_total_periodo
-                    
-                FROM movimiento m
-                JOIN tipo_movimiento tm ON tm.id = m.tipo_movimiento_id
-                LEFT JOIN distrito d ON d.id = m.distrito_id
-                LEFT JOIN servicio s ON s.id = m.servicio_id
-                WHERE {where_sql}
-            """
-            
-            # Parámetros
-            from datetime import timedelta
-            fecha_antes = (fecha_ini - timedelta(days=1)).strftime('%Y-%m-%d')
-            fecha_ini_str = fecha_ini.strftime('%Y-%m-%d')
-            fecha_fin_str = fecha_fin.strftime('%Y-%m-%d')
-            
-            query_params = params + [
-                fecha_antes,  # saldo_anterior
-                fecha_ini_str, fecha_fin_str,  # entradas
-                fecha_ini_str, fecha_fin_str,  # reajustes
-                fecha_ini_str, fecha_fin_str,  # entregado
-                fecha_ini_str, fecha_fin_str   # demanda_total
-            ]
-            
-            cursor.execute(query, query_params)
-            result = cursor.fetchone()
-            
-            if not result:
-                cursor.close()
-                conn.close()
-                return 0.0
-            
-            # Calcular valores
-            saldo_anterior = float(result['saldo_anterior'] or 0.0)
-            entradas = float(result['entradas_periodo'] or 0.0)
-            reajustes = float(result['reajustes_periodo'] or 0.0)
-            entregado = float(result['entregado_periodo'] or 0.0)
-            demanda_total = float(result['demanda_total_periodo'] or 0.0)
-            
-            # Saldo Mes Siguiente
-            saldo_mes_siguiente = saldo_anterior + entradas + reajustes - entregado
-            
-            # Promedio Mensual
-            dias_periodo = (fecha_fin - fecha_ini).days + 1
-            numero_meses = max(1, dias_periodo / 30.44)
-            promedio_mensual = demanda_total / numero_meses if numero_meses > 0 else 0.0
-            
-            # Nivel Máximo
-            try:
-                nivel_maximo = float(self.nivel_maximo_var.get()) if self.nivel_maximo_var.get() else 6.0
-            except:  # noqa: E722
-                nivel_maximo = 6.0
-            
-            # Cantidad Máxima
-            cantidad_maxima = promedio_mensual * nivel_maximo
-            
-            # ✅ CANTIDAD A SOLICITAR = Cantidad Máxima - Saldo Mes Siguiente
-            cantidad_solicitar = max(0.0, cantidad_maxima - saldo_mes_siguiente)
-            
-            cursor.close()
-            conn.close()
-            
-            # Guardar en caché
-            self._cache_solicitar_ubicacion[cache_key] = cantidad_solicitar
-                        
-            return cantidad_solicitar
-            
-        except Exception as e:
-            print(f"Error calculando cantidad a solicitar por ubicación: {e}")
-            import traceback
-            traceback.print_exc()
-            return 0.0
-    
     def _formatear_periodo_logistico(self, fecha_ini, fecha_fin):
         """
         Devuelve un string 'Periodo logístico: 26/MM/YYYY – 25/MM/YYYY' usando fecha_ini/fecha_fin.
@@ -1228,10 +1015,6 @@ class ReporteCantidadSolicitada:
 
         datos_agrupados = {}
 
-        # ✅ NUEVO: Obtener estructura jerárquica según nivel
-        nivel_info = self._derivar_nivel_y_filtros()
-        ubicaciones_dinamicas = self._obtener_ubicaciones_dinamicas(nivel_info)
-        
         nivel_area = (self.combo_area.get() or '').strip()
         nivel_distrito = (self.combo_distrito.get() or '').strip()
         nivel_tipo_servicio = (self.combo_tipo_servicio.get() or '').strip()
@@ -1243,7 +1026,7 @@ class ReporteCantidadSolicitada:
                 return float(x)
             except:  # noqa: E722
                 return 0.0
-                
+                  
         for mov in movimientos_raw:
             insumo_id = mov.get('codigo_insumo')
             if insumo_id is None or str(insumo_id).strip() == '':
@@ -1302,8 +1085,7 @@ class ReporteCantidadSolicitada:
                     'ini_en_periodo_area': 0.0,
                     'ini_en_periodo_distritos': 0.0,
                     'ini_en_periodo_servicios': 0.0,
-                    '_saldo_base_asignado': False,
-                    'cantidad_solicitar_por_ubicacion': {ubicacion: 0.0 for ubicacion in ubicaciones_dinamicas}
+                    '_saldo_base_asignado': False
                 }
 
             # ✅ CORRECCIÓN: Usar saldo precalculado (ya calculado en generar_vista_previa)
@@ -1383,7 +1165,7 @@ class ReporteCantidadSolicitada:
                 elif es_nivel_servicio:
                     datos_agrupados[codigo]['reajustes_servicios'] -= cantidad
 
-        # Promedios (usar el cálculo pre-existente como en procesar_datos_bres)
+        # Promedios (guardar el resultado para usarlo abajo)
         insumo_ids = [datos['insumo_id'] for datos in datos_agrupados.values() if datos['insumo_id'] is not None]
         promedios_por_insumo = self.calcular_promedio_demanda_real(insumo_ids, fecha_ini, fecha_fin) or {}
 
@@ -1483,11 +1265,12 @@ class ReporteCantidadSolicitada:
 
             # ✅ CALCULAR COLUMNAS DERIVADAS CON LOS DATOS VISIBLES EN LA TABLA
 
-            # 1. Calcular número de meses del periodo
+            # 1. Calcular número de meses del periodo (se mantiene para fallback)
             dias_periodo = (fecha_fin - fecha_ini).days + 1
-            numero_meses = max(1, dias_periodo / 30.44)  # Promedio de días por mes
+            numero_meses = max(1, dias_periodo / 30.44)
 
             # 2. Promedio Mensual de Demanda Real: usar promedio histórico pre-calculado
+            #    calcular_promedio_demanda_real debe devolver un dict {insumo_id: promedio_mensual}
             promedio_mensual = float(promedios_por_insumo.get(insumo_id, 0.0))
 
             # Fallback opcional: si no hay histórico y prefieres un valor basado en demanda_total/días
@@ -1501,19 +1284,24 @@ class ReporteCantidadSolicitada:
                 meses_existencia = 0.0
 
             # 4. Obtener nivel máximo desde el Combo (robusto y con fallback)
+            # Preferimos leer desde el widget visible (combo_nivel_maximo), si no está, usamos la var.
             nivel_raw = (self.combo_nivel_maximo.get() or self.nivel_maximo_var.get() or "").strip()
+
             try:
+                # Convertir a entero (permitir si el usuario puso "6.0" u "06")
                 nivel_maximo = int(float(nivel_raw)) if nivel_raw != "" else 1
+                # Evitar valores no razonables
                 if nivel_maximo <= 0:
                     nivel_maximo = 1
             except Exception:
+                # Fallback seguro: 1 mes por defecto (cambiar a 6 si prefieres)
                 nivel_maximo = 1
 
             # 5. Cantidad Máxima (usando promedio_mensual calculado)
             cantidad_maxima = promedio_mensual * nivel_maximo
 
             # 6. Cantidad a Solicitar = Cantidad Máxima - Existencia Física
-            # Se resta la EXISTENCIA FÍSICA (cálculo interno) de la CANTIDAD MÁXIMA.
+            # Se resta la EXISTENCIA FÍSICA (columna visible) de la CANTIDAD MÁXIMA.
             # Si el resultado es negativo, lo dejamos negativo para indicar "NO DEBE SOLICITAR".
             try:
                 existencia_fisica_val = float(existencia_fisica)
@@ -1521,17 +1309,12 @@ class ReporteCantidadSolicitada:
                 existencia_fisica_val = 0.0
 
             cantidad_solicitar_raw = cantidad_maxima - existencia_fisica_val
+
+            # Redondear a 2 decimales (manteniendo el signo negativo si existe)
             cantidad_solicitar = round(cantidad_solicitar_raw, 2)
 
-            # ✅ CALCULAR cantidad a solicitar por cada ubicación dinámica
-            for ubicacion in ubicaciones_dinamicas:
-                cantidad_solicitar_ubicacion = self._calcular_cantidad_solicitar_por_ubicacion(
-                    insumo_id, ubicacion, nivel_info, fecha_ini, fecha_fin
-                )
-                datos_agrupados[codigo]['cantidad_solicitar_por_ubicacion'][ubicacion] = cantidad_solicitar_ubicacion
-
-            # ✅ CONSTRUIR FILA DE DATOS
-            fila_datos = {
+            # ✅ AGREGAR A DATOS PROCESADOS
+            datos_procesados.append({
                 'codigo_insumo': codigo,
                 'nombre_insumo': datos['nombre_insumo'],
                 'saldo_anterior': self.formato_float(saldo_anterior_total),
@@ -1547,38 +1330,71 @@ class ReporteCantidadSolicitada:
                 'cantidad_maxima': self.formato_float(cantidad_maxima),
                 'cantidad_solicitar': self.formato_float(cantidad_solicitar),
                 'movimientos_individuales': {}
-            }
-
-            # ✅ AGREGAR columnas dinámicas
-            for ubicacion in ubicaciones_dinamicas:
-                cantidad_ubicacion = datos_agrupados[codigo]['cantidad_solicitar_por_ubicacion'].get(ubicacion, 0.0)
-                fila_datos[f'solicitar_{ubicacion}'] = self.formato_float(cantidad_ubicacion)
-
-            datos_procesados.append(fila_datos)
+            })
 
         datos_procesados.sort(key=lambda x: x['codigo_insumo'])
         
         return datos_procesados
     
     def calcular_promedio_demanda_real(self, insumo_ids, fecha_ini, fecha_fin):
+        """
+        Calcula promedio mensual de demanda real sobre 3 periodos logísticos:
+        - p0: fecha_ini .. fecha_fin (periodo actual, p.ej. 26/M-1 .. 25/M)
+        - p1: periodo inmediatamente anterior (26/M-2 .. 25/M-1)
+        - p2: dos periodos atrás (26/M-3 .. 25/M-2)
+
+        Retorna dict {insumo_id: promedio (float, 2 decimales)}.
+        """
         if not insumo_ids:
             return {}
-        
-        # ✅ Verificar cache
-        cache_key = (tuple(sorted(insumo_ids)), fecha_ini, fecha_fin, 
+
+        # Cache key
+        cache_key = (tuple(sorted(insumo_ids)), fecha_ini, fecha_fin,
                     self.combo_area.get(), self.combo_distrito.get(),
                     self.combo_tipo_servicio.get(), self.combo_servicio.get())
-        
+
         if cache_key in self._cache_promedios:
             return self._cache_promedios[cache_key]
-        
+
+        # Helper: desplazar meses hacia atrás manteniendo día (usado para obtener '26' de meses previos)
+        def shift_month(dt, months_back):
+            """
+            Devuelve una fecha con el mismo 'day' (p. ej. 26) trasladada `months_back` meses hacia atrás.
+            Si el mes resultante tiene menos días, usa el último día del mes.
+            """
+            year = dt.year
+            month = dt.month - months_back
+            while month <= 0:
+                month += 12
+                year -= 1
+            last_day = calendar.monthrange(year, month)[1]
+            day = min(dt.day, last_day)
+            return datetime(year, month, day)
+
         try:
             conn = conectar_db()
             if not conn:
                 return {}
             cursor = conn.cursor(dictionary=True, buffered=True)
 
-            fecha_inicio_calculo = fecha_fin - timedelta(days=90)
+            # Periodos logísticos:
+            p0_start = fecha_ini
+            p0_end = fecha_fin
+
+            # p1: empieza un mes antes en día=26, termina un día antes de p0_start
+            p1_end = p0_start - timedelta(days=1)
+            p1_start = shift_month(p0_start, 1)  # 26 del mes anterior
+            # p2: dos meses antes
+            p2_end = p1_start - timedelta(days=1)
+            p2_start = shift_month(p0_start, 2)
+
+            # Asegurar que las fechas tienen hora 00:00:00 / se usan solo fechas
+            p0s = p0_start.strftime('%Y-%m-%d')
+            p0e = p0_end.strftime('%Y-%m-%d')
+            p1s = p1_start.strftime('%Y-%m-%d')
+            p1e = p1_end.strftime('%Y-%m-%d')
+            p2s = p2_start.strftime('%Y-%m-%d')
+            p2e = p2_end.strftime('%Y-%m-%d')
 
             area_sel = self.combo_area.get().strip() or None
             distrito_sel = self.combo_distrito.get().strip() or None
@@ -1586,23 +1402,24 @@ class ReporteCantidadSolicitada:
             servicio_sel = self.combo_servicio.get().strip() or None
 
             placeholders = ','.join(['%s'] * len(insumo_ids))
-            
-            # ✅ Simplificar consulta - evitar joins innecesarios
+
+            # Consulta: para cada insumo devolver suma en cada uno de los 3 periodos
             query = f"""
-                SELECT 
-                m.insumo_id,
-                YEAR(m.fecha_registro) as anio,
-                MONTH(m.fecha_registro) as mes,
-                SUM(m.cantidad) as demanda_mes
+                SELECT
+                    m.insumo_id,
+                    SUM(CASE WHEN DATE(m.fecha_registro) BETWEEN %s AND %s THEN m.cantidad ELSE 0 END) AS demanda_p2,
+                    SUM(CASE WHEN DATE(m.fecha_registro) BETWEEN %s AND %s THEN m.cantidad ELSE 0 END) AS demanda_p1,
+                    SUM(CASE WHEN DATE(m.fecha_registro) BETWEEN %s AND %s THEN m.cantidad ELSE 0 END) AS demanda_p0
                 FROM movimiento m
                 INNER JOIN tipo_movimiento tm ON m.tipo_movimiento_id = tm.id
                 WHERE m.insumo_id IN ({placeholders})
-                AND m.fecha_registro BETWEEN %s AND %s
                 AND tm.descripcion IN ('ENTREGADO', 'NO ENTREGADO')
             """
-            params = list(insumo_ids) + [fecha_inicio_calculo.strftime('%Y-%m-%d'), fecha_fin.strftime('%Y-%m-%d')]
 
-            # Agregar filtros de ubicación solo si están seleccionados
+            # Params: p2_start,p2_end, p1_start,p1_end, p0_start,p0_end AFTER insumo_ids
+            params = [p2s, p2e, p1s, p1e, p0s, p0e] + list(insumo_ids)
+
+            # Agregar filtros de ubicación solo si seleccionados (mantener la misma lógica de tu código)
             if servicio_sel:
                 query += """
                     AND EXISTS (
@@ -1640,37 +1457,44 @@ class ReporteCantidadSolicitada:
                 """
                 params.append(area_sel)
 
-            query += " GROUP BY m.insumo_id, YEAR(m.fecha_registro), MONTH(m.fecha_registro)"
-            
+            query += " GROUP BY m.insumo_id"
+
             cursor.execute(query, params)
-            resultados = cursor.fetchall()
-            conn.close()
+            rows = cursor.fetchall()
 
-            demandas_por_insumo = {}
-            for r in resultados:
-                ins = r['insumo_id']
-                val = float(r['demanda_mes']) if r['demanda_mes'] else 0.0
-                demandas_por_insumo.setdefault(ins, []).append(val)
-
+            # Inicializar con ceros (si no hay filas en la consulta, se considera 0 en todos los periodos)
             promedios = {}
             for ins in insumo_ids:
-                if ins in demandas_por_insumo:
-                    arr = demandas_por_insumo[ins]
-                    ult = arr[-3:] if len(arr) >= 3 else arr
-                    prom = sum(ult) / len(ult) if ult else 0.0
-                    promedios[ins] = round(prom, 2)
-                else:
-                    promedios[ins] = 0.0
-            
-            # ✅ Guardar en cache
+                promedios[ins] = 0.0
+
+            # Llenar con resultados
+            for r in rows:
+                ins = r['insumo_id']
+                # Notar: demanda_p2 es el más antiguo (p2), demanda_p1 intermedio, demanda_p0 actual
+                d2 = float(r.get('demanda_p2') or 0.0)
+                d1 = float(r.get('demanda_p1') or 0.0)
+                d0 = float(r.get('demanda_p0') or 0.0)
+                prom = round((d2 + d1 + d0) / 3.0, 2)
+                promedios[ins] = prom
+
+            # Guardar en cache
             self._cache_promedios[cache_key] = promedios
             return promedios
-            
+
         except Exception as e:
-            print(f"DEBUG OPTIMIZED: Error calculando promedios batch: {e}")
+            print(f"DEBUG OPTIMIZED: Error calculando promedios batch (logístico): {e}")
             import traceback
             traceback.print_exc()
             return {}
+        finally:
+            try:
+                cursor.close()
+            except Exception:
+                pass
+            try:
+                conn.close()
+            except Exception:
+                pass
 
     def obtener_demanda_mes(self, insumo_id, fecha_inicio, fecha_fin):
         conn = None
@@ -1842,7 +1666,7 @@ class ReporteCantidadSolicitada:
                 fg=self.COLORS['white'],
                 bg=self.COLORS['primary']).pack(anchor='w')
 
-        tk.Label(title_inner, text="Balance, Requisición y Envío de Suministros",
+        tk.Label(title_inner, text="Reporte Distribución de Insumos según BRES",
                 font=('Segoe UI', 7),
                 fg=self.COLORS['white'],
                 bg=self.COLORS['primary']).pack(anchor='w', pady=(1, 0))
@@ -1978,7 +1802,8 @@ class ReporteCantidadSolicitada:
         niveles = [str(i) for i in range(1, 13)]
         self.combo_nivel_maximo = ttk.Combobox(frame_nivel_content, textvariable=self.nivel_maximo_var, values=niveles, width=8, state="readonly")
         self.combo_nivel_maximo.grid(row=0, column=1, padx=3, pady=1, sticky='w')
-        self.combo_nivel_maximo.set("6")
+        
+        self.combo_nivel_maximo.set("1")
 
         # **VISOR PDF (sin expand, con altura fija)**
         self.pdf_outer = tk.Frame(self.main_container, bg=self.COLORS['white'])
@@ -2176,8 +2001,6 @@ class ReporteCantidadSolicitada:
             self._cache_existencia_fisica.clear()
         if hasattr(self, 'saldo_anterior_por_insumo'):
             self.saldo_anterior_por_insumo.clear()
-        if hasattr(self, '_cache_solicitar_ubicacion'):
-            self._cache_solicitar_ubicacion.clear()
         
         # Deshabilitar botón para evitar múltiples clics rápidos
         for child in self.frame_botones.winfo_children():
@@ -2702,7 +2525,7 @@ class ReporteCantidadSolicitada:
 
             elements.append(Paragraph("DIRECCIÓN DEPARTAMENTAL DE REDES INTEGRADAS DE SERVICIOS DE SALUD DE GUATEMALA,", title_style))
             elements.append(Paragraph("ÁREA NOR ORIENTE", subtitle_style))
-            elements.append(Paragraph("DISTRIBUCION DE INSUMOS SEGUN BRES", subtitle_style))
+            elements.append(Paragraph("BALANCE, REQUISICIÓN Y ENVÍO DE SUMINISTROS", subtitle_style))
             elements.append(Paragraph(f"Generado el: {datetime.now().strftime('%d/%m/%Y %H:%M:%S')}", timestamp_style))
             
             # Agregar debajo el periodo logístico (26–25) o el rango seleccionado
@@ -2744,48 +2567,61 @@ class ReporteCantidadSolicitada:
             elements.append(table_filtros)
             elements.append(Spacer(1, 24))
 
-            # Obtener ubicaciones dinámicas
-            nivel_info = self._derivar_nivel_y_filtros()
-            ubicaciones_dinamicas = self._obtener_ubicaciones_dinamicas(nivel_info)
+            headers = [
+                'Código',
+                'Descripción\ndel Insumo',
+                'Saldo\nAnterior',
+                'Entradas\nNivel\nSuperior',
+                'Entregado\na Usuario',
+                'No\nEntregado',
+                'Demanda',
+                'Reajustes\n(+) (-)',
+                'Saldo Mes\nSiguiente',
+                'Existencia\nFísica',
+                'Promedio\nMensual\nDemanda Real',
+                'Meses\nExistencia\nDisponible',
+                'Cantidad\nMáxima',
+                'Cantidad a\nSolicitar'
+            ]
 
-            def dividir_texto_en_lineas(texto, max_chars=12):
-                palabras = texto.split()
-                lineas = []
-                linea_actual = ""
-                for palabra in palabras:
-                    if len(linea_actual) + len(palabra) + 1 <= max_chars:
-                        if linea_actual:
-                            linea_actual += " " + palabra
-                        else:
-                            linea_actual = palabra
-                    else:
-                        lineas.append(linea_actual)
-                        linea_actual = palabra
-                if linea_actual:
-                    lineas.append(linea_actual)
-                return "\n".join(lineas)
-
-            # Luego, al construir los headers:
-            headers = ['Código', 'Descripción del Insumo']
-            for ubicacion in ubicaciones_dinamicas:
-                headers.append(dividir_texto_en_lineas(ubicacion, max_chars=12))
-
-            # Construir filas solo con esos campos
-            data = [headers] 
+            data = [headers]
             for mov in self.movimientos_data:
                 row = [
                     mov.get('codigo_insumo', ''),
-                    self.dividir_texto_en_lineas(mov.get('nombre_insumo', ''), 30)
+                    self.dividir_texto_en_lineas(mov.get('nombre_insumo', ''), 30),
+                    mov.get('saldo_anterior', ''),
+                    mov.get('entradas_nivel_superior', ''),
+                    mov.get('entregado_usuario', ''),
+                    mov.get('no_entregado', ''),
+                    mov.get('demanda', ''),
+                    mov.get('reajustes', ''),
+                    mov.get('saldo_mes_siguiente', ''),
+                    mov.get('existencia_fisica', ''),
+                    mov.get('promedio_mensual', ''),
+                    mov.get('meses_existencia', ''),
+                    mov.get('cantidad_maxima', ''),
+                    mov.get('cantidad_solicitar', '')
                 ]
-                for ubicacion in ubicaciones_dinamicas:
-                    row.append(mov.get(f'solicitar_{ubicacion}', '0.00'))
                 data.append(row)
 
-            # Ajustar colWidths acorde a columnas
-            colWidths = [1.2*inch, 3.5*inch] + [0.8*inch]*len(ubicaciones_dinamicas)
+            colWidths = [
+                0.7*inch,
+                3.0*inch,
+                0.8*inch,
+                0.8*inch,
+                0.8*inch,
+                0.8*inch,
+                0.8*inch,
+                0.8*inch,
+                0.8*inch,
+                0.8*inch,
+                0.9*inch,
+                0.9*inch,
+                0.8*inch,
+                0.8*inch
+            ]
 
-            table = Table(data, colWidths=colWidths, repeatRows=1)  # repeatRows=1 para repetir encabezado
-
+            table = Table(data, colWidths=colWidths, repeatRows=1)
             table_style = [
                 ('BACKGROUND', (0,0), (-1,0), colors.lightblue),
                 ('TEXTCOLOR', (0,0), (-1,0), colors.black),
@@ -2823,28 +2659,26 @@ class ReporteCantidadSolicitada:
             filas_por_hoja = 1000
             total_movimientos = len(self.movimientos_data)
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            file_name = f"Reporte_Cantidad_Solicitada_{timestamp}.xlsx"
+            file_name = f"Reporte_Cantidad Solicitada_{timestamp}.xlsx"
             downloads_path = os.path.expanduser("~/Downloads")
             full_path = os.path.join(downloads_path, file_name)
 
             with pd.ExcelWriter(full_path, engine='xlsxwriter') as writer:
                 workbook = writer.book
 
-                # Obtener ubicaciones dinámicas
-                nivel_info = self._derivar_nivel_y_filtros()
-                ubicaciones_dinamicas = self._obtener_ubicaciones_dinamicas(nivel_info)
-
-                # Columnas base solo código y nombre
-                columnas = ['codigo_insumo', 'nombre_insumo']
-                encabezados = ['Código', 'Descripción del Insumo']
-
-                # Agregar columnas dinámicas (solo una vez)
-                for ubicacion in ubicaciones_dinamicas:
-                    columnas.append(f'solicitar_{ubicacion}')
-                    encabezados.append(ubicacion)
-
-                # Anchos de columnas
-                col_widths = [15, 40] + [15] * len(ubicaciones_dinamicas)
+                columnas = [
+                    'codigo_insumo', 'nombre_insumo', 'saldo_anterior', 'entradas_nivel_superior',
+                    'entregado_usuario', 'no_entregado', 'demanda', 'reajustes',
+                    'saldo_mes_siguiente', 'existencia_fisica', 'promedio_mensual',
+                    'meses_existencia', 'cantidad_maxima', 'cantidad_solicitar'
+                ]
+                encabezados = [
+                    'Código', 'Descripción\ndel Insumo', 'Saldo\nAnterior', 'Entradas\nNivel\nSuperior',
+                    'Entregado\na Usuario', 'No\nEntregado', 'Demanda', 'Reajustes\n(+) (-)',
+                    'Saldo Mes\nSiguiente', 'Existencia\nFísica', 'Promedio\nMensual\nDemanda Real',
+                    'Meses\nExistencia\nDisponible', 'Cantidad\nMáxima', 'Cantidad a\nSolicitar'
+                ]
+                col_widths = [10, 30, 10, 12, 12, 10, 10, 12, 12, 12, 18, 18, 12, 12]
 
                 for hoja_num in range(0, total_movimientos, filas_por_hoja):
                     nombre_hoja = f"Cantidad Solicitada_{hoja_num // filas_por_hoja + 1}"
@@ -2899,9 +2733,9 @@ class ReporteCantidadSolicitada:
                     worksheet.merge_range(0, 0, 0, len(encabezados) - 1,
                         "DIRECCIÓN DEPARTAMENTAL DE REDES INTEGRADAS DE SERVICIOS DE SALUD DE GUATEMALA,", title_format)
                     worksheet.merge_range(1, 0, 1, len(encabezados) - 1, "ÁREA NOR ORIENTE", subtitle_format)
-                    worksheet.merge_range(2, 0, 2, len(encabezados) - 1, "DISTRIBUCION DE INSUMOS SEGUN BRES", subtitle_format)
+                    worksheet.merge_range(2, 0, 2, len(encabezados) - 1, "BALANCE, REQUISICIÓN Y ENVÍO DE SUMINISTROS", subtitle_format)
                     worksheet.merge_range(3, 0, 3, len(encabezados) - 1, f"Generado el: {datetime.now().strftime('%d/%m/%Y %H:%M:%S')}", subtitle_format)
-
+                    
                     # Fila 4 para el periodo logístico
                     try:
                         if self.modo_fecha_var.get() == "corte" and self.mes_inicio_var.get() and self.mes_final_var.get() and self.anio_var.get():
@@ -2922,7 +2756,7 @@ class ReporteCantidadSolicitada:
                     worksheet.merge_range(5, 4, 5, 5, f"Tipo de Servicio: {self.combo_tipo_servicio.get()}", filtro_format)
                     worksheet.merge_range(5, 6, 5, 7, f"Servicio: {self.combo_servicio.get()}", filtro_format)
                     worksheet.merge_range(5, 8, 5, 9, f"Tipo de Insumo: {self.combo_tipo_insumo.get()}", filtro_format)
-                    worksheet.merge_range(5, 10, 5, 11, f"Nivel Máximo: {self.combo_nivel_maximo.get()}", filtro_format)
+                    worksheet.merge_range(5, 10, 5, 13, f"Nivel Máximo: {self.combo_nivel_maximo.get()}", filtro_format)
 
                     for col_num, header in enumerate(encabezados):
                         worksheet.write(fila_inicio - 1, col_num, header, header_format)
@@ -2930,14 +2764,16 @@ class ReporteCantidadSolicitada:
 
                     for row_offset, row_data in enumerate(df.values):
                         for col_num, cell_value in enumerate(row_data):
-                            if encabezados[col_num] == 'Descripción del Insumo':
+                            if encabezados[col_num] == 'Descripción\ndel Insumo':
                                 worksheet.write(fila_inicio + row_offset, col_num, cell_value, cell_format_wrap)
-                            else:
+                            elif encabezados[col_num] != 'Reajustes\n(+) (-)' and col_num > 2:
                                 try:
                                     val = float(cell_value)
                                     worksheet.write_number(fila_inicio + row_offset, col_num, val, cell_format_number)
                                 except:  # noqa: E722
                                     worksheet.write(fila_inicio + row_offset, col_num, cell_value, cell_format_center)
+                            else:
+                                worksheet.write(fila_inicio + row_offset, col_num, cell_value, cell_format_center)
 
                     worksheet.set_landscape()
                     worksheet.set_paper(5)
