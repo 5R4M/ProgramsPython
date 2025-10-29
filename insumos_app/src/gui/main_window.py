@@ -1,17 +1,10 @@
 import tkinter as tk
-import sqlite3
 from tkinter import ttk
 from tkinter import messagebox
 import sys
 import os
 from PIL import Image, ImageTk
 from ttkthemes import ThemedStyle
-
-from src.database.db_manager import conectar_db
-
-# Agregar el directorio raíz del proyecto al PATH de Python
-project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-sys.path.append(project_root)
 
 # Importar las funciones de la base de datos
 from src.database import crear_base_datos, verificar_tablas
@@ -25,7 +18,11 @@ from src.gui.reporte_bres import ReporteBres
 from src.gui.reporte_balance_bodega import ReporteBalanceBodega
 from src.gui.configurar_servidor import ConfigurarServidor
 from src.gui.reporte_cantidad_solicitada import ReporteCantidadSolicitada
-from src.gui.importar_exportar_manager import ImportarExportarManager, crear_gestor_importar_exportar
+from src.gui.importar_exportar_manager import ImportarExportarManager
+
+# Agregar el directorio raíz del proyecto al PATH de Python
+project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+sys.path.append(project_root)
 
 def resource_path(relative_path):
     try:
@@ -82,7 +79,7 @@ class MainWindow:
             icon_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'utils', 'icons', 'app_icon.ico')
             if os.path.exists(icon_path):
                 self.root.iconbitmap(icon_path)
-        except:
+        except:  # noqa: E722
             pass
 
         # Aplicar tema moderno
@@ -1184,7 +1181,7 @@ class MainWindow:
                 if hasattr(self.pantalla_actual, 'destroy'):
                     try:
                         self.pantalla_actual.destroy()
-                    except:
+                    except:  # noqa: E722
                         pass
                 self.pantalla_actual = None
 
@@ -1192,7 +1189,7 @@ class MainWindow:
                 for widget in self.main_content_frame.winfo_children():
                     try:
                         widget.destroy()
-                    except:
+                    except:  # noqa: E722
                         pass
                 self.main_content_frame.update_idletasks()
 
@@ -1314,7 +1311,7 @@ class MainWindow:
         try:
             from src.database import DB_PATH
             db_path = DB_PATH
-        except:
+        except:  # noqa: E722
             db_path = 'database.db'
         self.pantalla_actual = ImportarExportarManager(self.main_content_frame, self)
         self.pantalla_actual.db_path = db_path
