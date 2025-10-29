@@ -2525,7 +2525,7 @@ class ReporteCantidadSolicitada:
 
             elements.append(Paragraph("DIRECCIÓN DEPARTAMENTAL DE REDES INTEGRADAS DE SERVICIOS DE SALUD DE GUATEMALA,", title_style))
             elements.append(Paragraph("ÁREA NOR ORIENTE", subtitle_style))
-            elements.append(Paragraph("BALANCE, REQUISICIÓN Y ENVÍO DE SUMINISTROS", subtitle_style))
+            elements.append(Paragraph("DISTRIBUCIÓN DE INSUMOS SEGÚN BRES", subtitle_style))
             elements.append(Paragraph(f"Generado el: {datetime.now().strftime('%d/%m/%Y %H:%M:%S')}", timestamp_style))
             
             # Agregar debajo el periodo logístico (26–25) o el rango seleccionado
@@ -2733,7 +2733,7 @@ class ReporteCantidadSolicitada:
                     worksheet.merge_range(0, 0, 0, len(encabezados) - 1,
                         "DIRECCIÓN DEPARTAMENTAL DE REDES INTEGRADAS DE SERVICIOS DE SALUD DE GUATEMALA,", title_format)
                     worksheet.merge_range(1, 0, 1, len(encabezados) - 1, "ÁREA NOR ORIENTE", subtitle_format)
-                    worksheet.merge_range(2, 0, 2, len(encabezados) - 1, "BALANCE, REQUISICIÓN Y ENVÍO DE SUMINISTROS", subtitle_format)
+                    worksheet.merge_range(2, 0, 2, len(encabezados) - 1, "DISTRIBUCIÓN DE INSUMOS SEGÚN BRES", subtitle_format)
                     worksheet.merge_range(3, 0, 3, len(encabezados) - 1, f"Generado el: {datetime.now().strftime('%d/%m/%Y %H:%M:%S')}", subtitle_format)
                     
                     # Fila 4 para el periodo logístico
