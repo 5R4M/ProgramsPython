@@ -78,7 +78,6 @@ class ReporteBalanceBodega:
         self.tipo_insumo_var = tk.StringVar()
         self.insumo_var = tk.StringVar()
         self.presentacion_var = tk.StringVar()
-        self.nivel_maximo_var = tk.StringVar(value="6")
         self.desglose_var = tk.BooleanVar(value=False)
         
         self.current_page = 0
@@ -784,19 +783,12 @@ class ReporteBalanceBodega:
         self.combo_presentacion.grid(row=0, column=5, padx=3, pady=2, sticky='ew')
 
         # Nivel Máximo - MÁS COMPACTA
-        self.frame_nivel_container, frame_nivel_content = self.create_titled_frame(
-            self.main_container, "📈 Nivel Máximo"
+        self.frame_detsal_container, frame_nivel_content = self.create_titled_frame(
+            self.main_container, "📈 Detalle Salida Nivel Inferior"
         )
-        self.frame_nivel_container.config(bg=self.COLORS['light'])
+        self.frame_detsal_container.config(bg=self.COLORS['light'])
         frame_nivel_content.config(bg=self.COLORS['light'])
-        self.frame_nivel_container.pack(fill="x", padx=5, pady=2)
-
-        ttk.Label(frame_nivel_content, text="Nivel Máximo:").grid(row=0, column=0, padx=3, pady=2, sticky='w')
-        self.nivel_maximo_var = tk.StringVar()
-        niveles = [str(i) for i in range(1, 12 + 1)]
-        self.combo_nivel_maximo = ttk.Combobox(frame_nivel_content, textvariable=self.nivel_maximo_var, values=niveles, width=10, state="readonly")
-        self.combo_nivel_maximo.grid(row=0, column=1, padx=3, pady=2, sticky='w')
-        self.combo_nivel_maximo.set("6")
+        self.frame_detsal_container.pack(fill="x", padx=5, pady=2)
 
         # ==== BEGIN PATCH: Checkbutton desglose con trace ====
         ttk.Checkbutton(
@@ -1915,7 +1907,7 @@ class ReporteBalanceBodega:
                 f"Área: {self.combo_area.get()}",
                 f"Distrito: {self.combo_distrito.get()}",
                 f"Tipo de Insumo: {self.combo_tipo_insumo.get()}",
-                f"Nivel Máximo: {self.combo_nivel_maximo.get()}"
+                f"Detalle Salida Nivel Inferior: {'Sí' if self.desglose_var.get() else 'No'}"
             ]
             data_filtros = [[Paragraph(item, left_style) for item in filtros]]
             col_widths = [125, 125, 125, 125, 125, 125]
@@ -2206,8 +2198,8 @@ class ReporteBalanceBodega:
                     worksheet.merge_range(5, 0, 5, 1, f"Área: {self.combo_area.get()}", filtro_format)
                     worksheet.merge_range(5, 2, 5, 3, f"Distrito: {self.combo_distrito.get()}", filtro_format)
                     worksheet.write(5, 4, f"Tipo de Insumo: {self.combo_tipo_insumo.get()}", filtro_format)
-                    worksheet.write(5, 5, f"Nivel Máximo: {self.combo_nivel_maximo.get()}", filtro_format)
-
+                    worksheet.write(5, 5, f"Detalle Salida Nivel Inferior: {'Sí' if self.desglose_var.get() else 'No'}", filtro_format)
+                    
                     for col_num, header in enumerate(encabezados):
                         worksheet.write(fila_inicio - 1, col_num, header, header_format)
                         worksheet.set_column(col_num, col_num, col_widths[col_num])
