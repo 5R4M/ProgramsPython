@@ -627,13 +627,9 @@ class ReporteCantidadSolicitada:
 
     def _obtener_saldos_batch(self, fecha_corte_dt, contexto, insumos_ids):
         """
-        ✅ CORREGIDO: Calcula SALDO ANTERIOR (sin Inventario Inicial)
-        
-        El Inventario Inicial NO debe incluirse aquí porque:
-        - Solo debe sumarse en el primer mes donde aparece
-        - Ya se maneja por separado en procesar_datos_cantidad_solicitada()
-        
-        Fórmula: Saldo = Entradas Nivel Superior + Reajustes - Entregado
+        Calcula SALDO ANTERIOR (sin Inventario Inicial) para múltiples insumos.
+        Ahora respeta el 'contexto' pasado: si contexto contiene 'distrito'/'servicio'/'tipo_servicio'/'area'
+        se usará esa información para construir los filtros de nivel (antes siempre se usaba _derivar_nivel_y_filtros()).
         """
         if not insumos_ids:
             return {}
@@ -644,7 +640,22 @@ class ReporteCantidadSolicitada:
         
         cur = conn.cursor(dictionary=True)
 
+        # Derivar nivel desde el contexto si está presente (prioritario)
         nivel_info = self._derivar_nivel_y_filtros()
+        if contexto:
+            # Priorizar el contexto explícito pasado a la función
+            if contexto.get('servicio'):
+                nivel_info = {'nivel': 'servicio', 'area': contexto.get('area'), 'distrito': contexto.get('distrito'),
+                            'tipo_servicio': contexto.get('tipo_servicio'), 'servicio': contexto.get('servicio')}
+            elif contexto.get('tipo_servicio'):
+                nivel_info = {'nivel': 'tipo_servicio', 'area': contexto.get('area'), 'distrito': contexto.get('distrito'),
+                            'tipo_servicio': contexto.get('tipo_servicio'), 'servicio': None}
+            elif contexto.get('distrito'):
+                nivel_info = {'nivel': 'distrito', 'area': contexto.get('area'), 'distrito': contexto.get('distrito'),
+                            'tipo_servicio': None, 'servicio': None}
+            elif contexto.get('area'):
+                nivel_info = {'nivel': 'area', 'area': contexto.get('area'), 'distrito': None,
+                            'tipo_servicio': None, 'servicio': None}
 
         where = [
             f"m.insumo_id IN ({','.join(['%s'] * len(insumos_ids))})",
@@ -652,21 +663,24 @@ class ReporteCantidadSolicitada:
         ]
         params = list(insumos_ids) + [fecha_corte_dt.strftime('%Y-%m-%d')]
 
-        if nivel_info['nivel'] == 'area' and nivel_info['area']:
+        # Aplicar filtros según el nivel determinado (ahora viene de nivel_info, que puede venir del contexto)
+        if nivel_info.get('nivel') == 'area' and nivel_info.get('area'):
             where.append("a.nombre = %s")
             params.append(nivel_info['area'])
             where.append("m.distrito_id IS NULL")
-        elif nivel_info['nivel'] == 'distrito' and nivel_info['distrito']:
+        elif nivel_info.get('nivel') == 'distrito' and nivel_info.get('distrito'):
             where.append("d.nombre = %s")
             params.append(nivel_info['distrito'])
             where.append("m.servicio_id IS NULL")
-        elif nivel_info['nivel'] == 'servicio' and nivel_info.get('servicio'):
+        elif nivel_info.get('nivel') == 'servicio' and nivel_info.get('servicio'):
             where.append("s.nombre = %s")
             params.append(nivel_info['servicio'])
-        elif nivel_info['nivel'] == 'tipo_servicio' and nivel_info.get('tipo_servicio'):
+            where.append("m.tipo_servicio_id IS NULL")
+        elif nivel_info.get('nivel') == 'tipo_servicio' and nivel_info.get('tipo_servicio'):
             where.append("ts.nombre = %s")
             params.append(nivel_info['tipo_servicio'])
 
+        # Filtros adicionales por insumo/tipo/presentación (usamos el contexto original pasado)
         if contexto.get('tipo_insumo'):
             where.append("ti.descripcion = %s")
             params.append(contexto['tipo_insumo'])
@@ -689,34 +703,21 @@ class ReporteCantidadSolicitada:
 
         where_sql = " AND ".join(where)
 
-        # ✅ FÓRMULA CORREGIDA: SIN Inventario Inicial
         sql = f"""
             SELECT
                 m.insumo_id,
                 SUM(
                     CASE
-                        -- ✅ ENTRADAS: Solo Entrada Nivel Superior
                         WHEN UPPER(REPLACE(REPLACE(tm.descripcion, '  ', ' '), '  ', ' ')) = 'ENTRADA NIVEL SUPERIOR'
                             THEN m.cantidad
-                        
-                        -- ❌ INVENTARIO INICIAL: NO incluir aquí
-                        -- Se maneja por separado en procesar_datos_cantidad_solicitada()
-                        
-                        -- ✅ REAJUSTES POSITIVOS
                         WHEN UPPER(REPLACE(REPLACE(tm.descripcion, '  ', ' '), '  ', ' ')) LIKE '%REAJUSTE%' 
                             AND (UPPER(tm.descripcion) LIKE '%(+)%' OR UPPER(tm.descripcion) LIKE '%POSITIVO%')
                             THEN m.cantidad
-                        
-                        -- ✅ SALIDAS: Solo ENTREGADO
                         WHEN UPPER(REPLACE(REPLACE(tm.descripcion, '  ', ' '), '  ', ' ')) = 'ENTREGADO'
                             THEN -m.cantidad
-                        
-                        -- ✅ REAJUSTES NEGATIVOS
                         WHEN UPPER(REPLACE(REPLACE(tm.descripcion, '  ', ' '), '  ', ' ')) LIKE '%REAJUSTE%' 
                             AND (UPPER(tm.descripcion) LIKE '%(-)%' OR UPPER(tm.descripcion) LIKE '%NEGATIVO%')
                             THEN -m.cantidad
-                        
-                        -- ❌ NO INCLUIR: SALIDA NIVEL INFERIOR, NO ENTREGADO, INVENTARIO INICIAL
                         ELSE 0
                     END
                 ) AS saldo
@@ -740,8 +741,8 @@ class ReporteCantidadSolicitada:
 
     def _obtener_existencia_fisica_batch(self, fecha_corte_dt, contexto, insumos_ids):
         """
-        ✅ NUEVO: Calcula EXISTENCIA FÍSICA de múltiples insumos
-        Existencia Física = Saldo Teórico - Salidas a Nivel Inferior
+        Calcula EXISTENCIA FÍSICA de múltiples insumos.
+        Ahora respeta el 'contexto' pasado (igual que _obtener_saldos_batch).
         """
         if not insumos_ids:
             return {}
@@ -752,7 +753,21 @@ class ReporteCantidadSolicitada:
         
         cur = conn.cursor(dictionary=True)
 
+        # Derivar nivel desde el contexto si está presente
         nivel_info = self._derivar_nivel_y_filtros()
+        if contexto:
+            if contexto.get('servicio'):
+                nivel_info = {'nivel': 'servicio', 'area': contexto.get('area'), 'distrito': contexto.get('distrito'),
+                            'tipo_servicio': contexto.get('tipo_servicio'), 'servicio': contexto.get('servicio')}
+            elif contexto.get('tipo_servicio'):
+                nivel_info = {'nivel': 'tipo_servicio', 'area': contexto.get('area'), 'distrito': contexto.get('distrito'),
+                            'tipo_servicio': contexto.get('tipo_servicio'), 'servicio': None}
+            elif contexto.get('distrito'):
+                nivel_info = {'nivel': 'distrito', 'area': contexto.get('area'), 'distrito': contexto.get('distrito'),
+                            'tipo_servicio': None, 'servicio': None}
+            elif contexto.get('area'):
+                nivel_info = {'nivel': 'area', 'area': contexto.get('area'), 'distrito': None,
+                            'tipo_servicio': None, 'servicio': None}
 
         where = [
             f"m.insumo_id IN ({','.join(['%s'] * len(insumos_ids))})",
@@ -760,18 +775,19 @@ class ReporteCantidadSolicitada:
         ]
         params = list(insumos_ids) + [fecha_corte_dt.strftime('%Y-%m-%d')]
 
-        if nivel_info['nivel'] == 'area' and nivel_info['area']:
+        if nivel_info.get('nivel') == 'area' and nivel_info.get('area'):
             where.append("a.nombre = %s")
             params.append(nivel_info['area'])
             where.append("m.distrito_id IS NULL")
-        elif nivel_info['nivel'] == 'distrito' and nivel_info['distrito']:
+        elif nivel_info.get('nivel') == 'distrito' and nivel_info.get('distrito'):
             where.append("d.nombre = %s")
             params.append(nivel_info['distrito'])
             where.append("m.servicio_id IS NULL")
-        elif nivel_info['nivel'] == 'servicio' and nivel_info.get('servicio'):
+        elif nivel_info.get('nivel') == 'servicio' and nivel_info.get('servicio'):
             where.append("s.nombre = %s")
             params.append(nivel_info['servicio'])
-        elif nivel_info['nivel'] == 'tipo_servicio' and nivel_info.get('tipo_servicio'):
+            where.append("m.tipo_servicio_id IS NULL")
+        elif nivel_info.get('nivel') == 'tipo_servicio' and nivel_info.get('tipo_servicio'):
             where.append("ts.nombre = %s")
             params.append(nivel_info['tipo_servicio'])
 
@@ -797,16 +813,13 @@ class ReporteCantidadSolicitada:
 
         where_sql = " AND ".join(where)
 
-        # ✅ CÁLCULO DE EXISTENCIA FÍSICA: Incluye TODAS las salidas
         sql = f"""
             SELECT
                 m.insumo_id,
                 SUM(
                     CASE
-                        -- ✅ ENTRADAS: Suman a la existencia
                         WHEN tm.descripcion IN ('ENTRADA NIVEL SUPERIOR', 'INVENTARIO INICIAL', 'REAJUSTE (+)')
                             THEN m.cantidad
-                        -- ✅ SALIDAS: Todas restan de la existencia física
                         WHEN tm.descripcion IN ('SALIDA NIVEL INFERIOR', 'ENTREGADO', 'REAJUSTE (-)')
                             THEN -m.cantidad
                         ELSE 0
@@ -829,7 +842,6 @@ class ReporteCantidadSolicitada:
         cur.close()
 
         return {r['insumo_id']: (r['existencia_fisica'] or 0) for r in rows}
-    
     def _get_conn(self):
         """Obtiene conexión a BD reutilizable"""
         try:
@@ -1336,6 +1348,235 @@ class ReporteCantidadSolicitada:
         
         return datos_procesados
     
+    def construir_matriz_cantidad_solicitar(self, movimientos_raw, fecha_ini, fecha_fin, todos_los_insumos):
+        """
+        Versión robusta que normaliza nombres de campo y unifica códigos/IDs.
+        Retorna (headers, rows).
+        """
+        from datetime import timedelta
+
+        # helper para aceptar varias claves posibles
+        def _get_field(m, *keys):
+            for k in keys:
+                v = m.get(k)
+                if v is not None and str(v).strip() != '':
+                    return str(v).strip()
+            return ''
+
+        def _to_float(val):
+            try:
+                if val is None:
+                    return 0.0
+                s = str(val).replace(',', '').strip()
+                return float(s) if s != '' else 0.0
+            except Exception:
+                try:
+                    return float(str(val).replace('.', '').replace(',', '.'))
+                except Exception:
+                    return 0.0
+
+        nivel_info = self._derivar_nivel_y_filtros()
+        nivel = nivel_info.get('nivel')
+
+        # obtener códigos formateados (id -> codigo)
+        try:
+            codigo_por_id = self.generar_codigo_insumo(movimientos_raw) or {}
+        except Exception:
+            codigo_por_id = {}
+
+        headers = ['Código', 'Descripción del Insumo']
+        filas_map = {}  # codigo_formateado -> {'descripcion':..., 'valores': {subnivel: float}}
+        subniveles = []
+
+        # Determinar subniveles con tolerancia a claves alternas
+        if nivel == 'area' and (self.combo_area.get() or '').strip():
+            # preferir orden y lista desde self.distritos (mantenemos orden de BD)
+            if getattr(self, 'distritos', None):
+                subniveles = [d.get('nombre') for d in self.distritos if d.get('nombre')]
+            else:
+                subs = { _get_field(m, 'distrito_nombre', 'distrito', 'distrito_name') for m in movimientos_raw }
+                subniveles = sorted([s for s in subs if s])
+        elif nivel == 'distrito' and (self.combo_distrito.get() or '').strip():
+            subs = { _get_field(m, 'servicio_nombre', 'servicio', 'servicio_name') for m in movimientos_raw }
+            subniveles = sorted([s for s in subs if s])
+        else:
+            # si no hay subniveles detectados, construimos tabla simple (Código, Descripción, Cantidad a Solicitar)
+            headers.append('Cantidad a Solicitar')
+            rows = []
+            for mov in (self.movimientos_data or []):
+                codigo = mov.get('codigo_insumo') or mov.get('insumo_id') or ''
+                descripcion = mov.get('nombre_insumo', '')
+                cantidad = _to_float(mov.get('cantidad_solicitar', 0))
+                rows.append([str(codigo), descripcion, f"{cantidad:.2f}"])
+            return headers, rows
+
+        # eliminar vacíos y mantener orden estable
+        subniveles = [s for s in subniveles if s]
+        if not subniveles:
+            headers.append('Cantidad a Solicitar')
+            rows = []
+            for mov in (self.movimientos_data or []):
+                codigo = mov.get('codigo_insumo') or mov.get('insumo_id') or ''
+                descripcion = mov.get('nombre_insumo', '')
+                cantidad = _to_float(mov.get('cantidad_solicitar', 0))
+                rows.append([str(codigo), descripcion, f"{cantidad:.2f}"])
+            return headers, rows
+
+        headers.extend(subniveles)
+
+        # construir conjunto de códigos base unificando formatos
+        codigos_base = set()
+        # Si tenemos movimientos_data (resultado procesado) preferimos sus códigos formateados y descripciones
+        if self.movimientos_data:
+            for m in self.movimientos_data:
+                c = m.get('codigo_insumo') or m.get('insumo_id')
+                if c is None:
+                    continue
+                cc = str(c)
+                codigos_base.add(cc)
+                filas_map.setdefault(cc, {'descripcion': m.get('nombre_insumo', ''), 'valores': {}})
+        else:
+            # usamos movimientos_raw y el mapping id->codigo
+            for m in movimientos_raw:
+                iid = m.get('codigo_insumo') or m.get('insumo_id')
+                if iid is None:
+                    continue
+                # si iid ya es un código formateado (string con guión) lo usamos tal cual,
+                # si es id numérico lo convertimos vía codigo_por_id.
+                codigo = None
+                try:
+                    # si es int-like y existe en codigo_por_id
+                    if isinstance(iid, int) or (isinstance(iid, str) and iid.isdigit()):
+                        codigo = codigo_por_id.get(int(iid)) if int(str(iid)) in codigo_por_id else None
+                    # si no, usar tal cual
+                    if not codigo:
+                        codigo = str(iid)
+                except Exception:
+                    codigo = str(iid)
+                codigos_base.add(str(codigo))
+                filas_map.setdefault(str(codigo), {'descripcion': m.get('nombre_insumo', ''), 'valores': {}})
+
+        # backups de estados que modificaremos
+        _saldo_backup = getattr(self, 'saldo_anterior_por_insumo', {}).copy() if hasattr(self, 'saldo_anterior_por_insumo') else {}
+        _exist_backup = getattr(self, 'existencia_fisica_anterior_por_insumo', {}).copy() if hasattr(self, 'existencia_fisica_anterior_por_insumo') else {}
+        combo_backup = {
+            'area': self.combo_area.get(),
+            'distrito': self.combo_distrito.get(),
+            'tipo_servicio': self.combo_tipo_servicio.get(),
+            'servicio': self.combo_servicio.get()
+        }
+
+        try:
+            for sub in subniveles:
+                # construir contexto local robusto
+                contexto_local = {
+                    'area': (self.combo_area.get() or '').strip() or None,
+                    'distrito': None,
+                    'tipo_servicio': None,
+                    'servicio': None,
+                    'presentacion': (self.combo_presentacion.get() or '').strip() or None,
+                    'tipo_insumo': (self.combo_tipo_insumo.get() or '').strip() or None,
+                    'insumo': (self.combo_insumo.get() or '').strip() or None
+                }
+                if nivel == 'area':
+                    contexto_local['distrito'] = sub
+                else:  # nivel == 'distrito'
+                    contexto_local['distrito'] = (self.combo_distrito.get() or '').strip() or None
+                    contexto_local['servicio'] = sub
+
+                fecha_corte_anterior = fecha_ini - timedelta(days=1)
+
+                # obtener saldos/existencias para este subnivel
+                try:
+                    saldos_local = self._obtener_saldos_batch(fecha_corte_anterior, contexto_local, list(todos_los_insumos))
+                except Exception:
+                    saldos_local = {}
+                try:
+                    existencia_local = self._obtener_existencia_fisica_batch(fecha_corte_anterior, contexto_local, list(todos_los_insumos))
+                except Exception:
+                    existencia_local = {}
+
+                # filtrar movimientos_raw por subnivel usando claves tolerantes
+                if nivel == 'area':
+                    movs_filtrados = [m for m in movimientos_raw if _get_field(m, 'distrito_nombre', 'distrito', 'distrito_name') == sub]
+                else:
+                    movs_filtrados = [m for m in movimientos_raw if _get_field(m, 'servicio_nombre', 'servicio', 'servicio_name') == sub]
+
+                # establecer estados temporales para que procesar_datos use el contexto correcto
+                self.saldo_anterior_por_insumo = saldos_local
+                self.existencia_fisica_anterior_por_insumo = existencia_local
+
+                # ajustar combos (por compatibilidad con otras funciones que lean combos)
+                try:
+                    if nivel == 'area':
+                        self.combo_distrito.set(sub)
+                    else:
+                        self.combo_servicio.set(sub)
+                except Exception:
+                    pass
+
+                # procesar los datos solo para este subnivel
+                try:
+                    datos_proc = self.procesar_datos_cantidad_solicitada(movs_filtrados, fecha_ini, fecha_fin, list(todos_los_insumos)) or []
+                except Exception:
+                    datos_proc = []
+
+                # mapear resultados: soportar que procesar_datos devuelva codigo formateado o insumo_id
+                mapa_sub = {}
+                for item in datos_proc:
+                    codigo_item = item.get('codigo_insumo') or item.get('insumo_id')
+                    # si codigo_item es id numérico intentar traducir a codigo formateado
+                    if codigo_item is None:
+                        continue
+                    codigo_str = str(codigo_item)
+                    # si es un id numérico y existe en codigo_por_id, tomar el código formateado
+                    try:
+                        if codigo_str.isdigit():
+                            iid = int(codigo_str)
+                            codigo_form = codigo_por_id.get(iid) or codigo_str
+                        else:
+                            codigo_form = codigo_str
+                    except Exception:
+                        codigo_form = codigo_str
+
+                    cantidad = _to_float(item.get('cantidad_solicitar', 0))
+                    mapa_sub[codigo_form] = cantidad
+
+                    # registrar descripción si está vacía
+                    if filas_map.get(codigo_form, {}).get('descripcion') in (None, ''):
+                        filas_map.setdefault(codigo_form, {'descripcion': item.get('nombre_insumo', ''), 'valores': {}})
+                    codigos_base.add(codigo_form)
+
+                # asegurar que cada código tenga un valor para este subnivel
+                for codigo in list(codigos_base):
+                    filas_map.setdefault(codigo, {'descripcion': filas_map.get(codigo, {}).get('descripcion', ''), 'valores': {}})
+                    filas_map[codigo]['valores'][sub] = mapa_sub.get(codigo, 0.0)
+
+        finally:
+            # restaurar estados originales
+            self.saldo_anterior_por_insumo = _saldo_backup
+            self.existencia_fisica_anterior_por_insumo = _exist_backup
+            try:
+                self.combo_area.set(combo_backup['area'])
+                self.combo_distrito.set(combo_backup['distrito'])
+                self.combo_tipo_servicio.set(combo_backup['tipo_servicio'])
+                self.combo_servicio.set(combo_backup['servicio'])
+            except Exception:
+                pass
+
+        # construir filas ordenadas por código (mantener orden alfanumérico estable)
+        rows = []
+        for codigo in sorted(filas_map.keys(), key=lambda x: str(x)):
+            info = filas_map[codigo]
+            descripcion = info.get('descripcion', '')
+            row = [codigo, descripcion]
+            for sub in subniveles:
+                val = info['valores'].get(sub, 0.0)
+                row.append(f"{val:.2f}")
+            rows.append(row)
+
+        return headers, rows
+
     def calcular_promedio_demanda_real(self, insumo_ids, fecha_ini, fecha_fin):
         """
         Calcula promedio mensual de demanda real sobre 3 periodos logísticos:
@@ -2088,6 +2329,14 @@ class ReporteCantidadSolicitada:
             # 1. Saldo Teórico (para columna "Saldo Anterior" y "Saldo Mes Siguiente")
             # 2. Existencia Física (para cálculo interno de stock disponible)
 
+            # --------------------------
+            # Guardar inputs del último cálculo para uso en PDF/Excel dinámico
+            self._last_movimientos_raw = movimientos_raw
+            self._last_fecha_ini = fecha_ini
+            self._last_fecha_fin = fecha_fin
+            self._last_todos_insumos = list(todos_los_insumos)
+            # --------------------------
+            
             # Saldo Teórico = Saldo Mes Siguiente del mes anterior (sin salidas a nivel inferior)
             self.saldo_anterior_por_insumo = self._obtener_saldos_batch(
                 fecha_corte_anterior,
@@ -2099,14 +2348,6 @@ class ReporteCantidadSolicitada:
             self.existencia_fisica_anterior_por_insumo = self._obtener_existencia_fisica_batch(
                 fecha_corte_anterior,
                 contexto, 
-                list(todos_los_insumos)
-            )
-
-            # ✅ AHORA SÍ procesar datos (con ambos saldos calculados)
-            self.movimientos_data = self.procesar_datos_cantidad_solicitada(
-                movimientos_raw, 
-                fecha_ini, 
-                fecha_fin, 
                 list(todos_los_insumos)
             )
 
@@ -2567,42 +2808,97 @@ class ReporteCantidadSolicitada:
             elements.append(table_filtros)
             elements.append(Spacer(1, 24))
 
-            headers = [
-                'Código',
-                'Descripción\ndel Insumo',
-                'Saldo\nAnterior',
-                'Entradas\nNivel\nSuperior',
-                'Entregado\na Usuario',
-                'No\nEntregado',
-                'Demanda',
-                'Reajustes\n(+) (-)',
-                'Saldo Mes\nSiguiente',
-                'Existencia\nFísica',
-                'Promedio\nMensual\nDemanda Real',
-                'Meses\nExistencia\nDisponible',
-                'Cantidad\nMáxima',
-                'Cantidad a\nSolicitar'
-            ]
+            # --- Construir tabla dinámica: Código, Descripción, <subniveles> (Cantidad a Solicitar) ---
+            try:
+                # Usar los datos guardados en generar_vista_previa
+                movimientos_raw = getattr(self, '_last_movimientos_raw', None)
+                fecha_ini_local = getattr(self, '_last_fecha_ini', None)
+                fecha_fin_local = getattr(self, '_last_fecha_fin', None)
+                todos_insumos_local = getattr(self, '_last_todos_insumos', None)
 
-            data = [headers]
-            for mov in self.movimientos_data:
-                row = [
-                    mov.get('codigo_insumo', ''),
-                    self.dividir_texto_en_lineas(mov.get('nombre_insumo', ''), 30),
-                    mov.get('saldo_anterior', ''),
-                    mov.get('entradas_nivel_superior', ''),
-                    mov.get('entregado_usuario', ''),
-                    mov.get('no_entregado', ''),
-                    mov.get('demanda', ''),
-                    mov.get('reajustes', ''),
-                    mov.get('saldo_mes_siguiente', ''),
-                    mov.get('existencia_fisica', ''),
-                    mov.get('promedio_mensual', ''),
-                    mov.get('meses_existencia', ''),
-                    mov.get('cantidad_maxima', ''),
-                    mov.get('cantidad_solicitar', '')
+                if movimientos_raw and fecha_ini_local and fecha_fin_local and todos_insumos_local:
+                    headers, rows = self.construir_matriz_cantidad_solicitar(
+                        movimientos_raw, fecha_ini_local, fecha_fin_local, todos_insumos_local
+                    )
+                    # Construir "data" compatible con ReportLab
+                    data = [headers]
+                    for r in rows:
+                        data.append(r)
+                else:
+                    # Fallback: usar la tabla completa original si faltan datos
+                    headers = [
+                        'Código',
+                        'Descripción\ndel Insumo',
+                        'Saldo\nAnterior',
+                        'Entradas\nNivel\nSuperior',
+                        'Entregado\na Usuario',
+                        'No\nEntregado',
+                        'Demanda',
+                        'Reajustes\n(+) (-)',
+                        'Saldo Mes\nSiguiente',
+                        'Existencia\nFísica',
+                        'Promedio\nMensual\nDemanda Real',
+                        'Meses\nExistencia\nDisponible',
+                        'Cantidad\nMáxima',
+                        'Cantidad a\nSolicitar'
+                    ]
+                    data = [headers]
+                    for mov in self.movimientos_data:
+                        row = [
+                            mov.get('codigo_insumo', ''),
+                            self.dividir_texto_en_lineas(mov.get('nombre_insumo', ''), 30),
+                            mov.get('saldo_anterior', ''),
+                            mov.get('entradas_nivel_superior', ''),
+                            mov.get('entregado_usuario', ''),
+                            mov.get('no_entregado', ''),
+                            mov.get('demanda', ''),
+                            mov.get('reajustes', ''),
+                            mov.get('saldo_mes_siguiente', ''),
+                            mov.get('existencia_fisica', ''),
+                            mov.get('promedio_mensual', ''),
+                            mov.get('meses_existencia', ''),
+                            mov.get('cantidad_maxima', ''),
+                            mov.get('cantidad_solicitar', '')
+                        ]
+                        data.append(row)
+            except Exception:
+                # si algo falla, construir tabla original para no romper la generación
+                data = []
+                headers = [
+                    'Código',
+                    'Descripción\ndel Insumo',
+                    'Saldo\nAnterior',
+                    'Entradas\nNivel\nSuperior',
+                    'Entregado\na Usuario',
+                    'No\nEntregado',
+                    'Demanda',
+                    'Reajustes\n(+) (-)',
+                    'Saldo Mes\nSiguiente',
+                    'Existencia\nFísica',
+                    'Promedio\nMensual\nDemanda Real',
+                    'Meses\nExistencia\nDisponible',
+                    'Cantidad\nMáxima',
+                    'Cantidad a\nSolicitar'
                 ]
-                data.append(row)
+                data = [headers]
+                for mov in self.movimientos_data:
+                    row = [
+                        mov.get('codigo_insumo', ''),
+                        self.dividir_texto_en_lineas(mov.get('nombre_insumo', ''), 30),
+                        mov.get('saldo_anterior', ''),
+                        mov.get('entradas_nivel_superior', ''),
+                        mov.get('entregado_usuario', ''),
+                        mov.get('no_entregado', ''),
+                        mov.get('demanda', ''),
+                        mov.get('reajustes', ''),
+                        mov.get('saldo_mes_siguiente', ''),
+                        mov.get('existencia_fisica', ''),
+                        mov.get('promedio_mensual', ''),
+                        mov.get('meses_existencia', ''),
+                        mov.get('cantidad_maxima', ''),
+                        mov.get('cantidad_solicitar', '')
+                    ]
+                    data.append(row)
 
             colWidths = [
                 0.7*inch,
@@ -2666,19 +2962,32 @@ class ReporteCantidadSolicitada:
             with pd.ExcelWriter(full_path, engine='xlsxwriter') as writer:
                 workbook = writer.book
 
-                columnas = [
-                    'codigo_insumo', 'nombre_insumo', 'saldo_anterior', 'entradas_nivel_superior',
-                    'entregado_usuario', 'no_entregado', 'demanda', 'reajustes',
-                    'saldo_mes_siguiente', 'existencia_fisica', 'promedio_mensual',
-                    'meses_existencia', 'cantidad_maxima', 'cantidad_solicitar'
-                ]
-                encabezados = [
-                    'Código', 'Descripción\ndel Insumo', 'Saldo\nAnterior', 'Entradas\nNivel\nSuperior',
-                    'Entregado\na Usuario', 'No\nEntregado', 'Demanda', 'Reajustes\n(+) (-)',
-                    'Saldo Mes\nSiguiente', 'Existencia\nFísica', 'Promedio\nMensual\nDemanda Real',
-                    'Meses\nExistencia\nDisponible', 'Cantidad\nMáxima', 'Cantidad a\nSolicitar'
-                ]
-                col_widths = [10, 30, 10, 12, 12, 10, 10, 12, 12, 12, 18, 18, 12, 12]
+                # Construir matriz dinámica para Excel igual que para PDF
+                movimientos_raw = getattr(self, '_last_movimientos_raw', None)
+                fecha_ini_local = getattr(self, '_last_fecha_ini', None)
+                fecha_fin_local = getattr(self, '_last_fecha_fin', None)
+                todos_insumos_local = getattr(self, '_last_todos_insumos', None)
+
+                if movimientos_raw and fecha_ini_local and fecha_fin_local and todos_insumos_local:
+                    headers, rows = self.construir_matriz_cantidad_solicitar(
+                        movimientos_raw, fecha_ini_local, fecha_fin_local, todos_insumos_local
+                    )
+                    # Crear DataFrame directamente desde rows y headers
+                    df = pd.DataFrame(rows, columns=headers)
+                else:
+                    # fallback al comportamiento original
+                    columnas = [
+                        'codigo_insumo', 'nombre_insumo', 'saldo_anterior', 'entradas_nivel_superior',
+                        'entregado_usuario', 'no_entregado', 'demanda', 'reajustes',
+                        'saldo_mes_siguiente', 'existencia_fisica', 'promedio_mensual',
+                        'meses_existencia', 'cantidad_maxima', 'cantidad_solicitar'
+                    ]
+                    encabezados = [
+                        'Código', 'Descripción\ndel Insumo', 'Saldo\nAnterior', 'Entradas\nNivel\nSuperior',
+                        'Entregado\na Usuario', 'No\nEntregado', 'Demanda', 'Reajustes\n(+) (-)',
+                        'Saldo Mes\nSiguiente', 'Existencia\nFísica', 'Promedio\nMensual\nDemanda Real',
+                        'Meses\nExistencia\nDisponible', 'Cantidad\nMáxima', 'Cantidad a\nSolicitar'
+                    ]
 
                 for hoja_num in range(0, total_movimientos, filas_por_hoja):
                     nombre_hoja = f"Cantidad Solicitada_{hoja_num // filas_por_hoja + 1}"
@@ -2760,7 +3069,7 @@ class ReporteCantidadSolicitada:
 
                     for col_num, header in enumerate(encabezados):
                         worksheet.write(fila_inicio - 1, col_num, header, header_format)
-                        worksheet.set_column(col_num, col_num, col_widths[col_num])
+                        worksheet.set_column(col_num, col_num, col_widths[col_num])  # noqa: F821
 
                     for row_offset, row_data in enumerate(df.values):
                         for col_num, cell_value in enumerate(row_data):
