@@ -2330,34 +2330,40 @@ def asignar_prefijos_tipos_insumo():
             conn.close()
     return False
 
-def obtener_movimientos_cantidad_solicitada(fecha_inicio, fecha_fin, area_nombre=None, distrito_nombre=None, tipo_servicio_desc=None,
-    servicio_nombre=None, tipo_insumo_desc=None, insumo_nombre=None,
-    presentacion_nombre=None):
+def obtener_movimientos_cantidad_solicitada(
+    fecha_inicio, fecha_fin,
+    area_nombre=None, distrito_nombre=None,
+    tipo_servicio_desc=None, servicio_nombre=None,
+    servicio_id=None,  # <-- nuevo parámetro opcional
+    tipo_insumo_desc=None, insumo_nombre=None,
+    presentacion_nombre=None
+):
     conn = conectar_db()
     if not conn:
         return []
 
+    cursor = None
     try:
         cursor = conn.cursor(dictionary=True, buffered=True)
 
         query = """
         SELECT
-        m.fecha_registro AS fecha,
-        m.referencia,
-        tm.descripcion AS tipo_movimiento,
-        m.cantidad,
-        m.lote,
-        m.fecha_vencimiento,
-        m.observaciones,
-        d_salida.nombre AS distrito_destino,
-        s_salida.nombre AS servicio_destino,
-        i.nombre AS nombre_insumo,
-        i.id AS codigo_insumo,
-        COALESCE(p.nombre, '') AS presentacion,
-        a.nombre AS area_nombre,
-        d.nombre AS distrito_nombre,
-        ts.descripcion AS tipo_servicio_descripcion,
-        s.nombre AS servicio_nombre
+            m.fecha_registro AS fecha,
+            m.referencia,
+            tm.descripcion AS tipo_movimiento,
+            m.cantidad,
+            m.lote,
+            m.fecha_vencimiento,
+            m.observaciones,
+            d_salida.nombre AS distrito_destino,
+            s_salida.nombre AS servicio_destino,
+            i.nombre AS nombre_insumo,
+            i.id AS codigo_insumo,
+            COALESCE(p.nombre, '') AS presentacion,
+            a.nombre AS area_nombre,
+            d.nombre AS distrito_nombre,
+            ts.descripcion AS tipo_servicio_descripcion,
+            s.nombre AS servicio_nombre
         FROM movimiento m
         JOIN tipo_movimiento tm ON m.tipo_movimiento_id = tm.id
         LEFT JOIN insumo i ON m.insumo_id = i.id
@@ -2377,49 +2383,50 @@ def obtener_movimientos_cantidad_solicitada(fecha_inicio, fecha_fin, area_nombre
 
         params = [fecha_inicio, fecha_fin]
 
-        # **LÓGICA DE FILTRADO MEJORADA PARA CONSOLIDACIÓN**
-        if servicio_nombre:
-            # Nivel SERVICIO: solo movimientos del servicio específico
+        # FILTRADO POR SERVICIO: usar servicio_id primero si está disponible (más preciso)
+        if servicio_id:
+            query += " AND m.servicio_id = %s"
+            params.append(servicio_id)
+        elif servicio_nombre:
+            # Nivel SERVICIO por nombre
             query += " AND s.nombre = %s"
             params.append(servicio_nombre)
 
+        # Si no se especificó servicio_id/nombre, aplicar otros niveles
         elif tipo_servicio_desc:
-            # Nivel TIPO SERVICIO: todos los servicios del tipo
             query += " AND ts.descripcion = %s"
             params.append(tipo_servicio_desc)
 
         elif distrito_nombre:
-            # Nivel DISTRITO: incluir movimientos del distrito Y de todos sus servicios
             query += """ AND (
-            d.nombre = %s OR 
-            s.id IN (
-            SELECT serv.id 
-            FROM servicio serv 
-            INNER JOIN tipo_servicio ts_inner ON serv.id_tipo_servicio = ts_inner.id 
-            INNER JOIN distrito d_inner ON ts_inner.id_distrito = d_inner.id 
-            WHERE d_inner.nombre = %s
-            )
+                d.nombre = %s OR 
+                s.id IN (
+                    SELECT serv.id 
+                    FROM servicio serv 
+                    INNER JOIN tipo_servicio ts_inner ON serv.id_tipo_servicio = ts_inner.id 
+                    INNER JOIN distrito d_inner ON ts_inner.id_distrito = d_inner.id 
+                    WHERE d_inner.nombre = %s
+                )
             )"""
             params.extend([distrito_nombre, distrito_nombre])
 
         elif area_nombre:
-            # Nivel ÁREA: incluir movimientos del área Y de todos sus distritos Y servicios
             query += """ AND (
-            a.nombre = %s OR 
-            d.id IN (
-            SELECT dist.id 
-            FROM distrito dist 
-            INNER JOIN area a_inner ON dist.id_area = a_inner.id 
-            WHERE a_inner.nombre = %s
-            ) OR
-            s.id IN (
-            SELECT serv.id 
-            FROM servicio serv 
-            INNER JOIN tipo_servicio ts_inner ON serv.id_tipo_servicio = ts_inner.id 
-            INNER JOIN distrito d_inner ON ts_inner.id_distrito = d_inner.id 
-            INNER JOIN area a_inner ON d_inner.id_area = a_inner.id 
-            WHERE a_inner.nombre = %s
-            )
+                a.nombre = %s OR 
+                d.id IN (
+                    SELECT dist.id 
+                    FROM distrito dist 
+                    INNER JOIN area a_inner ON dist.id_area = a_inner.id 
+                    WHERE a_inner.nombre = %s
+                ) OR
+                s.id IN (
+                    SELECT serv.id 
+                    FROM servicio serv 
+                    INNER JOIN tipo_servicio ts_inner ON serv.id_tipo_servicio = ts_inner.id 
+                    INNER JOIN distrito d_inner ON ts_inner.id_distrito = d_inner.id 
+                    INNER JOIN area a_inner ON d_inner.id_area = a_inner.id 
+                    WHERE a_inner.nombre = %s
+                )
             )"""
             params.extend([area_nombre, area_nombre, area_nombre])
 
@@ -2433,7 +2440,6 @@ def obtener_movimientos_cantidad_solicitada(fecha_inicio, fecha_fin, area_nombre
             params.append(insumo_nombre)
 
         if presentacion_nombre:
-            # Buscar la presentación en la tabla intermedia
             query += " AND p.nombre = %s"
             params.append(presentacion_nombre)
 
@@ -2445,22 +2451,22 @@ def obtener_movimientos_cantidad_solicitada(fecha_inicio, fecha_fin, area_nombre
         movimientos = []
         for row in resultados:
             movimientos.append({
-            'fecha': row['fecha'],
-            'referencia': row['referencia'],
-            'tipo_movimiento': row['tipo_movimiento'],
-            'cantidad': float(row['cantidad']) if row['cantidad'] else 0,
-            'lote': row['lote'],
-            'fecha_vencimiento': row['fecha_vencimiento'],
-            'observaciones': row['observaciones'],
-            'distrito_destino': row['distrito_destino'],
-            'servicio_destino': row['servicio_destino'],
-            'nombre_insumo': row['nombre_insumo'],
-            'codigo_insumo': row['codigo_insumo'],
-            'presentacion': row['presentacion'],
-            'area_nombre': row['area_nombre'],
-            'distrito_nombre': row['distrito_nombre'],
-            'tipo_servicio_descripcion': row['tipo_servicio_descripcion'],
-            'servicio_nombre': row['servicio_nombre']
+                'fecha': row['fecha'],
+                'referencia': row['referencia'],
+                'tipo_movimiento': row['tipo_movimiento'],
+                'cantidad': float(row['cantidad']) if row['cantidad'] else 0,
+                'lote': row['lote'],
+                'fecha_vencimiento': row['fecha_vencimiento'],
+                'observaciones': row['observaciones'],
+                'distrito_destino': row['distrito_destino'],
+                'servicio_destino': row['servicio_destino'],
+                'nombre_insumo': row['nombre_insumo'],
+                'codigo_insumo': row['codigo_insumo'],
+                'presentacion': row['presentacion'],
+                'area_nombre': row['area_nombre'],
+                'distrito_nombre': row['distrito_nombre'],
+                'tipo_servicio_descripcion': row['tipo_servicio_descripcion'],
+                'servicio_nombre': row['servicio_nombre']
             })
 
         return movimientos
@@ -2471,5 +2477,13 @@ def obtener_movimientos_cantidad_solicitada(fecha_inicio, fecha_fin, area_nombre
         traceback.print_exc()
         return []
     finally:
-        cursor.close()
-        conn.close()
+        try:
+            if cursor:
+                cursor.close()
+        except Exception:
+            pass
+        try:
+            if conn:
+                conn.close()
+        except Exception:
+            pass

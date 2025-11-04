@@ -2221,14 +2221,6 @@ class ReporteBres:
                 list(todos_los_insumos)
             )
 
-            # ✅ AHORA SÍ procesar datos (con ambos saldos calculados)
-            self.movimientos_data = self.procesar_datos_bres(
-                movimientos_raw, 
-                fecha_ini, 
-                fecha_fin, 
-                list(todos_los_insumos)
-            )
-
             # ✅ AHORA SÍ procesar datos (con existencia física ya calculada)
             self.movimientos_data = self.procesar_datos_bres(
                 movimientos_raw, 
