@@ -5,11 +5,6 @@ import pandas as pd
 import sys
 import os
 
-# Agregar el directorio raíz del proyecto al PATH de Python
-project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-if project_root not in sys.path:
-    sys.path.append(project_root)
-
 from src.database.db_manager import (
     agregar_area,
     obtener_areas,
@@ -28,6 +23,11 @@ from src.database.db_manager import (
     eliminar_tipo_servicio,
     eliminar_servicio
 )
+
+# Agregar el directorio raíz del proyecto al PATH de Python
+project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+if project_root not in sys.path:
+    sys.path.append(project_root)
 
 class GestionServicios:
     def __init__(self, parent_frame, main_window):
@@ -1113,6 +1113,9 @@ class GestionServicios:
             ventana.destroy()
             messagebox.showinfo("Éxito", "Servicio actualizado correctamente")
 
+        # <-- AQUÍ se crean los botones que faltaban
+        self._dialog_buttons(container['buttons'], guardar, ventana.destroy)
+
     def eliminar_servicio(self):
         selected = self.tree_servicios.selection()
         if not selected:
@@ -1162,7 +1165,7 @@ class GestionServicios:
             ventana.configure(bg=self.COLORS['light'])
         except Exception:
             pass
-        ventana.geometry("420x320")
+        ventana.geometry("420x420")
         self.centrar_ventana(ventana)
 
     def _dialog_container(self, ventana, title_text, subtitle_text):

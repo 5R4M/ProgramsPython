@@ -5,10 +5,6 @@ import pandas as pd
 import os
 import sys
 
-# Agregar el directorio raíz del proyecto al PATH de Python
-project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-sys.path.append(project_root)
-
 from src.database.db_manager import (
     obtener_tipos_insumo,
     obtener_presentaciones,
@@ -31,6 +27,10 @@ from src.database import (
     verificar_tablas,
     crear_base_datos
 )
+
+# Agregar el directorio raíz del proyecto al PATH de Python
+project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+sys.path.append(project_root)
 
 def resource_path(relative_path):
     if getattr(sys, 'frozen', False):
@@ -817,7 +817,7 @@ class GestionInsumos:
             ventana.configure(bg=self.COLORS['light'])
         except Exception:
             pass
-        ventana.geometry("420x260")
+        ventana.geometry("420x320")
         self.centrar_ventana(ventana)
 
     def _dialog_container(self, ventana, title_text, subtitle_text):
