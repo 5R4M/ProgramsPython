@@ -575,13 +575,17 @@ class ReporteBres:
             where.append("d.nombre = %s")
             params.append(nivel_info['distrito'])
             where.append("m.servicio_id IS NULL")
-        elif nivel_info['nivel'] == 'servicio' and nivel_info.get('servicio'):
-            where.append("s.nombre = %s")
-            params.append(nivel_info['servicio'])
+        elif nivel_info['nivel'] == 'servicio':
+            if nivel_info.get('servicio_id'):
+                where.append("s.id = %s")
+                params.append(nivel_info['servicio_id'])
+            elif nivel_info.get('servicio'):
+                where.append("s.nombre = %s")
+                params.append(nivel_info['servicio'])
         elif nivel_info['nivel'] == 'tipo_servicio' and nivel_info.get('tipo_servicio'):
             where.append("ts.nombre = %s")
             params.append(nivel_info['tipo_servicio'])
-
+        
         # Filtros por insumo
         if contexto.get('tipo_insumo'):
             where.append("ti.descripcion = %s")
@@ -660,6 +664,9 @@ class ReporteBres:
             where.append("d.nombre = %s")
             params.append(nivel_info['distrito'])
             where.append("m.servicio_id IS NULL")
+        if nivel_info['nivel'] == 'servicio' and nivel_info.get('servicio_id'):
+            where.append("s.id = %s")
+            params.append(nivel_info['servicio_id'])
         elif nivel_info['nivel'] == 'servicio' and nivel_info.get('servicio'):
             where.append("s.nombre = %s")
             params.append(nivel_info['servicio'])
@@ -768,9 +775,13 @@ class ReporteBres:
             where.append("d.nombre = %s")
             params.append(nivel_info['distrito'])
             where.append("m.servicio_id IS NULL")
-        elif nivel_info['nivel'] == 'servicio' and nivel_info.get('servicio'):
-            where.append("s.nombre = %s")
-            params.append(nivel_info['servicio'])
+        elif nivel_info['nivel'] == 'servicio':
+            if nivel_info.get('servicio_id'):
+                where.append("s.id = %s")
+                params.append(nivel_info['servicio_id'])
+            elif nivel_info.get('servicio'):
+                where.append("s.nombre = %s")
+                params.append(nivel_info['servicio'])
         elif nivel_info['nivel'] == 'tipo_servicio' and nivel_info.get('tipo_servicio'):
             where.append("ts.nombre = %s")
             params.append(nivel_info['tipo_servicio'])
@@ -797,32 +808,60 @@ class ReporteBres:
 
         where_sql = " AND ".join(where)
 
-        # ✅ CÁLCULO DE EXISTENCIA FÍSICA: Incluye TODAS las salidas
-        sql = f"""
-            SELECT
-                m.insumo_id,
-                SUM(
-                    CASE
-                        -- ✅ ENTRADAS: Suman a la existencia
-                        WHEN tm.descripcion IN ('ENTRADA NIVEL SUPERIOR', 'INVENTARIO INICIAL', 'REAJUSTE (+)')
-                            THEN m.cantidad
-                        -- ✅ SALIDAS: Todas restan de la existencia física
-                        WHEN tm.descripcion IN ('SALIDA NIVEL INFERIOR', 'ENTREGADO', 'REAJUSTE (-)')
-                            THEN -m.cantidad
-                        ELSE 0
-                    END
-                ) AS existencia_fisica
-            FROM movimiento m
-            JOIN insumo i ON i.id = m.insumo_id
-            JOIN tipo_insumo ti ON ti.id = i.id_tipo_insumo
-            JOIN tipo_movimiento tm ON tm.id = m.tipo_movimiento_id
-            LEFT JOIN area a ON a.id = m.area_id
-            LEFT JOIN distrito d ON d.id = m.distrito_id
-            LEFT JOIN servicio s ON s.id = m.servicio_id
-            LEFT JOIN tipo_servicio ts ON ts.id = s.id_tipo_servicio
-            WHERE {where_sql}
-            GROUP BY m.insumo_id
-        """
+        # ⭐ En nivel SERVICIO, Existencia Física = Saldo Teórico (no hay salidas a nivel inferior)
+        # Determinar si estamos en nivel servicio
+        es_nivel_servicio = nivel_info['nivel'] == 'servicio'
+
+        if es_nivel_servicio:
+            # SERVICIO: Existencia Física = Saldo Teórico (sin ENTREGADO ni SALIDA NIVEL INFERIOR)
+            sql = f"""
+                SELECT
+                    m.insumo_id,
+                    SUM(
+                        CASE
+                            WHEN tm.descripcion IN ('ENTRADA NIVEL SUPERIOR', 'INVENTARIO INICIAL', 'REAJUSTE (+)')
+                                THEN m.cantidad
+                            WHEN tm.descripcion IN ('REAJUSTE (-)')
+                                THEN -m.cantidad
+                            ELSE 0
+                        END
+                    ) AS existencia_fisica
+                FROM movimiento m
+                JOIN insumo i ON i.id = m.insumo_id
+                JOIN tipo_insumo ti ON ti.id = i.id_tipo_insumo
+                JOIN tipo_movimiento tm ON tm.id = m.tipo_movimiento_id
+                LEFT JOIN area a ON a.id = m.area_id
+                LEFT JOIN distrito d ON d.id = m.distrito_id
+                LEFT JOIN servicio s ON s.id = m.servicio_id
+                LEFT JOIN tipo_servicio ts ON ts.id = s.id_tipo_servicio
+                WHERE {where_sql}
+                GROUP BY m.insumo_id
+            """
+        else:
+            # ÁREA/DISTRITO: Incluir todas las salidas
+            sql = f"""
+                SELECT
+                    m.insumo_id,
+                    SUM(
+                        CASE
+                            WHEN tm.descripcion IN ('ENTRADA NIVEL SUPERIOR', 'INVENTARIO INICIAL', 'REAJUSTE (+)')
+                                THEN m.cantidad
+                            WHEN tm.descripcion IN ('SALIDA NIVEL INFERIOR', 'ENTREGADO', 'REAJUSTE (-)')
+                                THEN -m.cantidad
+                            ELSE 0
+                        END
+                    ) AS existencia_fisica
+                FROM movimiento m
+                JOIN insumo i ON i.id = m.insumo_id
+                JOIN tipo_insumo ti ON ti.id = i.id_tipo_insumo
+                JOIN tipo_movimiento tm ON tm.id = m.tipo_movimiento_id
+                LEFT JOIN area a ON a.id = m.area_id
+                LEFT JOIN distrito d ON d.id = m.distrito_id
+                LEFT JOIN servicio s ON s.id = m.servicio_id
+                LEFT JOIN tipo_servicio ts ON ts.id = s.id_tipo_servicio
+                WHERE {where_sql}
+                GROUP BY m.insumo_id
+            """
 
         cur.execute(sql, params)
         rows = cur.fetchall()
@@ -848,13 +887,25 @@ class ReporteBres:
         tipo_servicio = (self.combo_tipo_servicio.get() or '').strip() or None
         servicio = (self.combo_servicio.get() or '').strip() or None
         
+        # ⭐ Obtener servicio_id si hay servicio seleccionado
+        servicio_id = None
+        if servicio and tipo_servicio:
+            if hasattr(self, 'tipos_servicio'):
+                tipo_serv_obj = next((t for t in self.tipos_servicio if t['descripcion'] == tipo_servicio), None)
+                if tipo_serv_obj:
+                    servicios = obtener_servicios_por_tipo(tipo_serv_obj['id'])
+                    serv_obj = next((s for s in servicios if s['nombre'] == servicio), None)
+                    if serv_obj and 'id' in serv_obj:
+                        servicio_id = serv_obj['id']
+
         if servicio:
             return {
                 'nivel': 'servicio',
                 'area': area,
                 'distrito': distrito,
                 'tipo_servicio': tipo_servicio,
-                'servicio': servicio
+                'servicio': servicio,
+                'servicio_id': servicio_id
             }
         elif tipo_servicio:
             return {
@@ -1108,27 +1159,28 @@ class ReporteBres:
                 datos_agrupados[codigo]['_saldo_base_asignado'] = True
 
             # Determinar nivel del movimiento (contexto del mov)
-            es_nivel_area = bool(area and not distrito)
-            es_nivel_distrito = bool(distrito and not servicio)
-            es_nivel_servicio = bool(servicio)
+            # ⭐ CORRECCIÓN: Verificar servicio primero (más específico)
+            es_nivel_servicio = bool(servicio and servicio.strip())
+            es_nivel_distrito = bool(distrito and distrito.strip() and not es_nivel_servicio)
+            es_nivel_area = bool(area and area.strip() and not distrito)
 
             # Acumulación por tipo dentro del periodo
             if tipo_movimiento == 'INVENTARIO INICIAL':
                 # NO tocar saldo_anterior_* con INI del periodo; guardarlo aparte para cierre
-                if es_nivel_area:
-                    datos_agrupados[codigo]['ini_en_periodo_area'] += cantidad
+                if es_nivel_servicio:
+                    datos_agrupados[codigo]['ini_en_periodo_servicios'] += cantidad
                 elif es_nivel_distrito:
                     datos_agrupados[codigo]['ini_en_periodo_distritos'] += cantidad
-                elif es_nivel_servicio:
-                    datos_agrupados[codigo]['ini_en_periodo_servicios'] += cantidad
+                elif es_nivel_area:
+                    datos_agrupados[codigo]['ini_en_periodo_area'] += cantidad
 
             elif tipo_movimiento == 'ENTRADA NIVEL SUPERIOR':
-                if es_nivel_area:
-                    datos_agrupados[codigo]['entradas_nivel_superior_area'] += cantidad
+                if es_nivel_servicio:
+                    datos_agrupados[codigo]['entradas_nivel_superior_servicios'] += cantidad
                 elif es_nivel_distrito:
                     datos_agrupados[codigo]['entradas_nivel_superior_distritos'] += cantidad
-                elif es_nivel_servicio:
-                    datos_agrupados[codigo]['entradas_nivel_superior_servicios'] += cantidad
+                elif es_nivel_area:
+                    datos_agrupados[codigo]['entradas_nivel_superior_area'] += cantidad
 
             elif tipo_movimiento == 'SALIDA NIVEL INFERIOR':
                 if es_nivel_area:
@@ -1184,6 +1236,8 @@ class ReporteBres:
 
             # ✅ Variable de compatibilidad para el reporte
             saldo_anterior_total = saldo_anterior_teorico
+
+            # ✅ CALCULAR TOTALES PARA COLUMNAS (estos son los valores visibles en la tabla)
 
             # ✅ CALCULAR TOTALES PARA COLUMNAS (estos son los valores visibles en la tabla)
 
@@ -1248,20 +1302,68 @@ class ReporteBres:
             no_entregado_total = datos['no_entregado_distritos'] + datos['no_entregado_servicios']
             demanda_total = entregado_total + no_entregado_total
 
-            # ✅ CÁLCULO 1: SALDO MES SIGUIENTE (SOLO con datos de columnas visibles)
-            # Fórmula: Saldo Anterior + Entradas Nivel Superior + Reajustes - Entregado
-            saldo_mes_siguiente = saldo_anterior_teorico
-            saldo_mes_siguiente += entradas_nivel_superior_total  
-            saldo_mes_siguiente += reajustes_total              
-            saldo_mes_siguiente -= entregado_total               
+            # ✅ INVENTARIO INICIAL según nivel
+            if nivel_servicio or nivel_tipo_servicio:
+                inventario_inicial_total = datos['ini_en_periodo_servicios']
+            elif nivel_distrito:
+                inventario_inicial_total = datos['ini_en_periodo_distritos']
+            elif nivel_area:
+                inventario_inicial_total = datos['ini_en_periodo_area']
+            else:
+                # Consolidado: sumar todos
+                inventario_inicial_total = (
+                    datos['ini_en_periodo_area'] + 
+                    datos['ini_en_periodo_distritos'] + 
+                    datos['ini_en_periodo_servicios']
+                )
 
-            # ✅ CÁLCULO 2: EXISTENCIA FÍSICA (cálculo interno - incluye salidas a nivel inferior)
-            # Fórmula: Existencia Física Anterior + Entrada Superior + Inventario Inicial - Salida Inferior + Reajustes
-            existencia_fisica = existencia_fisica_anterior
-            existencia_fisica += datos['entradas_nivel_superior_area']
-            existencia_fisica += datos['ini_en_periodo_area']
-            existencia_fisica -= datos['salidas_nivel_inferior_area']
-            existencia_fisica += datos['reajustes_area']
+            # ✅ CÁLCULO 1: SALDO MES SIGUIENTE
+            # Fórmula: Saldo Anterior + Entradas + Inventario Inicial + Reajustes - Entregado
+            # ⚠️ NO ENTREGADO NO SE RESTA (permanece en inventario)
+            saldo_mes_siguiente = saldo_anterior_teorico
+            saldo_mes_siguiente += entradas_nivel_superior_total
+            saldo_mes_siguiente += inventario_inicial_total
+            saldo_mes_siguiente += reajustes_total
+            saldo_mes_siguiente -= entregado_total
+            # NO restar no_entregado_total
+
+            # ✅ CÁLCULO 2: EXISTENCIA FÍSICA
+            if nivel_servicio or nivel_tipo_servicio:
+                # ⭐ NIVEL SERVICIO: Existencia Física = Saldo Mes Siguiente
+                # En el último nivel jerárquico NO hay salidas a nivel inferior
+                # Por lo tanto, el stock físico disponible ES IGUAL al saldo contable
+                existencia_fisica = saldo_mes_siguiente
+                
+            elif nivel_distrito:
+                # NIVEL DISTRITO: Calcular con salidas a nivel inferior
+                existencia_fisica = existencia_fisica_anterior
+                existencia_fisica += datos['entradas_nivel_superior_distritos']
+                existencia_fisica += datos['ini_en_periodo_distritos']
+                existencia_fisica -= datos['salidas_nivel_inferior_distritos']
+                existencia_fisica += datos['reajustes_distritos']
+                
+            elif nivel_area:
+                # NIVEL ÁREA: Calcular con salidas a nivel inferior
+                existencia_fisica = existencia_fisica_anterior
+                existencia_fisica += datos['entradas_nivel_superior_area']
+                existencia_fisica += datos['ini_en_periodo_area']
+                existencia_fisica -= datos['salidas_nivel_inferior_area']
+                existencia_fisica += datos['reajustes_area']
+                
+            else:
+                # CONSOLIDADO: Sumar todos los niveles
+                existencia_fisica = existencia_fisica_anterior
+                existencia_fisica += datos['entradas_nivel_superior_area']
+                existencia_fisica += datos['entradas_nivel_superior_distritos']
+                existencia_fisica += datos['entradas_nivel_superior_servicios']
+                existencia_fisica += datos['ini_en_periodo_area']
+                existencia_fisica += datos['ini_en_periodo_distritos']
+                existencia_fisica += datos['ini_en_periodo_servicios']
+                existencia_fisica -= datos['salidas_nivel_inferior_area']
+                existencia_fisica -= datos['salidas_nivel_inferior_distritos']
+                existencia_fisica += datos['reajustes_area']
+                existencia_fisica += datos['reajustes_distritos']
+                existencia_fisica += datos['reajustes_servicios']
 
             # ✅ CALCULAR COLUMNAS DERIVADAS CON LOS DATOS VISIBLES EN LA TABLA
 
@@ -2038,6 +2140,21 @@ class ReporteBres:
                 messagebox.showerror("Error", "La fecha final debe ser mayor a la inicial")
                 return
 
+            # ⭐ Obtener ID del servicio seleccionado para evitar duplicados
+            servicio_id = None
+            if self.combo_servicio.get().strip():
+                servicio_nombre = self.combo_servicio.get().strip()
+                tipo_servicio_desc = self.combo_tipo_servicio.get().strip()
+                
+                # Buscar el servicio correcto comparando nombre Y tipo de servicio
+                if hasattr(self, 'tipos_servicio') and tipo_servicio_desc:
+                    tipo_servicio = next((t for t in self.tipos_servicio if t['descripcion'] == tipo_servicio_desc), None)
+                    if tipo_servicio:
+                        servicios = obtener_servicios_por_tipo(tipo_servicio['id'])
+                        servicio = next((s for s in servicios if s['nombre'] == servicio_nombre), None)
+                        if servicio and 'id' in servicio:
+                            servicio_id = servicio['id']
+
             movimientos_raw = obtener_movimientos_bres(
                 fecha_ini.strftime('%Y-%m-%d'),
                 fecha_fin.strftime('%Y-%m-%d'),
@@ -2045,6 +2162,7 @@ class ReporteBres:
                 distrito_nombre=self.combo_distrito.get().strip() or None,
                 tipo_servicio_desc=self.combo_tipo_servicio.get().strip() or None,
                 servicio_nombre=self.combo_servicio.get().strip() or None,
+                servicio_id=servicio_id,  # ⭐ NUEVO PARÁMETRO
                 tipo_insumo_desc=self.combo_tipo_insumo.get().strip() or None,
                 insumo_nombre=self.combo_insumo.get().strip() or None,
                 presentacion_nombre=self.combo_presentacion.get().strip() or None
@@ -2055,6 +2173,7 @@ class ReporteBres:
                 'distrito': (self.combo_distrito.get() or '').strip() or None,
                 'tipo_servicio': (self.combo_tipo_servicio.get() or '').strip() or None,
                 'servicio': (self.combo_servicio.get() or '').strip() or None,
+                'servicio_id': servicio_id,  # ⭐ AGREGAR ID DEL SERVICIO
                 'presentacion': (self.combo_presentacion.get() or '').strip() or None,
                 'tipo_insumo': (self.combo_tipo_insumo.get() or '').strip() or None,
                 'insumo': (self.combo_insumo.get() or '').strip() or None

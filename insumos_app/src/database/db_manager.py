@@ -1918,7 +1918,7 @@ def eliminar_movimiento(mov_id):
 # ---- OPERACIONES BRES----
 
 def obtener_movimientos_bres(fecha_inicio, fecha_fin, area_nombre=None, distrito_nombre=None, tipo_servicio_desc=None,
-    servicio_nombre=None, tipo_insumo_desc=None, insumo_nombre=None,
+    servicio_nombre=None, servicio_id=None, tipo_insumo_desc=None, insumo_nombre=None,
     presentacion_nombre=None):
     conn = conectar_db()
     if not conn:
@@ -1965,10 +1965,17 @@ def obtener_movimientos_bres(fecha_inicio, fecha_fin, area_nombre=None, distrito
         params = [fecha_inicio, fecha_fin]
 
         # **LÓGICA DE FILTRADO MEJORADA PARA CONSOLIDACIÓN**
-        if servicio_nombre:
-            # Nivel SERVICIO: solo movimientos del servicio específico
+        if servicio_id:
+            # ⭐ PRIORIDAD: Filtrar por ID único del servicio (más preciso)
+            query += " AND s.id = %s"
+            params.append(servicio_id)
+        elif servicio_nombre:
+            # Nivel SERVICIO: filtrar por nombre + tipo_servicio para evitar duplicados
             query += " AND s.nombre = %s"
             params.append(servicio_nombre)
+            if tipo_servicio_desc:
+                query += " AND ts.descripcion = %s"
+                params.append(tipo_servicio_desc)
 
         elif tipo_servicio_desc:
             # Nivel TIPO SERVICIO: todos los servicios del tipo
