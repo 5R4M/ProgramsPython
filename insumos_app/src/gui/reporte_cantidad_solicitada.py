@@ -281,6 +281,43 @@ class ReporteCantidadSolicitada:
             traceback.print_exc()
             return {}
     
+    def obtener_entidades_relacionadas(self):
+        """
+        Obtiene las entidades relacionadas según el nivel de filtro seleccionado.
+        Retorna: (tipo_entidad, lista_entidades)
+        - tipo_entidad: 'distrito' o 'servicio'
+        - lista_entidades: lista de nombres de distritos o servicios
+        """
+        area_sel = (self.combo_area.get() or '').strip()
+        distrito_sel = (self.combo_distrito.get() or '').strip()
+        tipo_servicio_sel = (self.combo_tipo_servicio.get() or '').strip()
+        
+        try:
+            if area_sel and not distrito_sel:
+                # Nivel ÁREA: mostrar distritos
+                area_obj = next((a for a in self.areas if a['nombre'] == area_sel), None)
+                if area_obj:
+                    from src.database.db_manager import obtener_distritos_por_area
+                    distritos = obtener_distritos_por_area(area_obj['id'])
+                    return ('distrito', [d['nombre'] for d in distritos if d.get('nombre')])
+            
+            elif distrito_sel and not tipo_servicio_sel:
+                # Nivel DISTRITO: mostrar servicios
+                distrito_obj = next((d for d in self.distritos if d['nombre'] == distrito_sel), None)
+                if distrito_obj:
+                    tipos_serv = obtener_tipos_servicio_por_distrito(distrito_obj['id'])
+                    servicios = []
+                    for ts in tipos_serv:
+                        servs = obtener_servicios_por_tipo(ts['id'])
+                        servicios.extend([s['nombre'] for s in servs if s.get('nombre')])
+                    return ('servicio', servicios)
+            
+            return (None, [])
+        
+        except Exception as e:
+            print(f"Error obteniendo entidades relacionadas: {e}")
+            return (None, [])
+    
     # === Corte logístico y saldo anterior desde BD (26–25) ===
 
     def _fecha_corte_anterior(self, fecha_inicio_periodo):
@@ -988,12 +1025,9 @@ class ReporteCantidadSolicitada:
         
         return 'OTRO'
     
-    def procesar_datos_cantidad_solicitada(self, movimientos_raw, fecha_ini, fecha_fin, todos_los_insumos=None):
+    def _procesar_datos_normales(self, movimientos_raw, fecha_ini, fecha_fin, todos_los_insumos):
         """
-        Procesa Cantidad Solicitada:
-        - Usa self.saldo_anterior_por_insumo (saldo al 25 inclusive) como base.
-        - Suma SOLO movimientos dentro del periodo [fecha_ini, fecha_fin] (26–25).
-        - Incluye TODOS los insumos con saldo, incluso sin movimientos nuevos.
+        Procesamiento NORMAL (sin pivote): muestra todas las columnas originales
         """
                 
         # Normalizar campos y mapear tipo_servicio si viene con otra clave
@@ -1437,6 +1471,294 @@ class ReporteCantidadSolicitada:
         datos_procesados.sort(key=lambda x: x['codigo_insumo'])
         
         return datos_procesados
+    
+    def procesar_datos_cantidad_solicitada(self, movimientos_raw, fecha_ini, fecha_fin, todos_los_insumos=None):
+        """
+        Procesa Cantidad Solicitada con opción de pivoteo por distrito o servicio
+        """
+        # Verificar si necesitamos pivotar
+        tipo_entidad, entidades = self.obtener_entidades_relacionadas()
+        es_pivote = tipo_entidad is not None and len(entidades) > 0
+        
+        # Normalizar campos
+        for m in movimientos_raw:
+            if 'tipo_servicio_desc' in m and 'tipo_servicio_descripcion' not in m:
+                m['tipo_servicio_descripcion'] = m['tipo_servicio_desc']
+
+        codigos_insumos = self.generar_codigo_insumo(movimientos_raw)
+
+        if todos_los_insumos is None:
+            todos_los_insumos = set(codigos_insumos.keys())
+
+        # Obtener información de todos los insumos
+        conn = conectar_db()
+        if conn:
+            try:
+                cursor = conn.cursor(dictionary=True, buffered=True)
+                for insumo_id in todos_los_insumos:
+                    if insumo_id not in codigos_insumos:
+                        cursor.execute("""
+                            SELECT 
+                                i.id, i.nombre AS nombre_insumo, i.id_tipo_insumo,
+                                ti.descripcion AS tipo_insumo_descripcion, ti.codigo_prefijo,
+                                GROUP_CONCAT(p.nombre SEPARATOR ', ') AS presentacion
+                            FROM insumo i
+                            INNER JOIN tipo_insumo ti ON i.id_tipo_insumo = ti.id
+                            LEFT JOIN insumo_presentacion ip ON i.id = ip.insumo_id
+                            LEFT JOIN presentacion p ON ip.presentacion_id = p.id
+                            WHERE i.id = %s
+                            GROUP BY i.id, i.nombre, i.id_tipo_insumo, ti.descripcion, ti.codigo_prefijo
+                        """, (insumo_id,))
+                        
+                        info = cursor.fetchone()
+                        if info:
+                            if info.get('codigo_prefijo'):
+                                prefijo = info['codigo_prefijo']
+                            else:
+                                tipo_descripcion = (info.get('tipo_insumo_descripcion') or '').strip().upper()
+                                tipo_limpio = ''.join(c for c in tipo_descripcion if c.isalnum())
+                                prefijo = (tipo_limpio[:4] if len(tipo_limpio) >= 4 else (tipo_limpio + 'XXXX')[:4]).upper()
+                            
+                            cursor.execute("""
+                                SELECT COUNT(*) + 1 as posicion
+                                FROM insumo
+                                WHERE id_tipo_insumo = %s AND id < %s
+                            """, (info['id_tipo_insumo'], insumo_id))
+                            pos = cursor.fetchone()['posicion']
+                            codigos_insumos[insumo_id] = f"{prefijo}-{str(pos).zfill(4)}"
+                            
+                            movimientos_raw.append({
+                                'codigo_insumo': insumo_id,
+                                'nombre_insumo': info['nombre_insumo'],
+                                'nombre_presentacion': info['presentacion'] or '',
+                                'tipo_movimiento': 'INVENTARIO INICIAL',
+                                'cantidad': 0,
+                                'fecha_registro': fecha_ini,
+                                'area_nombre': '',
+                                'distrito_nombre': '',
+                                'tipo_servicio_descripcion': '',
+                                'servicio_nombre': ''
+                            })
+            finally:
+                cursor.close()
+                conn.close()
+
+        # SI ES PIVOTE: calcular cantidad a solicitar por entidad
+        if es_pivote:
+            return self._procesar_datos_pivotados(
+                movimientos_raw, fecha_ini, fecha_fin, 
+                codigos_insumos, todos_los_insumos,
+                tipo_entidad, entidades
+            )
+        
+        # MODO NORMAL: procesamiento original
+        return self._procesar_datos_normales(
+            movimientos_raw, fecha_ini, fecha_fin,
+            codigos_insumos, todos_los_insumos
+        )
+    
+    def _procesar_datos_pivotados(self, movimientos_raw, fecha_ini, fecha_fin, 
+                        codigos_insumos, todos_los_insumos,
+                        tipo_entidad, entidades):
+        """
+        Genera datos pivotados: cada entidad (distrito/servicio) en una columna
+        """
+        area_sel = (self.combo_area.get() or '').strip()
+        distrito_sel = (self.combo_distrito.get() or '').strip()
+        
+        # Calcular saldo anterior (día antes del inicio)
+        fecha_corte_anterior = fecha_ini - timedelta(days=1)
+        
+        # Estructura: {insumo_id: {entidad_nombre: cantidad_solicitar}}
+        datos_por_insumo = {}
+        
+        for entidad in entidades:
+                   
+            # ✅ CORRECCIÓN: Crear contexto específico ANTES de filtrar movimientos
+            if tipo_entidad == 'distrito':
+                contexto_entidad = {
+                    'area': area_sel,
+                    'distrito': entidad,  # ⭐ DISTRITO ESPECÍFICO
+                    'tipo_servicio': None,
+                    'servicio': None,
+                    'presentacion': (self.combo_presentacion.get() or '').strip() or None,
+                    'tipo_insumo': (self.combo_tipo_insumo.get() or '').strip() or None,
+                    'insumo': (self.combo_insumo.get() or '').strip() or None
+                }
+            else:  # tipo_entidad == 'servicio'
+                # ⭐ Obtener servicio_id para el servicio actual
+                servicio_id_entidad = None
+                if hasattr(self, 'tipos_servicio'):
+                    tipo_servicio_desc = self.combo_tipo_servicio.get().strip()
+                    tipo_servicio = next((t for t in self.tipos_servicio if t['descripcion'] == tipo_servicio_desc), None)
+                    if tipo_servicio:
+                        servicios = obtener_servicios_por_tipo(tipo_servicio['id'])
+                        servicio = next((s for s in servicios if s['nombre'] == entidad), None)
+                        if servicio and 'id' in servicio:
+                            servicio_id_entidad = servicio['id']
+                
+                contexto_entidad = {
+                    'area': area_sel,
+                    'distrito': distrito_sel,
+                    'tipo_servicio': self.combo_tipo_servicio.get().strip() or None,
+                    'servicio': entidad,  # ⭐ SERVICIO ESPECÍFICO
+                    'servicio_id': servicio_id_entidad,  # ⭐ ID DEL SERVICIO
+                    'presentacion': (self.combo_presentacion.get() or '').strip() or None,
+                    'tipo_insumo': (self.combo_tipo_insumo.get() or '').strip() or None,
+                    'insumo': (self.combo_insumo.get() or '').strip() or None
+                }
+            
+            # Filtrar movimientos para esta entidad específica
+            movimientos_entidad = []
+            for mov in movimientos_raw:
+                incluir = False
+                
+                if tipo_entidad == 'distrito':
+                    # Verificar que el movimiento pertenezca a este distrito
+                    if (mov.get('area_nombre') == area_sel and 
+                        mov.get('distrito_nombre') == entidad):
+                        incluir = True
+                
+                elif tipo_entidad == 'servicio':
+                    # Verificar que el movimiento pertenezca a este servicio
+                    if (mov.get('area_nombre') == area_sel and
+                        mov.get('distrito_nombre') == distrito_sel and
+                        mov.get('servicio_nombre') == entidad):
+                        incluir = True
+                
+                if incluir:
+                    movimientos_entidad.append(mov)
+            
+            # ✅ OBTENER INSUMOS CON SALDO USANDO EL CONTEXTO ESPECÍFICO
+            insumos_con_saldo = self._obtener_insumos_con_saldo(fecha_corte_anterior, contexto_entidad)
+            insumos_en_periodo = set(m.get('codigo_insumo') for m in movimientos_entidad if m.get('codigo_insumo'))
+            todos_insumos_entidad = insumos_con_saldo | insumos_en_periodo
+            
+            # ✅ CALCULAR SALDOS CON EL CONTEXTO ESPECÍFICO DE LA ENTIDAD
+            saldos_entidad = self._obtener_saldos_batch(fecha_corte_anterior, contexto_entidad, list(todos_insumos_entidad))
+            existencias_entidad = self._obtener_existencia_fisica_batch(fecha_corte_anterior, contexto_entidad, list(todos_insumos_entidad))
+                        
+            # Procesar cada insumo para esta entidad
+            for insumo_id in todos_insumos_entidad:
+                if insumo_id not in datos_por_insumo:
+                    codigo = codigos_insumos.get(insumo_id, f"TEMP-{str(insumo_id).zfill(4)}")
+                    nombre = next((m.get('nombre_insumo') for m in movimientos_raw if m.get('codigo_insumo') == insumo_id), '')
+                    
+                    datos_por_insumo[insumo_id] = {
+                        'codigo_insumo': codigo,
+                        'nombre_insumo': nombre,
+                        'entidades': {}
+                    }
+                
+                # ✅ CONVERTIR A FLOAT ANTES DE PASAR A LA FUNCIÓN
+                saldo_teorico = float(saldos_entidad.get(insumo_id, 0.0))
+                existencia_fisica = float(existencias_entidad.get(insumo_id, 0.0))
+                                
+                # Calcular cantidad a solicitar para esta entidad
+                cantidad_solicitar = self._calcular_cantidad_solicitar_entidad(
+                    insumo_id, movimientos_entidad, fecha_ini, fecha_fin,
+                    saldo_teorico,
+                    existencia_fisica,
+                    contexto_entidad  # ⭐ PASAR EL CONTEXTO ESPECÍFICO
+                )
+                                
+                datos_por_insumo[insumo_id]['entidades'][entidad] = cantidad_solicitar
+        
+        # Convertir a lista para la tabla
+        datos_procesados = []
+        for insumo_id, datos in datos_por_insumo.items():
+            fila = {
+                'codigo_insumo': datos['codigo_insumo'],
+                'nombre_insumo': datos['nombre_insumo'],
+                'es_pivote': True,
+                'tipo_entidad': tipo_entidad,
+                'entidades_data': datos['entidades']
+            }
+            datos_procesados.append(fila)
+        
+        datos_procesados.sort(key=lambda x: x['codigo_insumo'])
+        return datos_procesados
+    
+    def _calcular_cantidad_solicitar_entidad(self, insumo_id, movimientos_entidad, 
+                                  fecha_ini, fecha_fin, saldo_teorico_anterior,
+                                  existencia_fisica_anterior, contexto):
+        """
+        Calcula la cantidad a solicitar para un insumo en una entidad específica
+        """
+        def f(x):
+            try:
+                return float(x)
+            except:  # noqa: E722
+                return 0.0
+        
+        # ✅ CONVERTIR SALDOS A FLOAT DESDE EL INICIO
+        saldo_teorico_anterior = f(saldo_teorico_anterior)
+        existencia_fisica_anterior = f(existencia_fisica_anterior)
+        
+        # Acumular movimientos del periodo
+        entradas = 0.0
+        entregado = 0.0
+        no_entregado = 0.0
+        reajustes = 0.0
+        inventario_inicial = 0.0
+        salidas_nivel_inferior = 0.0
+        
+        for mov in movimientos_entidad:
+            if mov.get('codigo_insumo') != insumo_id:
+                continue
+            
+            try:
+                fecha_mov = mov.get('fecha_registro')
+                if isinstance(fecha_mov, str):
+                    try:
+                        fecha_mov = datetime.strptime(fecha_mov, '%Y-%m-%d')
+                    except:  # noqa: E722
+                        fecha_mov = datetime.strptime(fecha_mov, '%d/%m/%Y')
+                
+                if not (fecha_ini <= fecha_mov <= fecha_fin):
+                    continue
+            except:  # noqa: E722
+                continue
+            
+            tipo_mov = self._normalizar_tipo_mov(mov.get('tipo_movimiento', ''))
+            cantidad = f(mov.get('cantidad', 0))
+            
+            if tipo_mov == 'ENTRADA NIVEL SUPERIOR':
+                entradas += cantidad
+            elif tipo_mov == 'ENTREGADO':
+                entregado += cantidad
+            elif tipo_mov == 'NO ENTREGADO':
+                no_entregado += cantidad
+            elif tipo_mov == 'REAJUSTE (+)':
+                reajustes += cantidad
+            elif tipo_mov == 'REAJUSTE (-)':
+                reajustes -= cantidad
+            elif tipo_mov == 'INVENTARIO INICIAL':
+                inventario_inicial += cantidad
+            elif tipo_mov == 'SALIDA NIVEL INFERIOR':
+                salidas_nivel_inferior += cantidad
+        
+        # ✅ LÍNEA ELIMINADA: saldo_mes_siguiente no se usa
+        # saldo_mes_siguiente = saldo_teorico_anterior + entradas + inventario_inicial + reajustes - entregado
+        
+        # ✅ Calcular existencia física (esta sí se usa)
+        existencia_fisica = existencia_fisica_anterior + entradas + inventario_inicial - salidas_nivel_inferior + reajustes
+        
+        # Obtener promedio y nivel máximo
+        promedios = self.calcular_promedio_demanda_real([insumo_id], fecha_ini, fecha_fin)
+        promedio_mensual = float(promedios.get(insumo_id, 0.0))
+        
+        try:
+            nivel_maximo = int(float(self.combo_nivel_maximo.get() or "1"))
+            if nivel_maximo <= 0:
+                nivel_maximo = 1
+        except:  # noqa: E722
+            nivel_maximo = 1
+        
+        cantidad_maxima = promedio_mensual * nivel_maximo
+        cantidad_solicitar = cantidad_maxima - existencia_fisica
+        
+        return round(cantidad_solicitar, 2)
     
     def calcular_promedio_demanda_real(self, insumo_ids, fecha_ini, fecha_fin):
         """
@@ -2617,6 +2939,7 @@ class ReporteCantidadSolicitada:
         if not self.movimientos_data:
             messagebox.showwarning("Advertencia", "No hay datos para mostrar")
             return
+        
         try:
             doc = SimpleDocTemplate(
                 ruta_pdf,
@@ -2630,24 +2953,24 @@ class ReporteCantidadSolicitada:
             elements = []
             styles = getSampleStyleSheet()
 
+            # Estilos (sin cambios)
             title_style = ParagraphStyle('CustomTitle', parent=styles['Heading1'], alignment=1, spaceAfter=10, fontSize=12)
             subtitle_style = ParagraphStyle('CustomSubtitle', parent=styles['Heading2'], alignment=1, spaceAfter=8, fontSize=10)
             timestamp_style = ParagraphStyle('TimestampStyle', parent=styles['Normal'], alignment=1, spaceAfter=12, fontSize=9)
 
+            # Encabezados (sin cambios)
             elements.append(Paragraph("DIRECCIÓN DEPARTAMENTAL DE REDES INTEGRADAS DE SERVICIOS DE SALUD DE GUATEMALA,", title_style))
             elements.append(Paragraph("ÁREA NOR ORIENTE", subtitle_style))
-            elements.append(Paragraph("BALANCE, REQUISICIÓN Y ENVÍO DE SUMINISTROS", subtitle_style))
+            elements.append(Paragraph("DISTRIBUCION DE INSUMOS SEGUN BRES", subtitle_style))
             elements.append(Paragraph(f"Generado el: {datetime.now().strftime('%d/%m/%Y %H:%M:%S')}", timestamp_style))
             
-            # Agregar debajo el periodo logístico (26–25) o el rango seleccionado
+            # Periodo logístico
             try:
                 if self.modo_fecha_var.get() == "corte" and self.mes_inicio_var.get() and self.mes_final_var.get() and self.anio_var.get():
-                    # Reconstruir fechas a partir del corte
                     fecha_ini_str, fecha_fin_str = self.calcular_rango_corte_logistico(self.anio_var.get(), self.mes_inicio_var.get(), self.mes_final_var.get())
                     _fi = datetime.strptime(fecha_ini_str, '%d/%m/%Y')
                     _ff = datetime.strptime(fecha_fin_str, '%d/%m/%Y')
                 else:
-                    # Tomar del rango manual
                     _fi = datetime.strptime(self.fecha_inicial.get(), '%d/%m/%Y')
                     _ff = datetime.strptime(self.fecha_final.get(), '%d/%m/%Y')
 
@@ -2657,6 +2980,7 @@ class ReporteCantidadSolicitada:
             except Exception:
                 pass
 
+            # Filtros
             left_style = ParagraphStyle(name="LeftAlign", alignment=0, fontSize=9, fontName='Helvetica')
             filtros = [
                 f"Área: {self.combo_area.get()}",
@@ -2678,60 +3002,72 @@ class ReporteCantidadSolicitada:
             elements.append(table_filtros)
             elements.append(Spacer(1, 24))
 
-            headers = [
-                'Código',
-                'Descripción\ndel Insumo',
-                'Saldo\nAnterior',
-                'Entradas\nNivel\nSuperior',
-                'Entregado\na Usuario',
-                'No\nEntregado',
-                'Demanda',
-                'Reajustes\n(+) (-)',
-                'Saldo Mes\nSiguiente',
-                'Existencia\nFísica',
-                'Promedio\nMensual\nDemanda Real',
-                'Meses\nExistencia\nDisponible',
-                'Cantidad\nMáxima',
-                'Cantidad a\nSolicitar'
-            ]
+            # ✅ DETECTAR SI ES PIVOTE
+            es_pivote = len(self.movimientos_data) > 0 and self.movimientos_data[0].get('es_pivote', False)
 
-            data = [headers]
-            for mov in self.movimientos_data:
-                row = [
-                    mov.get('codigo_insumo', ''),
-                    self.dividir_texto_en_lineas(mov.get('nombre_insumo', ''), 30),
-                    mov.get('saldo_anterior', ''),
-                    mov.get('entradas_nivel_superior', ''),
-                    mov.get('entregado_usuario', ''),
-                    mov.get('no_entregado', ''),
-                    mov.get('demanda', ''),
-                    mov.get('reajustes', ''),
-                    mov.get('saldo_mes_siguiente', ''),
-                    mov.get('existencia_fisica', ''),
-                    mov.get('promedio_mensual', ''),
-                    mov.get('meses_existencia', ''),
-                    mov.get('cantidad_maxima', ''),
-                    mov.get('cantidad_solicitar', '')
+            if es_pivote:
+                # ===== TABLA PIVOTADA =====
+                self.movimientos_data[0].get('tipo_entidad', '')
+                entidades = sorted(set(
+                    entidad 
+                    for mov in self.movimientos_data 
+                    for entidad in mov.get('entidades_data', {}).keys()
+                ))
+                
+                headers = ['Código', 'Descripción\ndel Insumo'] + entidades
+                
+                data = [headers]
+                for mov in self.movimientos_data:
+                    row = [
+                        mov.get('codigo_insumo', ''),
+                        self.dividir_texto_en_lineas(mov.get('nombre_insumo', ''), 30)
+                    ]
+                    for entidad in entidades:
+                        valor = mov.get('entidades_data', {}).get(entidad, 0.0)
+                        row.append(self.formato_float(valor))
+                    data.append(row)
+                
+                # Anchos: código + descripción + entidades
+                col_width_entidad = 1.2 * inch
+                colWidths = [0.7*inch, 3.0*inch] + [col_width_entidad] * len(entidades)
+                
+            else:
+                # ===== TABLA NORMAL (SIN CAMBIOS) =====
+                headers = [
+                    'Código', 'Descripción\ndel Insumo', 'Saldo\nAnterior',
+                    'Entradas\nNivel\nSuperior', 'Entregado\na Usuario', 'No\nEntregado',
+                    'Demanda', 'Reajustes\n(+) (-)', 'Saldo Mes\nSiguiente',
+                    'Existencia\nFísica', 'Promedio\nMensual\nDemanda Real',
+                    'Meses\nExistencia\nDisponible', 'Cantidad\nMáxima', 'Cantidad a\nSolicitar'
                 ]
-                data.append(row)
 
-            colWidths = [
-                0.7*inch,
-                3.0*inch,
-                0.8*inch,
-                0.8*inch,
-                0.8*inch,
-                0.8*inch,
-                0.8*inch,
-                0.8*inch,
-                0.8*inch,
-                0.8*inch,
-                0.9*inch,
-                0.9*inch,
-                0.8*inch,
-                0.8*inch
-            ]
+                data = [headers]
+                for mov in self.movimientos_data:
+                    row = [
+                        mov.get('codigo_insumo', ''),
+                        self.dividir_texto_en_lineas(mov.get('nombre_insumo', ''), 30),
+                        mov.get('saldo_anterior', ''),
+                        mov.get('entradas_nivel_superior', ''),
+                        mov.get('entregado_usuario', ''),
+                        mov.get('no_entregado', ''),
+                        mov.get('demanda', ''),
+                        mov.get('reajustes', ''),
+                        mov.get('saldo_mes_siguiente', ''),
+                        mov.get('existencia_fisica', ''),
+                        mov.get('promedio_mensual', ''),
+                        mov.get('meses_existencia', ''),
+                        mov.get('cantidad_maxima', ''),
+                        mov.get('cantidad_solicitar', '')
+                    ]
+                    data.append(row)
 
+                colWidths = [
+                    0.7*inch, 3.0*inch, 0.8*inch, 0.8*inch, 0.8*inch, 0.8*inch,
+                    0.8*inch, 0.8*inch, 0.8*inch, 0.8*inch, 0.9*inch, 0.9*inch,
+                    0.8*inch, 0.8*inch
+                ]
+
+            # Crear tabla
             table = Table(data, colWidths=colWidths, repeatRows=1)
             table_style = [
                 ('BACKGROUND', (0,0), (-1,0), colors.lightblue),
@@ -2777,27 +3113,61 @@ class ReporteCantidadSolicitada:
             with pd.ExcelWriter(full_path, engine='xlsxwriter') as writer:
                 workbook = writer.book
 
-                columnas = [
-                    'codigo_insumo', 'nombre_insumo', 'saldo_anterior', 'entradas_nivel_superior',
-                    'entregado_usuario', 'no_entregado', 'demanda', 'reajustes',
-                    'saldo_mes_siguiente', 'existencia_fisica', 'promedio_mensual',
-                    'meses_existencia', 'cantidad_maxima', 'cantidad_solicitar'
-                ]
-                encabezados = [
-                    'Código', 'Descripción\ndel Insumo', 'Saldo\nAnterior', 'Entradas\nNivel\nSuperior',
-                    'Entregado\na Usuario', 'No\nEntregado', 'Demanda', 'Reajustes\n(+) (-)',
-                    'Saldo Mes\nSiguiente', 'Existencia\nFísica', 'Promedio\nMensual\nDemanda Real',
-                    'Meses\nExistencia\nDisponible', 'Cantidad\nMáxima', 'Cantidad a\nSolicitar'
-                ]
-                col_widths = [10, 30, 10, 12, 12, 10, 10, 12, 12, 12, 18, 18, 12, 12]
+                es_pivote = len(self.movimientos_data) > 0 and self.movimientos_data[0].get('es_pivote', False)
+
+                if es_pivote:
+                    # ===== EXCEL PIVOTADO =====
+                    self.movimientos_data[0].get('tipo_entidad', '')
+                    entidades = sorted(set(
+                        entidad 
+                        for mov in self.movimientos_data 
+                        for entidad in mov.get('entidades_data', {}).keys()
+                    ))
+                    
+                    columnas = ['codigo_insumo', 'nombre_insumo'] + entidades
+                    encabezados = ['Código', 'Descripción\ndel Insumo'] + entidades
+                    col_widths = [10, 30] + [15] * len(entidades)
+                    
+                else:
+                    # ===== EXCEL NORMAL (código original) =====
+                    columnas = [
+                        'codigo_insumo', 'nombre_insumo', 'saldo_anterior', 'entradas_nivel_superior',
+                        'entregado_usuario', 'no_entregado', 'demanda', 'reajustes',
+                        'saldo_mes_siguiente', 'existencia_fisica', 'promedio_mensual',
+                        'meses_existencia', 'cantidad_maxima', 'cantidad_solicitar'
+                    ]
+                    encabezados = [
+                        'Código', 'Descripción\ndel Insumo', 'Saldo\nAnterior', 'Entradas\nNivel\nSuperior',
+                        'Entregado\na Usuario', 'No\nEntregado', 'Demanda', 'Reajustes\n(+) (-)',
+                        'Saldo Mes\nSiguiente', 'Existencia\nFísica', 'Promedio\nMensual\nDemanda Real',
+                        'Meses\nExistencia\nDisponible', 'Cantidad\nMáxima', 'Cantidad a\nSolicitar'
+                    ]
+                    col_widths = [10, 30, 10, 12, 12, 10, 10, 12, 12, 12, 18, 18, 12, 12]
 
                 for hoja_num in range(0, total_movimientos, filas_por_hoja):
                     nombre_hoja = f"Cantidad_Solicitada_{hoja_num // filas_por_hoja + 1}"
                     fin_hoja = min(hoja_num + filas_por_hoja, total_movimientos)
                     datos_hoja = self.movimientos_data[hoja_num:fin_hoja]
 
-                    df = pd.DataFrame(datos_hoja)[columnas]
-                    df.columns = encabezados
+                    if es_pivote:
+                        # Construir DataFrame pivotado
+                        datos_df = []
+                        for mov in datos_hoja:
+                            fila_dict = {
+                                'Código': mov.get('codigo_insumo', ''),
+                                'Descripción\ndel Insumo': mov.get('nombre_insumo', '')
+                            }
+                            for entidad in entidades:
+                                valor = mov.get('entidades_data', {}).get(entidad, 0.0)
+                                fila_dict[entidad] = self.formato_float(valor)
+                            datos_df.append(fila_dict)
+                        
+                        df = pd.DataFrame(datos_df)
+                    else:
+                        # DataFrame normal (código original)
+                        df = pd.DataFrame(datos_hoja)[columnas]
+                        df.columns = encabezados
+                    
                     fila_inicio = 8
                     df.to_excel(writer, sheet_name=nombre_hoja, startrow=fila_inicio, index=False, header=False)
 
@@ -2844,7 +3214,7 @@ class ReporteCantidadSolicitada:
                     worksheet.merge_range(0, 0, 0, len(encabezados) - 1,
                         "DIRECCIÓN DEPARTAMENTAL DE REDES INTEGRADAS DE SERVICIOS DE SALUD DE GUATEMALA,", title_format)
                     worksheet.merge_range(1, 0, 1, len(encabezados) - 1, "ÁREA NOR ORIENTE", subtitle_format)
-                    worksheet.merge_range(2, 0, 2, len(encabezados) - 1, "BALANCE, REQUISICIÓN Y ENVÍO DE SUMINISTROS", subtitle_format)
+                    worksheet.merge_range(2, 0, 2, len(encabezados) - 1, "DISTRIBUCION DE INSUMOS SEGUN BRES", subtitle_format)
                     worksheet.merge_range(3, 0, 3, len(encabezados) - 1, f"Generado el: {datetime.now().strftime('%d/%m/%Y %H:%M:%S')}", subtitle_format)
                     
                     # Fila 4 para el periodo logístico
