@@ -695,15 +695,12 @@ class ReporteCantidadSolicitada:
             LEFT JOIN tipo_servicio ts ON ts.id = s.id_tipo_servicio
             WHERE {where_sql}
         """
-
-        print(f"  🔍 DEBUG SQL Insumos - Distrito: {contexto.get('distrito')}, ID: {contexto.get('distrito_id')}")
         
         cur.execute(sql, params)
         rows = cur.fetchall()
         cur.close()
 
         resultado = {r['insumo_id'] for r in rows}
-        print(f"  ✅ Insumos con saldo: {len(resultado)}")
         return resultado
     
     def _obtener_saldos_batch(self, fecha_corte_dt, contexto, insumos_ids):
@@ -806,16 +803,12 @@ class ReporteCantidadSolicitada:
             WHERE {where_sql}
             GROUP BY m.insumo_id
         """
-
-        print(f"  🔍 DEBUG SQL Saldos - Distrito: {contexto.get('distrito')}, ID: {contexto.get('distrito_id')}")
-        print(f"  📝 Params: {params[:5]}...")  # Mostrar primeros params para debug
         
         cur.execute(sql, params)
         rows = cur.fetchall()
         cur.close()
 
         resultado = {r['insumo_id']: (r['saldo'] or 0) for r in rows}
-        print(f"  ✅ Saldos obtenidos: {len(resultado)} insumos")
         return resultado
 
     def _obtener_existencia_fisica_batch(self, fecha_corte_dt, contexto, insumos_ids):
@@ -935,15 +928,12 @@ class ReporteCantidadSolicitada:
                 WHERE {where_sql}
                 GROUP BY m.insumo_id
             """
-
-        print(f"  🔍 DEBUG SQL Existencias - Distrito: {contexto.get('distrito')}, ID: {contexto.get('distrito_id')}")
         
         cur.execute(sql, params)
         rows = cur.fetchall()
         cur.close()
 
         resultado = {r['insumo_id']: (r['existencia_fisica'] or 0) for r in rows}
-        print(f"  ✅ Existencias obtenidas: {len(resultado)} insumos")
         return resultado
     
     def _get_conn(self):
@@ -1624,8 +1614,8 @@ class ReporteCantidadSolicitada:
         )
     
     def _procesar_datos_pivotados(self, movimientos_raw, fecha_ini, fecha_fin, 
-                    codigos_insumos, todos_los_insumos,
-                    tipo_entidad, entidades):
+                codigos_insumos, todos_los_insumos,
+                tipo_entidad, entidades):
         """
         Genera datos pivotados: cada entidad (distrito/servicio) en una columna
         """
@@ -1639,8 +1629,7 @@ class ReporteCantidadSolicitada:
         datos_por_insumo = {}
         
         for entidad in entidades:
-            print(f"\n🔍 DEBUG: Procesando entidad '{entidad}' (tipo: {tipo_entidad})")
-            
+                            
             # ✅ CORRECCIÓN: Crear contexto específico ANTES de filtrar movimientos
             if tipo_entidad == 'distrito':
                 # ⭐ Obtener distrito_id para el distrito actual
@@ -1659,8 +1648,7 @@ class ReporteCantidadSolicitada:
                     'tipo_insumo': (self.combo_tipo_insumo.get() or '').strip() or None,
                     'insumo': (self.combo_insumo.get() or '').strip() or None
                 }
-                print(f"  📍 Contexto distrito: {contexto_entidad}")
-                
+                                                
             else:  # tipo_entidad == 'servicio'
                 # ⭐ Obtener servicio_id para el servicio actual
                 servicio_id_entidad = None
@@ -1683,9 +1671,8 @@ class ReporteCantidadSolicitada:
                     'tipo_insumo': (self.combo_tipo_insumo.get() or '').strip() or None,
                     'insumo': (self.combo_insumo.get() or '').strip() or None
                 }
-                print(f"  📍 Contexto servicio: {contexto_entidad}")
-            
-            # ✅ Filtrar movimientos ESPECÍFICOS para esta entidad
+                    
+            # ✅ CORRECCIÓN CRÍTICA: Filtrar movimientos ESPECÍFICOS para esta entidad
             movimientos_entidad = []
             for mov in movimientos_raw:
                 incluir = False
@@ -1694,12 +1681,15 @@ class ReporteCantidadSolicitada:
                     # ⭐ VERIFICAR que el movimiento pertenezca EXACTAMENTE a este distrito
                     mov_area = mov.get('area_nombre', '').strip()
                     mov_distrito = mov.get('distrito_nombre', '').strip()
+                    mov_servicio = mov.get('servicio_nombre', '').strip()  # ⭐ NUEVO: Verificar que NO tenga servicio
                     
-                    # Solo incluir si el área coincide Y el distrito coincide EXACTAMENTE
-                    if mov_area == area_sel and mov_distrito == entidad:
+                    # Solo incluir si:
+                    # 1. El área coincide
+                    # 2. El distrito coincide EXACTAMENTE
+                    # 3. NO tiene servicio (es movimiento de distrito, no de servicio hijo)
+                    if mov_area == area_sel and mov_distrito == entidad and not mov_servicio:
                         incluir = True
-                        print(f"    ✅ Incluir movimiento: {mov.get('codigo_insumo')} - {mov.get('tipo_movimiento')} - Área: {mov_area}, Distrito: {mov_distrito}")
-                
+                                                        
                 elif tipo_entidad == 'servicio':
                     # ⭐ VERIFICAR que el movimiento pertenezca EXACTAMENTE a este servicio
                     mov_area = mov.get('area_nombre', '').strip()
@@ -1711,26 +1701,19 @@ class ReporteCantidadSolicitada:
                         mov_distrito == distrito_sel and 
                         mov_servicio == entidad):
                         incluir = True
-                        print(f"    ✅ Incluir movimiento: {mov.get('codigo_insumo')} - {mov.get('tipo_movimiento')} - Servicio: {mov_servicio}")
-                
+                                                           
                 if incluir:
                     movimientos_entidad.append(mov)
-            
-            print(f"  📊 Total movimientos para '{entidad}': {len(movimientos_entidad)}")
-            
+                                
             # ✅ OBTENER INSUMOS CON SALDO USANDO EL CONTEXTO ESPECÍFICO
             insumos_con_saldo = self._obtener_insumos_con_saldo(fecha_corte_anterior, contexto_entidad)
             insumos_en_periodo = set(m.get('codigo_insumo') for m in movimientos_entidad if m.get('codigo_insumo'))
             todos_insumos_entidad = insumos_con_saldo | insumos_en_periodo
-            
-            print(f"  📦 Insumos con saldo: {len(insumos_con_saldo)}, en periodo: {len(insumos_en_periodo)}, total: {len(todos_insumos_entidad)}")
-            
+                                
             # ✅ CALCULAR SALDOS CON EL CONTEXTO ESPECÍFICO DE LA ENTIDAD
             saldos_entidad = self._obtener_saldos_batch(fecha_corte_anterior, contexto_entidad, list(todos_insumos_entidad))
             existencias_entidad = self._obtener_existencia_fisica_batch(fecha_corte_anterior, contexto_entidad, list(todos_insumos_entidad))
-            
-            print(f"  💰 Saldos calculados: {len(saldos_entidad)}, Existencias: {len(existencias_entidad)}")
-            
+                    
             # Procesar cada insumo para esta entidad
             for insumo_id in todos_insumos_entidad:
                 if insumo_id not in datos_por_insumo:
@@ -1738,7 +1721,6 @@ class ReporteCantidadSolicitada:
                     
                     # ✅ Filtrar insumos sin código válido
                     if codigo.startswith('TEMP-'):
-                        print(f"⚠️ Insumo sin código válido: {mov.get('nombre_insumo', 'Desconocido')} (ID: {insumo_id})")
                         continue
                     
                     nombre = next((m.get('nombre_insumo') for m in movimientos_raw if m.get('codigo_insumo') == insumo_id), '')
@@ -1752,9 +1734,7 @@ class ReporteCantidadSolicitada:
                 # ✅ CONVERTIR A FLOAT ANTES DE PASAR A LA FUNCIÓN
                 saldo_teorico = float(saldos_entidad.get(insumo_id, 0.0))
                 existencia_fisica = float(existencias_entidad.get(insumo_id, 0.0))
-                
-                print(f"    📊 Insumo {insumo_id}: Saldo teórico={saldo_teorico}, Existencia física={existencia_fisica}")
-                
+                                                
                 # Calcular cantidad a solicitar para esta entidad
                 cantidad_solicitar = self._calcular_cantidad_solicitar_entidad(
                     insumo_id, movimientos_entidad, fecha_ini, fecha_fin,
@@ -1762,9 +1742,7 @@ class ReporteCantidadSolicitada:
                     existencia_fisica,
                     contexto_entidad  # ⭐ PASAR EL CONTEXTO ESPECÍFICO
                 )
-                
-                print(f"    💰 Cantidad a solicitar: {cantidad_solicitar}")
-                
+                                
                 datos_por_insumo[insumo_id]['entidades'][entidad] = cantidad_solicitar
         
         # Convertir a lista para la tabla
