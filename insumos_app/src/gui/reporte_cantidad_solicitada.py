@@ -643,9 +643,13 @@ class ReporteCantidadSolicitada:
         if contexto.get('servicio_id'):
             where.append("m.servicio_id = %s")
             params.append(contexto['servicio_id'])
+            where.append("m.area_id IS NULL")  # ⭐ EXCLUIR movimientos del ÁREA
+            where.append("m.distrito_id IS NULL")  # ⭐ EXCLUIR movimientos del DISTRITO
         elif contexto.get('servicio'):
             where.append("s.nombre = %s")
             params.append(contexto['servicio'])
+            where.append("m.area_id IS NULL")  # ⭐ EXCLUIR movimientos del ÁREA
+            where.append("m.distrito_id IS NULL")  # ⭐ EXCLUIR movimientos del DISTRITO
         elif contexto.get('tipo_servicio'):
             where.append("ts.descripcion = %s")
             params.append(contexto['tipo_servicio'])
@@ -729,10 +733,14 @@ class ReporteCantidadSolicitada:
             # Nivel SERVICIO: filtrar por ID exacto
             where.append("m.servicio_id = %s")
             params.append(contexto['servicio_id'])
+            where.append("m.area_id IS NULL")  # ⭐ EXCLUIR movimientos del ÁREA
+            where.append("m.distrito_id IS NULL")  # ⭐ EXCLUIR movimientos del DISTRITO
         elif contexto.get('servicio'):
             # Fallback por nombre
             where.append("s.nombre = %s")
             params.append(contexto['servicio'])
+            where.append("m.area_id IS NULL")  # ⭐ EXCLUIR movimientos del ÁREA
+            where.append("m.distrito_id IS NULL")  # ⭐ EXCLUIR movimientos del DISTRITO
         elif contexto.get('tipo_servicio'):
             where.append("ts.descripcion = %s")
             params.append(contexto['tipo_servicio'])
@@ -835,9 +843,13 @@ class ReporteCantidadSolicitada:
         if contexto.get('servicio_id'):
             where.append("m.servicio_id = %s")
             params.append(contexto['servicio_id'])
+            where.append("m.area_id IS NULL")  # ⭐ EXCLUIR movimientos del ÁREA
+            where.append("m.distrito_id IS NULL")  # ⭐ EXCLUIR movimientos del DISTRITO
         elif contexto.get('servicio'):
             where.append("s.nombre = %s")
             params.append(contexto['servicio'])
+            where.append("m.area_id IS NULL")  # ⭐ EXCLUIR movimientos del ÁREA
+            where.append("m.distrito_id IS NULL")  # ⭐ EXCLUIR movimientos del DISTRITO
         elif contexto.get('tipo_servicio'):
             where.append("ts.descripcion = %s")
             params.append(contexto['tipo_servicio'])
@@ -1650,21 +1662,24 @@ class ReporteCantidadSolicitada:
                 }
                                                 
             else:  # tipo_entidad == 'servicio'
-                # ⭐ Obtener servicio_id para el servicio actual
+                # ⭐ Obtener servicio_id para el servicio actual de forma robusta
                 servicio_id_entidad = None
-                if hasattr(self, 'tipos_servicio'):
-                    tipo_servicio_desc = self.combo_tipo_servicio.get().strip()
-                    tipo_servicio = next((t for t in self.tipos_servicio if t['descripcion'] == tipo_servicio_desc), None)
-                    if tipo_servicio:
-                        servicios = obtener_servicios_por_tipo(tipo_servicio['id'])
+                
+                # Buscar entre TODOS los servicios del distrito actual
+                distrito_obj = next((d for d in self.distritos if d['nombre'] == distrito_sel), None)
+                if distrito_obj:
+                    tipos_serv = obtener_tipos_servicio_por_distrito(distrito_obj['id'])
+                    for ts in tipos_serv:
+                        servicios = obtener_servicios_por_tipo(ts['id'])
                         servicio = next((s for s in servicios if s['nombre'] == entidad), None)
                         if servicio and 'id' in servicio:
                             servicio_id_entidad = servicio['id']
+                            break
                 
                 contexto_entidad = {
-                    'area': area_sel,
-                    'distrito': distrito_sel,
-                    'tipo_servicio': self.combo_tipo_servicio.get().strip() or None,
+                    'area': None,  # ⭐ NO FILTRAR POR ÁREA
+                    'distrito': None,  # ⭐ NO FILTRAR POR DISTRITO (evita duplicados)
+                    'tipo_servicio': None,  # ⭐ NO FILTRAR POR TIPO SERVICIO
                     'servicio': entidad,  # ⭐ SERVICIO ESPECÍFICO
                     'servicio_id': servicio_id_entidad,  # ⭐ ID DEL SERVICIO
                     'presentacion': (self.combo_presentacion.get() or '').strip() or None,
@@ -1692,14 +1707,10 @@ class ReporteCantidadSolicitada:
                                                         
                 elif tipo_entidad == 'servicio':
                     # ⭐ VERIFICAR que el movimiento pertenezca EXACTAMENTE a este servicio
-                    mov_area = mov.get('area_nombre', '').strip()
-                    mov_distrito = mov.get('distrito_nombre', '').strip()
                     mov_servicio = mov.get('servicio_nombre', '').strip()
                     
-                    # Solo incluir si área, distrito Y servicio coinciden EXACTAMENTE
-                    if (mov_area == area_sel and 
-                        mov_distrito == distrito_sel and 
-                        mov_servicio == entidad):
+                    # Solo incluir si el servicio coincide EXACTAMENTE (sin validar área/distrito)
+                    if mov_servicio == entidad:
                         incluir = True
                                                            
                 if incluir:
