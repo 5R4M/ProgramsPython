@@ -291,8 +291,13 @@ class ReporteCantidadSolicitada:
         area_sel = (self.combo_area.get() or '').strip()
         distrito_sel = (self.combo_distrito.get() or '').strip()
         tipo_servicio_sel = (self.combo_tipo_servicio.get() or '').strip()
+        servicio_sel = (self.combo_servicio.get() or '').strip()  # ✅ AGREGAR ESTA LÍNEA
         
         try:
+            # ✅ VALIDAR SI SE SELECCIONÓ SERVICIO
+            if servicio_sel:
+                return (None, [])
+            
             if area_sel and not distrito_sel:
                 # Nivel ÁREA: mostrar distritos
                 area_obj = next((a for a in self.areas if a['nombre'] == area_sel), None)
@@ -328,6 +333,39 @@ class ReporteCantidadSolicitada:
         y = fecha_inicio_periodo.year
         m = fecha_inicio_periodo.month
         return datetime(y, m, 25)
+    
+    def _obtener_servicios_para_distrito(self, distrito_nombre):
+        """
+        Obtiene todos los servicios asociados a un distrito específico
+        """
+        try:
+            distrito_obj = next((d for d in self.distritos if d['nombre'] == distrito_nombre), None)
+            if not distrito_obj:
+                return []
+            
+            tipos_serv = obtener_tipos_servicio_por_distrito(distrito_obj['id'])
+            servicios = []
+            for ts in tipos_serv:
+                servs = obtener_servicios_por_tipo(ts['id'])
+                servicios.extend([s['nombre'] for s in servs if s.get('nombre')])
+            
+            return servicios
+        except Exception as e:
+            print(f"Error obteniendo servicios para distrito: {e}")
+            return []
+    
+    def _obtener_distrito_id(self, distrito_nombre):
+        """
+        Obtiene el ID de un distrito por su nombre
+        """
+        try:
+            distrito_obj = next((d for d in self.distritos if d['nombre'] == distrito_nombre), None)
+            if distrito_obj and 'id' in distrito_obj:
+                return distrito_obj['id']
+            return None
+        except Exception as e:
+            print(f"Error obteniendo distrito_id: {e}")
+            return None
     
     def _obtener_existencia_fisica_corte_bd(self, fecha_corte_dt, contexto, insumo_id):
         """
@@ -590,7 +628,7 @@ class ReporteCantidadSolicitada:
 
     def _obtener_insumos_con_saldo(self, fecha_corte_dt, contexto):
         """
-        Obtiene todos los insumos que tienen movimientos hasta la fecha de corte
+        ✅ CORREGIDO: Obtiene insumos con saldo usando el CONTEXTO específico pasado
         """
         conn = self._get_conn()
         if not conn:
@@ -598,32 +636,32 @@ class ReporteCantidadSolicitada:
         
         cur = conn.cursor(dictionary=True)
 
-        nivel_info = self._derivar_nivel_y_filtros()
-
         where = ["DATE(m.fecha_registro) <= %s"]
         params = [fecha_corte_dt.strftime('%Y-%m-%d')]
 
-        # Filtro por nivel
-        if nivel_info['nivel'] == 'area' and nivel_info['area']:
-            where.append("a.nombre = %s")
-            params.append(nivel_info['area'])
-            where.append("m.distrito_id IS NULL")
-        elif nivel_info['nivel'] == 'distrito' and nivel_info['distrito']:
-            where.append("d.nombre = %s")
-            params.append(nivel_info['distrito'])
+        # ⭐ APLICAR FILTROS DEL CONTEXTO ESPECÍFICO (no _derivar_nivel_y_filtros)
+        if contexto.get('servicio_id'):
+            where.append("m.servicio_id = %s")
+            params.append(contexto['servicio_id'])
+        elif contexto.get('servicio'):
+            where.append("s.nombre = %s")
+            params.append(contexto['servicio'])
+        elif contexto.get('tipo_servicio'):
+            where.append("ts.descripcion = %s")
+            params.append(contexto['tipo_servicio'])
+        elif contexto.get('distrito_id'):
+            where.append("m.distrito_id = %s")
+            params.append(contexto['distrito_id'])
             where.append("m.servicio_id IS NULL")
-        elif nivel_info['nivel'] == 'servicio':
-            if nivel_info.get('servicio_id'):
-                where.append("s.id = %s")
-                params.append(nivel_info['servicio_id'])
-            elif nivel_info.get('servicio'):
-                where.append("s.nombre = %s")
-                params.append(nivel_info['servicio'])
-        elif nivel_info['nivel'] == 'tipo_servicio' and nivel_info.get('tipo_servicio'):
-            where.append("ts.nombre = %s")
-            params.append(nivel_info['tipo_servicio'])
+        elif contexto.get('distrito'):
+            where.append("d.nombre = %s")
+            params.append(contexto['distrito'])
+            where.append("m.servicio_id IS NULL")
+        elif contexto.get('area'):
+            where.append("a.nombre = %s")
+            params.append(contexto['area'])
+            where.append("m.distrito_id IS NULL")
         
-        # Filtros por insumo
         if contexto.get('tipo_insumo'):
             where.append("ti.descripcion = %s")
             params.append(contexto['tipo_insumo'])
@@ -632,7 +670,6 @@ class ReporteCantidadSolicitada:
             where.append("i.nombre = %s")
             params.append(contexto['insumo'])
 
-        # Presentación
         if contexto.get('presentacion'):
             where.append("""
                 EXISTS (
@@ -647,7 +684,6 @@ class ReporteCantidadSolicitada:
 
         where_sql = " AND ".join(where)
 
-        # ✅ CORRECCIÓN: Eliminar el JOIN directo con tipo_servicio desde movimiento
         sql = f"""
             SELECT DISTINCT m.insumo_id
             FROM movimiento m
@@ -660,21 +696,20 @@ class ReporteCantidadSolicitada:
             WHERE {where_sql}
         """
 
+        print(f"  🔍 DEBUG SQL Insumos - Distrito: {contexto.get('distrito')}, ID: {contexto.get('distrito_id')}")
+        
         cur.execute(sql, params)
         rows = cur.fetchall()
         cur.close()
 
-        return {r['insumo_id'] for r in rows}
-
+        resultado = {r['insumo_id'] for r in rows}
+        print(f"  ✅ Insumos con saldo: {len(resultado)}")
+        return resultado
+    
     def _obtener_saldos_batch(self, fecha_corte_dt, contexto, insumos_ids):
         """
-        ✅ CORREGIDO: Calcula SALDO ANTERIOR (sin Inventario Inicial)
-        
-        El Inventario Inicial NO debe incluirse aquí porque:
-        - Solo debe sumarse en el primer mes donde aparece
-        - Ya se maneja por separado en procesar_datos_cantidad_solicitada()
-        
-        Fórmula: Saldo = Entradas Nivel Superior + Reajustes - Entregado
+        ✅ CORREGIDO: Calcula SALDO ANTERIOR usando el CONTEXTO específico pasado como parámetro
+        (no los combos globales)
         """
         if not insumos_ids:
             return {}
@@ -685,32 +720,41 @@ class ReporteCantidadSolicitada:
         
         cur = conn.cursor(dictionary=True)
 
-        nivel_info = self._derivar_nivel_y_filtros()
-
+        # ⭐ USAR CONTEXTO PASADO, NO _derivar_nivel_y_filtros()
         where = [
             f"m.insumo_id IN ({','.join(['%s'] * len(insumos_ids))})",
             "DATE(m.fecha_registro) <= %s"
         ]
         params = list(insumos_ids) + [fecha_corte_dt.strftime('%Y-%m-%d')]
 
-        if nivel_info['nivel'] == 'area' and nivel_info['area']:
-            where.append("a.nombre = %s")
-            params.append(nivel_info['area'])
-            where.append("m.distrito_id IS NULL")
-        elif nivel_info['nivel'] == 'distrito' and nivel_info['distrito']:
-            where.append("d.nombre = %s")
-            params.append(nivel_info['distrito'])
-            where.append("m.servicio_id IS NULL")
-        if nivel_info['nivel'] == 'servicio' and nivel_info.get('servicio_id'):
-            where.append("s.id = %s")
-            params.append(nivel_info['servicio_id'])
-        elif nivel_info['nivel'] == 'servicio' and nivel_info.get('servicio'):
+        # ⭐ APLICAR FILTROS DEL CONTEXTO ESPECÍFICO
+        if contexto.get('servicio_id'):
+            # Nivel SERVICIO: filtrar por ID exacto
+            where.append("m.servicio_id = %s")
+            params.append(contexto['servicio_id'])
+        elif contexto.get('servicio'):
+            # Fallback por nombre
             where.append("s.nombre = %s")
-            params.append(nivel_info['servicio'])
-        elif nivel_info['nivel'] == 'tipo_servicio' and nivel_info.get('tipo_servicio'):
-            where.append("ts.nombre = %s")
-            params.append(nivel_info['tipo_servicio'])
+            params.append(contexto['servicio'])
+        elif contexto.get('tipo_servicio'):
+            where.append("ts.descripcion = %s")
+            params.append(contexto['tipo_servicio'])
+        elif contexto.get('distrito_id'):
+            # ⭐ NIVEL DISTRITO: usar ID del distrito específico
+            where.append("m.distrito_id = %s")
+            params.append(contexto['distrito_id'])
+            where.append("m.servicio_id IS NULL")  # Excluir servicios
+        elif contexto.get('distrito'):
+            # Fallback por nombre
+            where.append("d.nombre = %s")
+            params.append(contexto['distrito'])
+            where.append("m.servicio_id IS NULL")
+        elif contexto.get('area'):
+            where.append("a.nombre = %s")
+            params.append(contexto['area'])
+            where.append("m.distrito_id IS NULL")  # Excluir distritos
 
+        # Filtros adicionales de insumo
         if contexto.get('tipo_insumo'):
             where.append("ti.descripcion = %s")
             params.append(contexto['tipo_insumo'])
@@ -733,34 +777,21 @@ class ReporteCantidadSolicitada:
 
         where_sql = " AND ".join(where)
 
-        # ✅ FÓRMULA CORREGIDA: SIN Inventario Inicial
         sql = f"""
             SELECT
                 m.insumo_id,
                 SUM(
                     CASE
-                        -- ✅ ENTRADAS: Solo Entrada Nivel Superior
                         WHEN UPPER(REPLACE(REPLACE(tm.descripcion, '  ', ' '), '  ', ' ')) = 'ENTRADA NIVEL SUPERIOR'
                             THEN m.cantidad
-                        
-                        -- ❌ INVENTARIO INICIAL: NO incluir aquí
-                        -- Se maneja por separado en procesar_datos_cantidad_solicitada()
-                        
-                        -- ✅ REAJUSTES POSITIVOS
                         WHEN UPPER(REPLACE(REPLACE(tm.descripcion, '  ', ' '), '  ', ' ')) LIKE '%REAJUSTE%' 
                             AND (UPPER(tm.descripcion) LIKE '%(+)%' OR UPPER(tm.descripcion) LIKE '%POSITIVO%')
                             THEN m.cantidad
-                        
-                        -- ✅ SALIDAS: Solo ENTREGADO
                         WHEN UPPER(REPLACE(REPLACE(tm.descripcion, '  ', ' '), '  ', ' ')) = 'ENTREGADO'
                             THEN -m.cantidad
-                        
-                        -- ✅ REAJUSTES NEGATIVOS
                         WHEN UPPER(REPLACE(REPLACE(tm.descripcion, '  ', ' '), '  ', ' ')) LIKE '%REAJUSTE%' 
                             AND (UPPER(tm.descripcion) LIKE '%(-)%' OR UPPER(tm.descripcion) LIKE '%NEGATIVO%')
                             THEN -m.cantidad
-                        
-                        -- ❌ NO INCLUIR: SALIDA NIVEL INFERIOR, NO ENTREGADO, INVENTARIO INICIAL
                         ELSE 0
                     END
                 ) AS saldo
@@ -776,16 +807,20 @@ class ReporteCantidadSolicitada:
             GROUP BY m.insumo_id
         """
 
+        print(f"  🔍 DEBUG SQL Saldos - Distrito: {contexto.get('distrito')}, ID: {contexto.get('distrito_id')}")
+        print(f"  📝 Params: {params[:5]}...")  # Mostrar primeros params para debug
+        
         cur.execute(sql, params)
         rows = cur.fetchall()
         cur.close()
 
-        return {r['insumo_id']: (r['saldo'] or 0) for r in rows}
+        resultado = {r['insumo_id']: (r['saldo'] or 0) for r in rows}
+        print(f"  ✅ Saldos obtenidos: {len(resultado)} insumos")
+        return resultado
 
     def _obtener_existencia_fisica_batch(self, fecha_corte_dt, contexto, insumos_ids):
         """
-        ✅ NUEVO: Calcula EXISTENCIA FÍSICA de múltiples insumos
-        Existencia Física = Saldo Teórico - Salidas a Nivel Inferior
+        ✅ CORREGIDO: Calcula EXISTENCIA FÍSICA usando el CONTEXTO específico pasado como parámetro
         """
         if not insumos_ids:
             return {}
@@ -796,32 +831,36 @@ class ReporteCantidadSolicitada:
         
         cur = conn.cursor(dictionary=True)
 
-        nivel_info = self._derivar_nivel_y_filtros()
-
+        # ⭐ USAR CONTEXTO PASADO, NO _derivar_nivel_y_filtros()
         where = [
             f"m.insumo_id IN ({','.join(['%s'] * len(insumos_ids))})",
             "DATE(m.fecha_registro) <= %s"
         ]
         params = list(insumos_ids) + [fecha_corte_dt.strftime('%Y-%m-%d')]
 
-        if nivel_info['nivel'] == 'area' and nivel_info['area']:
-            where.append("a.nombre = %s")
-            params.append(nivel_info['area'])
-            where.append("m.distrito_id IS NULL")
-        elif nivel_info['nivel'] == 'distrito' and nivel_info['distrito']:
+        # ⭐ APLICAR FILTROS DEL CONTEXTO ESPECÍFICO
+        if contexto.get('servicio_id'):
+            where.append("m.servicio_id = %s")
+            params.append(contexto['servicio_id'])
+        elif contexto.get('servicio'):
+            where.append("s.nombre = %s")
+            params.append(contexto['servicio'])
+        elif contexto.get('tipo_servicio'):
+            where.append("ts.descripcion = %s")
+            params.append(contexto['tipo_servicio'])
+        elif contexto.get('distrito_id'):
+            # ⭐ NIVEL DISTRITO: usar ID del distrito específico
+            where.append("m.distrito_id = %s")
+            params.append(contexto['distrito_id'])
+            where.append("m.servicio_id IS NULL")  # Excluir servicios
+        elif contexto.get('distrito'):
             where.append("d.nombre = %s")
-            params.append(nivel_info['distrito'])
+            params.append(contexto['distrito'])
             where.append("m.servicio_id IS NULL")
-        elif nivel_info['nivel'] == 'servicio':
-            if nivel_info.get('servicio_id'):
-                where.append("s.id = %s")
-                params.append(nivel_info['servicio_id'])
-            elif nivel_info.get('servicio'):
-                where.append("s.nombre = %s")
-                params.append(nivel_info['servicio'])
-        elif nivel_info['nivel'] == 'tipo_servicio' and nivel_info.get('tipo_servicio'):
-            where.append("ts.nombre = %s")
-            params.append(nivel_info['tipo_servicio'])
+        elif contexto.get('area'):
+            where.append("a.nombre = %s")
+            params.append(contexto['area'])
+            where.append("m.distrito_id IS NULL")
 
         if contexto.get('tipo_insumo'):
             where.append("ti.descripcion = %s")
@@ -845,12 +884,10 @@ class ReporteCantidadSolicitada:
 
         where_sql = " AND ".join(where)
 
-        # ⭐ En nivel SERVICIO, Existencia Física = Saldo Teórico (no hay salidas a nivel inferior)
-        # Determinar si estamos en nivel servicio
-        es_nivel_servicio = nivel_info['nivel'] == 'servicio'
+        # Determinar si es nivel servicio (sin salidas a nivel inferior)
+        es_nivel_servicio = bool(contexto.get('servicio') or contexto.get('servicio_id'))
 
         if es_nivel_servicio:
-            # SERVICIO: Existencia Física = Saldo Teórico (sin ENTREGADO ni SALIDA NIVEL INFERIOR)
             sql = f"""
                 SELECT
                     m.insumo_id,
@@ -875,7 +912,6 @@ class ReporteCantidadSolicitada:
                 GROUP BY m.insumo_id
             """
         else:
-            # ÁREA/DISTRITO: Incluir todas las salidas
             sql = f"""
                 SELECT
                     m.insumo_id,
@@ -900,11 +936,15 @@ class ReporteCantidadSolicitada:
                 GROUP BY m.insumo_id
             """
 
+        print(f"  🔍 DEBUG SQL Existencias - Distrito: {contexto.get('distrito')}, ID: {contexto.get('distrito_id')}")
+        
         cur.execute(sql, params)
         rows = cur.fetchall()
         cur.close()
 
-        return {r['insumo_id']: (r['existencia_fisica'] or 0) for r in rows}
+        resultado = {r['insumo_id']: (r['existencia_fisica'] or 0) for r in rows}
+        print(f"  ✅ Existencias obtenidas: {len(resultado)} insumos")
+        return resultado
     
     def _get_conn(self):
         """Obtiene conexión a BD reutilizable"""
@@ -924,7 +964,13 @@ class ReporteCantidadSolicitada:
         tipo_servicio = (self.combo_tipo_servicio.get() or '').strip() or None
         servicio = (self.combo_servicio.get() or '').strip() or None
         
-        # ⭐ Obtener servicio_id si hay servicio seleccionado
+        # ⭐ Obtener IDs si están disponibles
+        distrito_id = None
+        if distrito:
+            distrito_obj = next((d for d in self.distritos if d['nombre'] == distrito), None)
+            if distrito_obj and 'id' in distrito_obj:
+                distrito_id = distrito_obj['id']
+        
         servicio_id = None
         if servicio and tipo_servicio:
             if hasattr(self, 'tipos_servicio'):
@@ -940,6 +986,7 @@ class ReporteCantidadSolicitada:
                 'nivel': 'servicio',
                 'area': area,
                 'distrito': distrito,
+                'distrito_id': distrito_id,
                 'tipo_servicio': tipo_servicio,
                 'servicio': servicio,
                 'servicio_id': servicio_id
@@ -949,6 +996,7 @@ class ReporteCantidadSolicitada:
                 'nivel': 'tipo_servicio',
                 'area': area,
                 'distrito': distrito,
+                'distrito_id': distrito_id,
                 'tipo_servicio': tipo_servicio,
                 'servicio': None
             }
@@ -957,6 +1005,7 @@ class ReporteCantidadSolicitada:
                 'nivel': 'distrito',
                 'area': area,
                 'distrito': distrito,
+                'distrito_id': distrito_id,
                 'tipo_servicio': None,
                 'servicio': None
             }
@@ -965,6 +1014,7 @@ class ReporteCantidadSolicitada:
                 'nivel': 'area',
                 'area': area,
                 'distrito': None,
+                'distrito_id': None,
                 'tipo_servicio': None,
                 'servicio': None
             }
@@ -973,6 +1023,7 @@ class ReporteCantidadSolicitada:
                 'nivel': 'consolidado',
                 'area': None,
                 'distrito': None,
+                'distrito_id': None,
                 'tipo_servicio': None,
                 'servicio': None
             }
@@ -1118,6 +1169,12 @@ class ReporteCantidadSolicitada:
                 continue
 
             codigo = codigos_insumos.get(insumo_id, f"TEMP-{str(insumo_id).zfill(4)}")
+            
+            # ✅ AGREGAR ESTA VALIDACIÓN
+            if codigo.startswith('TEMP-'):
+                print(f"⚠️ Insumo sin código válido (ID: {insumo_id}) - OMITIDO")
+                continue  
+            
             nombre = mov.get('nombre_insumo', '')
 
             area = mov.get('area_nombre', '')
@@ -1476,6 +1533,15 @@ class ReporteCantidadSolicitada:
         """
         Procesa Cantidad Solicitada con opción de pivoteo por distrito o servicio
         """
+        # ✅ AGREGAR VALIDACIÓN AL INICIO
+        servicio_sel = (self.combo_servicio.get() or '').strip()
+        if servicio_sel:
+            return []  # Retornar lista vacía si hay servicio seleccionado
+        
+        # Verificar si necesitamos pivotar
+        tipo_entidad, entidades = self.obtener_entidades_relacionadas()
+        es_pivote = tipo_entidad is not None and len(entidades) > 0
+        
         # Verificar si necesitamos pivotar
         tipo_entidad, entidades = self.obtener_entidades_relacionadas()
         es_pivote = tipo_entidad is not None and len(entidades) > 0
@@ -1558,8 +1624,8 @@ class ReporteCantidadSolicitada:
         )
     
     def _procesar_datos_pivotados(self, movimientos_raw, fecha_ini, fecha_fin, 
-                        codigos_insumos, todos_los_insumos,
-                        tipo_entidad, entidades):
+                    codigos_insumos, todos_los_insumos,
+                    tipo_entidad, entidades):
         """
         Genera datos pivotados: cada entidad (distrito/servicio) en una columna
         """
@@ -1573,18 +1639,28 @@ class ReporteCantidadSolicitada:
         datos_por_insumo = {}
         
         for entidad in entidades:
-                   
+            print(f"\n🔍 DEBUG: Procesando entidad '{entidad}' (tipo: {tipo_entidad})")
+            
             # ✅ CORRECCIÓN: Crear contexto específico ANTES de filtrar movimientos
             if tipo_entidad == 'distrito':
+                # ⭐ Obtener distrito_id para el distrito actual
+                distrito_id_entidad = None
+                distrito_obj = next((d for d in self.distritos if d['nombre'] == entidad), None)
+                if distrito_obj and 'id' in distrito_obj:
+                    distrito_id_entidad = distrito_obj['id']
+                
                 contexto_entidad = {
                     'area': area_sel,
                     'distrito': entidad,  # ⭐ DISTRITO ESPECÍFICO
+                    'distrito_id': distrito_id_entidad,  # ⭐ ID DEL DISTRITO
                     'tipo_servicio': None,
                     'servicio': None,
                     'presentacion': (self.combo_presentacion.get() or '').strip() or None,
                     'tipo_insumo': (self.combo_tipo_insumo.get() or '').strip() or None,
                     'insumo': (self.combo_insumo.get() or '').strip() or None
                 }
+                print(f"  📍 Contexto distrito: {contexto_entidad}")
+                
             else:  # tipo_entidad == 'servicio'
                 # ⭐ Obtener servicio_id para el servicio actual
                 servicio_id_entidad = None
@@ -1607,41 +1683,64 @@ class ReporteCantidadSolicitada:
                     'tipo_insumo': (self.combo_tipo_insumo.get() or '').strip() or None,
                     'insumo': (self.combo_insumo.get() or '').strip() or None
                 }
+                print(f"  📍 Contexto servicio: {contexto_entidad}")
             
-            # Filtrar movimientos para esta entidad específica
+            # ✅ Filtrar movimientos ESPECÍFICOS para esta entidad
             movimientos_entidad = []
             for mov in movimientos_raw:
                 incluir = False
                 
                 if tipo_entidad == 'distrito':
-                    # Verificar que el movimiento pertenezca a este distrito
-                    if (mov.get('area_nombre') == area_sel and 
-                        mov.get('distrito_nombre') == entidad):
+                    # ⭐ VERIFICAR que el movimiento pertenezca EXACTAMENTE a este distrito
+                    mov_area = mov.get('area_nombre', '').strip()
+                    mov_distrito = mov.get('distrito_nombre', '').strip()
+                    
+                    # Solo incluir si el área coincide Y el distrito coincide EXACTAMENTE
+                    if mov_area == area_sel and mov_distrito == entidad:
                         incluir = True
+                        print(f"    ✅ Incluir movimiento: {mov.get('codigo_insumo')} - {mov.get('tipo_movimiento')} - Área: {mov_area}, Distrito: {mov_distrito}")
                 
                 elif tipo_entidad == 'servicio':
-                    # Verificar que el movimiento pertenezca a este servicio
-                    if (mov.get('area_nombre') == area_sel and
-                        mov.get('distrito_nombre') == distrito_sel and
-                        mov.get('servicio_nombre') == entidad):
+                    # ⭐ VERIFICAR que el movimiento pertenezca EXACTAMENTE a este servicio
+                    mov_area = mov.get('area_nombre', '').strip()
+                    mov_distrito = mov.get('distrito_nombre', '').strip()
+                    mov_servicio = mov.get('servicio_nombre', '').strip()
+                    
+                    # Solo incluir si área, distrito Y servicio coinciden EXACTAMENTE
+                    if (mov_area == area_sel and 
+                        mov_distrito == distrito_sel and 
+                        mov_servicio == entidad):
                         incluir = True
+                        print(f"    ✅ Incluir movimiento: {mov.get('codigo_insumo')} - {mov.get('tipo_movimiento')} - Servicio: {mov_servicio}")
                 
                 if incluir:
                     movimientos_entidad.append(mov)
+            
+            print(f"  📊 Total movimientos para '{entidad}': {len(movimientos_entidad)}")
             
             # ✅ OBTENER INSUMOS CON SALDO USANDO EL CONTEXTO ESPECÍFICO
             insumos_con_saldo = self._obtener_insumos_con_saldo(fecha_corte_anterior, contexto_entidad)
             insumos_en_periodo = set(m.get('codigo_insumo') for m in movimientos_entidad if m.get('codigo_insumo'))
             todos_insumos_entidad = insumos_con_saldo | insumos_en_periodo
             
+            print(f"  📦 Insumos con saldo: {len(insumos_con_saldo)}, en periodo: {len(insumos_en_periodo)}, total: {len(todos_insumos_entidad)}")
+            
             # ✅ CALCULAR SALDOS CON EL CONTEXTO ESPECÍFICO DE LA ENTIDAD
             saldos_entidad = self._obtener_saldos_batch(fecha_corte_anterior, contexto_entidad, list(todos_insumos_entidad))
             existencias_entidad = self._obtener_existencia_fisica_batch(fecha_corte_anterior, contexto_entidad, list(todos_insumos_entidad))
-                        
+            
+            print(f"  💰 Saldos calculados: {len(saldos_entidad)}, Existencias: {len(existencias_entidad)}")
+            
             # Procesar cada insumo para esta entidad
             for insumo_id in todos_insumos_entidad:
                 if insumo_id not in datos_por_insumo:
                     codigo = codigos_insumos.get(insumo_id, f"TEMP-{str(insumo_id).zfill(4)}")
+                    
+                    # ✅ Filtrar insumos sin código válido
+                    if codigo.startswith('TEMP-'):
+                        print(f"⚠️ Insumo sin código válido: {mov.get('nombre_insumo', 'Desconocido')} (ID: {insumo_id})")
+                        continue
+                    
                     nombre = next((m.get('nombre_insumo') for m in movimientos_raw if m.get('codigo_insumo') == insumo_id), '')
                     
                     datos_por_insumo[insumo_id] = {
@@ -1653,7 +1752,9 @@ class ReporteCantidadSolicitada:
                 # ✅ CONVERTIR A FLOAT ANTES DE PASAR A LA FUNCIÓN
                 saldo_teorico = float(saldos_entidad.get(insumo_id, 0.0))
                 existencia_fisica = float(existencias_entidad.get(insumo_id, 0.0))
-                                
+                
+                print(f"    📊 Insumo {insumo_id}: Saldo teórico={saldo_teorico}, Existencia física={existencia_fisica}")
+                
                 # Calcular cantidad a solicitar para esta entidad
                 cantidad_solicitar = self._calcular_cantidad_solicitar_entidad(
                     insumo_id, movimientos_entidad, fecha_ini, fecha_fin,
@@ -1661,7 +1762,9 @@ class ReporteCantidadSolicitada:
                     existencia_fisica,
                     contexto_entidad  # ⭐ PASAR EL CONTEXTO ESPECÍFICO
                 )
-                                
+                
+                print(f"    💰 Cantidad a solicitar: {cantidad_solicitar}")
+                
                 datos_por_insumo[insumo_id]['entidades'][entidad] = cantidad_solicitar
         
         # Convertir a lista para la tabla
@@ -2462,6 +2565,21 @@ class ReporteCantidadSolicitada:
                 messagebox.showerror("Error", "La fecha final debe ser mayor a la inicial")
                 return
 
+            # ✅ AGREGAR ESTA VALIDACIÓN DESPUÉS DE VALIDAR FECHAS
+            servicio_sel = (self.combo_servicio.get() or '').strip()
+            if servicio_sel:
+                messagebox.showwarning(
+                    "Advertencia", 
+                    "No se puede generar el reporte con un servicio seleccionado.\n\n"
+                    "Por favor, seleccione solo ÁREA o DISTRITO para ver el reporte pivotado."
+                )
+                # Rehabilitar botón
+                for child in self.frame_botones.winfo_children():
+                    if child.cget('text') == "Vista Previa":
+                        child.config(state='normal')
+                        break
+                return
+            
             # ⭐ Obtener ID del servicio seleccionado para evitar duplicados
             servicio_id = None
             if self.combo_servicio.get().strip():
@@ -3014,6 +3132,7 @@ class ReporteCantidadSolicitada:
                     for entidad in mov.get('entidades_data', {}).keys()
                 ))
                 
+                # ✅ SOLO MOSTRAR: Código, Descripción del Insumo, y las entidades
                 headers = ['Código', 'Descripción\ndel Insumo'] + entidades
                 
                 data = [headers]
