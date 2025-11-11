@@ -3121,8 +3121,34 @@ class ReporteCantidadSolicitada:
                     for entidad in mov.get('entidades_data', {}).keys()
                 ))
                 
+                # ✅ FUNCIÓN PARA DIVIDIR NOMBRES LARGOS EN MÚLTIPLES LÍNEAS
+                def dividir_nombre_entidad(nombre, max_chars=15):
+                    """Divide nombres largos en múltiples líneas para headers"""
+                    if len(nombre) <= max_chars:
+                        return nombre
+                    
+                    palabras = nombre.split()
+                    lineas = []
+                    linea_actual = ""
+                    
+                    for palabra in palabras:
+                        if len(linea_actual + " " + palabra) <= max_chars:
+                            linea_actual = (linea_actual + " " + palabra).strip()
+                        else:
+                            if linea_actual:
+                                lineas.append(linea_actual)
+                            linea_actual = palabra
+                    
+                    if linea_actual:
+                        lineas.append(linea_actual)
+                    
+                    return "\n".join(lineas)
+                
+                # ✅ APLICAR FORMATO A LOS ENCABEZADOS DE ENTIDADES
+                entidades_formateadas = [dividir_nombre_entidad(e) for e in entidades]
+                
                 # ✅ SOLO MOSTRAR: Código, Descripción del Insumo, y las entidades
-                headers = ['Código', 'Descripción\ndel Insumo'] + entidades
+                headers = ['Código', 'Descripción\ndel Insumo'] + entidades_formateadas
                 
                 data = [headers]
                 for mov in self.movimientos_data:

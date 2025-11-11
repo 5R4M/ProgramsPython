@@ -72,7 +72,7 @@ class MainWindow:
         self.root = tk.Tk()
         self.root.withdraw()  # OCULTAR VENTANA DURANTE CONFIGURACIÓN
         
-        self.root.title("Sistema de Gestión de Insumos")
+        self.root.title("Módulo de Productos Afines")
 
         # Configurar icono de la ventana si existe
         try:
@@ -393,11 +393,11 @@ class MainWindow:
         else:
             tk.Frame(header_frame, bg=self.COLORS['primary'], height=30).pack()
 
-        tk.Label(header_frame, text="SISTEMA DE GESTIÓN", 
+        tk.Label(header_frame, text="MÓDULO DE PRODUCTOS", 
                 font=('Segoe UI', 12, 'bold'),
                 fg=self.COLORS['white'], 
                 bg=self.COLORS['primary']).pack(pady=(5, 2))
-        tk.Label(header_frame, text="DE INSUMOS", 
+        tk.Label(header_frame, text="AFINES", 
                 font=('Segoe UI', 12, 'bold'),
                 fg=self.COLORS['white'], 
                 bg=self.COLORS['primary']).pack(pady=(0, 15))

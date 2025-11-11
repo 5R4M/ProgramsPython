@@ -116,7 +116,7 @@ def debug_paths():
         log(f"   Nombre del equipo: {platform.node()}")
         log(f"   Usuario actual: {os.getenv('USERNAME', 'N/A')}")
 
-        log(f"\n📁 RUTAS DE ARCHIVOS:")
+        log("\n📁 RUTAS DE ARCHIVOS:")
         log(f"   Script actual: {__file__}")
         log(f"   Directorio del script: {os.path.dirname(os.path.abspath(__file__))}")
         log(f"   ¿Es ejecutable?: {getattr(sys, 'frozen', False)}")
@@ -154,7 +154,7 @@ def debug_paths():
             except Exception as e:
                 log(f"     Error listando directorio: {e}")
 
-        log(f"\n🌐 DIAGNÓSTICO DE CONECTIVIDAD:")
+        log("\n🌐 DIAGNÓSTICO DE CONECTIVIDAD:")
 
         mysql_host = None
         mysql_port = 3306
@@ -175,37 +175,37 @@ def debug_paths():
                     if mysql_host and mysql_user:
                         log(f"   ✅ Configuración leída desde: {config_path}")
                     else:
-                        log(f"   ⚠️ Configuración incompleta en archivo")
+                        log("   ⚠️ Configuración incompleta en archivo")
                 else:
-                    log(f"   ⚠️ Archivo config existe pero sin sección [MySQL]")
+                    log("   ⚠️ Archivo config existe pero sin sección [MySQL]")
             except Exception as e:
                 log(f"   ⚠️ Error leyendo configuración: {e}")
         else:
-            log(f"   ⚠️ No existe archivo de configuración")
+            log("   ⚠️ No existe archivo de configuración")
 
         # Validar antes de continuar
         if not mysql_host or not mysql_user or not mysql_password:
-            log(f"   ⚠️ No se puede realizar diagnóstico sin configuración válida")
+            log("   ⚠️ No se puede realizar diagnóstico sin configuración válida")
             return
 
         log(f"   Servidor objetivo: {mysql_host}:{mysql_port}")
         log(f"   Usuario: {mysql_user}")
 
-        log(f"\n🔍 1. RESOLUCIÓN DNS:")
+        log("\n🔍 1. RESOLUCIÓN DNS:")
         try:
             import socket
             ip_address = socket.gethostbyname(mysql_host)
             log(f"   ✅ {mysql_host} resuelve a: {ip_address}")
         except socket.gaierror as e:
             log(f"   ❌ Error resolviendo {mysql_host}: {e}")
-            log(f"   💡 Sugerencia: Usar IP directa en lugar del nombre")
+            log("   💡 Sugerencia: Usar IP directa en lugar del nombre")
             mysql_host = "192.168.1.100"
             log(f"   🔄 Intentando con IP: {mysql_host}")
 
         log(f"\n🔍 2. CONECTIVIDAD DE RED (Puerto {mysql_port}):")
         network_ok = test_network_connectivity(mysql_host, mysql_port)
 
-        log(f"\n🔍 3. VERIFICACIÓN DE PUERTOS ADICIONALES:")
+        log("\n🔍 3. VERIFICACIÓN DE PUERTOS ADICIONALES:")
         test_ports = [80, 443, 53, 8080]
         for port in test_ports:
             result = test_network_connectivity("8.8.8.8", port, timeout=3)
@@ -213,31 +213,31 @@ def debug_paths():
                 log(f"   ✅ Conectividad general OK (puerto {port})")
                 break
         else:
-            log(f"   ⚠️ Posibles problemas de conectividad general")
+            log("   ⚠️ Posibles problemas de conectividad general")
 
-        log(f"\n🔍 4. VERIFICACIÓN DE FIREWALL:")
+        log("\n🔍 4. VERIFICACIÓN DE FIREWALL:")
         check_windows_firewall()
 
-        log(f"\n🔍 5. DEPENDENCIAS MYSQL:")
+        log("\n🔍 5. DEPENDENCIAS MYSQL:")
         check_mysql_dependencies()
 
         if network_ok:
-            log(f"\n🔍 6. CONEXIÓN MYSQL COMPLETA:")
+            log("\n🔍 6. CONEXIÓN MYSQL COMPLETA:")
             mysql_ok = test_mysql_connection(mysql_host, mysql_port, mysql_user, mysql_password)
         else:
             mysql_ok = False
-            log(f"\n⚠️ 6. SALTANDO PRUEBA MYSQL (sin conectividad de red)")
+            log("\n⚠️ 6. SALTANDO PRUEBA MYSQL (sin conectividad de red)")
 
-        log(f"\n🔍 7. CONFIGURACIÓN DE RED LOCAL:")
+        log("\n🔍 7. CONFIGURACIÓN DE RED LOCAL:")
         check_network_config()
 
-        log(f"\n" + "=" * 80)
+        log("\n" + "=" * 80)
         log("📋 RESUMEN DEL DIAGNÓSTICO")
         log("=" * 80)
         log(f"🌐 Conectividad de red: {'✅ OK' if network_ok else '❌ FALLA'}")
         log(f"🗄️  Conexión MySQL: {'✅ OK' if mysql_ok else '❌ FALLA'}")
 
-        log(f"\n💡 SUGERENCIAS:")
+        log("\n💡 SUGERENCIAS:")
         if not network_ok:
             log("   🔧 PROBLEMAS DE RED:")
             log("   1. Verificar que el servidor MySQL esté ejecutándose")
@@ -286,8 +286,7 @@ def test_mysql_connection(host, port, user, password):
     """Prueba conexión MySQL completa"""
     try:
         import mysql.connector
-        from mysql.connector import Error
-        log(f"   🔄 Intentando conexión MySQL...")
+        log("   🔄 Intentando conexión MySQL...")
         connection = mysql.connector.connect(
             host=host,
             port=port,
@@ -305,7 +304,7 @@ def test_mysql_connection(host, port, user, password):
         cursor.close()
         connection.close()
 
-        log(f"   ✅ Conexión MySQL exitosa")
+        log("   ✅ Conexión MySQL exitosa")
         log(f"   📊 Versión MySQL: {version}")
         if databases:
             log(f"   🗄️  Bases de datos disponibles: {', '.join(databases[:5])}")
@@ -314,13 +313,13 @@ def test_mysql_connection(host, port, user, password):
     except mysql.connector.Error as e:
         log(f"   ❌ Error MySQL: {e.errno} - {e.msg}")
         if e.errno == 1045:
-            log(f"   💡 Usuario o contraseña incorrectos")
+            log("   💡 Usuario o contraseña incorrectos")
         elif e.errno == 2003:
-            log(f"   💡 No se puede conectar al servidor MySQL")
+            log("   💡 No se puede conectar al servidor MySQL")
         elif e.errno == 1130:
-            log(f"   💡 Host no autorizado para conectar")
+            log("   💡 Host no autorizado para conectar")
         elif e.errno == 2013:
-            log(f"   💡 Conexión perdida con el servidor MySQL")
+            log("   💡 Conexión perdida con el servidor MySQL")
         return False
     except Exception as e:
         log(f"   ❌ Error inesperado: {e}")
@@ -349,18 +348,18 @@ def check_mysql_dependencies():
                     break
 
             if not found_dll:
-                log(f"   ⚠️ No se encontraron DLLs de MySQL en ubicaciones comunes")
-                log(f"   💡 Instalar MySQL Connector/C++ Redistributable")
+                log("   ⚠️ No se encontraron DLLs de MySQL en ubicaciones comunes")
+                log("   💡 Instalar MySQL Connector/C++ Redistributable")
 
     except ImportError as e:
         log(f"   ❌ mysql.connector NO disponible: {e}")
-        log(f"   💡 Instalar: pip install mysql-connector-python")
+        log("   💡 Instalar: pip install mysql-connector-python")
 
 def check_windows_firewall():
     """Verifica configuración básica del firewall de Windows"""
     import platform
     if platform.system() != "Windows":
-        log(f"   ℹ️ No es Windows, saltando verificación de firewall")
+        log("   ℹ️ No es Windows, saltando verificación de firewall")
         return
 
     try:
@@ -372,12 +371,12 @@ def check_windows_firewall():
 
         if result.returncode == 0:
             if "ON" in result.stdout:
-                log(f"   ⚠️ Firewall de Windows está ACTIVO")
-                log(f"   💡 Verificar reglas para puerto 3306")
+                log("   ⚠️ Firewall de Windows está ACTIVO")
+                log("   💡 Verificar reglas para puerto 3306")
             else:
-                log(f"   ✅ Firewall de Windows está INACTIVO")
+                log("   ✅ Firewall de Windows está INACTIVO")
         else:
-            log(f"   ⚠️ No se pudo verificar estado del firewall")
+            log("   ⚠️ No se pudo verificar estado del firewall")
 
     except Exception as e:
         log(f"   ⚠️ Error verificando firewall: {e}")
@@ -582,7 +581,7 @@ def verificar_mysql_y_continuar(self):
             config = configparser.ConfigParser()
             try:
                 config.read(config_file, encoding='utf-8')
-                log(f"✅ Archivo de configuración leído correctamente")
+                log("✅ Archivo de configuración leído correctamente")
             except Exception as e:
                 error_msg = f"Error leyendo archivo de configuración: {str(e)}"
                 self.root.after(0, lambda: self.mostrar_configuracion_mysql(error_msg))
@@ -685,7 +684,7 @@ def ejecutar_bat_con_elevacion(ruta_bat):
 def es_admin():
     try:
         return ctypes.windll.shell32.IsUserAnAdmin()
-    except:
+    except:  # noqa: E722
         return False
 
 def ejecutar_como_admin():
@@ -1269,7 +1268,7 @@ class ConfiguracionMySQL:
 class LoginWindow:
     def __init__(self):
         self.root = tk.Tk()
-        self.root.title("Sistema de Gestión de Insumos")
+        self.root.title("Módulo de Productos Afines")
         self.root.geometry("800x450")
         self.root.configure(bg='#f8f9fa')
         self.root.resizable(False, False)
@@ -1326,7 +1325,7 @@ class LoginWindow:
                 config = configparser.ConfigParser()
                 try:
                     config.read(config_file, encoding='utf-8')
-                    log(f"✅ Archivo de configuración leído correctamente")
+                    log("✅ Archivo de configuración leído correctamente")
                 except Exception as e:
                     error_msg = f"Error leyendo archivo de configuración: {str(e)}"
                     self.root.after(0, lambda: self.mostrar_configuracion_mysql(error_msg))
@@ -1499,7 +1498,7 @@ class LoginWindow:
         if self.animation_job:
             try:
                 self.root.after_cancel(self.animation_job)
-            except:
+            except:  # noqa: E722
                 pass
 
         self.loading_active = True
@@ -1594,7 +1593,7 @@ class LoginWindow:
 
         tk.Label(
             title_frame,
-            text=f"No se pudo conectar a la base de datos:",
+            text="No se pudo conectar a la base de datos:",
             font=('Segoe UI', 10),
             bg='#f8f9fa',
             fg='#7f8c8d'
@@ -1699,7 +1698,7 @@ class LoginWindow:
         if hasattr(self, 'animation_job') and self.animation_job:
             try:
                 self.root.after_cancel(self.animation_job)
-            except:
+            except:  # noqa: E722
                 pass
 
         for widget in self.root.winfo_children():
@@ -1753,7 +1752,7 @@ class LoginWindow:
 
         title_label = tk.Label(
             left_content,
-            text="SISTEMA DE GESTIÓN\nDE INSUMOS",
+            text="MÓDULO DE PRODUCTOS\nAFINES",
             font=('Segoe UI', 18, 'bold'),
             bg='#2c3e50',
             fg='#ffffff',
