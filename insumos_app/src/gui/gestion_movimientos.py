@@ -5,16 +5,17 @@ import pandas as pd
 import sys
 import os
 
-# Agregar el directorio raíz del proyecto al PATH de Python
-project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-sys.path.append(project_root)
-
 from src.database.db_manager import (
     obtener_tipos_movimiento,
     agregar_tipo_movimiento,
     actualizar_tipo_movimiento,
     eliminar_tipo_movimiento,
 )
+
+
+# Agregar el directorio raíz del proyecto al PATH de Python
+project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+sys.path.append(project_root)
 
 class GestionMovimientos:
     def __init__(self, parent_frame, main_window):
@@ -338,5 +339,5 @@ class GestionMovimientos:
         except Exception:
             try:
                 self.parent.destroy()
-            except:
+            except:  # noqa: E722
                 pass

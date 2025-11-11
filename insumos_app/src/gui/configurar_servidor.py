@@ -4,7 +4,7 @@ import ctypes
 import os
 import sys
 import tkinter as tk
-from tkinter import ttk, messagebox, simpledialog, filedialog
+from tkinter import ttk, messagebox, simpledialog
 import subprocess
 import configparser
 import socket
@@ -608,8 +608,8 @@ max_connections = {max_connections}
                 cursor.execute("SELECT VERSION()")
                 version = cursor.fetchone()[0]
                 try:
-                    self.info_text.insert(tk.END, f"🔄 Estado del Servidor MySQL\n")
-                    self.info_text.insert(tk.END, f"✅ Servidor ACTIVO\n")
+                    self.info_text.insert(tk.END, "🔄 Estado del Servidor MySQL\n")
+                    self.info_text.insert(tk.END, "✅ Servidor ACTIVO\n")
                     self.info_text.insert(tk.END, f"📊 Versión: {version}\n\n")
                 except Exception:
                     pass
@@ -708,7 +708,7 @@ max_connections = {max_connections}
                     try:
                         self.info_text.insert(tk.END, f"\n🌍 Simulando conexión desde {ip_externa}...\n")
                         self.info_text.insert(tk.END, f"Usuario: {usuario_prueba}\n")
-                        self.info_text.insert(tk.END, f"⚠️  Nota: Esta es una simulación local.\n")
+                        self.info_text.insert(tk.END, "⚠️  Nota: Esta es una simulación local.\n")
                         self.info_text.insert(tk.END, f"Para una prueba real, ejecute desde {ip_externa}:\n")
                         self.info_text.insert(tk.END, f"mysql -h {self.host_var.get()} -P {self.puerto_var.get()} -u {usuario_prueba} -p\n\n")
                     except Exception:

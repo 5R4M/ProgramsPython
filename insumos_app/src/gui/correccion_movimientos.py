@@ -1143,7 +1143,7 @@ class CorreccionMovimientos:
         sin_fv_inicial = not bool(fv_db)
         sin_fecha_var = tk.BooleanVar(value=sin_fv_inicial)
 
-        insumo_nombre = (movimiento.get('insumo_nombre') or "").strip()
+        (movimiento.get('insumo_nombre') or "").strip()
         presentacion_var = tk.StringVar(value=(movimiento.get('presentacion') or movimiento.get('nombre_presentacion') or "").strip())
 
         # DETALLES

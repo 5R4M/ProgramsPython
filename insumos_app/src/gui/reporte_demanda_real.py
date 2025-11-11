@@ -1,22 +1,14 @@
 import tkinter as tk
 from tkinter import ttk, messagebox
-from tkcalendar import DateEntry
 import pandas as pd
 from datetime import datetime, timedelta, date, time
 import sys
 import os
 from ttkwidgets.autocomplete import AutocompleteCombobox
 
-# ReportLab para PDF
-from reportlab.lib import colors
-from reportlab.lib.pagesizes import letter, landscape
-from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
-from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-from reportlab.lib.units import inch
 
 import fitz  # PyMuPDF
 from PIL import Image, ImageTk
-from ttkwidgets.autocomplete import AutocompleteCombobox
 
 import locale
 
@@ -45,7 +37,6 @@ from src.database.db_manager import (
     obtener_movimientos_kardex,
     conectar_db, 
     obtener_saldo_corte_logistico,
-    obtener_insumos_con_saldo,
     agregar_columna_codigo_prefijo, 
     asignar_prefijos_tipos_insumo
 )
@@ -493,7 +484,7 @@ class ReporteDemandaReal:
                 if os.path.exists(self.temp_pdf_path):
                     try:
                         os.remove(self.temp_pdf_path)
-                    except:
+                    except:  # noqa: E722
                         pass
                 delattr(self, 'temp_pdf_path')
             if hasattr(self, 'periodo_logistico_text'):
@@ -712,7 +703,7 @@ class ReporteDemandaReal:
                 if insumo_id_raw is not None:
                     try:
                         insumo_ids.add(int(str(insumo_id_raw).strip()))
-                    except:
+                    except:  # noqa: E722
                         pass
         
         if not insumo_ids:
@@ -931,7 +922,7 @@ class ReporteDemandaReal:
             insumo_id_raw = mov.get('codigo_insumo') or mov.get('insumo_id') or mov.get('codigo')
             try:
                 insumo_id = int(str(insumo_id_raw).strip()) if insumo_id_raw is not None else None
-            except:
+            except:  # noqa: E722
                 insumo_id = None
             
             if insumo_id is None or insumo_id not in todos_los_insumos:
@@ -1679,7 +1670,7 @@ class ReporteDemandaReal:
                 try:
                     iid = int(str(iid).strip())
                     insumo_ids_en_periodo.add(iid)
-                except:
+                except:  # noqa: E722
                     pass
 
             # COMBINAR: insumos con saldo anterior + insumos del periodo actual
@@ -2212,7 +2203,7 @@ class ReporteDemandaReal:
             print(f"Error al cerrar ventana: {e}")
             try:
                 self.parent.quit()
-            except:
+            except:  # noqa: E722
                 pass
           
     def destroy(self):
