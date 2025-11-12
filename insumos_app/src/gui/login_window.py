@@ -562,118 +562,6 @@ except ImportError:
     verificar_credenciales = verificar_credenciales_fallback
     crear_tabla_usuarios = crear_tabla_usuarios_fallback
 
-def verificar_mysql_y_continuar(self):
-    """Verifica la conexión MySQL y decide qué mostrar - VERSIÓN CORREGIDA"""
-    def verificar_conexion():
-        try:
-            log("Iniciando verificación de conexión MySQL...")
-
-            debug_paths()
-
-            config_file = get_config_path("mysql_config.ini")
-            log(f"Buscando archivo de configuración en: {config_file}")
-
-            if not os.path.exists(config_file):
-                error_msg = f"Archivo de configuración no encontrado: {config_file}"
-                self.root.after(0, lambda: self.mostrar_configuracion_mysql(error_msg))
-                return
-
-            config = configparser.ConfigParser()
-            try:
-                config.read(config_file, encoding='utf-8')
-                log("✅ Archivo de configuración leído correctamente")
-            except Exception as e:
-                error_msg = f"Error leyendo archivo de configuración: {str(e)}"
-                self.root.after(0, lambda: self.mostrar_configuracion_mysql(error_msg))
-                return
-
-            if 'MySQL' not in config:
-                error_msg = "Configuración MySQL no válida en archivo mysql_config.ini"
-                self.root.after(0, lambda: self.mostrar_configuracion_mysql(error_msg))
-                return
-
-            mysql_config = config['MySQL']
-
-            # SIN valores por defecto hardcodeados
-            host = mysql_config.get('host')
-            port_str = mysql_config.get('port')
-            user = mysql_config.get('admin_user')
-            password = mysql_config.get('admin_pass')
-
-            # Validar que existan
-            if not host or not port_str or not user:
-                error_msg = "Configuración MySQL incompleta (falta host, port o user)"
-                self.root.after(0, lambda: self.mostrar_configuracion_mysql(error_msg))
-                return
-
-            try:
-                port = int(port_str)
-            except ValueError:
-                error_msg = f"Puerto inválido: {port_str}"
-                self.root.after(0, lambda: self.mostrar_configuracion_mysql(error_msg))
-                return
-
-            log(f"Configuración cargada: {user}@{host}:{port}")
-
-            if not password:
-                error_msg = "Contraseña de MySQL no configurada"
-                self.root.after(0, lambda: self.mostrar_configuracion_mysql(error_msg))
-                return
-
-            log(f"Probando conexión a {user}@{host}:{port}")
-
-            if not verificar_conectividad_red(host, port):
-                error_msg = f"No se puede acceder al puerto {port} en {host}. Verifique que MySQL esté ejecutándose."
-                self.root.after(0, lambda: self.mostrar_configuracion_mysql(error_msg))
-                return
-
-            try:
-                connection = mysql.connector.connect(
-                    host=host,
-                    port=port,
-                    user=user,
-                    password=password,
-                    connection_timeout=10,
-                    autocommit=True
-                )
-
-                cursor = connection.cursor()
-                cursor.execute("SELECT VERSION()")
-                version = cursor.fetchone()[0]
-                log(f"✅ Conexión MySQL exitosa - Versión: {version}")
-                cursor.close()
-                connection.close()
-
-            except mysql.connector.Error as e:
-                error_msg = f"Error MySQL {e.errno}: {e.msg}"
-                if e.errno == 1045:
-                    error_msg = "Usuario o contraseña incorrectos en configuración MySQL"
-                elif e.errno == 2003:
-                    error_msg = "No se puede conectar al servidor MySQL. Verifique que esté ejecutándose."
-                elif e.errno == 1049:
-                    error_msg = "Base de datos no existe. Se creará automáticamente."
-
-                self.root.after(0, lambda: self.mostrar_configuracion_mysql(error_msg))
-                return
-
-            try:
-                crear_tabla_usuarios()
-                log("✅ Tablas verificadas/creadas")
-            except Exception as e:
-                log(f"⚠️ Error creando tablas: {e} - continuando...")
-
-            log("✅ Conexión MySQL exitosa, mostrando login...")
-            self.root.after(0, self.mostrar_login)
-
-        except Exception as e:
-            error_msg = f"Error inesperado en verificación: {str(e)}"
-            log(error_msg)
-            log_exc()
-            self.root.after(0, lambda: self.mostrar_configuracion_mysql(error_msg))
-
-    self.mostrar_mensaje_carga()
-    self.root.after(500, lambda: threading.Thread(target=verificar_conexion, daemon=True).start())
-
 def ejecutar_bat_con_elevacion(ruta_bat):
     ret = ctypes.windll.shell32.ShellExecuteW(None, "runas", ruta_bat, None, None, 1)
     if ret <= 32:
@@ -1292,12 +1180,14 @@ class LoginWindow:
         self.verificar_mysql_y_continuar()
 
     def verificar_mysql_y_continuar(self):
-        """Verifica la conexión MySQL y decide qué mostrar - MEJORADA PARA EJECUTABLE"""
+        """Verifica la conexión MySQL y decide qué mostrar - OPTIMIZADA"""
         def verificar_conexion():
             try:
                 log("Iniciando verificación de conexión MySQL...")
 
-                debug_paths()
+                # Solo ejecutar debug en desarrollo (no en producción)
+                if not SILENT and not getattr(sys, 'frozen', False):
+                    debug_paths()
 
                 config_file = get_config_path("mysql_config.ini")
                 log(f"Buscando archivo de configuración en: {config_file}")
@@ -1338,7 +1228,7 @@ class LoginWindow:
 
                 mysql_config = config['MySQL']
                 
-                # ✅ SIN valores por defecto hardcodeados
+                # SIN valores por defecto hardcodeados
                 host = mysql_config.get('host')
                 port_str = mysql_config.get('port')
                 user = mysql_config.get('admin_user')
@@ -1366,6 +1256,7 @@ class LoginWindow:
 
                 log(f"Probando conexión a {user}@{host}:{port}")
 
+                # Verificación rápida de conectividad (sin debug pesado)
                 if not verificar_conectividad_red(host, port):
                     error_msg = f"No se puede acceder al puerto {port} en {host}. Verifique que MySQL esté ejecutándose."
                     self.root.after(0, lambda: self.mostrar_configuracion_mysql(error_msg))

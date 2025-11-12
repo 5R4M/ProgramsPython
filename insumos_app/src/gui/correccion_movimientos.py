@@ -271,7 +271,7 @@ cache = DataCache()
 class CorreccionMovimientos:
     # Definir las columnas como atributo de la clase
     COLUMNAS = [
-        'ID', 'Fecha', 'Área', 'Distrito', 'Tipo de Servicio', 'Referencia', 'Servicio',
+        'Fecha', 'Área', 'Distrito', 'Tipo de Servicio', 'Referencia', 'Servicio',
         'Tipo de Movimiento', 'Lote', 'Fecha Vencimiento', 'Cantidad', 'Insumo',
         'Distrito Salida', 'Servicio Salida', 'Observaciones'
     ]
@@ -658,10 +658,9 @@ class CorreccionMovimientos:
             height=8,
             style='Correccion.Treeview'
         )
-
+        
         # Encabezados visibles (igual a las columnas)
         encabezados_visibles = {
-            'ID': 'ID',
             'Fecha': 'FECHA',
             'Área': 'ÁREA',
             'Distrito': 'DISTRITO',
@@ -680,7 +679,6 @@ class CorreccionMovimientos:
 
         # Anchos aproximados por columna (ajústalos a tu gusto)
         anchos_columnas = {
-            'ID': 60,
             'Fecha': 120,
             'Área': 120,
             'Distrito': 140,
@@ -699,7 +697,6 @@ class CorreccionMovimientos:
 
         # Justificación por columna
         justificacion = {
-            'ID': 'center',
             'Fecha': 'center',
             'Área': 'w',
             'Distrito': 'w',
@@ -717,8 +714,13 @@ class CorreccionMovimientos:
         }
 
         for col in columns:
-            self.tree.heading(col, text=encabezados_visibles.get(col, col), anchor='center')
-            self.tree.column(col, width=anchos_columnas.get(col, 120), minwidth=80, anchor=justificacion.get(col, 'w'))
+            if col == 'ID':
+                # Ocultar columna ID completamente
+                self.tree.heading(col, text='')
+                self.tree.column(col, width=0, minwidth=0, stretch=False)
+            else:
+                self.tree.heading(col, text=encabezados_visibles.get(col, col), anchor='center')
+                self.tree.column(col, width=anchos_columnas.get(col, 120), minwidth=80, anchor=justificacion.get(col, 'w'))
 
         # Ubicar Treeview y conectar scrollbars existentes
         self.tree.pack(fill="both", expand=True)
@@ -1028,7 +1030,6 @@ class CorreccionMovimientos:
             lote = mov.get('lote') or ""
             
             rows.append((
-                mov.get('id', ''),                          # ID
                 mov.get('fecha', ''),                       # Fecha
                 mov.get('area_nombre', '') or "",           # Área
                 mov.get('distrito_nombre', '') or "",       # Distrito
@@ -1045,16 +1046,18 @@ class CorreccionMovimientos:
                 mov.get('observaciones', '') or ""          # Observaciones
             ))
 
-        self._populate_tree_chunked(rows, chunk_size=600)
+        self._populate_tree_chunked(rows, chunk_size=600, ids=[mov.get('id', '') for mov in data])
 
-    def _populate_tree_chunked(self, rows, chunk_size=600):
+    def _populate_tree_chunked(self, rows, chunk_size=600, ids=None):
         total = len(rows)
         index = 0
         def _insert_chunk():
             nonlocal index
             end = min(index + chunk_size, total)
             for i in range(index, end):
-                self.tree.insert('', 'end', values=rows[i])
+                # Guardar ID en tags
+                item_id = ids[i] if ids else ''
+                self.tree.insert('', 'end', values=rows[i], tags=(str(item_id),))
             index = end
             if index < total:
                 self.parent.after(1, _insert_chunk)
@@ -1083,9 +1086,15 @@ class CorreccionMovimientos:
             messagebox.showwarning("Advertencia", "Por favor, seleccione un movimiento para editar")
             return
 
-        item_values = self.tree.item(selected_item[0], 'values')
-        movimiento_id = item_values[0]
+        # Obtener el ID desde los tags
+        tags = self.tree.item(selected_item[0], 'tags')
+        if not tags:
+            messagebox.showerror("Error", "No se pudo obtener el ID del movimiento")
+            return
+        
+        movimiento_id = tags[0]
 
+        # Buscar el movimiento en los datos
         movimiento = next((m for m in self.movimientos_data if str(m['id']) == str(movimiento_id)), None)
         if not movimiento:
             messagebox.showerror("Error", "No se pudo encontrar el movimiento seleccionado")
@@ -1467,8 +1476,11 @@ class CorreccionMovimientos:
 
                 # PASO 2: Actualizar la fila en el TreeView
                 for item in self.tree.get_children():
-                    item_values = self.tree.item(item, 'values')
-                    if str(item_values[0]) == str(movimiento['id']):  # Comparar por ID
+                    item_id = self.tree.item(item, 'tags')[0] if self.tree.item(item, 'tags') else ''
+                    if str(item_id) == str(movimiento['id']):  # Comparar por ID
+                        # Obtener los valores actuales del TreeView
+                        item_values = self.tree.item(item, 'values')
+                        
                         # Convertir fechas al formato DD/MM/YYYY para el TreeView
                         try:
                             fecha_mostrar = datetime.strptime(fecha_val, '%Y-%m-%d').strftime('%d/%m/%Y')
@@ -1483,23 +1495,22 @@ class CorreccionMovimientos:
                                 fv_mostrar = fv_val
                         
                         # Construir la nueva fila con los datos actualizados
-                        # IMPORTANTE: Usar item_values[índice] para mantener los valores que no cambian
+                        # Ahora sin ID, los índices cambian: Fecha es índice 0
                         new_values = (
-                            datos_actualizados['id'],                           # ID
-                            fecha_mostrar,                                      # Fecha (ACTUALIZADO)
-                            item_values[2],                                     # Área (mantener valor actual del tree)
-                            item_values[3],                                     # Distrito (mantener valor actual del tree)
-                            item_values[4],                                     # Tipo Servicio (mantener valor actual del tree)
-                            datos_actualizados['referencia'],                   # Referencia (ACTUALIZADO)
-                            item_values[6],                                     # Servicio (mantener valor actual del tree)
-                            tipo_mov_val,                                       # Tipo Movimiento (ACTUALIZADO)
-                            lote_val if lote_val else "",                       # Lote (ACTUALIZADO)
-                            fv_mostrar,                                         # Fecha Vencimiento (ACTUALIZADO)
-                            self.formato_float(cantidad_val),                   # Cantidad (ACTUALIZADO)
-                            item_values[11],                                    # Insumo (mantener valor actual del tree)
-                            distrito_salida_val if distrito_salida_val else "", # Distrito Salida (ACTUALIZADO)
-                            servicio_salida_val if servicio_salida_val else "", # Servicio Salida (ACTUALIZADO)
-                            datos_actualizados['observaciones']                 # Observaciones (ACTUALIZADO)
+                            fecha_mostrar,                                      # Fecha (índice 0)
+                            item_values[1],                                     # Área (índice 1)
+                            item_values[2],                                     # Distrito (índice 2)
+                            item_values[3],                                     # Tipo Servicio (índice 3)
+                            datos_actualizados['referencia'],                   # Referencia (índice 4)
+                            item_values[5],                                     # Servicio (índice 5)
+                            tipo_mov_val,                                       # Tipo Movimiento (índice 6)
+                            lote_val if lote_val else "",                       # Lote (índice 7)
+                            fv_mostrar,                                         # Fecha Vencimiento (índice 8)
+                            self.formato_float(cantidad_val),                   # Cantidad (índice 9)
+                            item_values[10],                                    # Insumo (índice 10)
+                            distrito_salida_val if distrito_salida_val else "", # Distrito Salida (índice 11)
+                            servicio_salida_val if servicio_salida_val else "", # Servicio Salida (índice 12)
+                            datos_actualizados['observaciones']                 # Observaciones (índice 13)
                         )
                         # Actualizar la fila del TreeView
                         self.tree.item(item, values=new_values)
@@ -1542,8 +1553,7 @@ class CorreccionMovimientos:
             messagebox.showwarning("Advertencia", "Por favor, seleccione un movimiento para eliminar")
             return
 
-        item_values = self.tree.item(selected_item[0], 'values')
-        movimiento_id = item_values[0]
+        movimiento_id = self.tree.item(selected_item[0], 'tags')[0]
 
         if not messagebox.askyesno(
             "Confirmar Eliminación",
