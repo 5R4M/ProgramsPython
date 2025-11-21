@@ -1,0 +1,64 @@
+{% extends "base.html" %}
+
+{% block title %}Detalle del Paciente{% endblock %}
+
+{% block content %}
+<h1>👤 Detalle del Paciente</h1>
+
+<div class="section">
+    <h2>📋 Información Personal</h2>
+    <div class="info-row">
+        <div class="label">Nombre Completo:</div>
+        <div class="value">{{ paciente.nombre }} {{ paciente.apellido }}</div>
+    </div>
+    <div class="info-row">
+        <div class="label">Cédula:</div>
+        <div class="value">{{ paciente.cedula }}</div>
+    </div>
+    <div class="info-row">
+        <div class="label">Fecha de Nacimiento:</div>
+        <div class="value">{{ paciente.fecha_nacimiento.strftime('%d/%m/%Y') }}</div>
+    </div>
+    <div class="info-row">
+        <div class="label">Teléfono:</div>
+        <div class="value">{{ paciente.telefono or 'No registrado' }}</div>
+    </div>
+    <div class="info-row">
+        <div class="label">Email:</div>
+        <div class="value">{{ paciente.email or 'No registrado' }}</div>
+    </div>
+    <div class="info-row">
+        <div class="label">Dirección:</div>
+        <div class="value">{{ paciente.direccion or 'No registrada' }}</div>
+    </div>
+</div>
+
+<div class="section">
+    <h2>🩺 Información Médica</h2>
+    <div class="info-row">
+        <div class="label">Tipo de Sangre:</div>
+        <div class="value">{{ paciente.tipo_sangre or 'No registrado' }}</div>
+    </div>
+    <div class="info-row">
+        <div class="label">Alergias:</div>
+        <div class="value">{{ paciente.alergias or 'Ninguna registrada' }}</div>
+    </div>
+    <div class="info-row">
+        <div class="label">Enfermedades Crónicas:</div>
+        <div class="value">{{ paciente.enfermedades_cronicas or 'Ninguna registrada' }}</div>
+    </div>
+    <div class="info-row">
+        <div class="label">Medicamentos Actuales:</div>
+        <div class="value">{{ paciente.medicamentos_actuales or 'Ninguno registrado' }}</div>
+    </div>
+    <div class="info-row">
+        <div class="label">Fecha de Registro:</div>
+        <div class="value">{{ paciente.fecha_registro.strftime('%d/%m/%Y %H:%M') }}</div>
+    </div>
+</div>
+
+<div class="actions">
+    <a href="{{ url_for('editar_paciente', id=paciente.id) }}" class="btn btn-warning">✏️ Editar</a>
+    <a href="{{ url_for('index') }}" class="btn btn-secondary">⬅️ Volver</a>
+</div>
+{% endblock %}

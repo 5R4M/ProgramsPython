@@ -1,0 +1,100 @@
+{% extends "base.html" %}
+
+{% block title %}{{ titulo }}{% endblock %}
+
+{% block content %}
+<h1>{{ titulo }}</h1>
+
+<form method="POST" autocomplete="off">
+    <div class="form-section">
+        <h2>📋 Datos Personales</h2>
+        
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 20px;">
+            <div class="form-group">
+                <label for="nombre">Nombre <span class="required">*</span></label>
+                <input type="text" id="nombre" name="nombre" value="{{ paciente.nombre if paciente else '' }}" 
+                       placeholder="Ingrese el nombre" required>
+            </div>
+            
+            <div class="form-group">
+                <label for="apellido">Apellido <span class="required">*</span></label>
+                <input type="text" id="apellido" name="apellido" value="{{ paciente.apellido if paciente else '' }}" 
+                       placeholder="Ingrese el apellido" required>
+            </div>
+        </div>
+        
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 20px;">
+            <div class="form-group">
+                <label for="cedula">Cédula <span class="required">*</span></label>
+                <input type="text" id="cedula" name="cedula" value="{{ paciente.cedula if paciente else '' }}" 
+                       placeholder="Ej: 1234567890" required>
+            </div>
+            
+            <div class="form-group">
+                <label for="fecha_nacimiento">Fecha de Nacimiento <span class="required">*</span></label>
+                <input type="date" id="fecha_nacimiento" name="fecha_nacimiento" 
+                       value="{{ paciente.fecha_nacimiento.strftime('%Y-%m-%d') if paciente else '' }}" required>
+            </div>
+        </div>
+        
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 20px;">
+            <div class="form-group">
+                <label for="telefono">Teléfono</label>
+                <input type="tel" id="telefono" name="telefono" value="{{ paciente.telefono if paciente else '' }}" 
+                       placeholder="Ej: +502 1234-5678">
+            </div>
+            
+            <div class="form-group">
+                <label for="email">Email</label>
+                <input type="email" id="email" name="email" value="{{ paciente.email if paciente else '' }}" 
+                       placeholder="ejemplo@correo.com">
+            </div>
+        </div>
+        
+        <div class="form-group">
+            <label for="direccion">Dirección</label>
+            <textarea id="direccion" name="direccion" placeholder="Ingrese la dirección completa del paciente">{{ paciente.direccion if paciente else '' }}</textarea>
+        </div>
+    </div>
+    
+    <div class="form-section">
+        <h2>🩺 Datos Médicos</h2>
+        
+        <div class="form-group">
+            <label for="tipo_sangre">Tipo de Sangre</label>
+            <select id="tipo_sangre" name="tipo_sangre">
+                <option value="">Seleccione el tipo de sangre...</option>
+                {% for tipo in ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'] %}
+                <option value="{{ tipo }}" {% if paciente and paciente.tipo_sangre == tipo %}selected{% endif %}>
+                    {{ tipo }}
+                </option>
+                {% endfor %}
+            </select>
+        </div>
+        
+        <div class="form-group">
+            <label for="alergias">Alergias</label>
+            <textarea id="alergias" name="alergias" placeholder="Ej: Penicilina, Polen, Mariscos, Látex...">{{ paciente.alergias if paciente else '' }}</textarea>
+        </div>
+        
+        <div class="form-group">
+            <label for="enfermedades_cronicas">Enfermedades Crónicas</label>
+            <textarea id="enfermedades_cronicas" name="enfermedades_cronicas" placeholder="Ej: Diabetes tipo 2, Hipertensión arterial, Asma...">{{ paciente.enfermedades_cronicas if paciente else '' }}</textarea>
+        </div>
+        
+        <div class="form-group">
+            <label for="medicamentos_actuales">Medicamentos Actuales</label>
+            <textarea id="medicamentos_actuales" name="medicamentos_actuales" placeholder="Ej: Metformina 500mg (2 veces al día), Losartán 50mg (1 vez al día)...">{{ paciente.medicamentos_actuales if paciente else '' }}</textarea>
+        </div>
+    </div>
+    
+    <div class="form-actions">
+        <button type="submit" class="btn btn-success">
+            <span>💾</span> Guardar Paciente
+        </button>
+        <a href="{{ url_for('index') }}" class="btn btn-secondary">
+            <span>❌</span> Cancelar
+        </a>
+    </div>
+</form>
+{% endblock %}

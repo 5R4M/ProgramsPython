@@ -1,0 +1,68 @@
+{% extends "base.html" %}
+
+{% block title %}Lista de Pacientes{% endblock %}
+
+{% block content %}
+<h1>🏥 Sistema de Gestión de Pacientes</h1>
+
+<div class="header-actions">
+    <a href="{{ url_for('crear_paciente') }}" class="btn btn-success">
+        <span>➕</span> Nuevo Paciente
+    </a>
+    <div class="search-box">
+        <input type="text" id="searchInput" placeholder="Buscar por nombre, cédula, teléfono..." onkeyup="buscarPaciente()">
+    </div>
+</div>
+
+{% if pacientes %}
+<div style="overflow-x: auto;">
+    <table id="tablaPacientes">
+        <thead>
+            <tr>
+                <th>Cédula</th>
+                <th>Nombre Completo</th>
+                <th>Fecha Nacimiento</th>
+                <th>Teléfono</th>
+                <th>Tipo Sangre</th>
+                <th style="text-align: center;">Acciones</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for paciente in pacientes %}
+            <tr>
+                <td><strong>{{ paciente.cedula }}</strong></td>
+                <td>{{ paciente.nombre }} {{ paciente.apellido }}</td>
+                <td>{{ paciente.fecha_nacimiento.strftime('%d/%m/%Y') }}</td>
+                <td>{{ paciente.telefono or '—' }}</td>
+                <td><strong>{{ paciente.tipo_sangre or '—' }}</strong></td>
+                <td class="actions">
+                    <a href="{{ url_for('ver_paciente', id=paciente.id) }}" class="btn" title="Ver detalles">
+                        👁️ Ver
+                    </a>
+                    <a href="{{ url_for('editar_paciente', id=paciente.id) }}" class="btn btn-warning" title="Editar paciente">
+                        ✏️ Editar
+                    </a>
+                    <a href="{{ url_for('eliminar_paciente', id=paciente.id) }}" class="btn btn-danger" 
+                       onclick="return confirm('¿Está seguro de eliminar a {{ paciente.nombre }} {{ paciente.apellido }}?')" 
+                       title="Eliminar paciente">
+                        🗑️ Eliminar
+                    </a>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+<div style="margin-top: 20px; text-align: center; color: var(--gray-600); font-size: 14px;">
+    <p>Total de pacientes registrados: <strong>{{ pacientes|length }}</strong></p>
+</div>
+
+{% else %}
+<div class="no-data">
+    <p>📋</p>
+    <p style="font-size: 20px; font-weight: 600; margin-bottom: 10px;">No hay pacientes registrados</p>
+    <p>Comienza agregando tu primer paciente haciendo clic en "Nuevo Paciente"</p>
+</div>
+{% endif %}
+{% endblock %}
