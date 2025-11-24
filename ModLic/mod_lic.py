@@ -14,20 +14,30 @@ class ActaNotarialEditor(ctk.CTk):
         self.plantilla_path = None
         self.plantilla_cargada = False
 
-        # Obtener dimensiones de la pantalla
-        ancho_pantalla = self.winfo_screenwidth()
-        alto_pantalla = self.winfo_screenheight()
-        
         # Definir tamaño de la ventana
         ancho_ventana = 1000
         alto_ventana = 900
+        
+        # Actualizar la ventana para obtener dimensiones reales de la pantalla
+        self.update_idletasks()
+        
+        # Obtener dimensiones de la pantalla
+        ancho_pantalla = self.winfo_screenwidth()
+        alto_pantalla = self.winfo_screenheight()
         
         # Calcular posición centrada
         x = (ancho_pantalla - ancho_ventana) // 2
         y = (alto_pantalla - alto_ventana) // 2
         
-        # Establecer geometría completa desde el inicio
+        # Asegurar que y no sea negativo
+        if y < 0:
+            y = 0
+        
+        # Establecer geometría completa
         self.geometry(f"{ancho_ventana}x{alto_ventana}+{x}+{y}")
+        
+        # Forzar la actualización de la posición
+        self.update()
         
         self.crear_interfaz()
 
@@ -89,8 +99,13 @@ class ActaNotarialEditor(ctk.CTk):
         self.entry_dia.pack(side="left", padx=5, expand=True, fill="x")
 
         ctk.CTkLabel(frame_fecha_dia, text="Mes:", width=100).pack(side="left", padx=5)
-        self.entry_mes = ctk.CTkEntry(frame_fecha_dia, placeholder_text="Ej: noviembre")
-        self.entry_mes.pack(side="left", padx=5, expand=True, fill="x")
+        self.combo_mes = ctk.CTkComboBox(
+            frame_fecha_dia,
+            values=["enero", "febrero", "marzo", "abril", "mayo", "junio",
+                    "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"]
+        )
+        self.combo_mes.set("noviembre")
+        self.combo_mes.pack(side="left", padx=5, expand=True, fill="x")
 
         ctk.CTkLabel(frame_fecha_dia, text="Año:", width=100).pack(side="left", padx=5)
         self.entry_anio = ctk.CTkEntry(frame_fecha_dia, placeholder_text="Ej: 2025")
@@ -167,6 +182,16 @@ class ActaNotarialEditor(ctk.CTk):
             placeholder_text="Ej: departamento de Guatemala"
         )
         self.entry_domicilio.pack(side="left", padx=5, expand=True, fill="x")
+
+        # ----- DPI -----
+        frame_dpi = ctk.CTkFrame(frame_datos)
+        frame_dpi.pack(pady=5, fill="x", padx=20)
+        ctk.CTkLabel(frame_dpi, text="DPI (CUI):", width=150).pack(side="left", padx=5)
+        self.entry_dpi = ctk.CTkEntry(
+            frame_dpi,
+            placeholder_text="Ej: 2008 22829 0101"
+        )
+        self.entry_dpi.pack(side="left", padx=5, expand=True, fill="x")
 
         # ----- Botones -----
         frame_botones = ctk.CTkFrame(main_frame)
@@ -266,32 +291,115 @@ class ActaNotarialEditor(ctk.CTk):
             return f"{decenas[d]} y {unidades[u]}"
         return str(num)
 
-    def reemplazar_en_parrafo(self, paragraph, buscar, reemplazar, reemplazar_todas=False):
+    def convertir_dpi_a_texto(self, dpi: str) -> str:
         """
-        Reemplaza texto en un párrafo incluso si está fragmentado en múltiples runs.
-        Preserva el formato del primer run donde aparece el texto.
+        Convierte un DPI en formato '2008 22829 0101' o '1916024260101' a texto.
+        """
+        dpi_limpio = dpi.replace(" ", "")
         
-        Args:
-            paragraph: El párrafo de Word donde buscar
-            buscar: El texto a buscar
-            reemplazar: El texto con el que reemplazar
-            reemplazar_todas: Si es True, reemplaza todas las apariciones, si es False solo la primera
-        """
+        if len(dpi_limpio) == 13 and dpi_limpio.isdigit():
+            partes = [dpi_limpio[:4], dpi_limpio[4:9], dpi_limpio[9:13]]
+        else:
+            partes = dpi.strip().split()
+            if len(partes) != 3:
+                return dpi
+        
+        resultado = []
+        
+        for i, parte in enumerate(partes):
+            if not parte.isdigit():
+                resultado.append(parte)
+                continue
+            
+            num = int(parte)
+            
+            if i == 0:
+                if num >= 2000:
+                    resto = num - 2000
+                    if resto == 0:
+                        resultado.append("dos mil")
+                    else:
+                        resultado.append("dos mil " + self.numero_a_texto(resto))
+                elif num >= 1000:
+                    miles = num // 1000
+                    resto = num % 1000
+                    texto_partes = []
+                    if miles == 1:
+                        texto_partes.append("mil")
+                    else:
+                        texto_partes.append(self.numero_a_texto(miles) + " mil")
+                    if resto > 0:
+                        texto_partes.append(self.numero_a_texto_centenas(resto))
+                    resultado.append(" ".join(texto_partes))
+                else:
+                    resultado.append(self.numero_a_texto(num))
+            
+            elif i == 1:
+                if parte.startswith("0") and len(parte) == 5:
+                    resultado.append("cero " + self.convertir_numero_miles(int(parte[1:])))
+                else:
+                    resultado.append(self.convertir_numero_miles(num))
+            
+            elif i == 2:
+                if parte.startswith("0") and len(parte) == 4:
+                    resultado.append("cero " + self.numero_a_texto_centenas(int(parte[1:])))
+                else:
+                    if num == 0:
+                        resultado.append("cero")
+                    else:
+                        resultado.append(self.convertir_numero_miles(num))
+        
+        return " espacio ".join(resultado)
+    
+    def convertir_numero_miles(self, num: int) -> str:
+        if num < 1000:
+            return self.numero_a_texto_centenas(num)
+        
+        miles = num // 1000
+        resto = num % 1000
+        
+        texto_partes = []
+        if miles == 1:
+            texto_partes.append("mil")
+        else:
+            texto_partes.append(self.numero_a_texto(miles) + " mil")
+        
+        if resto > 0:
+            texto_partes.append(self.numero_a_texto_centenas(resto))
+        
+        return " ".join(texto_partes)
+
+    def numero_a_texto_centenas(self, num: int) -> str:
+        if num < 100:
+            return self.numero_a_texto(num)
+        
+        centenas_texto = ["", "ciento", "doscientos", "trescientos", "cuatrocientos",
+                          "quinientos", "seiscientos", "setecientos", "ochocientos", "novecientos"]
+        
+        c = num // 100
+        resto = num % 100
+        
+        if num == 100:
+            return "cien"
+        
+        resultado = centenas_texto[c]
+        if resto > 0:
+            resultado += " " + self.numero_a_texto(resto)
+        
+        return resultado
+
+    def reemplazar_en_parrafo(self, paragraph, buscar, reemplazar, reemplazar_todas=False):
         reemplazos_realizados = 0
         
         while True:
-            # Obtener el texto completo del párrafo
             texto_completo = ''.join(run.text for run in paragraph.runs)
             
-            # Si no hay coincidencia, salir
             if buscar not in texto_completo:
                 break
             
-            # Encontrar la posición de la coincidencia
             pos_inicio = texto_completo.find(buscar)
             pos_fin = pos_inicio + len(buscar)
             
-            # Recorrer los runs para encontrar dónde empieza y termina el patrón
             pos_actual = 0
             run_inicio = None
             run_fin = None
@@ -301,12 +409,10 @@ class ActaNotarialEditor(ctk.CTk):
             for i, run in enumerate(paragraph.runs):
                 len_run = len(run.text)
                 
-                # Verificar si el inicio del patrón está en este run
                 if pos_actual <= pos_inicio < pos_actual + len_run:
                     run_inicio = i
                     pos_en_run_inicio = pos_inicio - pos_actual
                 
-                # Verificar si el fin del patrón está en este run
                 if pos_actual < pos_fin <= pos_actual + len_run:
                     run_fin = i
                     pos_en_run_fin = pos_fin - pos_actual
@@ -317,34 +423,26 @@ class ActaNotarialEditor(ctk.CTk):
             if run_inicio is None or run_fin is None:
                 break
             
-            # Caso 1: El patrón está en un solo run
             if run_inicio == run_fin:
                 run = paragraph.runs[run_inicio]
                 run.text = run.text[:pos_en_run_inicio] + reemplazar + run.text[pos_en_run_fin:]
             else:
-                # Caso 2: El patrón está fragmentado en varios runs
-                # Modificar el primer run
                 paragraph.runs[run_inicio].text = paragraph.runs[run_inicio].text[:pos_en_run_inicio] + reemplazar
                 
-                # Eliminar runs intermedios y modificar el último
                 runs_a_eliminar = []
                 for i in range(run_inicio + 1, run_fin + 1):
                     if i == run_fin:
-                        # En el último run, mantener solo lo que está después del patrón
                         paragraph.runs[i].text = paragraph.runs[i].text[pos_en_run_fin:]
-                        if not paragraph.runs[i].text:  # Si quedó vacío, marcarlo para eliminar
+                        if not paragraph.runs[i].text:
                             runs_a_eliminar.append(i)
                     else:
-                        # Runs intermedios se eliminan completamente
                         runs_a_eliminar.append(i)
                 
-                # Eliminar runs en orden inverso para no afectar los índices
                 for i in reversed(runs_a_eliminar):
                     paragraph._element.remove(paragraph.runs[i]._element)
             
             reemplazos_realizados += 1
             
-            # Si no queremos reemplazar todas las apariciones, salir después de la primera
             if not reemplazar_todas:
                 break
         
@@ -362,11 +460,10 @@ class ActaNotarialEditor(ctk.CTk):
         try:
             doc = Document(self.plantilla_path)
 
-            # Capturar datos
             hora = self.entry_hora.get().strip()
             minutos = self.entry_minutos.get().strip()
             dia = self.entry_dia.get().strip()
-            mes = self.entry_mes.get().strip()
+            mes = self.combo_mes.get().strip()
             anio = self.entry_anio.get().strip()
             nombre = self.entry_nombre.get().strip()
             edad = self.entry_edad.get().strip()
@@ -375,8 +472,8 @@ class ActaNotarialEditor(ctk.CTk):
             nacionalidad = self.entry_nacionalidad.get().strip()
             nivel_academico = self.entry_nivel.get().strip()
             domicilio = self.entry_domicilio.get().strip()
+            dpi = self.entry_dpi.get().strip()
 
-            # Nombre con apellido de casada
             nombre_completo = nombre
             if apellido_casada and estado_civil == "casada":
                 partes = nombre.split()
@@ -385,7 +482,6 @@ class ActaNotarialEditor(ctk.CTk):
                     if len(partes) > 2:
                         nombre_completo += " " + " ".join(partes[2:])
 
-            # Año en texto
             anio_texto = None
             if anio.isdigit():
                 anio_num = int(anio)
@@ -398,10 +494,8 @@ class ActaNotarialEditor(ctk.CTk):
                 else:
                     anio_texto = str(anio)
 
-            # Lista de reemplazos a realizar
             reemplazos = []
 
-            # Preparar reemplazos
             if hora and minutos:
                 hora_t = self.numero_a_texto(int(hora))
                 min_t = self.numero_a_texto(int(minutos))
@@ -423,7 +517,14 @@ class ActaNotarialEditor(ctk.CTk):
                 reemplazos.append(("Abner Aníbal Ajpop González", nombre_completo))
 
             if edad:
-                edad_t = self.numero_a_texto(int(edad))
+                edad_num = int(edad)
+                edad_t = self.numero_a_texto(edad_num)
+                
+                if edad_t.endswith(" y uno"):
+                    edad_t = edad_t[:-3] + " un"
+                elif edad_t == "uno":
+                    edad_t = "un"
+                
                 reemplazos.append(("veintiún", edad_t))
                 reemplazos.append(("(21)", f"({edad})"))
 
@@ -439,28 +540,34 @@ class ActaNotarialEditor(ctk.CTk):
             if domicilio:
                 reemplazos.append(("con domicilio en el departamento de Guatemala", f"con domicilio en el {domicilio}"))
 
-            # Realizar todos los reemplazos
+            if dpi:
+                dpi_formateado = dpi.replace(" ", "")
+                if len(dpi_formateado) == 13:
+                    dpi_con_espacios = f"{dpi_formateado[:4]} {dpi_formateado[4:9]} {dpi_formateado[9:13]}"
+                else:
+                    dpi_con_espacios = dpi
+                
+                dpi_texto = self.convertir_dpi_a_texto(dpi)
+                reemplazos.append(("dos mil ocho espacio veintidós mil ochocientos veintinueve espacio cero ciento uno", dpi_texto))
+                reemplazos.append(("(2008 22829 0101)", f"({dpi_con_espacios})"))
+
             for paragraph in doc.paragraphs:
                 for buscar, reemplazar in reemplazos:
-                    # Reemplazar el nombre en TODAS sus apariciones
                     if buscar == "Abner Aníbal Ajpop González":
                         self.reemplazar_en_parrafo(paragraph, buscar, reemplazar, reemplazar_todas=True)
                     else:
                         self.reemplazar_en_parrafo(paragraph, buscar, reemplazar, reemplazar_todas=False)
 
-            # También buscar en tablas si existen
             for table in doc.tables:
                 for row in table.rows:
                     for cell in row.cells:
                         for paragraph in cell.paragraphs:
                             for buscar, reemplazar in reemplazos:
-                                # Reemplazar el nombre en TODAS sus apariciones
                                 if buscar == "Abner Aníbal Ajpop González":
                                     self.reemplazar_en_parrafo(paragraph, buscar, reemplazar, reemplazar_todas=True)
                                 else:
                                     self.reemplazar_en_parrafo(paragraph, buscar, reemplazar, reemplazar_todas=False)
 
-            # Guardar
             archivo_salida = filedialog.asksaveasfilename(
                 defaultextension=".docx",
                 filetypes=[("Documento Word", "*.docx")],
@@ -480,7 +587,7 @@ class ActaNotarialEditor(ctk.CTk):
         self.entry_hora.delete(0, "end")
         self.entry_minutos.delete(0, "end")
         self.entry_dia.delete(0, "end")
-        self.entry_mes.delete(0, "end")
+        self.combo_mes.set("noviembre")
         self.entry_anio.delete(0, "end")
         self.entry_nombre.delete(0, "end")
         self.entry_edad.delete(0, "end")
@@ -489,6 +596,7 @@ class ActaNotarialEditor(ctk.CTk):
         self.entry_nacionalidad.delete(0, "end")
         self.entry_nivel.delete(0, "end")
         self.entry_domicilio.delete(0, "end")
+        self.entry_dpi.delete(0, "end")
 
 if __name__ == "__main__":
     app = ActaNotarialEditor()
