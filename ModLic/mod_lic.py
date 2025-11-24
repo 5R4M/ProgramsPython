@@ -2,6 +2,12 @@ import customtkinter as ctk
 from docx import Document
 from tkinter import filedialog, messagebox
 import os
+from docx2pdf import convert
+import tempfile
+from PIL import Image, ImageTk
+import fitz  # PyMuPDF
+import warnings
+warnings.filterwarnings("ignore", category=UserWarning, module="customtkinter")
 
 class ActaNotarialEditor(ctk.CTk):
     def __init__(self):
@@ -14,36 +20,25 @@ class ActaNotarialEditor(ctk.CTk):
         self.plantilla_path = None
         self.plantilla_cargada = False
 
-        # Definir tamaño de la ventana
-        ancho_ventana = 1000
-        alto_ventana = 900
-        
-        # Actualizar la ventana para obtener dimensiones reales de la pantalla
-        self.update_idletasks()
-        
-        # Obtener dimensiones de la pantalla
-        ancho_pantalla = self.winfo_screenwidth()
-        alto_pantalla = self.winfo_screenheight()
-        
-        # Calcular posición centrada
-        x = (ancho_pantalla - ancho_ventana) // 2
-        y = (alto_pantalla - alto_ventana) // 2
-        
-        # Asegurar que y no sea negativo
-        if y < 0:
-            y = 0
-        
-        # Establecer geometría completa
-        self.geometry(f"{ancho_ventana}x{alto_ventana}+{x}+{y}")
-        
-        # Forzar la actualización de la posición
-        self.update()
-        
+        # Crear interfaz primero
         self.crear_interfaz()
+        
+        # Maximizar ventana después de 100ms (cuando ya está todo renderizado)
+        self.after(100, lambda: self.state('zoomed'))
 
     def crear_interfaz(self):
-        main_frame = ctk.CTkScrollableFrame(self, width=850, height=750)
-        main_frame.pack(pady=20, padx=20, fill="both", expand=True)
+        # Frame principal con dos columnas
+        container = ctk.CTkFrame(self)
+        container.pack(fill="both", expand=True, padx=10, pady=10)
+        
+        # Configurar grid para dos columnas
+        container.grid_columnconfigure(0, weight=1)
+        container.grid_columnconfigure(1, weight=1)
+        container.grid_rowconfigure(0, weight=1)
+
+        # ===== PANEL IZQUIERDO: Formulario =====
+        main_frame = ctk.CTkScrollableFrame(container, width=700, height=850)
+        main_frame.grid(row=0, column=0, sticky="nsew", padx=(0, 5))
 
         titulo = ctk.CTkLabel(
             main_frame,
@@ -221,6 +216,40 @@ class ActaNotarialEditor(ctk.CTk):
         )
         self.btn_limpiar.pack(side="left", padx=10)
 
+        # ===== PANEL DERECHO: Visor de Documento =====
+        visor_frame = ctk.CTkFrame(container)
+        visor_frame.grid(row=0, column=1, sticky="nsew", padx=(5, 0))
+
+        # Título del visor
+        ctk.CTkLabel(
+            visor_frame,
+            text="📋 Vista Previa del Documento",
+            font=ctk.CTkFont(size=20, weight="bold")
+        ).pack(pady=10)
+
+        # Botón para actualizar vista previa
+        self.btn_actualizar_vista = ctk.CTkButton(
+            visor_frame,
+            text="🔄 Actualizar Vista Previa",
+            command=self.actualizar_vista_previa,
+            height=35,
+            font=ctk.CTkFont(size=14)
+        )
+        self.btn_actualizar_vista.pack(pady=5)
+
+        # Frame scrollable para el visor
+        self.visor_scroll = ctk.CTkScrollableFrame(visor_frame, width=700, height=750)
+        self.visor_scroll.pack(pady=10, padx=10, fill="both", expand=True)
+
+        # Label para mostrar el estado del visor
+        self.lbl_visor_estado = ctk.CTkLabel(
+            self.visor_scroll,
+            text="Cargue una plantilla para ver la vista previa",
+            text_color="gray",
+            font=ctk.CTkFont(size=14)
+        )
+        self.lbl_visor_estado.pack(pady=200)
+
     def cargar_plantilla(self):
         if self.plantilla_cargada:
             resp = messagebox.askyesno(
@@ -256,6 +285,10 @@ class ActaNotarialEditor(ctk.CTk):
                 text_color="green"
             )
             self.btn_cargar.configure(text="✓ Plantilla cargada", state="disabled")
+            
+            # Actualizar vista previa
+            self.actualizar_vista_previa()
+            
             messagebox.showinfo(
                 "Éxito",
                 "Plantilla cargada correctamente.\n\n"
@@ -266,6 +299,220 @@ class ActaNotarialEditor(ctk.CTk):
                 "Error",
                 f"No se pudo abrir el documento como .docx:\n{str(e)}"
             )
+
+    def actualizar_vista_previa(self):
+        """Actualiza la vista previa del documento en el panel derecho"""
+        if not self.plantilla_cargada:
+            messagebox.showwarning("Advertencia", "Primero debe cargar una plantilla")
+            return
+
+        try:
+            # Limpiar visor actual
+            for widget in self.visor_scroll.winfo_children():
+                widget.destroy()
+
+            self.lbl_visor_estado = ctk.CTkLabel(
+                self.visor_scroll,
+                text="Generando vista previa...",
+                text_color="orange",
+                font=ctk.CTkFont(size=14)
+            )
+            self.lbl_visor_estado.pack(pady=20)
+            self.update()
+
+            # Crear documento temporal con los datos actuales
+            doc = Document(self.plantilla_path)
+            
+            # Aplicar reemplazos si hay datos
+            self.aplicar_reemplazos_temporales(doc)
+
+            # Guardar documento temporal
+            temp_docx = tempfile.NamedTemporaryFile(delete=False, suffix=".docx")
+            doc.save(temp_docx.name)
+            temp_docx.close()
+
+            # Convertir a PDF temporal
+            temp_pdf = tempfile.NamedTemporaryFile(delete=False, suffix=".pdf")
+            temp_pdf.close()
+            
+            convert(temp_docx.name, temp_pdf.name)
+
+            # Renderizar PDF como imágenes
+            self.mostrar_pdf_en_visor(temp_pdf.name)
+
+            # Limpiar archivos temporales
+            os.unlink(temp_docx.name)
+            os.unlink(temp_pdf.name)
+
+        except Exception as e:
+            self.lbl_visor_estado.configure(
+                text=f"Error al generar vista previa:\n{str(e)}",
+                text_color="red"
+            )
+
+    def mostrar_pdf_en_visor(self, pdf_path):
+        """Muestra el PDF renderizado como imágenes en el visor"""
+        # Limpiar visor
+        for widget in self.visor_scroll.winfo_children():
+            widget.destroy()
+
+        try:
+            pdf_document = fitz.open(pdf_path)
+            
+            for page_num in range(len(pdf_document)):
+                page = pdf_document[page_num]
+                
+                # Renderizar página a imagen
+                zoom = 1.5  # Factor de zoom para mejor calidad
+                mat = fitz.Matrix(zoom, zoom)
+                pix = page.get_pixmap(matrix=mat)
+                
+                # Convertir a PIL Image
+                img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
+                
+                # Redimensionar para ajustar al visor
+                max_width = 700
+                ratio = max_width / img.width
+                new_height = int(img.height * ratio)
+                img = img.resize((max_width, new_height), Image.Resampling.LANCZOS)
+                
+                # Convertir a PhotoImage
+                photo = ImageTk.PhotoImage(img)
+                
+                # Crear label para mostrar la imagen
+                label = ctk.CTkLabel(self.visor_scroll, image=photo, text="")
+                label.image = photo  # Mantener referencia
+                label.pack(pady=10)
+                
+                # Agregar separador entre páginas
+                if page_num < len(pdf_document) - 1:
+                    separador = ctk.CTkLabel(
+                        self.visor_scroll,
+                        text=f"--- Página {page_num + 1} ---",
+                        font=ctk.CTkFont(size=12),
+                        text_color="gray"
+                    )
+                    separador.pack(pady=5)
+            
+            pdf_document.close()
+            
+        except Exception as e:
+            self.lbl_visor_estado = ctk.CTkLabel(
+                self.visor_scroll,
+                text=f"Error al mostrar PDF:\n{str(e)}",
+                text_color="red"
+            )
+            self.lbl_visor_estado.pack(pady=20)
+
+    def aplicar_reemplazos_temporales(self, doc):
+        """Aplica los reemplazos temporales para la vista previa"""
+        hora = self.entry_hora.get().strip()
+        minutos = self.entry_minutos.get().strip()
+        dia = self.entry_dia.get().strip()
+        mes = self.combo_mes.get().strip()
+        anio = self.entry_anio.get().strip()
+        nombre = self.entry_nombre.get().strip()
+        edad = self.entry_edad.get().strip()
+        estado_civil = self.combo_estado.get().strip()
+        apellido_casada = self.entry_casada.get().strip()
+        nacionalidad = self.entry_nacionalidad.get().strip()
+        nivel_academico = self.entry_nivel.get().strip()
+        domicilio = self.entry_domicilio.get().strip()
+        dpi = self.entry_dpi.get().strip()
+
+        nombre_completo = nombre
+        if apellido_casada and estado_civil == "casada" and nombre:
+            partes = nombre.split()
+            if len(partes) >= 2:
+                nombre_completo = f"{partes[0]} {partes[1]} {apellido_casada}"
+                if len(partes) > 2:
+                    nombre_completo += " " + " ".join(partes[2:])
+
+        anio_texto = None
+        if anio.isdigit():
+            anio_num = int(anio)
+            if 2000 <= anio_num < 2100:
+                resto = anio_num - 2000
+                if resto == 0:
+                    anio_texto = "dos mil"
+                else:
+                    anio_texto = "dos mil " + self.numero_a_texto(resto)
+            else:
+                anio_texto = str(anio)
+
+        reemplazos = []
+
+        if hora and minutos:
+            hora_t = self.numero_a_texto(int(hora))
+            min_t = self.numero_a_texto(int(minutos))
+            reemplazos.append(("diecisiete horas con veinte minutos", f"{hora_t} horas con {min_t} minutos"))
+
+        if dia:
+            dia_t = self.numero_a_texto(int(dia))
+            reemplazos.append(("veintiocho", dia_t))
+            reemplazos.append(("(28)", f"({dia})"))
+
+        if mes:
+            reemplazos.append(("noviembre", mes))
+
+        if anio and anio_texto:
+            reemplazos.append(("dos mil veinticinco", anio_texto))
+            reemplazos.append(("(2025)", f"({anio})"))
+
+        if nombre:
+            reemplazos.append(("Abner Aníbal Ajpop González", nombre_completo))
+
+        if edad:
+            edad_num = int(edad)
+            edad_t = self.numero_a_texto(edad_num)
+            
+            if edad_t.endswith(" y uno"):
+                edad_t = edad_t[:-3] + " un"
+            elif edad_t == "uno":
+                edad_t = "un"
+            
+            reemplazos.append(("veintiún", edad_t))
+            reemplazos.append(("(21)", f"({edad})"))
+
+        if estado_civil:
+            reemplazos.append(("soltero", estado_civil))
+
+        if nacionalidad:
+            reemplazos.append(("guatemalteco", nacionalidad))
+
+        if nivel_academico:
+            reemplazos.append(("Bachiller en Ciencias y Letras con Orientación en Computación", nivel_academico))
+
+        if domicilio:
+            reemplazos.append(("con domicilio en el departamento de Guatemala", f"con domicilio en el {domicilio}"))
+
+        if dpi:
+            dpi_formateado = dpi.replace(" ", "")
+            if len(dpi_formateado) == 13:
+                dpi_con_espacios = f"{dpi_formateado[:4]} {dpi_formateado[4:9]} {dpi_formateado[9:13]}"
+            else:
+                dpi_con_espacios = dpi
+            
+            dpi_texto = self.convertir_dpi_a_texto(dpi)
+            reemplazos.append(("dos mil ocho espacio veintidós mil ochocientos veintinueve espacio cero ciento uno", dpi_texto))
+            reemplazos.append(("(2008 22829 0101)", f"({dpi_con_espacios})"))
+
+        for paragraph in doc.paragraphs:
+            for buscar, reemplazar in reemplazos:
+                if buscar == "Abner Aníbal Ajpop González":
+                    self.reemplazar_en_parrafo(paragraph, buscar, reemplazar, reemplazar_todas=True)
+                else:
+                    self.reemplazar_en_parrafo(paragraph, buscar, reemplazar, reemplazar_todas=False)
+
+        for table in doc.tables:
+            for row in table.rows:
+                for cell in row.cells:
+                    for paragraph in cell.paragraphs:
+                        for buscar, reemplazar in reemplazos:
+                            if buscar == "Abner Aníbal Ajpop González":
+                                self.reemplazar_en_parrafo(paragraph, buscar, reemplazar, reemplazar_todas=True)
+                            else:
+                                self.reemplazar_en_parrafo(paragraph, buscar, reemplazar, reemplazar_todas=False)
 
     def numero_a_texto(self, num: int) -> str:
         unidades = ["", "uno", "dos", "tres", "cuatro", "cinco",
@@ -293,7 +540,7 @@ class ActaNotarialEditor(ctk.CTk):
 
     def convertir_dpi_a_texto(self, dpi: str) -> str:
         """
-        Convierte un DPI en formato '2008 22829 0101' o '1916024260101' a texto.
+        Convierte un DPI en formato '2008 22829 0101' o '2528015250108' a texto.
         """
         dpi_limpio = dpi.replace(" ", "")
         
@@ -313,13 +560,18 @@ class ActaNotarialEditor(ctk.CTk):
             
             num = int(parte)
             
+            # Primera parte (4 dígitos): año de nacimiento
             if i == 0:
                 if num >= 2000:
                     resto = num - 2000
                     if resto == 0:
                         resultado.append("dos mil")
                     else:
-                        resultado.append("dos mil " + self.numero_a_texto(resto))
+                        # Usar numero_a_texto_centenas para números mayores a 99
+                        if resto >= 100:
+                            resultado.append("dos mil " + self.numero_a_texto_centenas(resto))
+                        else:
+                            resultado.append("dos mil " + self.numero_a_texto(resto))
                 elif num >= 1000:
                     miles = num // 1000
                     resto = num % 1000
@@ -332,17 +584,29 @@ class ActaNotarialEditor(ctk.CTk):
                         texto_partes.append(self.numero_a_texto_centenas(resto))
                     resultado.append(" ".join(texto_partes))
                 else:
-                    resultado.append(self.numero_a_texto(num))
+                    resultado.append(self.numero_a_texto_centenas(num))
             
+            # Segunda parte (5 dígitos): código municipal
             elif i == 1:
                 if parte.startswith("0") and len(parte) == 5:
-                    resultado.append("cero " + self.convertir_numero_miles(int(parte[1:])))
+                    # Si empieza con 0, procesar el resto
+                    resto_num = int(parte[1:])
+                    if resto_num == 0:
+                        resultado.append("cero cero")
+                    else:
+                        resultado.append("cero " + self.convertir_numero_miles(resto_num))
                 else:
                     resultado.append(self.convertir_numero_miles(num))
             
+            # Tercera parte (4 dígitos): número correlativo
             elif i == 2:
                 if parte.startswith("0") and len(parte) == 4:
-                    resultado.append("cero " + self.numero_a_texto_centenas(int(parte[1:])))
+                    # Si empieza con 0, procesar el resto
+                    resto_num = int(parte[1:])
+                    if resto_num == 0:
+                        resultado.append("cero cero")
+                    else:
+                        resultado.append("cero " + self.numero_a_texto_centenas(resto_num))
                 else:
                     if num == 0:
                         resultado.append("cero")
