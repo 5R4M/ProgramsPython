@@ -6,7 +6,7 @@ import tempfile
 from PIL import Image, ImageTk
 import fitz  # PyMuPDF
 from docx2pdf import convert
-from config import DOCUMENTOS_DIR, COLOR_SUCCESS
+from config import DOCUMENTOS_DIR, COLOR_SUCCESS, COLOR_PRIMARY
 from utils import convertir_doc_a_docx, DocumentExtractor
 
 class VentanaCargarDocumentos(ctk.CTkToplevel):
@@ -24,6 +24,9 @@ class VentanaCargarDocumentos(ctk.CTkToplevel):
         # Centrar y maximizar ventana
         self.center_window()
         self.after(100, self.maximizar_ventana)
+        
+        # Cargar documentos existentes
+        self.cargar_documentos_existentes()
     
     def maximizar_ventana(self):
         """Maximiza la ventana"""
@@ -85,16 +88,23 @@ class VentanaCargarDocumentos(ctk.CTkToplevel):
         )
         btn_procesar.pack(pady=5, fill="x")
         
-        # Lista de documentos seleccionados
+        # Pestañas para documentos nuevos y existentes
+        self.tabview = ctk.CTkTabview(panel_izquierdo)
+        self.tabview.pack(pady=10, padx=20, fill="both", expand=True)
+        
+        # Pestaña: Documentos a cargar
+        self.tabview.add("📤 Nuevos")
+        tab_nuevos = self.tabview.tab("📤 Nuevos")
+        
         ctk.CTkLabel(
-            panel_izquierdo,
+            tab_nuevos,
             text="Documentos seleccionados:",
             font=ctk.CTkFont(size=16, weight="bold")
-        ).pack(pady=(20, 10), padx=20, anchor="w")
+        ).pack(pady=(10, 5), padx=10, anchor="w")
         
-        # Frame scrollable para la lista
-        self.lista_frame = ctk.CTkScrollableFrame(panel_izquierdo, height=400)
-        self.lista_frame.pack(pady=10, padx=20, fill="both", expand=True)
+        # Frame scrollable para la lista de nuevos
+        self.lista_frame = ctk.CTkScrollableFrame(tab_nuevos, height=400)
+        self.lista_frame.pack(pady=5, padx=10, fill="both", expand=True)
         
         self.lbl_lista_vacia = ctk.CTkLabel(
             self.lista_frame,
@@ -104,9 +114,9 @@ class VentanaCargarDocumentos(ctk.CTkToplevel):
         )
         self.lbl_lista_vacia.pack(pady=50)
         
-        # Controles de navegación
-        frame_navegacion = ctk.CTkFrame(panel_izquierdo)
-        frame_navegacion.pack(pady=10, padx=20, fill="x")
+        # Controles de navegación para nuevos
+        frame_navegacion = ctk.CTkFrame(tab_nuevos)
+        frame_navegacion.pack(pady=10, padx=10, fill="x")
         
         self.btn_anterior = ctk.CTkButton(
             frame_navegacion,
@@ -133,6 +143,48 @@ class VentanaCargarDocumentos(ctk.CTkToplevel):
         )
         self.btn_siguiente.pack(side="right", padx=5)
         
+        # Pestaña: Documentos existentes
+        self.tabview.add("📚 Cargados")
+        tab_existentes = self.tabview.tab("📚 Cargados")
+        
+        # Barra de búsqueda
+        frame_busqueda = ctk.CTkFrame(tab_existentes)
+        frame_busqueda.pack(pady=10, padx=10, fill="x")
+        
+        ctk.CTkLabel(
+            frame_busqueda,
+            text="🔍 Buscar:",
+            font=ctk.CTkFont(size=14)
+        ).pack(side="left", padx=5)
+        
+        self.entry_buscar = ctk.CTkEntry(
+            frame_busqueda,
+            placeholder_text="Buscar por nombre o DPI...",
+            font=ctk.CTkFont(size=12)
+        )
+        self.entry_buscar.pack(side="left", padx=5, expand=True, fill="x")
+        self.entry_buscar.bind("<KeyRelease>", lambda e: self.filtrar_documentos_existentes())
+        
+        btn_refrescar = ctk.CTkButton(
+            frame_busqueda,
+            text="🔄",
+            command=self.cargar_documentos_existentes,
+            width=40
+        )
+        btn_refrescar.pack(side="left", padx=5)
+        
+        # Frame scrollable para documentos existentes
+        self.lista_existentes_frame = ctk.CTkScrollableFrame(tab_existentes, height=500)
+        self.lista_existentes_frame.pack(pady=5, padx=10, fill="both", expand=True)
+        
+        self.lbl_sin_existentes = ctk.CTkLabel(
+            self.lista_existentes_frame,
+            text="No hay documentos cargados",
+            text_color="gray",
+            font=ctk.CTkFont(size=14)
+        )
+        self.lbl_sin_existentes.pack(pady=50)
+        
         # ===== PANEL DERECHO: Visor de documento =====
         panel_derecho = ctk.CTkFrame(container)
         panel_derecho.grid(row=0, column=1, sticky="nsew", padx=(5, 0))
@@ -150,11 +202,146 @@ class VentanaCargarDocumentos(ctk.CTkToplevel):
         
         self.lbl_visor_estado = ctk.CTkLabel(
             self.visor_scroll,
-            text="Seleccione documentos para visualizar",
+            text="Seleccione un documento para visualizar",
             text_color="gray",
             font=ctk.CTkFont(size=14)
         )
         self.lbl_visor_estado.pack(pady=200)
+    
+    def cargar_documentos_existentes(self):
+        """Carga todos los documentos existentes en la base de datos"""
+        # Limpiar lista
+        for widget in self.lista_existentes_frame.winfo_children():
+            widget.destroy()
+        
+        # Obtener todos los documentos
+        self.documentos_existentes = self.db.obtener_todos_documentos()
+        
+        if not self.documentos_existentes:
+            self.lbl_sin_existentes = ctk.CTkLabel(
+                self.lista_existentes_frame,
+                text="No hay documentos cargados en la base de datos",
+                text_color="gray",
+                font=ctk.CTkFont(size=14)
+            )
+            self.lbl_sin_existentes.pack(pady=50)
+            return
+        
+        # Mostrar documentos
+        self.mostrar_documentos_existentes(self.documentos_existentes)
+    
+    def mostrar_documentos_existentes(self, documentos):
+        """Muestra la lista de documentos existentes"""
+        # Limpiar lista
+        for widget in self.lista_existentes_frame.winfo_children():
+            widget.destroy()
+        
+        if not documentos:
+            self.lbl_sin_existentes = ctk.CTkLabel(
+                self.lista_existentes_frame,
+                text="No se encontraron documentos",
+                text_color="orange",
+                font=ctk.CTkFont(size=14)
+            )
+            self.lbl_sin_existentes.pack(pady=50)
+            return
+        
+        for doc in documentos:
+            # Formato: id, nombre_archivo, ruta_archivo, fecha_carga, nombre_completo, dpi
+            doc[0]
+            nombre_archivo = doc[1]
+            ruta_archivo = doc[2]
+            fecha_carga = doc[3]
+            nombre_persona = doc[4] if doc[4] else "Desconocido"
+            dpi_persona = doc[5] if doc[5] else "N/A"
+            
+            frame_doc = ctk.CTkFrame(self.lista_existentes_frame)
+            frame_doc.pack(pady=5, padx=10, fill="x")
+            
+            # Información del documento
+            info_text = f"📄 {nombre_archivo}\n👤 {nombre_persona}\n📋 DPI: {dpi_persona}\n📅 {fecha_carga}"
+            
+            ctk.CTkLabel(
+                frame_doc,
+                text=info_text,
+                anchor="w",
+                justify="left",
+                font=ctk.CTkFont(size=11)
+            ).pack(side="left", padx=10, pady=10, expand=True, fill="x")
+            
+            btn_ver = ctk.CTkButton(
+                frame_doc,
+                text="👁️ Ver",
+                command=lambda r=ruta_archivo: self.ver_documento_existente(r),
+                width=80,
+                fg_color=COLOR_PRIMARY,
+                hover_color="#2980b9"
+            )
+            btn_ver.pack(side="right", padx=5)
+    
+    def filtrar_documentos_existentes(self):
+        """Filtra los documentos existentes según el texto de búsqueda"""
+        texto_busqueda = self.entry_buscar.get().strip().lower()
+        
+        if not texto_busqueda:
+            self.mostrar_documentos_existentes(self.documentos_existentes)
+            return
+        
+        # Filtrar documentos
+        documentos_filtrados = []
+        for doc in self.documentos_existentes:
+            nombre_archivo = doc[1].lower()
+            nombre_persona = doc[4].lower() if doc[4] else ""
+            dpi_persona = doc[5].lower() if doc[5] else ""
+            
+            # Buscar en nombre de archivo, nombre de persona o DPI
+            if (texto_busqueda in nombre_archivo or
+                texto_busqueda in nombre_persona or
+                texto_busqueda in dpi_persona):
+                documentos_filtrados.append(doc)
+        
+        self.mostrar_documentos_existentes(documentos_filtrados)
+    
+    def ver_documento_existente(self, ruta_archivo):
+        """Visualiza un documento existente"""
+        if not os.path.exists(ruta_archivo):
+            messagebox.showerror(
+                "Error",
+                f"El archivo no existe:\n{ruta_archivo}"
+            )
+            return
+        
+        # Limpiar visor
+        for widget in self.visor_scroll.winfo_children():
+            widget.destroy()
+        
+        self.lbl_visor_estado = ctk.CTkLabel(
+            self.visor_scroll,
+            text="Cargando documento...",
+            text_color="orange",
+            font=ctk.CTkFont(size=14)
+        )
+        self.lbl_visor_estado.pack(pady=20)
+        self.update()
+        
+        try:
+            # Convertir a PDF temporal para visualización
+            temp_pdf = tempfile.NamedTemporaryFile(delete=False, suffix=".pdf")
+            temp_pdf.close()
+            
+            convert(ruta_archivo, temp_pdf.name)
+            
+            # Mostrar PDF
+            self.mostrar_pdf_en_visor(temp_pdf.name)
+            
+            # Limpiar archivo temporal
+            os.unlink(temp_pdf.name)
+        
+        except Exception as e:
+            self.lbl_visor_estado.configure(
+                text=f"Error al cargar documento:\n{str(e)}",
+                text_color="red"
+            )
     
     def seleccionar_documentos(self):
         """Permite seleccionar múltiples documentos"""
@@ -168,6 +355,9 @@ class VentanaCargarDocumentos(ctk.CTkToplevel):
         
         self.documentos_seleccionados = list(archivos)
         self.documento_actual_index = 0
+        
+        # Cambiar a la pestaña de nuevos
+        self.tabview.set("📤 Nuevos")
         
         self.actualizar_lista_documentos()
         self.actualizar_navegacion()
@@ -449,7 +639,7 @@ class VentanaCargarDocumentos(ctk.CTkToplevel):
                     raise Exception("No se pudo extraer el DPI del documento")
                 
                 # Copiar documento a carpeta de documentos
-                nombre_destino = f"{datos.get('dpi', 'sin_dpi').replace(' ', '_')}_{nombre_archivo}"
+                nombre_destino = f"{datos.get('dpi', 'sin_dpi').replace(' ', '_')}_acta_{datos.get('nombre', 'sin_nombre').replace(' ', '_')}.docx"
                 ruta_destino = os.path.join(DOCUMENTOS_DIR, nombre_destino)
                 
                 # Si es .doc convertido, copiar el .docx
@@ -463,7 +653,19 @@ class VentanaCargarDocumentos(ctk.CTkToplevel):
                 log_text.see("end")
                 self.update()
                 
-                persona_id, resultado = self.db.guardar_persona(datos)
+                # Asegurar que todos los campos estén presentes
+                datos_persona = {
+                    'nombre': datos.get('nombre', ''),
+                    'dpi': datos.get('dpi', ''),
+                    'edad': datos.get('edad'),
+                    'estado_civil': datos.get('estado_civil', ''),
+                    'nacionalidad': datos.get('nacionalidad', ''),
+                    'domicilio': datos.get('domicilio', ''),
+                    'nivel_academico': datos.get('nivel_academico', ''),
+                    'apellido_casada': datos.get('apellido_casada', '')
+                }
+                
+                persona_id, resultado = self.db.guardar_persona(datos_persona)
                 
                 # Guardar documento en la base de datos
                 self.db.guardar_documento(persona_id, nombre_destino, ruta_destino, "acta")
@@ -511,20 +713,13 @@ class VentanaCargarDocumentos(ctk.CTkToplevel):
             f"Total procesados: {len(self.documentos_seleccionados)}"
         )
         
-        # Limpiar lista de documentos
+        # Recargar documentos existentes
+        self.cargar_documentos_existentes()
+        
+        # Cambiar a la pestaña de documentos cargados
+        self.tabview.set("📚 Cargados")
+        
+        # Limpiar lista de nuevos documentos
         self.documentos_seleccionados = []
-        self.documento_actual_index = 0
         self.actualizar_lista_documentos()
         self.actualizar_navegacion()
-        
-        # Limpiar visor
-        for widget in self.visor_scroll.winfo_children():
-            widget.destroy()
-        
-        self.lbl_visor_estado = ctk.CTkLabel(
-            self.visor_scroll,
-            text="Documentos procesados correctamente",
-            text_color="green",
-            font=ctk.CTkFont(size=14)
-        )
-        self.lbl_visor_estado.pack(pady=200)

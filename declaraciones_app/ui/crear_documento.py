@@ -2,8 +2,12 @@ import customtkinter as ctk
 from tkinter import filedialog, messagebox
 import os
 import shutil
+import tempfile
 from docx import Document
 from datetime import datetime
+from PIL import Image, ImageTk
+import fitz  # PyMuPDF
+from docx2pdf import convert
 from config import PLANTILLAS_DIR, COLOR_SUCCESS, COLOR_PRIMARY, COLOR_WARNING
 from utils import NumeroATexto
 
@@ -13,24 +17,31 @@ class VentanaCrearDocumento(ctk.CTkToplevel):
         
         self.db = db
         self.persona_actual_id = None
+        self.documento_preview = None
         
         self.title("➕ Crear Nuevo Documento")
         
         self.crear_interfaz()
         
-        # Centrar ventana (esta ventana no necesita maximizar porque es scrollable)
+        # Centrar y maximizar ventana
         self.center_window()
+        self.after(100, self.maximizar_ventana)
+        
+        self.verificar_plantilla()
+    
+    def maximizar_ventana(self):
+        """Maximiza la ventana"""
+        self.state('zoomed')
     
     def center_window(self):
         """Centra la ventana en la pantalla"""
-        # Tamaño más grande para mejor visualización
-        ancho = 1000
-        alto = 900
-        self.geometry(f"{ancho}x{alto}")
+        self.geometry("1400x900")
         self.update_idletasks()
-        x = (self.winfo_screenwidth() // 2) - (ancho // 2)
-        y = (self.winfo_screenheight() // 2) - (alto // 2)
-        self.geometry(f'{ancho}x{alto}+{x}+{y}')
+        width = self.winfo_width()
+        height = self.winfo_height()
+        x = (self.winfo_screenwidth() // 2) - (width // 2)
+        y = (self.winfo_screenheight() // 2) - (height // 2)
+        self.geometry(f'{width}x{height}+{x}+{y}')
     
     def verificar_plantilla(self):
         """Verifica si hay una plantilla activa"""
@@ -97,27 +108,35 @@ class VentanaCrearDocumento(ctk.CTkToplevel):
     def crear_interfaz(self):
         """Crea la interfaz de creación de documentos"""
         
-        # Frame principal scrollable
-        main_frame = ctk.CTkScrollableFrame(self, width=850, height=800)
-        main_frame.pack(fill="both", expand=True, padx=10, pady=10)
+        # Frame principal con dos columnas
+        container = ctk.CTkFrame(self)
+        container.pack(fill="both", expand=True, padx=10, pady=10)
+        
+        container.grid_columnconfigure(0, weight=1)
+        container.grid_columnconfigure(1, weight=1)
+        container.grid_rowconfigure(0, weight=1)
+        
+        # ===== PANEL IZQUIERDO: Formulario =====
+        panel_izquierdo = ctk.CTkScrollableFrame(container, width=650)
+        panel_izquierdo.grid(row=0, column=0, sticky="nsew", padx=(0, 5))
         
         # Título
         ctk.CTkLabel(
-            main_frame,
+            panel_izquierdo,
             text="➕ Crear Nuevo Documento",
             font=ctk.CTkFont(size=28, weight="bold")
         ).pack(pady=20)
         
         # Estado de plantilla
         self.lbl_plantilla = ctk.CTkLabel(
-            main_frame,
+            panel_izquierdo,
             text="Verificando plantilla...",
             font=ctk.CTkFont(size=14)
         )
         self.lbl_plantilla.pack(pady=10)
         
         btn_cambiar_plantilla = ctk.CTkButton(
-            main_frame,
+            panel_izquierdo,
             text="📋 Cambiar Plantilla",
             command=self.cargar_plantilla,
             width=200
@@ -125,10 +144,10 @@ class VentanaCrearDocumento(ctk.CTkToplevel):
         btn_cambiar_plantilla.pack(pady=5)
         
         # Separador
-        ctk.CTkLabel(main_frame, text="").pack(pady=10)
+        ctk.CTkLabel(panel_izquierdo, text="").pack(pady=10)
         
         # ----- Sección de Búsqueda Rápida -----
-        frame_busqueda = ctk.CTkFrame(main_frame)
+        frame_busqueda = ctk.CTkFrame(panel_izquierdo)
         frame_busqueda.pack(pady=10, padx=20, fill="x")
         
         ctk.CTkLabel(
@@ -174,7 +193,7 @@ class VentanaCrearDocumento(ctk.CTkToplevel):
         btn_limpiar.pack(side="left", padx=5)
         
         # ----- Fecha y Hora -----
-        frame_fecha = ctk.CTkFrame(main_frame)
+        frame_fecha = ctk.CTkFrame(panel_izquierdo)
         frame_fecha.pack(pady=10, padx=20, fill="x")
         
         ctk.CTkLabel(
@@ -215,7 +234,7 @@ class VentanaCrearDocumento(ctk.CTkToplevel):
         self.entry_anio.pack(side="left", padx=5, expand=True, fill="x")
         
         # ----- Datos personales -----
-        frame_datos = ctk.CTkFrame(main_frame)
+        frame_datos = ctk.CTkFrame(panel_izquierdo)
         frame_datos.pack(pady=10, padx=20, fill="x")
         
         ctk.CTkLabel(
@@ -233,10 +252,34 @@ class VentanaCrearDocumento(ctk.CTkToplevel):
         )
         self.entry_nombre.pack(side="left", padx=5, expand=True, fill="x")
         
+        # Sexo
+        frame_sexo = ctk.CTkFrame(frame_datos)
+        frame_sexo.pack(pady=5, fill="x", padx=20)
+        ctk.CTkLabel(frame_sexo, text="Sexo:", width=150).pack(side="left", padx=5)
+        self.combo_sexo = ctk.CTkComboBox(
+            frame_sexo,
+            values=["masculino", "femenino"]
+        )
+        self.combo_sexo.set("masculino")
+        self.combo_sexo.pack(side="left", padx=5, expand=True, fill="x")
+        
+        # Fecha de nacimiento
+        frame_fecha_nac = ctk.CTkFrame(frame_datos)
+        frame_fecha_nac.pack(pady=5, fill="x", padx=20)
+        ctk.CTkLabel(frame_fecha_nac, text="Fecha de Nacimiento:", width=150).pack(side="left", padx=5)
+        self.entry_fecha_nac = ctk.CTkEntry(
+            frame_fecha_nac,
+            placeholder_text="DD/MM/AAAA (Ej: 15/03/1995)"
+        )
+        self.entry_fecha_nac.pack(side="left", padx=5, expand=True, fill="x")
+        self.entry_fecha_nac.bind("<FocusOut>", self.calcular_edad)
+        self.entry_fecha_nac.bind("<Return>", self.calcular_edad)
+        
         frame_edad = ctk.CTkFrame(frame_datos)
         frame_edad.pack(pady=5, fill="x", padx=20)
         ctk.CTkLabel(frame_edad, text="Edad:", width=150).pack(side="left", padx=5)
-        self.entry_edad = ctk.CTkEntry(frame_edad, placeholder_text="Ej: 30")
+        self.entry_edad = ctk.CTkEntry(frame_edad, placeholder_text="Se calcula automáticamente")
+        self.entry_edad.configure(state="readonly")
         self.entry_edad.pack(side="left", padx=5, expand=True, fill="x")
         
         frame_estado = ctk.CTkFrame(frame_datos)
@@ -297,7 +340,7 @@ class VentanaCrearDocumento(ctk.CTkToplevel):
         self.entry_dpi.pack(side="left", padx=5, expand=True, fill="x")
         
         # ----- Botones -----
-        frame_botones = ctk.CTkFrame(main_frame)
+        frame_botones = ctk.CTkFrame(panel_izquierdo)
         frame_botones.pack(pady=30)
         
         btn_guardar = ctk.CTkButton(
@@ -312,6 +355,18 @@ class VentanaCrearDocumento(ctk.CTkToplevel):
         )
         btn_guardar.pack(side="left", padx=10)
         
+        btn_preview = ctk.CTkButton(
+            frame_botones,
+            text="👁️ Vista Previa",
+            command=self.generar_preview,
+            height=45,
+            width=200,
+            font=ctk.CTkFont(size=16, weight="bold"),
+            fg_color=COLOR_WARNING,
+            hover_color="#e67e22"
+        )
+        btn_preview.pack(side="left", padx=10)
+        
         btn_generar = ctk.CTkButton(
             frame_botones,
             text="✅ Generar Documento",
@@ -323,6 +378,68 @@ class VentanaCrearDocumento(ctk.CTkToplevel):
             hover_color="#27ae60"
         )
         btn_generar.pack(side="left", padx=10)
+        
+        # ===== PANEL DERECHO: Visor de documento =====
+        panel_derecho = ctk.CTkFrame(container)
+        panel_derecho.grid(row=0, column=1, sticky="nsew", padx=(5, 0))
+        
+        # Título del visor
+        ctk.CTkLabel(
+            panel_derecho,
+            text="📄 Vista Previa del Documento",
+            font=ctk.CTkFont(size=20, weight="bold")
+        ).pack(pady=10)
+        
+        # Frame scrollable para el visor
+        self.visor_scroll = ctk.CTkScrollableFrame(panel_derecho, width=650, height=750)
+        self.visor_scroll.pack(pady=10, padx=10, fill="both", expand=True)
+        
+        self.lbl_visor_estado = ctk.CTkLabel(
+            self.visor_scroll,
+            text="Haga clic en 'Vista Previa' para visualizar el documento",
+            text_color="gray",
+            font=ctk.CTkFont(size=14)
+        )
+        self.lbl_visor_estado.pack(pady=200)
+    
+    def calcular_edad(self, event=None):
+        """Calcula la edad a partir de la fecha de nacimiento"""
+        fecha_nac_str = self.entry_fecha_nac.get().strip()
+        
+        if not fecha_nac_str:
+            return
+        
+        try:
+            # Intentar parsear la fecha
+            if '/' in fecha_nac_str:
+                partes = fecha_nac_str.split('/')
+                if len(partes) == 3:
+                    dia, mes, anio = int(partes[0]), int(partes[1]), int(partes[2])
+                    fecha_nac = datetime(anio, mes, dia)
+                else:
+                    return
+            else:
+                return
+            
+            # Calcular edad
+            hoy = datetime.now()
+            edad = hoy.year - fecha_nac.year
+            
+            # Ajustar si aún no ha cumplido años este año
+            if (hoy.month, hoy.day) < (fecha_nac.month, fecha_nac.day):
+                edad -= 1
+            
+            # Actualizar campo de edad
+            self.entry_edad.configure(state="normal")
+            self.entry_edad.delete(0, "end")
+            self.entry_edad.insert(0, str(edad))
+            self.entry_edad.configure(state="readonly")
+            
+        except ValueError:
+            messagebox.showwarning(
+                "Fecha inválida",
+                "Por favor ingrese una fecha válida en formato DD/MM/AAAA"
+            )
     
     def buscar_persona(self):
         """Busca una persona por DPI y autocompleta los campos"""
@@ -335,37 +452,86 @@ class VentanaCrearDocumento(ctk.CTkToplevel):
         resultado = self.db.buscar_persona_por_dpi(dpi)
         
         if resultado:
-            # Autocompletar campos
-            self.persona_actual_id = resultado[0]
+            # Formato: id, nombre_completo, dpi, edad, estado_civil, 
+            #          nacionalidad, domicilio, nivel_academico, 
+            #          apellido_casada, fecha_registro, sexo, fecha_nacimiento
             
+            self.persona_actual_id = resultado[0]  # id
+            
+            # Nombre completo
             self.entry_nombre.delete(0, "end")
-            self.entry_nombre.insert(0, resultado[1])
+            if resultado[1]:
+                self.entry_nombre.insert(0, resultado[1])
             
-            self.entry_edad.delete(0, "end")
-            if resultado[2]:
-                self.entry_edad.insert(0, str(resultado[2]))
+            # Sexo
+            if resultado[10]:
+                self.combo_sexo.set(resultado[10])
             
-            if resultado[3]:
-                self.combo_estado.set(resultado[3])
+            # Fecha de nacimiento
+            self.entry_fecha_nac.delete(0, "end")
+            if resultado[11]:
+                self.entry_fecha_nac.insert(0, resultado[11])
+                self.calcular_edad()
+            elif resultado[3]:
+                # Si no hay fecha de nacimiento pero sí edad
+                self.entry_edad.configure(state="normal")
+                self.entry_edad.delete(0, "end")
+                self.entry_edad.insert(0, str(resultado[3]))
+                self.entry_edad.configure(state="readonly")
             
-            self.entry_casada.delete(0, "end")
+            # Estado civil
             if resultado[4]:
-                self.entry_casada.insert(0, resultado[4])
+                self.combo_estado.set(resultado[4])
             
+            # Nacionalidad
             self.entry_nacionalidad.delete(0, "end")
             if resultado[5]:
                 self.entry_nacionalidad.insert(0, resultado[5])
             
-            self.entry_nivel.delete(0, "end")
-            if resultado[6]:
-                self.entry_nivel.insert(0, resultado[6])
-            
+            # Domicilio
             self.entry_domicilio.delete(0, "end")
-            if resultado[7]:
-                self.entry_domicilio.insert(0, resultado[7])
+            if resultado[6]:
+                self.entry_domicilio.insert(0, resultado[6])
             
+            # Nivel académico
+            self.entry_nivel.delete(0, "end")
+            if resultado[7]:
+                self.entry_nivel.insert(0, resultado[7])
+            
+            # Apellido de casada (limpiar si contiene texto no válido)
+            self.entry_casada.delete(0, "end")
+            if resultado[8]:
+                apellido_casada = resultado[8].strip()
+                
+                # Lista de textos que NO son apellidos de casada válidos
+                textos_invalidos = [
+                    "personal de identificación",
+                    "documento personal",
+                    "identificación",
+                    "dpi",
+                    "cui",
+                    "código único",
+                    "renap",
+                    "registro nacional"
+                ]
+                
+                # Verificar que no contenga texto inválido
+                es_valido = True
+                apellido_lower = apellido_casada.lower()
+                
+                for texto_invalido in textos_invalidos:
+                    if texto_invalido in apellido_lower:
+                        es_valido = False
+                        break
+                
+                # Solo insertar si es válido y no está vacío
+                if es_valido and len(apellido_casada) > 0:
+                    self.entry_casada.insert(0, apellido_casada)
+            
+            # DPI
             self.entry_dpi.delete(0, "end")
-            self.entry_dpi.insert(0, resultado[8])
+            if resultado[2]:
+                self.entry_dpi.insert(0, resultado[2])
             
             messagebox.showinfo("Éxito", f"Persona encontrada: {resultado[1]}\n\nDatos autocompletados.")
         else:
@@ -378,7 +544,6 @@ class VentanaCrearDocumento(ctk.CTkToplevel):
     def guardar_persona(self):
         """Guarda o actualiza una persona en la base de datos"""
         nombre = self.entry_nombre.get().strip()
-        edad = self.entry_edad.get().strip()
         dpi = self.entry_dpi.get().strip()
         
         if not nombre or not dpi:
@@ -386,9 +551,16 @@ class VentanaCrearDocumento(ctk.CTkToplevel):
             return
         
         try:
+            # Obtener edad del campo (puede ser calculada o manual)
+            self.entry_edad.configure(state="normal")
+            edad_str = self.entry_edad.get().strip()
+            self.entry_edad.configure(state="readonly")
+            
             datos = {
                 'nombre': nombre,
-                'edad': int(edad) if edad else None,
+                'sexo': self.combo_sexo.get(),
+                'fecha_nacimiento': self.entry_fecha_nac.get().strip(),
+                'edad': int(edad_str) if edad_str else None,
                 'estado_civil': self.combo_estado.get(),
                 'apellido_casada': self.entry_casada.get().strip(),
                 'nacionalidad': self.entry_nacionalidad.get().strip(),
@@ -408,6 +580,264 @@ class VentanaCrearDocumento(ctk.CTkToplevel):
         except Exception as e:
             messagebox.showerror("Error", f"Error al guardar persona:\n{str(e)}")
     
+    def generar_preview(self):
+        """Genera una vista previa del documento"""
+        # Verificar plantilla
+        plantilla = self.db.obtener_plantilla_activa()
+        if not plantilla:
+            messagebox.showwarning("Advertencia", "No hay plantilla activa")
+            return
+        
+        # Validar datos mínimos
+        if not self.entry_nombre.get().strip() or not self.entry_dpi.get().strip():
+            messagebox.showwarning("Advertencia", "Debe ingresar al menos el nombre y DPI")
+            return
+        
+        # Limpiar visor
+        for widget in self.visor_scroll.winfo_children():
+            widget.destroy()
+        
+        self.lbl_visor_estado = ctk.CTkLabel(
+            self.visor_scroll,
+            text="Generando vista previa...",
+            text_color="orange",
+            font=ctk.CTkFont(size=14)
+        )
+        self.lbl_visor_estado.pack(pady=20)
+        self.update()
+        
+        try:
+            # Generar documento temporal
+            doc = self.crear_documento_con_datos()
+            
+            # Guardar temporalmente
+            temp_docx = tempfile.NamedTemporaryFile(delete=False, suffix=".docx")
+            temp_docx.close()
+            doc.save(temp_docx.name)
+            
+            # Convertir a PDF
+            temp_pdf = tempfile.NamedTemporaryFile(delete=False, suffix=".pdf")
+            temp_pdf.close()
+            
+            convert(temp_docx.name, temp_pdf.name)
+            
+            # Mostrar PDF
+            self.mostrar_pdf_en_visor(temp_pdf.name)
+            
+            # Guardar referencia para generar después
+            self.documento_preview = temp_docx.name
+            
+            # Limpiar PDF temporal
+            os.unlink(temp_pdf.name)
+            
+        except Exception as e:
+            self.lbl_visor_estado.configure(
+                text=f"Error al generar vista previa:\n{str(e)}",
+                text_color="red"
+            )
+    
+    def mostrar_pdf_en_visor(self, pdf_path):
+        """Muestra el PDF renderizado como imágenes en el visor"""
+        # Limpiar visor
+        for widget in self.visor_scroll.winfo_children():
+            widget.destroy()
+        
+        try:
+            pdf_document = fitz.open(pdf_path)
+            
+            for page_num in range(len(pdf_document)):
+                page = pdf_document[page_num]
+                
+                # Renderizar página a imagen
+                zoom = 1.5
+                mat = fitz.Matrix(zoom, zoom)
+                pix = page.get_pixmap(matrix=mat)
+                
+                # Convertir a PIL Image
+                img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
+                
+                # Redimensionar para ajustar al visor
+                max_width = 650
+                ratio = max_width / img.width
+                new_height = int(img.height * ratio)
+                img = img.resize((max_width, new_height), Image.Resampling.LANCZOS)
+                
+                # Convertir a PhotoImage
+                photo = ImageTk.PhotoImage(img)
+                
+                # Crear label para mostrar la imagen
+                label = ctk.CTkLabel(self.visor_scroll, image=photo, text="")
+                label.image = photo
+                label.pack(pady=10)
+                
+                # Agregar separador entre páginas
+                if page_num < len(pdf_document) - 1:
+                    separador = ctk.CTkLabel(
+                        self.visor_scroll,
+                        text=f"--- Página {page_num + 1} ---",
+                        font=ctk.CTkFont(size=12),
+                        text_color="gray"
+                    )
+                    separador.pack(pady=5)
+            
+            pdf_document.close()
+            
+        except Exception as e:
+            self.lbl_visor_estado = ctk.CTkLabel(
+                self.visor_scroll,
+                text=f"Error al mostrar PDF:\n{str(e)}",
+                text_color="red"
+            )
+            self.lbl_visor_estado.pack(pady=20)
+    
+    def crear_documento_con_datos(self):
+        """Crea un documento con los datos del formulario"""
+        plantilla = self.db.obtener_plantilla_activa()
+        doc = Document(plantilla[2])
+        
+        # Obtener datos
+        hora = self.entry_hora.get().strip()
+        minutos = self.entry_minutos.get().strip()
+        dia = self.entry_dia.get().strip()
+        mes = self.combo_mes.get().strip()
+        anio = self.entry_anio.get().strip()
+        nombre = self.entry_nombre.get().strip()
+        sexo = self.combo_sexo.get().strip()
+        
+        # Obtener edad
+        self.entry_edad.configure(state="normal")
+        edad = self.entry_edad.get().strip()
+        self.entry_edad.configure(state="readonly")
+        
+        estado_civil = self.combo_estado.get().strip()
+        apellido_casada = self.entry_casada.get().strip()
+        nacionalidad = self.entry_nacionalidad.get().strip()
+        nivel_academico = self.entry_nivel.get().strip()
+        domicilio = self.entry_domicilio.get().strip()
+        dpi = self.entry_dpi.get().strip()
+        
+        # Determinar artículos y pronombres según el sexo
+        if sexo == "femenino":
+            # Reemplazos de masculino a femenino
+            reemplazos_genero = [
+                ("el señor", "la señora"),
+                ("el requirente", "la requirente")
+            ]
+        else:
+            # Reemplazos de femenino a masculino
+            reemplazos_genero = [
+                ("la señora", "el señor"),
+                ("la requirente", "el requirente")
+            ]
+        
+        # Construir nombre completo con apellido de casada
+        nombre_completo = nombre
+        if apellido_casada and estado_civil == "casada":
+            partes = nombre.split()
+            if len(partes) >= 2:
+                nombre_completo = f"{partes[0]} {partes[1]} {apellido_casada}"
+                if len(partes) > 2:
+                    nombre_completo += " " + " ".join(partes[2:])
+        
+        # Convertir año a texto
+        anio_texto = None
+        if anio.isdigit():
+            anio_num = int(anio)
+            if 2000 <= anio_num < 2100:
+                resto = anio_num - 2000
+                if resto == 0:
+                    anio_texto = "dos mil"
+                else:
+                    anio_texto = "dos mil " + NumeroATexto.convertir(resto)
+            else:
+                anio_texto = str(anio)
+        
+        # Preparar reemplazos
+        reemplazos = []
+        
+        # Primero agregar los reemplazos de género (IMPORTANTE: antes que otros)
+        reemplazos.extend(reemplazos_genero)
+        
+        if hora and minutos:
+            hora_t = NumeroATexto.convertir(int(hora))
+            min_t = NumeroATexto.convertir(int(minutos))
+            reemplazos.append(("diecisiete horas con veinte minutos", f"{hora_t} horas con {min_t} minutos"))
+        
+        if dia:
+            dia_t = NumeroATexto.convertir(int(dia))
+            reemplazos.append(("veintiocho", dia_t))
+            reemplazos.append(("(28)", f"({dia})"))
+        
+        if mes:
+            reemplazos.append(("noviembre", mes))
+        
+        if anio and anio_texto:
+            reemplazos.append(("dos mil veinticinco", anio_texto))
+            reemplazos.append(("(2025)", f"({anio})"))
+        
+        if nombre:
+            reemplazos.append(("Abner Aníbal Ajpop González", nombre_completo))
+        
+        if edad:
+            edad_num = int(edad)
+            edad_t = NumeroATexto.convertir(edad_num)
+            
+            if edad_t.endswith(" y uno"):
+                edad_t = edad_t[:-3] + " un"
+            elif edad_t == "uno":
+                edad_t = "un"
+            
+            reemplazos.append(("veintiún", edad_t))
+            reemplazos.append(("(21)", f"({edad})"))
+        
+        if estado_civil:
+            reemplazos.append(("soltero", estado_civil))
+        
+        if nacionalidad:
+            reemplazos.append(("guatemalteco", nacionalidad))
+        
+        if nivel_academico:
+            reemplazos.append(("Bachiller en Ciencias y Letras con Orientación en Computación", nivel_academico))
+        
+        if domicilio:
+            reemplazos.append(("con domicilio en el departamento de Guatemala", f"con domicilio en el {domicilio}"))
+        
+        if dpi:
+            dpi_formateado = dpi.replace(" ", "")
+            if len(dpi_formateado) == 13:
+                dpi_con_espacios = f"{dpi_formateado[:4]} {dpi_formateado[4:9]} {dpi_formateado[9:13]}"
+            else:
+                dpi_con_espacios = dpi
+            
+            dpi_texto = NumeroATexto.convertir_dpi(dpi)
+            reemplazos.append(("dos mil ocho espacio veintidós mil ochocientos veintinueve espacio cero ciento uno", dpi_texto))
+            reemplazos.append(("(2008 22829 0101)", f"({dpi_con_espacios})"))
+        
+        # Aplicar reemplazos
+        for paragraph in doc.paragraphs:
+            for buscar, reemplazar in reemplazos:
+                # Reemplazar todas las ocurrencias para nombre y género
+                if buscar == "Abner Aníbal Ajpop González":
+                    self.reemplazar_en_parrafo(paragraph, buscar, reemplazar, reemplazar_todas=True)
+                elif buscar in ["el señor", "la señora", "el requirente", "la requirente"]:
+                    self.reemplazar_en_parrafo(paragraph, buscar, reemplazar, reemplazar_todas=True)
+                else:
+                    self.reemplazar_en_parrafo(paragraph, buscar, reemplazar, reemplazar_todas=False)
+        
+        for table in doc.tables:
+            for row in table.rows:
+                for cell in row.cells:
+                    for paragraph in cell.paragraphs:
+                        for buscar, reemplazar in reemplazos:
+                            if buscar == "Abner Aníbal Ajpop González":
+                                self.reemplazar_en_parrafo(paragraph, buscar, reemplazar, reemplazar_todas=True)
+                            elif buscar in ["el señor", "la señora", "el requirente", "la requirente"]:
+                                self.reemplazar_en_parrafo(paragraph, buscar, reemplazar, reemplazar_todas=True)
+                            else:
+                                self.reemplazar_en_parrafo(paragraph, buscar, reemplazar, reemplazar_todas=False)
+        
+        return doc
+    
     def generar_documento(self):
         """Genera el documento con los datos ingresados"""
         # Verificar plantilla
@@ -422,143 +852,83 @@ class VentanaCrearDocumento(ctk.CTkToplevel):
             return
         
         try:
-            # Cargar plantilla
-            doc = Document(plantilla[2])
+            # Crear documento
+            doc = self.crear_documento_con_datos()
             
-            # Obtener datos
-            hora = self.entry_hora.get().strip()
-            minutos = self.entry_minutos.get().strip()
-            dia = self.entry_dia.get().strip()
-            mes = self.combo_mes.get().strip()
+            # Verificar si ya existe un documento para esta persona en este año
             anio = self.entry_anio.get().strip()
-            nombre = self.entry_nombre.get().strip()
-            edad = self.entry_edad.get().strip()
-            estado_civil = self.combo_estado.get().strip()
-            apellido_casada = self.entry_casada.get().strip()
-            nacionalidad = self.entry_nacionalidad.get().strip()
-            nivel_academico = self.entry_nivel.get().strip()
-            domicilio = self.entry_domicilio.get().strip()
-            dpi = self.entry_dpi.get().strip()
+            archivo_salida = None
             
-            # Construir nombre completo con apellido de casada
-            nombre_completo = nombre
-            if apellido_casada and estado_civil == "casada":
-                partes = nombre.split()
-                if len(partes) >= 2:
-                    nombre_completo = f"{partes[0]} {partes[1]} {apellido_casada}"
-                    if len(partes) > 2:
-                        nombre_completo += " " + " ".join(partes[2:])
-            
-            # Convertir año a texto
-            anio_texto = None
-            if anio.isdigit():
-                anio_num = int(anio)
-                if 2000 <= anio_num < 2100:
-                    resto = anio_num - 2000
-                    if resto == 0:
-                        anio_texto = "dos mil"
-                    else:
-                        anio_texto = "dos mil " + NumeroATexto.convertir(resto)
-                else:
-                    anio_texto = str(anio)
-            
-            # Preparar reemplazos
-            reemplazos = []
-            
-            if hora and minutos:
-                hora_t = NumeroATexto.convertir(int(hora))
-                min_t = NumeroATexto.convertir(int(minutos))
-                reemplazos.append(("diecisiete horas con veinte minutos", f"{hora_t} horas con {min_t} minutos"))
-            
-            if dia:
-                dia_t = NumeroATexto.convertir(int(dia))
-                reemplazos.append(("veintiocho", dia_t))
-                reemplazos.append(("(28)", f"({dia})"))
-            
-            if mes:
-                reemplazos.append(("noviembre", mes))
-            
-            if anio and anio_texto:
-                reemplazos.append(("dos mil veinticinco", anio_texto))
-                reemplazos.append(("(2025)", f"({anio})"))
-            
-            if nombre:
-                reemplazos.append(("Abner Aníbal Ajpop González", nombre_completo))
-            
-            if edad:
-                edad_num = int(edad)
-                edad_t = NumeroATexto.convertir(edad_num)
+            if self.persona_actual_id and anio:
+                # Buscar si ya existe un documento
+                self.db.cursor.execute('''
+                    SELECT ruta_documento FROM historial_actas
+                    WHERE persona_id = ? AND anio = ?
+                    ORDER BY id DESC LIMIT 1
+                ''', (self.persona_actual_id, int(anio)))
                 
-                if edad_t.endswith(" y uno"):
-                    edad_t = edad_t[:-3] + " un"
-                elif edad_t == "uno":
-                    edad_t = "un"
+                resultado = self.db.cursor.fetchone()
                 
-                reemplazos.append(("veintiún", edad_t))
-                reemplazos.append(("(21)", f"({edad})"))
+                if resultado and os.path.exists(resultado[0]):
+                    # Preguntar si desea sobrescribir
+                    respuesta = messagebox.askyesno(
+                        "Documento existente",
+                        f"Ya existe un documento para esta persona en el año {anio}.\n\n"
+                        f"¿Desea actualizar el documento existente?\n\n"
+                        f"Ruta: {resultado[0]}"
+                    )
+                    
+                    if respuesta:
+                        archivo_salida = resultado[0]
             
-            if estado_civil:
-                reemplazos.append(("soltero", estado_civil))
-            
-            if nacionalidad:
-                reemplazos.append(("guatemalteco", nacionalidad))
-            
-            if nivel_academico:
-                reemplazos.append(("Bachiller en Ciencias y Letras con Orientación en Computación", nivel_academico))
-            
-            if domicilio:
-                reemplazos.append(("con domicilio en el departamento de Guatemala", f"con domicilio en el {domicilio}"))
-            
-            if dpi:
-                dpi_formateado = dpi.replace(" ", "")
-                if len(dpi_formateado) == 13:
-                    dpi_con_espacios = f"{dpi_formateado[:4]} {dpi_formateado[4:9]} {dpi_formateado[9:13]}"
-                else:
-                    dpi_con_espacios = dpi
-                
-                dpi_texto = NumeroATexto.convertir_dpi(dpi)
-                reemplazos.append(("dos mil ocho espacio veintidós mil ochocientos veintinueve espacio cero ciento uno", dpi_texto))
-                reemplazos.append(("(2008 22829 0101)", f"({dpi_con_espacios})"))
-            
-            # Aplicar reemplazos
-            for paragraph in doc.paragraphs:
-                for buscar, reemplazar in reemplazos:
-                    if buscar == "Abner Aníbal Ajpop González":
-                        self.reemplazar_en_parrafo(paragraph, buscar, reemplazar, reemplazar_todas=True)
-                    else:
-                        self.reemplazar_en_parrafo(paragraph, buscar, reemplazar, reemplazar_todas=False)
-            
-            for table in doc.tables:
-                for row in table.rows:
-                    for cell in row.cells:
-                        for paragraph in cell.paragraphs:
-                            for buscar, reemplazar in reemplazos:
-                                if buscar == "Abner Aníbal Ajpop González":
-                                    self.reemplazar_en_parrafo(paragraph, buscar, reemplazar, reemplazar_todas=True)
-                                else:
-                                    self.reemplazar_en_parrafo(paragraph, buscar, reemplazar, reemplazar_todas=False)
-            
-            # Guardar documento
-            archivo_salida = filedialog.asksaveasfilename(
-                defaultextension=".docx",
-                filetypes=[("Documento Word", "*.docx")],
-                initialfile=f"acta_{nombre.replace(' ', '_')}.docx"
-            )
+            # Si no hay archivo existente o no se quiere sobrescribir, crear uno nuevo
+            if not archivo_salida:
+                nombre = self.entry_nombre.get().strip()
+                fecha_hora = datetime.now().strftime("%Y%m%d_%H%M%S")
+                archivo_salida = filedialog.asksaveasfilename(
+                    defaultextension=".docx",
+                    filetypes=[("Documento Word", "*.docx")],
+                    initialfile=f"acta_{nombre.replace(' ', '_')}_{fecha_hora}.docx"
+                )
             
             if archivo_salida:
                 doc.save(archivo_salida)
                 
                 # Guardar en historial si hay persona registrada
                 if self.persona_actual_id and anio:
+                    dia = self.entry_dia.get().strip()
+                    mes = self.combo_mes.get().strip()
+                    hora = self.entry_hora.get().strip()
+                    minutos = self.entry_minutos.get().strip()
+                    
                     fecha_acta = f"{dia}/{mes}/{anio}" if dia and mes else datetime.now().strftime("%d/%m/%Y")
-                    self.db.guardar_historial_acta(
-                        self.persona_actual_id,
-                        fecha_acta,
-                        hora,
-                        minutos,
-                        int(anio),
-                        archivo_salida
-                    )
+                    
+                    # Verificar si ya existe un registro para actualizar
+                    self.db.cursor.execute('''
+                        SELECT id FROM historial_actas
+                        WHERE persona_id = ? AND anio = ?
+                    ''', (self.persona_actual_id, int(anio)))
+                    
+                    existe = self.db.cursor.fetchone()
+                    
+                    if existe:
+                        # Actualizar
+                        self.db.cursor.execute('''
+                            UPDATE historial_actas
+                            SET fecha_acta = ?, hora = ?, minutos = ?, ruta_documento = ?
+                            WHERE id = ?
+                        ''', (fecha_acta, hora, minutos, archivo_salida, existe[0]))
+                        self.db.conn.commit()
+                    else:
+                        # Insertar nuevo
+                        self.db.guardar_historial_acta(
+                            self.persona_actual_id,
+                            fecha_acta,
+                            hora,
+                            minutos,
+                            int(anio),
+                            archivo_salida
+                        )
                 
                 messagebox.showinfo(
                     "Éxito",
@@ -638,7 +1008,11 @@ class VentanaCrearDocumento(ctk.CTkToplevel):
         self.combo_mes.set("noviembre")
         self.entry_anio.delete(0, "end")
         self.entry_nombre.delete(0, "end")
+        self.combo_sexo.set("masculino")
+        self.entry_fecha_nac.delete(0, "end")
+        self.entry_edad.configure(state="normal")
         self.entry_edad.delete(0, "end")
+        self.entry_edad.configure(state="readonly")
         self.combo_estado.set("soltero")
         self.entry_casada.delete(0, "end")
         self.entry_nacionalidad.delete(0, "end")
@@ -646,3 +1020,15 @@ class VentanaCrearDocumento(ctk.CTkToplevel):
         self.entry_domicilio.delete(0, "end")
         self.entry_dpi.delete(0, "end")
         self.persona_actual_id = None
+        
+        # Limpiar visor
+        for widget in self.visor_scroll.winfo_children():
+            widget.destroy()
+        
+        self.lbl_visor_estado = ctk.CTkLabel(
+            self.visor_scroll,
+            text="Haga clic en 'Vista Previa' para visualizar el documento",
+            text_color="gray",
+            font=ctk.CTkFont(size=14)
+        )
+        self.lbl_visor_estado.pack(pady=200)

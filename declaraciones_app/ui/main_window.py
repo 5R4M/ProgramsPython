@@ -17,6 +17,8 @@ class MainWindow(ctk.CTk):
         # Inicializar base de datos
         self.db = DatabaseManager()
         
+        self.info_frame = None
+        
         # Crear interfaz
         self.crear_interfaz()
         
@@ -117,11 +119,11 @@ class MainWindow(ctk.CTk):
         btn_crear.grid(row=0, column=2, padx=20, pady=20, sticky="nsew")
         
         # Frame inferior con información
-        info_frame = ctk.CTkFrame(main_frame)
-        info_frame.pack(pady=20, fill="x")
+        self.info_frame = ctk.CTkFrame(main_frame)
+        self.info_frame.pack(pady=20, fill="x")
         
         # Estadísticas
-        self.actualizar_estadisticas(info_frame)
+        self.actualizar_estadisticas(self.info_frame)
         
         # Pie de página
         footer = ctk.CTkLabel(
@@ -179,16 +181,36 @@ class MainWindow(ctk.CTk):
         """Abre la ventana de carga de documentos"""
         ventana = VentanaCargarDocumentos(self, self.db)
         ventana.grab_set()
+        self.wait_window(ventana)
+        self.actualizar_estadisticas(self.info_frame)
     
     def abrir_buscar_documento(self):
         """Abre la ventana de búsqueda de documentos"""
         ventana = VentanaBuscarDocumento(self, self.db)
         ventana.grab_set()
+        self.wait_window(ventana)
+        self.actualizar_estadisticas(self.info_frame)
     
     def abrir_crear_documento(self):
         """Abre la ventana de creación de documentos"""
         ventana = VentanaCrearDocumento(self, self.db)
         ventana.grab_set()
+        self.wait_window(ventana)
+        self.actualizar_estadisticas(self.info_frame)
+
+    def actualizar_estadisticas_main(self):
+        """Actualiza las estadísticas en la ventana principal"""
+        # Buscar el frame de info
+        for widget in self.winfo_children():
+            if isinstance(widget, ctk.CTkFrame):
+                for child in widget.winfo_children():
+                    if isinstance(child, ctk.CTkFrame):
+                        # Buscar el frame de estadísticas
+                        for subchild in child.winfo_children():
+                            if isinstance(subchild, ctk.CTkFrame):
+                                # Encontramos el frame de info, actualizarlo
+                                self.actualizar_estadisticas(subchild.master)
+                                return
     
     def on_closing(self):
         """Maneja el cierre de la aplicación"""

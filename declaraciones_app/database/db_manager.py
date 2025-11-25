@@ -7,6 +7,8 @@ class DatabaseManager:
         self.conn = sqlite3.connect(DB_PATH)
         self.cursor = self.conn.cursor()
         self.crear_tablas()
+        
+        self.verificar_y_cargar_plantillas_existentes()
     
     def crear_tablas(self):
         """Crea las tablas necesarias en la base de datos"""
@@ -27,6 +29,8 @@ class DatabaseManager:
             CREATE TABLE IF NOT EXISTS personas (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 nombre_completo TEXT NOT NULL,
+                sexo TEXT,
+                fecha_nacimiento TEXT,
                 edad INTEGER,
                 estado_civil TEXT,
                 apellido_casada TEXT,
@@ -38,6 +42,16 @@ class DatabaseManager:
                 ultima_modificacion TEXT
             )
         ''')
+        
+        # Verificar si necesitamos agregar las columnas nuevas a tablas existentes
+        self.cursor.execute("PRAGMA table_info(personas)")
+        columnas = [col[1] for col in self.cursor.fetchall()]
+        
+        if 'sexo' not in columnas:
+            self.cursor.execute('ALTER TABLE personas ADD COLUMN sexo TEXT')
+        
+        if 'fecha_nacimiento' not in columnas:
+            self.cursor.execute('ALTER TABLE personas ADD COLUMN fecha_nacimiento TEXT')
         
         # Tabla de documentos cargados
         self.cursor.execute('''
@@ -116,6 +130,28 @@ class DatabaseManager:
         """Guarda o actualiza una persona"""
         fecha_actual = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         
+        # Limpiar apellido de casada si contiene texto inválido
+        apellido_casada = datos.get('apellido_casada', '').strip()
+        
+        if apellido_casada:
+            textos_invalidos = [
+                "personal de identificación",
+                "documento personal",
+                "identificación",
+                "dpi",
+                "cui",
+                "código único",
+                "renap"
+            ]
+            
+            apellido_lower = apellido_casada.lower()
+            for texto_invalido in textos_invalidos:
+                if texto_invalido in apellido_lower:
+                    apellido_casada = None
+                    break
+        else:
+            apellido_casada = None
+        
         # Verificar si existe
         dpi_limpio = datos['dpi'].replace(" ", "")
         self.cursor.execute('''
@@ -129,15 +165,17 @@ class DatabaseManager:
             persona_id = resultado[0]
             self.cursor.execute('''
                 UPDATE personas
-                SET nombre_completo = ?, edad = ?, estado_civil = ?,
-                    apellido_casada = ?, nacionalidad = ?, nivel_academico = ?,
-                    domicilio = ?, dpi = ?, ultima_modificacion = ?
+                SET nombre_completo = ?, sexo = ?, fecha_nacimiento = ?, edad = ?, 
+                    estado_civil = ?, apellido_casada = ?, nacionalidad = ?, 
+                    nivel_academico = ?, domicilio = ?, dpi = ?, ultima_modificacion = ?
                 WHERE id = ?
             ''', (
                 datos.get('nombre', ''),
+                datos.get('sexo'),
+                datos.get('fecha_nacimiento'),
                 datos.get('edad'),
                 datos.get('estado_civil'),
-                datos.get('apellido_casada'),
+                apellido_casada,
                 datos.get('nacionalidad'),
                 datos.get('nivel_academico'),
                 datos.get('domicilio'),
@@ -151,15 +189,18 @@ class DatabaseManager:
             # Insertar
             self.cursor.execute('''
                 INSERT INTO personas (
-                    nombre_completo, edad, estado_civil, apellido_casada,
-                    nacionalidad, nivel_academico, domicilio, dpi, fecha_registro
+                    nombre_completo, sexo, fecha_nacimiento, edad, estado_civil, 
+                    apellido_casada, nacionalidad, nivel_academico, domicilio, 
+                    dpi, fecha_registro
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ''', (
                 datos.get('nombre', ''),
+                datos.get('sexo'),
+                datos.get('fecha_nacimiento'),
                 datos.get('edad'),
                 datos.get('estado_civil'),
-                datos.get('apellido_casada'),
+                apellido_casada,
                 datos.get('nacionalidad'),
                 datos.get('nivel_academico'),
                 datos.get('domicilio'),
@@ -171,35 +212,98 @@ class DatabaseManager:
     
     def buscar_persona_por_dpi(self, dpi):
         """Busca una persona por DPI"""
-        dpi_limpio = dpi.replace(" ", "")
-        self.cursor.execute('''
-            SELECT id, nombre_completo, edad, estado_civil, apellido_casada,
-                   nacionalidad, nivel_academico, domicilio, dpi
-            FROM personas
-            WHERE REPLACE(dpi, ' ', '') = ?
-        ''', (dpi_limpio,))
-        return self.cursor.fetchone()
+        try:
+            # Normalizar DPI (quitar espacios)
+            dpi_limpio = dpi.replace(" ", "")
+            
+            self.cursor.execute('''
+                SELECT id, nombre_completo, dpi, edad, estado_civil, 
+                       nacionalidad, domicilio, nivel_academico, 
+                       apellido_casada, fecha_registro, sexo, fecha_nacimiento
+                FROM personas
+                WHERE REPLACE(dpi, ' ', '') = ?
+            ''', (dpi_limpio,))
+            
+            return self.cursor.fetchone()
+        
+        except Exception:
+            return None
     
     def buscar_persona_por_nombre(self, nombre):
-        """Busca personas por nombre (búsqueda parcial)"""
-        self.cursor.execute('''
-            SELECT id, nombre_completo, edad, estado_civil, apellido_casada,
-                   nacionalidad, nivel_academico, domicilio, dpi
-            FROM personas
-            WHERE nombre_completo LIKE ?
-            ORDER BY nombre_completo
-        ''', (f'%{nombre}%',))
-        return self.cursor.fetchall()
+        """Busca personas por nombre (búsqueda parcial mejorada)"""
+        try:
+            # Normalizar nombre
+            nombre = nombre.strip()
+            
+            if not nombre:
+                return []
+            
+            # Búsqueda más flexible: divide el nombre en palabras
+            palabras = nombre.split()
+            
+            # Construir consulta dinámica para buscar todas las palabras
+            condiciones = []
+            parametros = []
+            
+            for palabra in palabras:
+                condiciones.append("LOWER(nombre_completo) LIKE ?")
+                parametros.append(f'%{palabra.lower()}%')
+            
+            consulta = f'''
+                SELECT id, nombre_completo, dpi, edad, estado_civil, 
+                       nacionalidad, domicilio, nivel_academico, 
+                       apellido_casada, fecha_registro, sexo, fecha_nacimiento
+                FROM personas
+                WHERE nombre_completo IS NOT NULL
+                AND ({' AND '.join(condiciones)})
+                ORDER BY nombre_completo
+            '''
+            
+            self.cursor.execute(consulta, parametros)
+            resultados = self.cursor.fetchall()
+            
+            # Si no encuentra con todas las palabras, buscar con cualquier palabra
+            if not resultados and len(palabras) > 1:
+                condiciones = []
+                parametros = []
+                
+                for palabra in palabras:
+                    condiciones.append("LOWER(nombre_completo) LIKE ?")
+                    parametros.append(f'%{palabra.lower()}%')
+                
+                consulta = f'''
+                    SELECT id, nombre_completo, dpi, edad, estado_civil, 
+                           nacionalidad, domicilio, nivel_academico, 
+                           apellido_casada, fecha_registro, sexo, fecha_nacimiento
+                    FROM personas
+                    WHERE nombre_completo IS NOT NULL
+                    AND ({' OR '.join(condiciones)})
+                    ORDER BY nombre_completo
+                '''
+                
+                self.cursor.execute(consulta, parametros)
+                resultados = self.cursor.fetchall()
+            
+            return resultados
+        
+        except Exception:
+            return []
     
     def obtener_persona_por_id(self, persona_id):
         """Obtiene una persona por ID"""
-        self.cursor.execute('''
-            SELECT id, nombre_completo, edad, estado_civil, apellido_casada,
-                   nacionalidad, nivel_academico, domicilio, dpi
-            FROM personas
-            WHERE id = ?
-        ''', (persona_id,))
-        return self.cursor.fetchone()
+        try:
+            self.cursor.execute('''
+                SELECT id, nombre_completo, dpi, edad, estado_civil, 
+                       nacionalidad, domicilio, nivel_academico, 
+                       apellido_casada, fecha_registro, sexo, fecha_nacimiento
+                FROM personas
+                WHERE id = ?
+            ''', (persona_id,))
+            
+            return self.cursor.fetchone()
+        
+        except Exception:
+            return None
     
     # ===== MÉTODOS PARA DOCUMENTOS =====
     
@@ -215,13 +319,52 @@ class DatabaseManager:
     
     def obtener_documentos_persona(self, persona_id):
         """Obtiene todos los documentos de una persona"""
-        self.cursor.execute('''
-            SELECT id, nombre_archivo, ruta_archivo, fecha_carga, tipo_documento
-            FROM documentos
-            WHERE persona_id = ?
-            ORDER BY fecha_carga DESC
-        ''', (persona_id,))
-        return self.cursor.fetchall()
+        try:
+            self.cursor.execute('''
+                SELECT id, nombre_archivo, ruta_archivo, fecha_carga, tipo_documento
+                FROM documentos
+                WHERE persona_id = ?
+                ORDER BY fecha_carga DESC
+            ''', (persona_id,))
+            
+            return self.cursor.fetchall()
+        
+        except Exception:
+            return []
+    
+    def obtener_estadisticas(self):
+        """Obtiene estadísticas de la base de datos"""
+        try:
+            # Total de documentos
+            self.cursor.execute('SELECT COUNT(*) FROM documentos')
+            total_documentos = self.cursor.fetchone()[0]
+            
+            # Total de personas registradas
+            self.cursor.execute('SELECT COUNT(*) FROM personas')
+            total_personas = self.cursor.fetchone()[0]
+            
+            # Total de personas con nombre (no NULL)
+            self.cursor.execute('SELECT COUNT(*) FROM personas WHERE nombre_completo IS NOT NULL')
+            personas_con_nombre = self.cursor.fetchone()[0]
+            
+            # Total de plantillas activas
+            self.cursor.execute('SELECT COUNT(*) FROM plantillas WHERE activa = 1')
+            plantillas_activas = self.cursor.fetchone()[0]
+            
+            return {
+                'total_documentos': total_documentos,
+                'total_personas': total_personas,
+                'personas_con_nombre': personas_con_nombre,
+                'plantillas_activas': plantillas_activas
+            }
+        
+        except Exception:
+            return {
+                'total_documentos': 0,
+                'total_personas': 0,
+                'personas_con_nombre': 0,
+                'plantillas_activas': 0
+            }
     
     def obtener_todos_documentos(self):
         """Obtiene todos los documentos cargados"""
@@ -255,6 +398,49 @@ class DatabaseManager:
         ''', (persona_id, fecha_acta, hora, minutos, anio, ruta_documento))
         self.conn.commit()
         return self.cursor.lastrowid
+    
+    def verificar_y_cargar_plantillas_existentes(self):
+        """Verifica si hay plantillas en la carpeta que no están en la BD"""
+        from config import PLANTILLAS_DIR
+        import os
+        
+        # Verificar si hay plantilla activa
+        plantilla_activa = self.obtener_plantilla_activa()
+        
+        if not plantilla_activa:
+            # Buscar archivos .docx en la carpeta de plantillas
+            if os.path.exists(PLANTILLAS_DIR):
+                archivos = [f for f in os.listdir(PLANTILLAS_DIR) if f.endswith('.docx')]
+                
+                if archivos:
+                    # Tomar el primer archivo encontrado
+                    archivo = archivos[0]
+                    ruta_completa = os.path.join(PLANTILLAS_DIR, archivo)
+                    
+                    # Registrar en la base de datos
+                    self.guardar_plantilla(archivo, ruta_completa, activar=True)
+    
+    def corregir_nombres_notario(self):
+        """Marca como NULL los nombres que corresponden al notario"""
+        from config import NOMBRES_NOTARIOS
+        
+        try:
+            filas_afectadas = 0
+            
+            for nombre_notario in NOMBRES_NOTARIOS:
+                self.cursor.execute('''
+                    UPDATE personas
+                    SET nombre_completo = NULL
+                    WHERE LOWER(nombre_completo) LIKE ?
+                ''', (f'%{nombre_notario.lower()}%',))
+                
+                filas_afectadas += self.cursor.rowcount
+            
+            self.conn.commit()
+            return filas_afectadas
+        
+        except Exception:
+            return 0
     
     def cerrar(self):
         """Cierra la conexión a la base de datos"""

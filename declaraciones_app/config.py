@@ -22,3 +22,12 @@ COLOR_PRIMARY = "#3498db"
 COLOR_SUCCESS = "#2ecc71"
 COLOR_WARNING = "#f39c12"
 COLOR_DANGER = "#e74c3c"
+
+# Lista de nombres de notarios (para excluir de la extracción)
+NOMBRES_NOTARIOS = [
+    "Néstor Antolín Najarro López",
+    "Nestor Antolin Najarro Lopez",
+    "NÉSTOR ANTOLÍN NAJARRO LÓPEZ",
+    "NESTOR ANTOLIN NAJARRO LOPEZ",
+    # Agrega otros notarios aquí si los hay
+]
