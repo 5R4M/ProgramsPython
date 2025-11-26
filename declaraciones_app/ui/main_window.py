@@ -25,6 +25,9 @@ class MainWindow(ctk.CTk):
         # Centrar y maximizar ventana
         self.center_window()
         self.after(100, self.maximizar_ventana)
+        
+        # Configurar el protocolo de cierre
+        self.protocol("WM_DELETE_WINDOW", self.on_closing)
     
     def maximizar_ventana(self):
         """Maximiza la ventana"""
@@ -136,83 +139,110 @@ class MainWindow(ctk.CTk):
     
     def actualizar_estadisticas(self, parent_frame):
         """Actualiza las estadísticas en la ventana principal"""
+        try:
+            # Verificar que la ventana principal existe
+            if not self.winfo_exists():
+                return
+            
+            # Verificar que el frame padre existe
+            if not parent_frame.winfo_exists():
+                return
+            
+            # Limpiar frame
+            for widget in parent_frame.winfo_children():
+                widget.destroy()
+            
+            # Obtener estadísticas
+            self.db.cursor.execute('SELECT COUNT(*) FROM personas')
+            total_personas = self.db.cursor.fetchone()[0]
+            
+            self.db.cursor.execute('SELECT COUNT(*) FROM documentos')
+            total_documentos = self.db.cursor.fetchone()[0]
+            
+            self.db.cursor.execute('SELECT COUNT(*) FROM plantillas WHERE activa = 1')
+            plantilla_activa = self.db.cursor.fetchone()[0]
+            
+            # Crear labels de estadísticas
+            stats_frame = ctk.CTkFrame(parent_frame)
+            stats_frame.pack(pady=10, padx=20, fill="x")
+            
+            ctk.CTkLabel(
+                stats_frame,
+                text=f"👥 Personas registradas: {total_personas}",
+                font=ctk.CTkFont(size=14)
+            ).pack(side="left", padx=20)
+            
+            ctk.CTkLabel(
+                stats_frame,
+                text=f"📄 Documentos cargados: {total_documentos}",
+                font=ctk.CTkFont(size=14)
+            ).pack(side="left", padx=20)
+            
+            estado_plantilla = "✅ Activa" if plantilla_activa > 0 else "❌ No configurada"
+            color_plantilla = "green" if plantilla_activa > 0 else "red"
+            
+            ctk.CTkLabel(
+                stats_frame,
+                text=f"📋 Plantilla: {estado_plantilla}",
+                font=ctk.CTkFont(size=14),
+                text_color=color_plantilla
+            ).pack(side="left", padx=20)
         
-        # Limpiar frame
-        for widget in parent_frame.winfo_children():
-            widget.destroy()
-        
-        # Obtener estadísticas
-        self.db.cursor.execute('SELECT COUNT(*) FROM personas')
-        total_personas = self.db.cursor.fetchone()[0]
-        
-        self.db.cursor.execute('SELECT COUNT(*) FROM documentos')
-        total_documentos = self.db.cursor.fetchone()[0]
-        
-        self.db.cursor.execute('SELECT COUNT(*) FROM plantillas WHERE activa = 1')
-        plantilla_activa = self.db.cursor.fetchone()[0]
-        
-        # Crear labels de estadísticas
-        stats_frame = ctk.CTkFrame(parent_frame)
-        stats_frame.pack(pady=10, padx=20, fill="x")
-        
-        ctk.CTkLabel(
-            stats_frame,
-            text=f"👥 Personas registradas: {total_personas}",
-            font=ctk.CTkFont(size=14)
-        ).pack(side="left", padx=20)
-        
-        ctk.CTkLabel(
-            stats_frame,
-            text=f"📄 Documentos cargados: {total_documentos}",
-            font=ctk.CTkFont(size=14)
-        ).pack(side="left", padx=20)
-        
-        estado_plantilla = "✅ Activa" if plantilla_activa > 0 else "❌ No configurada"
-        color_plantilla = "green" if plantilla_activa > 0 else "red"
-        
-        ctk.CTkLabel(
-            stats_frame,
-            text=f"📋 Plantilla: {estado_plantilla}",
-            font=ctk.CTkFont(size=14),
-            text_color=color_plantilla
-        ).pack(side="left", padx=20)
+        except Exception as e:
+            print(f"Error al actualizar estadísticas: {e}")
     
     def abrir_cargar_documentos(self):
         """Abre la ventana de carga de documentos"""
-        ventana = VentanaCargarDocumentos(self, self.db)
-        ventana.grab_set()
-        self.wait_window(ventana)
-        self.actualizar_estadisticas(self.info_frame)
+        try:
+            ventana = VentanaCargarDocumentos(self, self.db)
+            ventana.grab_set()
+            self.wait_window(ventana)
+            
+            # Actualizar estadísticas después de cerrar la ventana
+            if self.winfo_exists() and self.info_frame and self.info_frame.winfo_exists():
+                self.after(100, lambda: self.actualizar_estadisticas(self.info_frame))
+        except Exception as e:
+            print(f"Error al abrir ventana de cargar documentos: {e}")
     
     def abrir_buscar_documento(self):
         """Abre la ventana de búsqueda de documentos"""
-        ventana = VentanaBuscarDocumento(self, self.db)
-        ventana.grab_set()
-        self.wait_window(ventana)
-        self.actualizar_estadisticas(self.info_frame)
+        try:
+            ventana = VentanaBuscarDocumento(self, self.db)
+            ventana.grab_set()
+            self.wait_window(ventana)
+            
+            # Actualizar estadísticas después de cerrar la ventana
+            if self.winfo_exists() and self.info_frame and self.info_frame.winfo_exists():
+                self.after(100, lambda: self.actualizar_estadisticas(self.info_frame))
+        except Exception as e:
+            print(f"Error al abrir ventana de buscar documento: {e}")
     
     def abrir_crear_documento(self):
         """Abre la ventana de creación de documentos"""
-        ventana = VentanaCrearDocumento(self, self.db)
-        ventana.grab_set()
-        self.wait_window(ventana)
-        self.actualizar_estadisticas(self.info_frame)
+        try:
+            ventana = VentanaCrearDocumento(self, self.db)
+            ventana.grab_set()
+            self.wait_window(ventana)
+            
+            # Actualizar estadísticas después de cerrar la ventana
+            if self.winfo_exists() and self.info_frame and self.info_frame.winfo_exists():
+                self.after(100, lambda: self.actualizar_estadisticas(self.info_frame))
+        except Exception as e:
+            print(f"Error al abrir ventana de crear documento: {e}")
 
     def actualizar_estadisticas_main(self):
         """Actualiza las estadísticas en la ventana principal"""
-        # Buscar el frame de info
-        for widget in self.winfo_children():
-            if isinstance(widget, ctk.CTkFrame):
-                for child in widget.winfo_children():
-                    if isinstance(child, ctk.CTkFrame):
-                        # Buscar el frame de estadísticas
-                        for subchild in child.winfo_children():
-                            if isinstance(subchild, ctk.CTkFrame):
-                                # Encontramos el frame de info, actualizarlo
-                                self.actualizar_estadisticas(subchild.master)
-                                return
+        try:
+            if self.winfo_exists() and self.info_frame and self.info_frame.winfo_exists():
+                self.actualizar_estadisticas(self.info_frame)
+        except Exception as e:
+            print(f"Error al actualizar estadísticas main: {e}")
     
     def on_closing(self):
         """Maneja el cierre de la aplicación"""
-        self.db.cerrar()
-        self.destroy()
+        try:
+            self.db.cerrar()
+        except:  # noqa: E722
+            pass
+        finally:
+            self.destroy()

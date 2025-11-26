@@ -716,20 +716,6 @@ class VentanaCrearDocumento(ctk.CTkToplevel):
         domicilio = self.entry_domicilio.get().strip()
         dpi = self.entry_dpi.get().strip()
         
-        # Determinar artículos y pronombres según el sexo
-        if sexo == "femenino":
-            # Reemplazos de masculino a femenino
-            reemplazos_genero = [
-                ("el señor", "la señora"),
-                ("el requirente", "la requirente")
-            ]
-        else:
-            # Reemplazos de femenino a masculino
-            reemplazos_genero = [
-                ("la señora", "el señor"),
-                ("la requirente", "el requirente")
-            ]
-        
         # Construir nombre completo con apellido de casada
         nombre_completo = nombre
         if apellido_casada and estado_civil == "casada":
@@ -752,11 +738,20 @@ class VentanaCrearDocumento(ctk.CTkToplevel):
             else:
                 anio_texto = str(anio)
         
-        # Preparar reemplazos
-        reemplazos = []
+        # PRIMERO: Hacer reemplazos de género en todo el documento
+        if sexo == "femenino":
+            self.reemplazar_genero_documento(doc, "el señor", "la señora")
+            self.reemplazar_genero_documento(doc, "El señor", "La señora")
+            self.reemplazar_genero_documento(doc, "el requirente", "la requirente")
+            self.reemplazar_genero_documento(doc, "El requirente", "La requirente")
+        else:
+            self.reemplazar_genero_documento(doc, "la señora", "el señor")
+            self.reemplazar_genero_documento(doc, "La señora", "El señor")
+            self.reemplazar_genero_documento(doc, "la requirente", "el requirente")
+            self.reemplazar_genero_documento(doc, "La requirente", "El requirente")
         
-        # Primero agregar los reemplazos de género (IMPORTANTE: antes que otros)
-        reemplazos.extend(reemplazos_genero)
+        # SEGUNDO: Preparar otros reemplazos
+        reemplazos = []
         
         if hora and minutos:
             hora_t = NumeroATexto.convertir(int(hora))
@@ -813,13 +808,10 @@ class VentanaCrearDocumento(ctk.CTkToplevel):
             reemplazos.append(("dos mil ocho espacio veintidós mil ochocientos veintinueve espacio cero ciento uno", dpi_texto))
             reemplazos.append(("(2008 22829 0101)", f"({dpi_con_espacios})"))
         
-        # Aplicar reemplazos
+        # Aplicar otros reemplazos
         for paragraph in doc.paragraphs:
             for buscar, reemplazar in reemplazos:
-                # Reemplazar todas las ocurrencias para nombre y género
                 if buscar == "Abner Aníbal Ajpop González":
-                    self.reemplazar_en_parrafo(paragraph, buscar, reemplazar, reemplazar_todas=True)
-                elif buscar in ["el señor", "la señora", "el requirente", "la requirente"]:
                     self.reemplazar_en_parrafo(paragraph, buscar, reemplazar, reemplazar_todas=True)
                 else:
                     self.reemplazar_en_parrafo(paragraph, buscar, reemplazar, reemplazar_todas=False)
@@ -831,12 +823,51 @@ class VentanaCrearDocumento(ctk.CTkToplevel):
                         for buscar, reemplazar in reemplazos:
                             if buscar == "Abner Aníbal Ajpop González":
                                 self.reemplazar_en_parrafo(paragraph, buscar, reemplazar, reemplazar_todas=True)
-                            elif buscar in ["el señor", "la señora", "el requirente", "la requirente"]:
-                                self.reemplazar_en_parrafo(paragraph, buscar, reemplazar, reemplazar_todas=True)
                             else:
                                 self.reemplazar_en_parrafo(paragraph, buscar, reemplazar, reemplazar_todas=False)
         
         return doc
+
+    def reemplazar_genero_documento(self, doc, buscar, reemplazar):
+        """Reemplaza todas las ocurrencias de un texto de género en el documento completo"""
+        # Reemplazar en párrafos
+        for paragraph in doc.paragraphs:
+            self.reemplazar_texto_completo(paragraph, buscar, reemplazar)
+        
+        # Reemplazar en tablas
+        for table in doc.tables:
+            for row in table.rows:
+                for cell in row.cells:
+                    for paragraph in cell.paragraphs:
+                        self.reemplazar_texto_completo(paragraph, buscar, reemplazar)
+
+    def reemplazar_texto_completo(self, paragraph, buscar, reemplazar):
+        """Reemplaza TODAS las ocurrencias de un texto en un párrafo"""
+        # Obtener el texto completo del párrafo
+        texto_completo = ''.join(run.text for run in paragraph.runs)
+        
+        # Si no contiene el texto buscado, salir
+        if buscar not in texto_completo:
+            return
+        
+        # Reemplazar todas las ocurrencias
+        texto_nuevo = texto_completo.replace(buscar, reemplazar)
+        
+        # Si no hay cambios, salir
+        if texto_completo == texto_nuevo:
+            return
+        
+        # Limpiar todos los runs excepto el primero
+        if len(paragraph.runs) > 0:
+            # Guardar el formato del primer run
+            primer_run = paragraph.runs[0]
+            
+            # Eliminar todos los runs excepto el primero
+            for i in range(len(paragraph.runs) - 1, 0, -1):
+                paragraph._element.remove(paragraph.runs[i]._element)
+            
+            # Actualizar el texto del primer run
+            primer_run.text = texto_nuevo
     
     def generar_documento(self):
         """Genera el documento con los datos ingresados"""
