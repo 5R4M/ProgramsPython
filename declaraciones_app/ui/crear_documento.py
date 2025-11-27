@@ -11,37 +11,48 @@ from docx2pdf import convert
 from config import PLANTILLAS_DIR, COLOR_SUCCESS, COLOR_PRIMARY, COLOR_WARNING
 from utils import NumeroATexto
 
-class VentanaCrearDocumento(ctk.CTkToplevel):
-    def __init__(self, parent, db):
-        super().__init__(parent)
-        
+class VentanaCrearDocumento:
+    def __init__(self, parent, db, es_integrado=False):
         self.db = db
+        self.es_integrado = es_integrado
+        self.callback_actualizar = None
         self.persona_actual_id = None
         self.documento_preview = None
+        self.ruta_documento_actual = None
         
-        self.title("➕ Crear Nuevo Documento")
+        if es_integrado:
+            # Crear como Frame integrado
+            self.ventana = ctk.CTkFrame(parent)
+            self.ventana.pack(fill="both", expand=True)
+        else:
+            # Crear como ventana separada (Toplevel)
+            self.ventana = ctk.CTkToplevel(parent)
+            self.ventana.title("➕ Crear Nuevo Documento")
+            self.center_window()
+            self.ventana.after(100, self.maximizar_ventana)
         
         self.crear_interfaz()
-        
-        # Centrar y maximizar ventana
-        self.center_window()
-        self.after(100, self.maximizar_ventana)
-        
         self.verificar_plantilla()
+    
+    def set_callback_actualizar(self, callback):
+        """Permite establecer un callback para actualizar estadísticas"""
+        self.callback_actualizar = callback
     
     def maximizar_ventana(self):
         """Maximiza la ventana"""
-        self.state('zoomed')
-    
+        if not self.es_integrado:
+            self.ventana.state('zoomed')
+
     def center_window(self):
         """Centra la ventana en la pantalla"""
-        self.geometry("1400x900")
-        self.update_idletasks()
-        width = self.winfo_width()
-        height = self.winfo_height()
-        x = (self.winfo_screenwidth() // 2) - (width // 2)
-        y = (self.winfo_screenheight() // 2) - (height // 2)
-        self.geometry(f'{width}x{height}+{x}+{y}')
+        if not self.es_integrado:
+            self.ventana.geometry("1400x900")
+            self.ventana.update_idletasks()
+            width = self.ventana.winfo_width()
+            height = self.ventana.winfo_height()
+            x = (self.ventana.winfo_screenwidth() // 2) - (width // 2)
+            y = (self.ventana.winfo_screenheight() // 2) - (height // 2)
+            self.ventana.geometry(f'{width}x{height}+{x}+{y}')
     
     def verificar_plantilla(self):
         """Verifica si hay una plantilla activa"""
@@ -109,7 +120,7 @@ class VentanaCrearDocumento(ctk.CTkToplevel):
         """Crea la interfaz de creación de documentos"""
         
         # Frame principal con dos columnas
-        container = ctk.CTkFrame(self)
+        container = ctk.CTkFrame(self.ventana)
         container.pack(fill="both", expand=True, padx=10, pady=10)
         
         container.grid_columnconfigure(0, weight=1)
@@ -117,15 +128,15 @@ class VentanaCrearDocumento(ctk.CTkToplevel):
         container.grid_rowconfigure(0, weight=1)
         
         # ===== PANEL IZQUIERDO: Formulario =====
-        panel_izquierdo = ctk.CTkScrollableFrame(container, width=650)
+        panel_izquierdo = ctk.CTkFrame(container)
         panel_izquierdo.grid(row=0, column=0, sticky="nsew", padx=(0, 5))
         
         # Título
         ctk.CTkLabel(
             panel_izquierdo,
             text="➕ Crear Nuevo Documento",
-            font=ctk.CTkFont(size=28, weight="bold")
-        ).pack(pady=20)
+            font=ctk.CTkFont(size=20, weight="bold")
+        ).pack(pady=10)
         
         # Estado de plantilla
         self.lbl_plantilla = ctk.CTkLabel(
@@ -133,7 +144,7 @@ class VentanaCrearDocumento(ctk.CTkToplevel):
             text="Verificando plantilla...",
             font=ctk.CTkFont(size=14)
         )
-        self.lbl_plantilla.pack(pady=10)
+        self.lbl_plantilla.pack(pady=5)
         
         btn_cambiar_plantilla = ctk.CTkButton(
             panel_izquierdo,
@@ -141,30 +152,30 @@ class VentanaCrearDocumento(ctk.CTkToplevel):
             command=self.cargar_plantilla,
             width=200
         )
-        btn_cambiar_plantilla.pack(pady=5)
+        btn_cambiar_plantilla.pack(pady=3)
         
         # Separador
-        ctk.CTkLabel(panel_izquierdo, text="").pack(pady=10)
+        ctk.CTkLabel(panel_izquierdo, text="").pack(pady=5)
         
         # ----- Sección de Búsqueda Rápida -----
         frame_busqueda = ctk.CTkFrame(panel_izquierdo)
-        frame_busqueda.pack(pady=10, padx=20, fill="x")
+        frame_busqueda.pack(pady=5, padx=20, fill="x")
         
         ctk.CTkLabel(
             frame_busqueda,
             text="🔍 Búsqueda Rápida (Opcional)",
-            font=ctk.CTkFont(size=18, weight="bold")
-        ).pack(pady=10)
+            font=ctk.CTkFont(size=14, weight="bold")
+        ).pack(pady=5)
         
         ctk.CTkLabel(
             frame_busqueda,
             text="Si la persona ya existe, búsquela por DPI para autocompletar los datos",
             font=ctk.CTkFont(size=12),
             text_color="gray"
-        ).pack(pady=5)
+        ).pack(pady=2)
         
         frame_buscar_dpi = ctk.CTkFrame(frame_busqueda)
-        frame_buscar_dpi.pack(pady=10, padx=20, fill="x")
+        frame_buscar_dpi.pack(pady=3, padx=20, fill="x")
         
         ctk.CTkLabel(frame_buscar_dpi, text="DPI:", width=100).pack(side="left", padx=5)
         self.entry_buscar_dpi = ctk.CTkEntry(
@@ -194,13 +205,13 @@ class VentanaCrearDocumento(ctk.CTkToplevel):
         
         # ----- Fecha y Hora -----
         frame_fecha = ctk.CTkFrame(panel_izquierdo)
-        frame_fecha.pack(pady=10, padx=20, fill="x")
+        frame_fecha.pack(pady=3, padx=20, fill="x")
         
         ctk.CTkLabel(
             frame_fecha,
             text="🕐 Fecha y Hora del Acta",
-            font=ctk.CTkFont(size=18, weight="bold")
-        ).pack(pady=10)
+            font=ctk.CTkFont(size=14, weight="bold")
+        ).pack(pady=5)
         
         frame_hora = ctk.CTkFrame(frame_fecha)
         frame_hora.pack(pady=5, fill="x", padx=20)
@@ -235,16 +246,16 @@ class VentanaCrearDocumento(ctk.CTkToplevel):
         
         # ----- Datos personales -----
         frame_datos = ctk.CTkFrame(panel_izquierdo)
-        frame_datos.pack(pady=10, padx=20, fill="x")
+        frame_datos.pack(pady=5, padx=20, fill="x")
         
         ctk.CTkLabel(
             frame_datos,
             text="👤 Datos Personales",
             font=ctk.CTkFont(size=18, weight="bold")
-        ).pack(pady=10)
+        ).pack(pady=5)
         
         frame_nombre = ctk.CTkFrame(frame_datos)
-        frame_nombre.pack(pady=5, fill="x", padx=20)
+        frame_nombre.pack(pady=2, fill="x", padx=20)
         ctk.CTkLabel(frame_nombre, text="Nombre Completo:", width=150).pack(side="left", padx=5)
         self.entry_nombre = ctk.CTkEntry(
             frame_nombre,
@@ -254,7 +265,7 @@ class VentanaCrearDocumento(ctk.CTkToplevel):
         
         # Sexo
         frame_sexo = ctk.CTkFrame(frame_datos)
-        frame_sexo.pack(pady=5, fill="x", padx=20)
+        frame_sexo.pack(pady=2, fill="x", padx=20)
         ctk.CTkLabel(frame_sexo, text="Sexo:", width=150).pack(side="left", padx=5)
         self.combo_sexo = ctk.CTkComboBox(
             frame_sexo,
@@ -265,7 +276,7 @@ class VentanaCrearDocumento(ctk.CTkToplevel):
         
         # Fecha de nacimiento
         frame_fecha_nac = ctk.CTkFrame(frame_datos)
-        frame_fecha_nac.pack(pady=5, fill="x", padx=20)
+        frame_fecha_nac.pack(pady=2, fill="x", padx=20)
         ctk.CTkLabel(frame_fecha_nac, text="Fecha de Nacimiento:", width=150).pack(side="left", padx=5)
         self.entry_fecha_nac = ctk.CTkEntry(
             frame_fecha_nac,
@@ -276,14 +287,14 @@ class VentanaCrearDocumento(ctk.CTkToplevel):
         self.entry_fecha_nac.bind("<Return>", self.calcular_edad)
         
         frame_edad = ctk.CTkFrame(frame_datos)
-        frame_edad.pack(pady=5, fill="x", padx=20)
+        frame_edad.pack(pady=2, fill="x", padx=20)
         ctk.CTkLabel(frame_edad, text="Edad:", width=150).pack(side="left", padx=5)
         self.entry_edad = ctk.CTkEntry(frame_edad, placeholder_text="Se calcula automáticamente")
         self.entry_edad.configure(state="readonly")
         self.entry_edad.pack(side="left", padx=5, expand=True, fill="x")
         
         frame_estado = ctk.CTkFrame(frame_datos)
-        frame_estado.pack(pady=5, fill="x", padx=20)
+        frame_estado.pack(pady=2, fill="x", padx=20)
         ctk.CTkLabel(frame_estado, text="Estado Civil:", width=150).pack(side="left", padx=5)
         self.combo_estado = ctk.CTkComboBox(
             frame_estado,
@@ -294,7 +305,7 @@ class VentanaCrearDocumento(ctk.CTkToplevel):
         self.combo_estado.pack(side="left", padx=5, expand=True, fill="x")
         
         frame_casada = ctk.CTkFrame(frame_datos)
-        frame_casada.pack(pady=5, fill="x", padx=20)
+        frame_casada.pack(pady=2, fill="x", padx=20)
         ctk.CTkLabel(frame_casada, text="Apellido de casada:", width=150).pack(side="left", padx=5)
         self.entry_casada = ctk.CTkEntry(
             frame_casada,
@@ -303,7 +314,7 @@ class VentanaCrearDocumento(ctk.CTkToplevel):
         self.entry_casada.pack(side="left", padx=5, expand=True, fill="x")
         
         frame_nacionalidad = ctk.CTkFrame(frame_datos)
-        frame_nacionalidad.pack(pady=5, fill="x", padx=20)
+        frame_nacionalidad.pack(pady=2, fill="x", padx=20)
         ctk.CTkLabel(frame_nacionalidad, text="Nacionalidad:", width=150).pack(side="left", padx=5)
         self.entry_nacionalidad = ctk.CTkEntry(
             frame_nacionalidad,
@@ -312,7 +323,7 @@ class VentanaCrearDocumento(ctk.CTkToplevel):
         self.entry_nacionalidad.pack(side="left", padx=5, expand=True, fill="x")
         
         frame_nivel = ctk.CTkFrame(frame_datos)
-        frame_nivel.pack(pady=5, fill="x", padx=20)
+        frame_nivel.pack(pady=2, fill="x", padx=20)
         ctk.CTkLabel(frame_nivel, text="Nivel Académico:", width=150).pack(side="left", padx=5)
         self.entry_nivel = ctk.CTkEntry(
             frame_nivel,
@@ -321,7 +332,7 @@ class VentanaCrearDocumento(ctk.CTkToplevel):
         self.entry_nivel.pack(side="left", padx=5, expand=True, fill="x")
         
         frame_domicilio = ctk.CTkFrame(frame_datos)
-        frame_domicilio.pack(pady=5, fill="x", padx=20)
+        frame_domicilio.pack(pady=2, fill="x", padx=20)
         ctk.CTkLabel(frame_domicilio, text="Domicilio:", width=150).pack(side="left", padx=5)
         self.entry_domicilio = ctk.CTkEntry(
             frame_domicilio,
@@ -331,7 +342,7 @@ class VentanaCrearDocumento(ctk.CTkToplevel):
         
         # ----- DPI -----
         frame_dpi = ctk.CTkFrame(frame_datos)
-        frame_dpi.pack(pady=5, fill="x", padx=20)
+        frame_dpi.pack(pady=2, fill="x", padx=20)
         ctk.CTkLabel(frame_dpi, text="DPI (CUI):", width=150).pack(side="left", padx=5)
         self.entry_dpi = ctk.CTkEntry(
             frame_dpi,
@@ -341,43 +352,43 @@ class VentanaCrearDocumento(ctk.CTkToplevel):
         
         # ----- Botones -----
         frame_botones = ctk.CTkFrame(panel_izquierdo)
-        frame_botones.pack(pady=30)
+        frame_botones.pack(pady=10, padx=20)
         
         btn_guardar = ctk.CTkButton(
             frame_botones,
             text="💾 Guardar Persona",
             command=self.guardar_persona,
-            height=45,
+            height=35,
             width=200,
-            font=ctk.CTkFont(size=16, weight="bold"),
+            font=ctk.CTkFont(size=13, weight="bold"),
             fg_color=COLOR_PRIMARY,
             hover_color="#2980b9"
         )
-        btn_guardar.pack(side="left", padx=10)
+        btn_guardar.pack(side="left", padx=5)
         
         btn_preview = ctk.CTkButton(
             frame_botones,
             text="👁️ Vista Previa",
             command=self.generar_preview,
-            height=45,
+            height=35,
             width=200,
-            font=ctk.CTkFont(size=16, weight="bold"),
+            font=ctk.CTkFont(size=13, weight="bold"),
             fg_color=COLOR_WARNING,
             hover_color="#e67e22"
         )
-        btn_preview.pack(side="left", padx=10)
+        btn_preview.pack(side="left", padx=5)
         
         btn_generar = ctk.CTkButton(
             frame_botones,
             text="✅ Generar Documento",
             command=self.generar_documento,
-            height=45,
+            height=35,
             width=200,
-            font=ctk.CTkFont(size=16, weight="bold"),
+            font=ctk.CTkFont(size=13, weight="bold"),
             fg_color=COLOR_SUCCESS,
             hover_color="#27ae60"
         )
-        btn_generar.pack(side="left", padx=10)
+        btn_generar.pack(side="left", padx=5)
         
         # ===== PANEL DERECHO: Visor de documento =====
         panel_derecho = ctk.CTkFrame(container)
@@ -457,7 +468,18 @@ class VentanaCrearDocumento(ctk.CTkToplevel):
             #          apellido_casada, fecha_registro, sexo, fecha_nacimiento
             
             self.persona_actual_id = resultado[0]  # id
-            
+
+            # ==== NUEVO: obtener DOCX de esta persona desde la tabla 'documentos' ====
+            self.ruta_documento_actual = None
+            try:
+                ruta_doc = self.db.obtener_ultimo_documento_acta(self.persona_actual_id)
+                if ruta_doc and os.path.exists(ruta_doc):
+                    self.ruta_documento_actual = ruta_doc
+
+            except Exception as e:
+                print("Error al obtener documento desde tabla documentos:", e)
+            # ===========================================================
+
             # Nombre completo
             self.entry_nombre.delete(0, "end")
             if resultado[1]:
@@ -503,7 +525,6 @@ class VentanaCrearDocumento(ctk.CTkToplevel):
             if resultado[8]:
                 apellido_casada = resultado[8].strip()
                 
-                # Lista de textos que NO son apellidos de casada válidos
                 textos_invalidos = [
                     "personal de identificación",
                     "documento personal",
@@ -515,16 +536,13 @@ class VentanaCrearDocumento(ctk.CTkToplevel):
                     "registro nacional"
                 ]
                 
-                # Verificar que no contenga texto inválido
                 es_valido = True
                 apellido_lower = apellido_casada.lower()
-                
                 for texto_invalido in textos_invalidos:
                     if texto_invalido in apellido_lower:
                         es_valido = False
                         break
                 
-                # Solo insertar si es válido y no está vacío
                 if es_valido and len(apellido_casada) > 0:
                     self.entry_casada.insert(0, apellido_casada)
             
@@ -533,8 +551,11 @@ class VentanaCrearDocumento(ctk.CTkToplevel):
             if resultado[2]:
                 self.entry_dpi.insert(0, resultado[2])
             
-            messagebox.showinfo("Éxito", f"Persona encontrada: {resultado[1]}\n\nDatos autocompletados.")
+            mensaje_doc = "\n\nDocumento existente cargado." if self.ruta_documento_actual else "\n\nSin documento previo."
+            messagebox.showinfo("Éxito", f"Persona encontrada: {resultado[1]}{mensaje_doc}")
         else:
+            self.persona_actual_id = None
+            self.ruta_documento_actual = None
             messagebox.showinfo(
                 "No encontrado",
                 "No se encontró ninguna persona con ese DPI.\n\n"
@@ -542,7 +563,7 @@ class VentanaCrearDocumento(ctk.CTkToplevel):
             )
     
     def guardar_persona(self):
-        """Guarda o actualiza una persona en la base de datos"""
+        """Guarda o actualiza una persona en la base de datos y actualiza el documento si existe"""
         nombre = self.entry_nombre.get().strip()
         dpi = self.entry_dpi.get().strip()
         
@@ -572,11 +593,36 @@ class VentanaCrearDocumento(ctk.CTkToplevel):
             persona_id, resultado = self.db.guardar_persona(datos)
             self.persona_actual_id = persona_id
             
+            # ==== ACTUALIZAR DOCUMENTO ORIGINAL SI EXISTE ====
+            if self.ruta_documento_actual and os.path.exists(self.ruta_documento_actual):
+                try:
+                    # Crear documento con los datos actualizados
+                    doc_actualizado = self.crear_documento_con_datos()
+                    
+                    # Guardar directamente sobre el archivo original
+                    doc_actualizado.save(self.ruta_documento_actual)
+                    
+                    # Actualizar el preview para que refleje los cambios
+                    if self.documento_preview and os.path.exists(self.documento_preview):
+                        os.unlink(self.documento_preview)
+                    self.documento_preview = None
+                    
+                except Exception as e:
+                    messagebox.showwarning("Advertencia", f"Persona guardada pero no se pudo actualizar el documento:\n{str(e)}")
+            # =================================================
+            
             if resultado == "guardado":
                 messagebox.showinfo("Éxito", "Persona registrada correctamente")
             else:
-                messagebox.showinfo("Éxito", "Persona actualizada correctamente")
+                msg = "Persona actualizada correctamente"
+                if self.ruta_documento_actual and os.path.exists(self.ruta_documento_actual):
+                    msg += "\n\n✓ Documento actualizado con los nuevos datos"
+                messagebox.showinfo("Éxito", msg)
             
+            # Actualizar estadísticas del menú principal
+            if self.callback_actualizar:
+                self.callback_actualizar()
+                        
         except Exception as e:
             messagebox.showerror("Error", f"Error al guardar persona:\n{str(e)}")
     
@@ -604,11 +650,18 @@ class VentanaCrearDocumento(ctk.CTkToplevel):
             font=ctk.CTkFont(size=14)
         )
         self.lbl_visor_estado.pack(pady=20)
-        self.update()
+        self.ventana.update()
         
         try:
-            # Generar documento temporal
+            # Generar documento con datos actualizados
             doc = self.crear_documento_con_datos()
+            
+            # Limpiar preview anterior si existe
+            if self.documento_preview and os.path.exists(self.documento_preview):
+                try:
+                    os.unlink(self.documento_preview)
+                except:  # noqa: E722
+                    pass
             
             # Guardar temporalmente
             temp_docx = tempfile.NamedTemporaryFile(delete=False, suffix=".docx")
@@ -624,12 +677,15 @@ class VentanaCrearDocumento(ctk.CTkToplevel):
             # Mostrar PDF
             self.mostrar_pdf_en_visor(temp_pdf.name)
             
-            # Guardar referencia para generar después
+            # Guardar referencia del DOCX temporal para usar después
             self.documento_preview = temp_docx.name
             
             # Limpiar PDF temporal
-            os.unlink(temp_pdf.name)
-            
+            try:
+                os.unlink(temp_pdf.name)
+            except:  # noqa: E722
+                pass
+                        
         except Exception as e:
             self.lbl_visor_estado.configure(
                 text=f"Error al generar vista previa:\n{str(e)}",
@@ -691,11 +747,16 @@ class VentanaCrearDocumento(ctk.CTkToplevel):
             self.lbl_visor_estado.pack(pady=20)
     
     def crear_documento_con_datos(self):
-        """Crea un documento con los datos del formulario"""
+        """Crea un documento con los datos del formulario SIEMPRE desde la plantilla original"""
+        
+        # CAMBIO CRÍTICO: Siempre usar la plantilla original, nunca el documento modificado
         plantilla = self.db.obtener_plantilla_activa()
+        if not plantilla:
+            raise RuntimeError("No hay plantilla activa")
+        
         doc = Document(plantilla[2])
         
-        # Obtener datos
+        # Obtener datos del formulario
         hora = self.entry_hora.get().strip()
         minutos = self.entry_minutos.get().strip()
         dia = self.entry_dia.get().strip()
@@ -718,12 +779,21 @@ class VentanaCrearDocumento(ctk.CTkToplevel):
         
         # Construir nombre completo con apellido de casada
         nombre_completo = nombre
-        if apellido_casada and estado_civil == "casada":
-            partes = nombre.split()
-            if len(partes) >= 2:
-                nombre_completo = f"{partes[0]} {partes[1]} {apellido_casada}"
-                if len(partes) > 2:
-                    nombre_completo += " " + " ".join(partes[2:])
+        if apellido_casada:
+            # Verificar que el apellido de casada no esté vacío o solo espacios
+            apellido_casada_limpio = apellido_casada.strip()
+            if apellido_casada_limpio and estado_civil in ["casada", "divorciada", "viuda"]:
+                partes = nombre.split()
+                if len(partes) >= 4:
+                    # Insertar apellido de casada después del segundo apellido
+                    # Formato: Nombre1 Nombre2 Apellido1 Apellido2 → Nombre1 Nombre2 Apellido1 Apellido2 de_Casada
+                    nombre_completo = f"{partes[0]} {partes[1]} {partes[2]} {partes[3]} {apellido_casada_limpio}"
+                    # Agregar apellidos adicionales si existen
+                    if len(partes) > 4:
+                        nombre_completo += " " + " ".join(partes[4:])
+                elif len(partes) >= 2:
+                    # Si no tiene suficientes partes, agregar al final
+                    nombre_completo = f"{nombre} {apellido_casada_limpio}"
         
         # Convertir año a texto
         anio_texto = None
@@ -739,16 +809,35 @@ class VentanaCrearDocumento(ctk.CTkToplevel):
                 anio_texto = str(anio)
         
         # PRIMERO: Hacer reemplazos de género en todo el documento
+        # IMPORTANTE: Hacer los reemplazos más específicos primero
         if sexo == "femenino":
-            self.reemplazar_genero_documento(doc, "el señor", "la señora")
-            self.reemplazar_genero_documento(doc, "El señor", "La señora")
+            # Frases completas primero
+            self.reemplazar_genero_documento(doc, "al requirente", "a la requirente")
             self.reemplazar_genero_documento(doc, "el requirente", "la requirente")
             self.reemplazar_genero_documento(doc, "El requirente", "La requirente")
+            self.reemplazar_genero_documento(doc, "el señor", "la señora")
+            self.reemplazar_genero_documento(doc, "El señor", "La señora")
+            
+            # Palabras individuales - IMPORTANTE: usar palabras completas con espacios
+            self.reemplazar_genero_documento(doc, " advertido ", " advertida ")
+            self.reemplazar_genero_documento(doc, " enterado ", " enterada ")
+            self.reemplazar_genero_documento(doc, " deudor ", " deudora ")
+            self.reemplazar_genero_documento(doc, " moroso ", " morosa ")
+            self.reemplazar_genero_documento(doc, " incluido ", " incluida ")
         else:
-            self.reemplazar_genero_documento(doc, "la señora", "el señor")
-            self.reemplazar_genero_documento(doc, "La señora", "El señor")
+            # Frases completas primero
+            self.reemplazar_genero_documento(doc, "a la requirente", "al requirente")
             self.reemplazar_genero_documento(doc, "la requirente", "el requirente")
             self.reemplazar_genero_documento(doc, "La requirente", "El requirente")
+            self.reemplazar_genero_documento(doc, "la señora", "el señor")
+            self.reemplazar_genero_documento(doc, "La señora", "El señor")
+            
+            # Palabras individuales - con espacios
+            self.reemplazar_genero_documento(doc, " advertida ", " advertido ")
+            self.reemplazar_genero_documento(doc, " enterada ", " enterado ")
+            self.reemplazar_genero_documento(doc, " deudora ", " deudor ")
+            self.reemplazar_genero_documento(doc, " morosa ", " moroso ")
+            self.reemplazar_genero_documento(doc, " incluida ", " incluido ")
         
         # SEGUNDO: Preparar otros reemplazos
         reemplazos = []
@@ -807,7 +896,7 @@ class VentanaCrearDocumento(ctk.CTkToplevel):
             dpi_texto = NumeroATexto.convertir_dpi(dpi)
             reemplazos.append(("dos mil ocho espacio veintidós mil ochocientos veintinueve espacio cero ciento uno", dpi_texto))
             reemplazos.append(("(2008 22829 0101)", f"({dpi_con_espacios})"))
-        
+                
         # Aplicar otros reemplazos
         for paragraph in doc.paragraphs:
             for buscar, reemplazar in reemplazos:
@@ -829,104 +918,183 @@ class VentanaCrearDocumento(ctk.CTkToplevel):
         return doc
 
     def reemplazar_genero_documento(self, doc, buscar, reemplazar):
-        """Reemplaza todas las ocurrencias de un texto de género en el documento completo"""
+        """Reemplaza la PRIMERA ocurrencia de un texto de género en cada párrafo del documento"""
+        reemplazos_totales = 0
+        
         # Reemplazar en párrafos
         for paragraph in doc.paragraphs:
-            self.reemplazar_texto_completo(paragraph, buscar, reemplazar)
+            ''.join(run.text for run in paragraph.runs)
+            # Reemplazar TODAS las ocurrencias en este párrafo
+            while buscar in ''.join(run.text for run in paragraph.runs):
+                if self.reemplazar_preservando_formato(paragraph, buscar, reemplazar):
+                    reemplazos_totales += 1
+                else:
+                    break
+                # Prevenir loops infinitos
+                if reemplazos_totales > 100:
+                    return
         
         # Reemplazar en tablas
         for table in doc.tables:
             for row in table.rows:
                 for cell in row.cells:
                     for paragraph in cell.paragraphs:
-                        self.reemplazar_texto_completo(paragraph, buscar, reemplazar)
+                        while buscar in ''.join(run.text for run in paragraph.runs):
+                            if self.reemplazar_preservando_formato(paragraph, buscar, reemplazar):
+                                reemplazos_totales += 1
+                            else:
+                                break
+                            # Prevenir loops infinitos
+                            if reemplazos_totales > 100:
+                                return
+        
+    def clonar_formato_run(self, run_origen, run_destino):
+        """Clona TODO el formato de un run a otro"""
+        try:
+            # Formato de caracteres
+            if run_origen.bold is not None:
+                run_destino.bold = run_origen.bold
+            if run_origen.italic is not None:
+                run_destino.italic = run_origen.italic
+            if run_origen.underline is not None:
+                run_destino.underline = run_origen.underline
+            
+            # Formato de fuente
+            if run_origen.font.name:
+                run_destino.font.name = run_origen.font.name
+            if run_origen.font.size:
+                run_destino.font.size = run_origen.font.size
+            if run_origen.font.color.rgb:
+                run_destino.font.color.rgb = run_origen.font.color.rgb
+            
+            # Otros formatos
+            if run_origen.font.strike is not None:
+                run_destino.font.strike = run_origen.font.strike
+            if run_origen.font.all_caps is not None:
+                run_destino.font.all_caps = run_origen.font.all_caps
+            if run_origen.font.small_caps is not None:
+                run_destino.font.small_caps = run_origen.font.small_caps
+            if run_origen.font.highlight_color is not None:
+                run_destino.font.highlight_color = run_origen.font.highlight_color
+        except Exception as e:
+            print("Error al clonar formato de run:", e)
 
-    def reemplazar_texto_completo(self, paragraph, buscar, reemplazar):
-        """Reemplaza TODAS las ocurrencias de un texto en un párrafo"""
-        # Obtener el texto completo del párrafo
+    def reemplazar_preservando_formato(self, paragraph, buscar, reemplazar):
+        """
+        Reemplaza texto preservando el formato EXACTO de cada fragmento.
+        Esta función NO destruye runs, sino que reconstruye el párrafo manteniendo los formatos.
+        """
+        # Obtener texto completo y verificar si contiene el texto buscado
         texto_completo = ''.join(run.text for run in paragraph.runs)
         
-        # Si no contiene el texto buscado, salir
         if buscar not in texto_completo:
-            return
+            return False
         
-        # Reemplazar todas las ocurrencias
-        texto_nuevo = texto_completo.replace(buscar, reemplazar)
+        # Encontrar la posición del texto a reemplazar
+        pos_inicio = texto_completo.find(buscar)
+        pos_fin = pos_inicio + len(buscar)
         
-        # Si no hay cambios, salir
-        if texto_completo == texto_nuevo:
-            return
+        # Mapear cada carácter a su run correspondiente
+        mapa_runs = []  # [(caracter, run_index, formato)]
+        pos_actual = 0
         
-        # Limpiar todos los runs excepto el primero
-        if len(paragraph.runs) > 0:
-            # Guardar el formato del primer run
-            primer_run = paragraph.runs[0]
-            
-            # Eliminar todos los runs excepto el primero
-            for i in range(len(paragraph.runs) - 1, 0, -1):
-                paragraph._element.remove(paragraph.runs[i]._element)
-            
-            # Actualizar el texto del primer run
-            primer_run.text = texto_nuevo
+        for i, run in enumerate(paragraph.runs):
+            for char in run.text:
+                mapa_runs.append((char, i, run))
+                pos_actual += 1
+        
+        # Construir nuevo contenido preservando formatos
+        nuevos_runs = []
+        pos = 0
+        
+        while pos < len(mapa_runs):
+            if pos == pos_inicio:
+                # Insertar el reemplazo con el formato del primer carácter reemplazado
+                if pos_inicio < len(mapa_runs):
+                    run_formato = mapa_runs[pos_inicio][2]
+                    nuevos_runs.append((reemplazar, run_formato))
+                else:
+                    # Usar formato del último run disponible
+                    run_formato = paragraph.runs[-1] if paragraph.runs else None
+                    nuevos_runs.append((reemplazar, run_formato))
+                
+                # Saltar los caracteres que estamos reemplazando
+                pos = pos_fin
+            else:
+                # Mantener el carácter original con su formato
+                char, run_idx, run_orig = mapa_runs[pos]
+                
+                # Agrupar caracteres consecutivos con el mismo formato
+                texto_grupo = char
+                run_grupo = run_orig
+                pos += 1
+                
+                while pos < len(mapa_runs) and pos != pos_inicio:
+                    next_char, next_run_idx, next_run = mapa_runs[pos]
+                    if next_run_idx == run_idx:
+                        texto_grupo += next_char
+                        pos += 1
+                    else:
+                        break
+                
+                nuevos_runs.append((texto_grupo, run_grupo))
+        
+        # Reconstruir el párrafo
+        # Eliminar todos los runs existentes
+        for i in range(len(paragraph.runs) - 1, -1, -1):
+            paragraph._element.remove(paragraph.runs[i]._element)
+        
+        # Crear nuevos runs con el contenido y formato correspondiente
+        for texto, run_formato in nuevos_runs:
+            if texto:  # Solo agregar si hay texto
+                nuevo_run = paragraph.add_run(texto)
+                if run_formato:
+                    self.clonar_formato_run(run_formato, nuevo_run)
+        
+        return True
+    
+    def reemplazar_texto_completo(self, paragraph, buscar, reemplazar):
+        """Reemplaza TODAS las ocurrencias preservando formato (con protección contra loops)"""
+        texto_completo = ''.join(run.text for run in paragraph.runs)
+        
+        # Contar cuántas veces aparece el texto a buscar
+        ocurrencias = texto_completo.count(buscar)
+        
+        if ocurrencias == 0:
+            return False
+        
+        # Reemplazar exactamente el número de ocurrencias encontradas
+        reemplazos_hechos = 0
+        while reemplazos_hechos < ocurrencias:
+            if not self.reemplazar_preservando_formato(paragraph, buscar, reemplazar):
+                break
+            reemplazos_hechos += 1
+        
+        return reemplazos_hechos > 0
     
     def generar_documento(self):
-        """Genera el documento con los datos ingresados"""
-        # Verificar plantilla
-        plantilla = self.db.obtener_plantilla_activa()
-        if not plantilla:
-            messagebox.showwarning("Advertencia", "No hay plantilla activa")
-            return
-        
+        """Genera o actualiza el documento usando el archivo de vista previa"""
         # Validar datos mínimos
         if not self.entry_nombre.get().strip() or not self.entry_dpi.get().strip():
             messagebox.showwarning("Advertencia", "Debe ingresar al menos el nombre y DPI")
             return
-        
+
+        # Asegurarnos de tener una vista previa actualizada
+        if not self.documento_preview or not os.path.exists(self.documento_preview):
+            self.generar_preview()
+            if not self.documento_preview or not os.path.exists(self.documento_preview):
+                messagebox.showerror("Error", "No se pudo generar la vista previa del documento.")
+                return
+
         try:
-            # Crear documento
-            doc = self.crear_documento_con_datos()
-            
-            # Verificar si ya existe un documento para esta persona en este año
             anio = self.entry_anio.get().strip()
-            archivo_salida = None
-            
-            if self.persona_actual_id and anio:
-                # Buscar si ya existe un documento
-                self.db.cursor.execute('''
-                    SELECT ruta_documento FROM historial_actas
-                    WHERE persona_id = ? AND anio = ?
-                    ORDER BY id DESC LIMIT 1
-                ''', (self.persona_actual_id, int(anio)))
-                
-                resultado = self.db.cursor.fetchone()
-                
-                if resultado and os.path.exists(resultado[0]):
-                    # Preguntar si desea sobrescribir
-                    respuesta = messagebox.askyesno(
-                        "Documento existente",
-                        f"Ya existe un documento para esta persona en el año {anio}.\n\n"
-                        f"¿Desea actualizar el documento existente?\n\n"
-                        f"Ruta: {resultado[0]}"
-                    )
-                    
-                    if respuesta:
-                        archivo_salida = resultado[0]
-            
-            # Si no hay archivo existente o no se quiere sobrescribir, crear uno nuevo
-            if not archivo_salida:
-                nombre = self.entry_nombre.get().strip()
-                fecha_hora = datetime.now().strftime("%Y%m%d_%H%M%S")
-                archivo_salida = filedialog.asksaveasfilename(
-                    defaultextension=".docx",
-                    filetypes=[("Documento Word", "*.docx")],
-                    initialfile=f"acta_{nombre.replace(' ', '_')}_{fecha_hora}.docx"
-                )
-            
-            if archivo_salida:
-                doc.save(archivo_salida)
-                
-                # Guardar en historial si hay persona registrada
-                if self.persona_actual_id and anio:
+
+            # CASO 1: la persona ya tiene documento -> sobrescribir ese archivo
+            if self.persona_actual_id and self.ruta_documento_actual:
+                shutil.copy2(self.documento_preview, self.ruta_documento_actual)
+
+                # Actualizar historial (fecha, hora, minutos) si se maneja año
+                if anio:
                     dia = self.entry_dia.get().strip()
                     mes = self.combo_mes.get().strip()
                     hora = self.entry_hora.get().strip()
@@ -934,101 +1102,96 @@ class VentanaCrearDocumento(ctk.CTkToplevel):
                     
                     fecha_acta = f"{dia}/{mes}/{anio}" if dia and mes else datetime.now().strftime("%d/%m/%Y")
                     
-                    # Verificar si ya existe un registro para actualizar
                     self.db.cursor.execute('''
                         SELECT id FROM historial_actas
                         WHERE persona_id = ? AND anio = ?
                     ''', (self.persona_actual_id, int(anio)))
-                    
                     existe = self.db.cursor.fetchone()
                     
                     if existe:
-                        # Actualizar
                         self.db.cursor.execute('''
                             UPDATE historial_actas
                             SET fecha_acta = ?, hora = ?, minutos = ?, ruta_documento = ?
                             WHERE id = ?
-                        ''', (fecha_acta, hora, minutos, archivo_salida, existe[0]))
+                        ''', (fecha_acta, hora, minutos, self.ruta_documento_actual, existe[0]))
                         self.db.conn.commit()
-                    else:
-                        # Insertar nuevo
-                        self.db.guardar_historial_acta(
-                            self.persona_actual_id,
-                            fecha_acta,
-                            hora,
-                            minutos,
-                            int(anio),
-                            archivo_salida
-                        )
-                
+
                 messagebox.showinfo(
                     "Éxito",
-                    f"✅ Documento generado correctamente:\n\n{archivo_salida}"
+                    f"✅ Documento actualizado correctamente:\n\n{self.ruta_documento_actual}"
                 )
+                return
+
+            # CASO 2: persona nueva o sin documento previo -> pedir dónde guardar
+            nombre = self.entry_nombre.get().strip()
+            dpi = self.entry_dpi.get().strip()
+
+            # Formatear DPI sin espacios
+            dpi_sin_espacios = dpi.replace(" ", "")
+
+            # Crear nombre de archivo con formato: DPI_acta_Nombre.docx
+            archivo_salida = filedialog.asksaveasfilename(
+                defaultextension=".docx",
+                filetypes=[("Documento Word", "*.docx")],
+                initialfile=f"{dpi_sin_espacios}_acta_{nombre.replace(' ', '_')}.docx"
+            )
+
+            if not archivo_salida:
+                return
+
+            shutil.copy2(self.documento_preview, archivo_salida)
+            self.ruta_documento_actual = archivo_salida
+
+            # Guardar/actualizar historial
+            if self.persona_actual_id and anio:
+                dia = self.entry_dia.get().strip()
+                mes = self.combo_mes.get().strip()
+                hora = self.entry_hora.get().strip()
+                minutos = self.entry_minutos.get().strip()
+                
+                fecha_acta = f"{dia}/{mes}/{anio}" if dia and mes else datetime.now().strftime("%d/%m/%Y")
+                
+                self.db.cursor.execute('''
+                    SELECT id FROM historial_actas
+                    WHERE persona_id = ? AND anio = ?
+                ''', (self.persona_actual_id, int(anio)))
+                existe = self.db.cursor.fetchone()
+                
+                if existe:
+                    self.db.cursor.execute('''
+                        UPDATE historial_actas
+                        SET fecha_acta = ?, hora = ?, minutos = ?, ruta_documento = ?
+                        WHERE id = ?
+                    ''', (fecha_acta, hora, minutos, archivo_salida, existe[0]))
+                    self.db.conn.commit()
+                else:
+                    self.db.guardar_historial_acta(
+                        self.persona_actual_id,
+                        fecha_acta,
+                        hora,
+                        minutos,
+                        int(anio),
+                        archivo_salida
+                    )
+
+            messagebox.showinfo(
+                "Éxito",
+                f"✅ Documento generado correctamente:\n\n{archivo_salida}"
+            )
+
+            # Actualizar estadísticas del menú principal
+            if self.callback_actualizar:
+                self.callback_actualizar()
         
         except Exception as e:
             messagebox.showerror("Error", f"Error al generar el documento:\n{str(e)}")
     
     def reemplazar_en_parrafo(self, paragraph, buscar, reemplazar, reemplazar_todas=False):
-        """Reemplaza texto en un párrafo manteniendo el formato"""
-        reemplazos_realizados = 0
-        
-        while True:
-            texto_completo = ''.join(run.text for run in paragraph.runs)
-            
-            if buscar not in texto_completo:
-                break
-            
-            pos_inicio = texto_completo.find(buscar)
-            pos_fin = pos_inicio + len(buscar)
-            
-            pos_actual = 0
-            run_inicio = None
-            run_fin = None
-            pos_en_run_inicio = 0
-            pos_en_run_fin = 0
-            
-            for i, run in enumerate(paragraph.runs):
-                len_run = len(run.text)
-                
-                if pos_actual <= pos_inicio < pos_actual + len_run:
-                    run_inicio = i
-                    pos_en_run_inicio = pos_inicio - pos_actual
-                
-                if pos_actual < pos_fin <= pos_actual + len_run:
-                    run_fin = i
-                    pos_en_run_fin = pos_fin - pos_actual
-                    break
-                
-                pos_actual += len_run
-            
-            if run_inicio is None or run_fin is None:
-                break
-            
-            if run_inicio == run_fin:
-                run = paragraph.runs[run_inicio]
-                run.text = run.text[:pos_en_run_inicio] + reemplazar + run.text[pos_en_run_fin:]
-            else:
-                paragraph.runs[run_inicio].text = paragraph.runs[run_inicio].text[:pos_en_run_inicio] + reemplazar
-                
-                runs_a_eliminar = []
-                for i in range(run_inicio + 1, run_fin + 1):
-                    if i == run_fin:
-                        paragraph.runs[i].text = paragraph.runs[i].text[pos_en_run_fin:]
-                        if not paragraph.runs[i].text:
-                            runs_a_eliminar.append(i)
-                    else:
-                        runs_a_eliminar.append(i)
-                
-                for i in reversed(runs_a_eliminar):
-                    paragraph._element.remove(paragraph.runs[i]._element)
-            
-            reemplazos_realizados += 1
-            
-            if not reemplazar_todas:
-                break
-        
-        return reemplazos_realizados > 0
+        """Reemplaza texto preservando formato (una o todas las ocurrencias)"""
+        if reemplazar_todas:
+            return self.reemplazar_texto_completo(paragraph, buscar, reemplazar)
+        else:
+            return self.reemplazar_preservando_formato(paragraph, buscar, reemplazar)
     
     def limpiar_campos(self):
         """Limpia todos los campos del formulario"""
@@ -1051,6 +1214,7 @@ class VentanaCrearDocumento(ctk.CTkToplevel):
         self.entry_domicilio.delete(0, "end")
         self.entry_dpi.delete(0, "end")
         self.persona_actual_id = None
+        self.ruta_documento_actual = None
         
         # Limpiar visor
         for widget in self.visor_scroll.winfo_children():

@@ -332,6 +332,22 @@ class DatabaseManager:
         except Exception:
             return []
     
+    def obtener_ultimo_documento_acta(self, persona_id):
+        """Devuelve la ruta del último documento tipo 'acta' de una persona, o None si no hay."""
+        try:
+            self.cursor.execute('''
+                SELECT ruta_archivo
+                FROM documentos
+                WHERE persona_id = ? AND (tipo_documento IS NULL OR tipo_documento = 'acta')
+                ORDER BY fecha_carga DESC, id DESC
+                LIMIT 1
+            ''', (persona_id,))
+            row = self.cursor.fetchone()
+            return row[0] if row and row[0] else None
+        except Exception as e:
+            print("Error en obtener_ultimo_documento_acta:", e)
+            return None
+    
     def obtener_estadisticas(self):
         """Obtiene estadísticas de la base de datos"""
         try:

@@ -9,32 +9,41 @@ from docx2pdf import convert
 from config import DOCUMENTOS_DIR, COLOR_SUCCESS, COLOR_PRIMARY
 from utils import convertir_doc_a_docx, DocumentExtractor
 
-class VentanaCargarDocumentos(ctk.CTkToplevel):
-    def __init__(self, parent, db):
-        super().__init__(parent)
-        
+class VentanaCargarDocumentos:
+    def __init__(self, parent, db, es_integrado=False):
         self.db = db
+        self.es_integrado = es_integrado
+        self.callback_actualizar = None
         self.documentos_seleccionados = []
         self.documento_actual_index = 0
         
-        self.title("📥 Cargar Documentos a la Base de Datos")
+        if es_integrado:
+            # Crear como Frame integrado
+            self.ventana = ctk.CTkFrame(parent)
+            self.ventana.pack(fill="both", expand=True)
+        else:
+            # Crear como ventana separada (Toplevel)
+            self.ventana = ctk.CTkToplevel(parent)
+            self.ventana.title("📥 Cargar Documentos a la Base de Datos")
+            self.center_window()
+            self.ventana.after(100, self.maximizar_ventana)
         
         self.crear_interfaz()
-        
-        # Centrar y maximizar ventana
-        self.center_window()
-        self.after(100, self.maximizar_ventana)
-        
-        # Cargar documentos existentes
         self.cargar_documentos_existentes()
+    
+    def set_callback_actualizar(self, callback):
+        """Permite establecer un callback para actualizar estadísticas"""
+        self.callback_actualizar = callback
     
     def maximizar_ventana(self):
         """Maximiza la ventana"""
-        self.state('zoomed')
+        if not self.es_integrado:
+            self.ventana.state('zoomed')
     
     def center_window(self):
         """Centra la ventana en la pantalla"""
-        self.geometry("1400x900")
+        if not self.es_integrado:
+            self.ventana.geometry("1400x900")
         self.update_idletasks()
         width = self.winfo_width()
         height = self.winfo_height()
@@ -46,7 +55,7 @@ class VentanaCargarDocumentos(ctk.CTkToplevel):
         """Crea la interfaz de carga de documentos"""
         
         # Frame principal con dos columnas
-        container = ctk.CTkFrame(self)
+        container = ctk.CTkFrame(self.ventana)
         container.pack(fill="both", expand=True, padx=10, pady=10)
         
         container.grid_columnconfigure(0, weight=1)
@@ -322,7 +331,7 @@ class VentanaCargarDocumentos(ctk.CTkToplevel):
             font=ctk.CTkFont(size=14)
         )
         self.lbl_visor_estado.pack(pady=20)
-        self.update()
+        self.ventana.update()
         
         try:
             # Convertir a PDF temporal para visualización
@@ -471,7 +480,7 @@ class VentanaCargarDocumentos(ctk.CTkToplevel):
             font=ctk.CTkFont(size=14)
         )
         self.lbl_visor_estado.pack(pady=20)
-        self.update()
+        self.ventana.update()
         
         try:
             # Convertir .doc a .docx si es necesario
@@ -600,7 +609,7 @@ class VentanaCargarDocumentos(ctk.CTkToplevel):
         )
         btn_cerrar.pack(pady=10)
         
-        self.update()
+        self.ventana.update()
         
         importados = 0
         errores = 0
@@ -609,18 +618,18 @@ class VentanaCargarDocumentos(ctk.CTkToplevel):
         for i, archivo in enumerate(self.documentos_seleccionados):
             try:
                 progreso_label.configure(text=f"Procesando {i + 1} / {len(self.documentos_seleccionados)}")
-                self.update()
+                self.ventana.update()
                 
                 nombre_archivo = os.path.basename(archivo)
                 log_text.insert("end", f"\n📄 Procesando: {nombre_archivo}\n")
                 log_text.see("end")
-                self.update()
+                self.ventana.update()
                 
                 # Convertir .doc a .docx si es necesario
                 if archivo.lower().endswith('.doc'):
                     log_text.insert("end", "   Convirtiendo .doc a .docx...\n")
                     log_text.see("end")
-                    self.update()
+                    self.ventana.update()
                     
                     archivo_docx = convertir_doc_a_docx(archivo)
                     if not archivo_docx:
@@ -631,7 +640,7 @@ class VentanaCargarDocumentos(ctk.CTkToplevel):
                 # Extraer datos del documento
                 log_text.insert("end", "   Extrayendo datos...\n")
                 log_text.see("end")
-                self.update()
+                self.ventana.update()
                 
                 datos = DocumentExtractor.extraer_datos(archivo_docx)
                 
@@ -651,7 +660,7 @@ class VentanaCargarDocumentos(ctk.CTkToplevel):
                 # Guardar persona en la base de datos
                 log_text.insert("end", f"   Guardando: {datos.get('nombre', 'Sin nombre')}\n")
                 log_text.see("end")
-                self.update()
+                self.ventana.update()
                 
                 # Asegurar que todos los campos estén presentes
                 datos_persona = {
@@ -715,6 +724,8 @@ class VentanaCargarDocumentos(ctk.CTkToplevel):
         
         # Recargar documentos existentes
         self.cargar_documentos_existentes()
+        if self.callback_actualizar:
+            self.callback_actualizar()
         
         # Cambiar a la pestaña de documentos cargados
         self.tabview.set("📚 Cargados")

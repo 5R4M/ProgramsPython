@@ -8,42 +8,53 @@ from docx2pdf import convert
 from config import COLOR_SUCCESS
 from models import Persona
 
-class VentanaBuscarDocumento(ctk.CTkToplevel):
-    def __init__(self, parent, db):
-        super().__init__(parent)
-        
+class VentanaBuscarDocumento:
+    def __init__(self, parent, db, es_integrado=False):
         self.db = db
+        self.es_integrado = es_integrado
+        self.callback_actualizar = None
         self.persona_seleccionada = None
         self.documentos_persona = []
         self.documento_actual_index = 0
         
-        self.title("🔍 Buscar Documento")
+        if es_integrado:
+            # Crear como Frame integrado
+            self.ventana = ctk.CTkFrame(parent)
+            self.ventana.pack(fill="both", expand=True)
+        else:
+            # Crear como ventana separada (Toplevel)
+            self.ventana = ctk.CTkToplevel(parent)
+            self.ventana.title("🔍 Buscar Documento")
+            self.center_window()
+            self.ventana.after(100, self.maximizar_ventana)
         
         self.crear_interfaz()
-        
-        # Centrar y maximizar ventana
-        self.center_window()
-        self.after(100, self.maximizar_ventana)
+    
+    def set_callback_actualizar(self, callback):
+        """Permite establecer un callback para actualizar estadísticas"""
+        self.callback_actualizar = callback
     
     def maximizar_ventana(self):
         """Maximiza la ventana"""
-        self.state('zoomed')
+        if not self.es_integrado:
+            self.ventana.state('zoomed')
     
     def center_window(self):
         """Centra la ventana en la pantalla"""
-        self.geometry("1400x900")
-        self.update_idletasks()
-        width = self.winfo_width()
-        height = self.winfo_height()
-        x = (self.winfo_screenwidth() // 2) - (width // 2)
-        y = (self.winfo_screenheight() // 2) - (height // 2)
-        self.geometry(f'{width}x{height}+{x}+{y}')
+        if not self.es_integrado:
+            self.ventana.geometry("1400x900")
+            self.ventana.update_idletasks()
+            width = self.ventana.winfo_width()
+            height = self.ventana.winfo_height()
+            x = (self.ventana.winfo_screenwidth() // 2) - (width // 2)
+            y = (self.ventana.winfo_screenheight() // 2) - (height // 2)
+            self.ventana.geometry(f'{width}x{height}+{x}+{y}')
     
     def crear_interfaz(self):
         """Crea la interfaz de búsqueda"""
         
         # Frame principal con dos columnas
-        container = ctk.CTkFrame(self)
+        container = ctk.CTkFrame(self.ventana)
         container.pack(fill="both", expand=True, padx=10, pady=10)
         
         container.grid_columnconfigure(0, weight=1)
@@ -398,7 +409,7 @@ class VentanaBuscarDocumento(ctk.CTkToplevel):
             font=ctk.CTkFont(size=14)
         )
         self.lbl_visor_estado.pack(pady=20)
-        self.update()
+        self.ventana.update()
         
         try:
             # Convertir a PDF temporal para visualización
