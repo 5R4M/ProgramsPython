@@ -5,8 +5,9 @@ from PIL import Image, ImageTk
 import fitz  # PyMuPDF
 import tempfile
 from docx2pdf import convert
-from config import COLOR_SUCCESS
+from config import COLOR_SUCCESS, COLOR_PRIMARY, DOCUMENTOS_DIR
 from models import Persona
+from ui.crear_documento import VentanaCrearDocumento
 
 class VentanaBuscarDocumento:
     def __init__(self, parent, db, es_integrado=False):
@@ -228,7 +229,7 @@ class VentanaBuscarDocumento:
             messagebox.showwarning("Advertencia", "Ingrese un nombre para buscar")
             return
         
-        resultados = self.db.buscar_persona_por_nombre(nombre)
+        resultados = self.db.buscar_personas_por_nombre(nombre)  # <-- AQUÍ (plural)
         
         if resultados:
             self.mostrar_resultados(resultados)
@@ -284,15 +285,27 @@ class VentanaBuscarDocumento:
                 font=ctk.CTkFont(size=12)
             ).pack(side="left", padx=10, pady=10, expand=True, fill="x")
             
+            # Botón Editar (abre la ventana de edición con la GUI de crear documento)
+            btn_editar = ctk.CTkButton(
+                frame_resultado,
+                text="Editar",
+                command=lambda p=persona: self.abrir_editor_persona(p),
+                width=100,
+                fg_color=COLOR_PRIMARY,
+                hover_color="#2980b9"
+            )
+            btn_editar.pack(side="right", padx=5)
+
+            # Botón Seleccionar (solo carga la persona en el panel izquierdo de esta ventana)
             btn_seleccionar = ctk.CTkButton(
                 frame_resultado,
                 text="Seleccionar",
                 command=lambda p=persona: self.seleccionar_persona(p),
-                width=120,
+                width=100,
                 fg_color=COLOR_SUCCESS,
                 hover_color="#27ae60"
             )
-            btn_seleccionar.pack(side="right", padx=10)
+            btn_seleccionar.pack(side="right", padx=5)
     
     def seleccionar_persona(self, persona):
         """Selecciona una persona y muestra su información"""
@@ -303,6 +316,25 @@ class VentanaBuscarDocumento:
         
         # Cargar documentos de la persona
         self.cargar_documentos_persona()
+    
+    def abrir_editor_persona(self, persona):
+        try:
+            editor = VentanaCrearDocumento(
+                self.ventana,
+                self.db,
+                es_integrado=False,
+                solo_formulario=True
+            )
+
+            resultado = self.db.obtener_persona_por_id(persona.id)
+            if not resultado:
+                messagebox.showerror("Error", "No se pudo obtener la información completa de la persona.")
+                return
+
+            editor.cargar_datos_persona(resultado)
+
+        except Exception as e:
+            messagebox.showerror("Error", f"No se pudo abrir el editor:\n{str(e)}")
     
     def mostrar_info_persona(self):
         """Muestra información detallada de la persona seleccionada"""
@@ -341,45 +373,6 @@ class VentanaBuscarDocumento:
     def normalizar_dpi(self, dpi):
         """Convierte DPI con espacios o guiones a formato sin separadores"""
         return dpi.replace(" ", "").replace("_", "").replace("-", "")
-
-    def diagnosticar_archivos(self):
-        """Función de diagnóstico temporal"""
-        directorio_docs = os.path.join("declaraciones_app", "data", "documentos")
-        dpi_normalizado = self.normalizar_dpi(self.persona_seleccionada.dpi)
-        
-        print("\n" + "="*80)
-        print("DIAGNÓSTICO DE ARCHIVOS")
-        print("="*80)
-        print(f"DPI original: {self.persona_seleccionada.dpi}")
-        print(f"DPI normalizado: {dpi_normalizado}")
-        print(f"Directorio: {directorio_docs}")
-        print("-"*80)
-        
-        archivos = os.listdir(directorio_docs)
-        print(f"\nTotal archivos en carpeta: {len(archivos)}\n")
-        
-        for i, archivo in enumerate(archivos, 1):
-            extension = archivo.lower().split('.')[-1] if '.' in archivo else 'sin extensión'
-            es_valido = extension in ['docx', 'pdf']
-            
-            archivo_normalizado = archivo.replace(" ", "").replace("_", "").replace("-", "")
-            contiene_dpi = dpi_normalizado in archivo_normalizado
-            
-            print(f"{i}. {archivo}")
-            print(f"   Extensión: {extension} | Válida: {es_valido}")
-            print(f"   Normalizado: {archivo_normalizado}")
-            print(f"   ¿Contiene DPI '{dpi_normalizado}'?: {contiene_dpi}")
-            
-            if es_valido and contiene_dpi:
-                print("   ✅ DEBERÍA MOSTRARSE")
-            else:
-                if not es_valido:
-                    print("   ❌ NO SE MUESTRA: Extensión inválida")
-                if not contiene_dpi:
-                    print("   ❌ NO SE MUESTRA: No contiene el DPI")
-            print()
-        
-        print("="*80 + "\n")
     
     def cargar_documentos_persona(self):
         """Carga los documentos de la persona seleccionada"""
@@ -387,8 +380,8 @@ class VentanaBuscarDocumento:
         for widget in self.documentos_frame.winfo_children():
             widget.destroy()
         
-        # Directorio de documentos
-        directorio_docs = os.path.join("declaraciones_app", "data", "documentos")
+        # Directorio de documentos (centralizado)
+        directorio_docs = DOCUMENTOS_DIR
         
         if not os.path.exists(directorio_docs):
             self.lbl_sin_documentos = ctk.CTkLabel(
@@ -399,10 +392,7 @@ class VentanaBuscarDocumento:
             )
             self.lbl_sin_documentos.pack(pady=30)
             return
-        
-        # LLAMAR AL DIAGNÓSTICO
-        self.diagnosticar_archivos()
-        
+                
         # Normalizar DPI de la persona seleccionada
         dpi_normalizado = self.normalizar_dpi(self.persona_seleccionada.dpi)
         
@@ -420,7 +410,7 @@ class VentanaBuscarDocumento:
                 # Normalizar nombre del archivo
                 archivo_normalizado = archivo.replace(" ", "").replace("_", "").replace("-", "")
                 
-                # Verificar si contiene el DPI
+                # Verificar si contiene el DPI (sin separadores)
                 if dpi_normalizado.lower() in archivo_normalizado.lower():
                     ruta_completa = os.path.join(directorio_docs, archivo)
                     
@@ -433,7 +423,7 @@ class VentanaBuscarDocumento:
                     extension = archivo.lower().split('.')[-1].upper()
                     
                     self.documentos_persona.append((None, archivo, ruta_completa, fecha_str, extension))
-            
+        
         except Exception as e:
             print(f"Error al listar archivos: {e}")
             import traceback
@@ -451,7 +441,7 @@ class VentanaBuscarDocumento:
         
         # Ordenar por fecha
         self.documentos_persona.sort(key=lambda x: x[3], reverse=True)
-        
+                
         # Mostrar documentos
         for i, doc in enumerate(self.documentos_persona):
             doc_id, nombre_archivo, ruta_archivo, fecha_carga, tipo_documento = doc

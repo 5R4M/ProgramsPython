@@ -12,48 +12,66 @@ from config import PLANTILLAS_DIR, COLOR_SUCCESS, COLOR_PRIMARY, COLOR_WARNING, 
 from utils import NumeroATexto
 
 class VentanaCrearDocumento:
-    def __init__(self, parent, db, es_integrado=False):
+    def __init__(self, parent, db, es_integrado=False, solo_formulario=False):
         self.db = db
         self.es_integrado = es_integrado
+        self.solo_formulario = solo_formulario
         self.callback_actualizar = None
         self.persona_actual_id = None
         self.documento_preview = None
         self.ruta_documento_actual = None
-        
+
         if es_integrado:
-            # Crear como Frame integrado
+            # Como frame embebido en otra ventana
             self.ventana = ctk.CTkFrame(parent)
             self.ventana.pack(fill="both", expand=True)
         else:
-            # Crear como ventana separada (Toplevel)
+            # Como ventana emergente
             self.ventana = ctk.CTkToplevel(parent)
-            self.ventana.title("➕ Crear Nuevo Documento")
-            self.center_window()
-            self.ventana.after(100, self.maximizar_ventana)
-        
+            self.ventana.title("➕ Crear / Editar Documento")
+
+            # Que salga activa y encima del padre
+            self.ventana.transient(parent)
+            self.ventana.lift()
+            self.ventana.focus_force()
+            # Si quieres bloquear la ventana padre mientras está abierta:
+            # self.ventana.grab_set()
+
+        # Construir interfaz
         self.crear_interfaz()
+
+        # Verificar plantilla
         self.verificar_plantilla()
-    
+
+        # Ajustar tamaño y centrar
+        if not self.es_integrado:
+            self.ventana.update_idletasks()
+            if self.solo_formulario:
+                # Modo EDICIÓN: solo formulario
+                self.center_window_tamano(700, 700)
+            else:
+                # Modo NORMAL: con visor
+                self.center_window_tamano(1400, 900)
+                self.ventana.after(100, self.maximizar_ventana)
+
     def set_callback_actualizar(self, callback):
         """Permite establecer un callback para actualizar estadísticas"""
         self.callback_actualizar = callback
-    
-    def maximizar_ventana(self):
-        """Maximiza la ventana"""
-        if not self.es_integrado:
-            self.ventana.state('zoomed')
 
-    def center_window(self):
-        """Centra la ventana en la pantalla"""
+    def center_window_tamano(self, width, height):
+        """Centra la ventana con un tamaño específico."""
         if not self.es_integrado:
-            self.ventana.geometry("1400x900")
+            self.ventana.geometry(f"{width}x{height}")
             self.ventana.update_idletasks()
-            width = self.ventana.winfo_width()
-            height = self.ventana.winfo_height()
             x = (self.ventana.winfo_screenwidth() // 2) - (width // 2)
             y = (self.ventana.winfo_screenheight() // 2) - (height // 2)
-            self.ventana.geometry(f'{width}x{height}+{x}+{y}')
-    
+            self.ventana.geometry(f"{width}x{height}+{x}+{y}")
+
+    def maximizar_ventana(self):
+        """Maximiza la ventana (solo modo normal)."""
+        if not self.es_integrado:
+            self.ventana.state("zoomed")
+        
     def verificar_plantilla(self):
         """Verifica si hay una plantilla activa"""
         plantilla = self.db.obtener_plantilla_activa()
@@ -118,16 +136,15 @@ class VentanaCrearDocumento:
     
     def crear_interfaz(self):
         """Crea la interfaz de creación de documentos"""
-        
-        # Frame principal con dos columnas
+
         container = ctk.CTkFrame(self.ventana)
         container.pack(fill="both", expand=True, padx=10, pady=10)
-        
-        container.grid_columnconfigure(0, weight=0, minsize=450)  # Panel izquierdo con ancho fijo
-        container.grid_columnconfigure(1, weight=1)  # El visor ocupa el resto
+
+        container.grid_columnconfigure(0, weight=0, minsize=450)
+        container.grid_columnconfigure(1, weight=1)
         container.grid_rowconfigure(0, weight=1)
-        
-        # ===== PANEL IZQUIERDO: Formulario =====
+
+        # ==== PANEL IZQUIERDO: Formulario ====
         panel_izquierdo = ctk.CTkFrame(container)
         panel_izquierdo.grid(row=0, column=0, sticky="nsew", padx=(0, 5))
         
@@ -156,24 +173,25 @@ class VentanaCrearDocumento:
         btn_cambiar_plantilla.pack(pady=2)
         
         # ----- Sección de Búsqueda Rápida -----
-        frame_busqueda = ctk.CTkFrame(panel_izquierdo)
-        frame_busqueda.pack(pady=3, padx=8, fill="x")
+        # IMPORTANTE: guardamos el frame en self.frame_busqueda
+        self.frame_busqueda = ctk.CTkFrame(panel_izquierdo)
+        self.frame_busqueda.pack(pady=3, padx=8, fill="x")
         
         ctk.CTkLabel(
-            frame_busqueda,
+            self.frame_busqueda,
             text="🔍 Búsqueda Rápida",
             font=ctk.CTkFont(size=12, weight="bold")
         ).pack(pady=2)
         
         ctk.CTkLabel(
-            frame_busqueda,
+            self.frame_busqueda,
             text="Buscar persona existente",
             font=ctk.CTkFont(size=9),
             text_color="gray"
         ).pack(pady=1)
         
         # Búsqueda por DPI
-        frame_buscar_dpi = ctk.CTkFrame(frame_busqueda)
+        frame_buscar_dpi = ctk.CTkFrame(self.frame_busqueda)
         frame_buscar_dpi.pack(pady=1, padx=8, fill="x")
         
         frame_buscar_dpi.grid_columnconfigure(1, weight=1)
@@ -197,7 +215,7 @@ class VentanaCrearDocumento:
         btn_buscar.grid(row=0, column=2, padx=(2, 3))
         
         # Búsqueda por Nombre
-        frame_buscar_nombre = ctk.CTkFrame(frame_busqueda)
+        frame_buscar_nombre = ctk.CTkFrame(self.frame_busqueda)
         frame_buscar_nombre.pack(pady=1, padx=8, fill="x")
         
         frame_buscar_nombre.grid_columnconfigure(1, weight=1)
@@ -221,7 +239,7 @@ class VentanaCrearDocumento:
         btn_buscar_nombre.grid(row=0, column=2, padx=(2, 3))
         
         btn_limpiar = ctk.CTkButton(
-            frame_busqueda,
+            self.frame_busqueda,
             text="🔄 Limpiar",
             command=self.limpiar_campos,
             width=100,
@@ -374,28 +392,36 @@ class VentanaCrearDocumento:
         )
         btn_generar.grid(row=0, column=2, padx=3, sticky="ew")
         
-        # ===== PANEL DERECHO: Visor de documento =====
-        panel_derecho = ctk.CTkFrame(container)
-        panel_derecho.grid(row=0, column=1, sticky="nsew", padx=(5, 0))
-        
-        # Título del visor
-        ctk.CTkLabel(
-            panel_derecho,
-            text="📄 Vista Previa del Documento",
-            font=ctk.CTkFont(size=18, weight="bold")
-        ).pack(pady=8)
-        
-        # Frame scrollable para el visor
-        self.visor_scroll = ctk.CTkScrollableFrame(panel_derecho, width=650, height=750)
-        self.visor_scroll.pack(pady=10, padx=10, fill="both", expand=True)
-        
-        self.lbl_visor_estado = ctk.CTkLabel(
-            self.visor_scroll,
-            text="Haga clic en 'Vista Previa' para visualizar el documento",
-            text_color="gray",
-            font=ctk.CTkFont(size=14)
-        )
-        self.lbl_visor_estado.pack(pady=200)
+        # ==== PANEL DERECHO: Visor de documento ====
+        if not self.solo_formulario:
+            panel_derecho = ctk.CTkFrame(container)
+            panel_derecho.grid(row=0, column=1, sticky="nsew", padx=(5, 0))
+
+            ctk.CTkLabel(
+                panel_derecho,
+                text="📄 Vista Previa del Documento",
+                font=ctk.CTkFont(size=18, weight="bold")
+            ).pack(pady=8)
+
+            self.visor_scroll = ctk.CTkScrollableFrame(panel_derecho, width=650, height=750)
+            self.visor_scroll.pack(pady=10, padx=10, fill="both", expand=True)
+
+            self.lbl_visor_estado = ctk.CTkLabel(
+                self.visor_scroll,
+                text="Haga clic en 'Vista Previa' para visualizar el documento",
+                text_color="gray",
+                font=ctk.CTkFont(size=14)
+            )
+            self.lbl_visor_estado.pack(pady=200)
+        else:
+            # Dummy para que los métodos que usan visor no revienten
+            self.visor_scroll = ctk.CTkFrame(container)
+            self.visor_scroll.grid_forget()
+            self.lbl_visor_estado = None
+            
+        # === AL FINAL: si estamos en modo solo_formulario, OCULTAR búsqueda ===
+        if self.solo_formulario and self.frame_busqueda.winfo_manager():
+            self.frame_busqueda.pack_forget()
     
     def calcular_edad(self, event=None):
         """Calcula la edad a partir de la fecha de nacimiento"""
@@ -811,6 +837,11 @@ class VentanaCrearDocumento:
     
     def generar_preview(self):
         """Genera una vista previa del documento"""
+        if self.solo_formulario:
+            # En modo solo_formulario no mostramos visor.
+            messagebox.showinfo("Info", "En modo edición rápida no se muestra la vista previa.")
+            return
+        
         # Verificar plantilla
         plantilla = self.db.obtener_plantilla_activa()
         if not plantilla:
