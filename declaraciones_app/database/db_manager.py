@@ -229,7 +229,7 @@ class DatabaseManager:
         except Exception:
             return None
     
-    def buscar_persona_por_nombre(self, nombre):
+    def buscar_personas_por_nombre(self, nombre):
         """Busca personas por nombre (búsqueda parcial mejorada)"""
         try:
             # Normalizar nombre
@@ -251,8 +251,8 @@ class DatabaseManager:
             
             consulta = f'''
                 SELECT id, nombre_completo, dpi, edad, estado_civil, 
-                       nacionalidad, domicilio, nivel_academico, 
-                       apellido_casada, fecha_registro, sexo, fecha_nacimiento
+                    nacionalidad, domicilio, nivel_academico, 
+                    apellido_casada, fecha_registro, sexo, fecha_nacimiento
                 FROM personas
                 WHERE nombre_completo IS NOT NULL
                 AND ({' AND '.join(condiciones)})
@@ -273,8 +273,8 @@ class DatabaseManager:
                 
                 consulta = f'''
                     SELECT id, nombre_completo, dpi, edad, estado_civil, 
-                           nacionalidad, domicilio, nivel_academico, 
-                           apellido_casada, fecha_registro, sexo, fecha_nacimiento
+                        nacionalidad, domicilio, nivel_academico, 
+                        apellido_casada, fecha_registro, sexo, fecha_nacimiento
                     FROM personas
                     WHERE nombre_completo IS NOT NULL
                     AND ({' OR '.join(condiciones)})
@@ -286,9 +286,10 @@ class DatabaseManager:
             
             return resultados
         
-        except Exception:
+        except Exception as e:
+            print(f"Error en buscar_personas_por_nombre: {e}")
             return []
-    
+        
     def obtener_persona_por_id(self, persona_id):
         """Obtiene una persona por ID"""
         try:
@@ -381,18 +382,7 @@ class DatabaseManager:
                 'personas_con_nombre': 0,
                 'plantillas_activas': 0
             }
-    
-    def obtener_todos_documentos(self):
-        """Obtiene todos los documentos cargados"""
-        self.cursor.execute('''
-            SELECT d.id, d.nombre_archivo, d.ruta_archivo, d.fecha_carga, 
-                   p.nombre_completo, p.dpi
-            FROM documentos d
-            LEFT JOIN personas p ON d.persona_id = p.id
-            ORDER BY d.fecha_carga DESC
-        ''')
-        return self.cursor.fetchall()
-    
+        
     def obtener_documento_por_id(self, documento_id):
         """Obtiene un documento por ID"""
         self.cursor.execute('''
@@ -457,6 +447,95 @@ class DatabaseManager:
         
         except Exception:
             return 0
+    
+    def verificar_dpi_existe(self, dpi):
+        """Verifica si un DPI ya existe en la base de datos"""
+        try:
+            cursor = self.conn.cursor()
+            cursor.execute("SELECT COUNT(*) FROM personas WHERE dpi = ?", (dpi,))
+            resultado = cursor.fetchone()
+            return resultado[0] > 0
+        except Exception as e:
+            print(f"Error al verificar DPI: {e}")
+            return False
+    
+    def obtener_todas_personas(self):
+        """
+        Devuelve todas las personas registradas en la tabla 'personas'.
+        Formato esperado por la UI:
+            (id, nombre_completo, dpi, edad, estado_civil,
+            nacionalidad, domicilio, nivel_academico,
+            apellido_casada, fecha_registro, sexo, fecha_nacimiento)
+        Ajusta los nombres de columnas si es necesario.
+        """
+        self.cursor.execute("""
+            SELECT
+                id,
+                nombre_completo,
+                dpi,
+                edad,
+                estado_civil,
+                nacionalidad,
+                domicilio,
+                nivel_academico,
+                apellido_casada,
+                fecha_registro,
+                sexo,
+                fecha_nacimiento
+            FROM personas
+        """)
+        return self.cursor.fetchall()
+    
+    def obtener_todos_documentos(self):
+        """
+        Devuelve todos los documentos con los datos básicos de la persona asociada.
+
+        Formato de cada fila:
+            (
+                id_documento,      # 0
+                nombre_archivo,    # 1
+                ruta_archivo,      # 2
+                fecha_carga,       # 3
+                nombre_persona,    # 4
+                dpi_persona,       # 5
+                persona_id         # 6
+            )
+        """
+        self.cursor.execute("""
+            SELECT
+                d.id,
+                d.nombre_archivo,
+                d.ruta_archivo,
+                d.fecha_carga,
+                p.nombre_completo,
+                p.dpi,
+                d.persona_id
+            FROM documentos d
+            LEFT JOIN personas p ON d.persona_id = p.id
+            ORDER BY d.fecha_carga DESC, d.id DESC
+        """)
+        return self.cursor.fetchall()
+    
+    def eliminar_documento_por_id(self, documento_id):
+        """Elimina un documento por su ID."""
+        try:
+            self.cursor.execute("DELETE FROM documentos WHERE id = ?", (documento_id,))
+            self.conn.commit()
+        except Exception as e:
+            print(f"Error al eliminar documento: {e}")
+            raise
+
+    def eliminar_persona_por_id(self, persona_id):
+        """Elimina una persona por su ID (y opcionalmente documentos, si quieres en cascada)."""
+        try:
+            # Si quieres, antes puedes borrar sus documentos:
+            # self.cursor.execute("DELETE FROM documentos WHERE persona_id = ?", (persona_id,))
+
+            self.cursor.execute("DELETE FROM personas WHERE id = ?", (persona_id,))
+            self.conn.commit()
+        except Exception as e:
+            print(f"Error al eliminar persona: {e}")
+            raise
     
     def cerrar(self):
         """Cierra la conexión a la base de datos"""

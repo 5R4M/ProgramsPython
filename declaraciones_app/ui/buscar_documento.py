@@ -338,24 +338,119 @@ class VentanaBuscarDocumento:
             font=ctk.CTkFont(size=12)
         ).pack(pady=5, padx=20, fill="x")
     
+    def normalizar_dpi(self, dpi):
+        """Convierte DPI con espacios o guiones a formato sin separadores"""
+        return dpi.replace(" ", "").replace("_", "").replace("-", "")
+
+    def diagnosticar_archivos(self):
+        """Función de diagnóstico temporal"""
+        directorio_docs = os.path.join("declaraciones_app", "data", "documentos")
+        dpi_normalizado = self.normalizar_dpi(self.persona_seleccionada.dpi)
+        
+        print("\n" + "="*80)
+        print("DIAGNÓSTICO DE ARCHIVOS")
+        print("="*80)
+        print(f"DPI original: {self.persona_seleccionada.dpi}")
+        print(f"DPI normalizado: {dpi_normalizado}")
+        print(f"Directorio: {directorio_docs}")
+        print("-"*80)
+        
+        archivos = os.listdir(directorio_docs)
+        print(f"\nTotal archivos en carpeta: {len(archivos)}\n")
+        
+        for i, archivo in enumerate(archivos, 1):
+            extension = archivo.lower().split('.')[-1] if '.' in archivo else 'sin extensión'
+            es_valido = extension in ['docx', 'pdf']
+            
+            archivo_normalizado = archivo.replace(" ", "").replace("_", "").replace("-", "")
+            contiene_dpi = dpi_normalizado in archivo_normalizado
+            
+            print(f"{i}. {archivo}")
+            print(f"   Extensión: {extension} | Válida: {es_valido}")
+            print(f"   Normalizado: {archivo_normalizado}")
+            print(f"   ¿Contiene DPI '{dpi_normalizado}'?: {contiene_dpi}")
+            
+            if es_valido and contiene_dpi:
+                print("   ✅ DEBERÍA MOSTRARSE")
+            else:
+                if not es_valido:
+                    print("   ❌ NO SE MUESTRA: Extensión inválida")
+                if not contiene_dpi:
+                    print("   ❌ NO SE MUESTRA: No contiene el DPI")
+            print()
+        
+        print("="*80 + "\n")
+    
     def cargar_documentos_persona(self):
         """Carga los documentos de la persona seleccionada"""
         # Limpiar frame de documentos
         for widget in self.documentos_frame.winfo_children():
             widget.destroy()
         
-        # Obtener documentos
-        self.documentos_persona = self.db.obtener_documentos_persona(self.persona_seleccionada.id)
+        # Directorio de documentos
+        directorio_docs = os.path.join("declaraciones_app", "data", "documentos")
+        
+        if not os.path.exists(directorio_docs):
+            self.lbl_sin_documentos = ctk.CTkLabel(
+                self.documentos_frame,
+                text="No existe el directorio de documentos",
+                text_color="red",
+                font=ctk.CTkFont(size=12)
+            )
+            self.lbl_sin_documentos.pack(pady=30)
+            return
+        
+        # LLAMAR AL DIAGNÓSTICO
+        self.diagnosticar_archivos()
+        
+        # Normalizar DPI de la persona seleccionada
+        dpi_normalizado = self.normalizar_dpi(self.persona_seleccionada.dpi)
+        
+        # Buscar todos los archivos
+        self.documentos_persona = []
+        
+        try:
+            archivos = os.listdir(directorio_docs)
+            
+            for archivo in archivos:
+                # Verificar extensión válida
+                if not (archivo.lower().endswith('.docx') or archivo.lower().endswith('.pdf')):
+                    continue
+                
+                # Normalizar nombre del archivo
+                archivo_normalizado = archivo.replace(" ", "").replace("_", "").replace("-", "")
+                
+                # Verificar si contiene el DPI
+                if dpi_normalizado.lower() in archivo_normalizado.lower():
+                    ruta_completa = os.path.join(directorio_docs, archivo)
+                    
+                    # Obtener fecha de modificación
+                    import datetime
+                    fecha_modificacion = os.path.getmtime(ruta_completa)
+                    fecha_str = datetime.datetime.fromtimestamp(fecha_modificacion).strftime("%Y-%m-%d %H:%M:%S")
+                    
+                    # Obtener extensión
+                    extension = archivo.lower().split('.')[-1].upper()
+                    
+                    self.documentos_persona.append((None, archivo, ruta_completa, fecha_str, extension))
+            
+        except Exception as e:
+            print(f"Error al listar archivos: {e}")
+            import traceback
+            traceback.print_exc()
         
         if not self.documentos_persona:
             self.lbl_sin_documentos = ctk.CTkLabel(
                 self.documentos_frame,
-                text="Esta persona no tiene documentos cargados",
+                text=f"No se encontraron documentos para el DPI: {self.persona_seleccionada.dpi}",
                 text_color="orange",
                 font=ctk.CTkFont(size=12)
             )
             self.lbl_sin_documentos.pack(pady=30)
             return
+        
+        # Ordenar por fecha
+        self.documentos_persona.sort(key=lambda x: x[3], reverse=True)
         
         # Mostrar documentos
         for i, doc in enumerate(self.documentos_persona):
@@ -364,7 +459,7 @@ class VentanaBuscarDocumento:
             frame_doc = ctk.CTkFrame(self.documentos_frame)
             frame_doc.pack(pady=5, padx=10, fill="x")
             
-            info_doc = f"📄 {nombre_archivo}\n📅 {fecha_carga}"
+            info_doc = f"📄 {nombre_archivo}\n📅 {fecha_carga} | {tipo_documento}"
             
             ctk.CTkLabel(
                 frame_doc,
