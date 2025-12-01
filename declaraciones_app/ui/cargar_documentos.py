@@ -10,6 +10,7 @@ from config import DOCUMENTOS_DIR, COLOR_SUCCESS, COLOR_PRIMARY
 from utils import convertir_doc_a_docx, DocumentExtractor
 import time
 from .crear_documento import VentanaCrearDocumento
+import datetime
 
 class VentanaCargarDocumentos:
     def __init__(self, parent, db, es_integrado=False):
@@ -31,12 +32,23 @@ class VentanaCargarDocumentos:
             # Crear como ventana separada (Toplevel)
             self.ventana = ctk.CTkToplevel(parent)
             self.ventana.title("📥 Cargar Documentos a la Base de Datos")
-            self.center_window()
-            self.ventana.after(100, self.maximizar_ventana)
-        
+
+            # Asociar al padre, traer al frente y bloquearlo
+            self.ventana.transient(parent)
+            self.ventana.lift()
+            self.ventana.focus_force()
+            self.ventana.grab_set()   # bloquea interacciones con el padre
+
+        # Crear UI
         self.crear_interfaz()
         self.cargar_documentos_existentes()
         self.verificar_personas_sin_documento()
+
+        # IMPORTANTE: centrar DESPUÉS de crear la interfaz
+        if not self.es_integrado:
+            self.center_window()
+            # Recentrar una vez que todo terminó de dibujarse
+            self.ventana.after(50, self.center_window)
     
     def set_callback_actualizar(self, callback):
         """Permite establecer un callback para actualizar estadísticas"""
@@ -50,13 +62,28 @@ class VentanaCargarDocumentos:
     def center_window(self):
         """Centra la ventana en la pantalla"""
         if not self.es_integrado:
+            # Tamaño inicial razonable
             self.ventana.geometry("1400x900")
-        self.update_idletasks()
-        width = self.winfo_width()
-        height = self.winfo_height()
-        x = (self.winfo_screenwidth() // 2) - (width // 2)
-        y = (self.winfo_screenheight() // 2) - (height // 2)
-        self.geometry(f'{width}x{height}+{x}+{y}')
+            self.ventana.update_idletasks()
+
+            width = self.ventana.winfo_width()
+            height = self.ventana.winfo_height()
+            x = (self.ventana.winfo_screenwidth() // 2) - (width // 2)
+            y = (self.ventana.winfo_screenheight() // 2) - (height // 2)
+
+            self.ventana.geometry(f"{width}x{height}+{x}+{y}")
+    
+    def center_toplevel(self, win, w=400, h=200):
+        """Centra una ventana CTkToplevel en la pantalla."""
+        win.update_idletasks()
+
+        screen_width = win.winfo_screenwidth()
+        screen_height = win.winfo_screenheight()
+
+        x = (screen_width // 2) - (w // 2)
+        y = (screen_height // 2) - (h // 2)
+
+        win.geometry(f"{w}x{h}+{x}+{y}")
     
     def crear_interfaz(self):
         """Crea la interfaz de carga de documentos"""
@@ -223,9 +250,11 @@ class VentanaCargarDocumentos:
             font=ctk.CTkFont(size=14)
         )
         self.lbl_visor_estado.pack(pady=200)
-    
+
     def cargar_documentos_existentes(self):
-        """Carga documentos existentes basados únicamente en los archivos de la carpeta."""
+        """Carga documentos existentes basados en los archivos de la carpeta.
+        Ordena por fecha de modificación (más reciente primero) y guarda mtime.
+        """
         # Limpiar lista visual
         for widget in self.lista_existentes_frame.winfo_children():
             widget.destroy()
@@ -249,25 +278,41 @@ class VentanaCargarDocumentos:
             nombre_archivo = doc[1]
             mapa_doc_por_nombre[nombre_archivo] = doc
 
-        self.documentos_existentes = []
+        # Lista de (doc_con_mtime, mtime)
+        docs_con_mtime = []
 
-        # Construir lista solo con lo que existe en la carpeta
         for nombre_archivo in archivos_carpeta:
+            ruta_archivo = os.path.join(DOCUMENTOS_DIR, nombre_archivo)
+
             if nombre_archivo in mapa_doc_por_nombre:
                 doc = mapa_doc_por_nombre[nombre_archivo]
             else:
                 # Si no existe en BD, construimos una fila mínima:
-                ruta_archivo = os.path.join(DOCUMENTOS_DIR, nombre_archivo)
                 doc = (
                     None,                 # id_documento
                     nombre_archivo,       # nombre_archivo
                     ruta_archivo,         # ruta_archivo
-                    "",                   # fecha_carga
+                    "",                   # fecha_carga (BD)
                     "Desconocido",        # nombre_persona
                     "N/A",                # dpi
                     None                  # persona_id
                 )
-            self.documentos_existentes.append(doc)
+
+            # Obtener fecha de modificación del archivo
+            try:
+                mtime = os.path.getmtime(ruta_archivo)
+            except OSError:
+                mtime = 0  # si falla, que aparezca al final
+
+            # Extendemos la tupla doc añadiendo mtime como último campo
+            doc_con_mtime = doc + (mtime,)
+            docs_con_mtime.append((doc_con_mtime, mtime))
+
+        # Ordenar por mtime descendente (más reciente primero)
+        docs_con_mtime.sort(key=lambda x: x[1], reverse=True)
+
+        # Guardar solo la parte doc (ya con mtime dentro)
+        self.documentos_existentes = [item[0] for item in docs_con_mtime]
 
         # Encabezado con contador
         header_frame = ctk.CTkFrame(self.lista_existentes_frame, fg_color="transparent")
@@ -275,7 +320,8 @@ class VentanaCargarDocumentos:
 
         contador_text = (
             f"📊 Documentos mostrados: {len(self.documentos_existentes)} "
-            f"| 📁 Archivos en carpeta: {len(archivos_carpeta)}"
+            f"| 📁 Archivos en carpeta: {len(archivos_carpeta)} "
+            f"(Ordenados por fecha de modificación, más reciente primero)"
         )
         ctk.CTkLabel(
             header_frame,
@@ -301,7 +347,6 @@ class VentanaCargarDocumentos:
         # Limpiar SOLO los items existentes debajo del header,
         # manteniendo el primer frame (header_frame) si existe.
         children = self.lista_existentes_frame.winfo_children()
-        # Si el primero es el header, lo dejamos; borramos a partir del segundo
         start_idx = 1 if children else 0
         for widget in children[start_idx:]:
             widget.destroy()
@@ -317,13 +362,21 @@ class VentanaCargarDocumentos:
             return
 
         for doc in documentos:
-            # Formato: id, nombre_archivo, ruta_archivo, fecha_carga, nombre_completo, dpi, persona_id?
+            # doc: (id, nombre_archivo, ruta_archivo, fecha_carga, nombre_persona, dpi, persona_id, mtime)
             doc_id = doc[0]
             nombre_archivo = doc[1]
             ruta_archivo = doc[2]
-            fecha_carga = doc[3]
+            fecha_carga_bd = doc[3]
             nombre_persona = doc[4] if doc[4] else "Desconocido"
             dpi_persona = doc[5] if doc[5] else "N/A"
+            mtime = doc[7] if len(doc) > 7 else 0
+
+            # Convertir mtime a texto amigable
+            if mtime:
+                dt = datetime.datetime.fromtimestamp(mtime)
+                fecha_mod_str = dt.strftime("%Y-%m-%d %H:%M")
+            else:
+                fecha_mod_str = "Desconocida"
 
             frame_doc = ctk.CTkFrame(self.lista_existentes_frame)
             frame_doc.pack(pady=5, padx=10, fill="x")
@@ -332,7 +385,8 @@ class VentanaCargarDocumentos:
                 f"📄 {nombre_archivo}\n"
                 f"👤 {nombre_persona}\n"
                 f"📋 DPI: {dpi_persona}\n"
-                f"📅 {fecha_carga}"
+                f"📅 BD: {fecha_carga_bd}\n"
+                f"🕒 Última modificación: {fecha_mod_str}"
             )
 
             ctk.CTkLabel(
@@ -645,7 +699,7 @@ class VentanaCargarDocumentos:
                 pdf_document.close()
     
     def procesar_todos_documentos(self):
-        """Procesa y carga todos los documentos a la base de datos"""
+        """Procesa y carga todos los documentos a la base de datos (versión simple, sin log detallado)."""
         if not self.documentos_seleccionados:
             messagebox.showwarning("Advertencia", "No hay documentos seleccionados")
             return
@@ -704,28 +758,29 @@ class VentanaCargarDocumentos:
         if not respuesta:
             return
         
-        # Crear ventana de progreso
+        # Crear ventana de progreso SIMPLE
         ventana_progreso = ctk.CTkToplevel(self.ventana)
         ventana_progreso.title("Procesando documentos...")
-        ventana_progreso.geometry("700x500")
         ventana_progreso.grab_set()
-        
+        self.center_toplevel(ventana_progreso, 400, 200)
+
         ctk.CTkLabel(
             ventana_progreso,
             text="⚙️ Procesando documentos...",
-            font=ctk.CTkFont(size=18, weight="bold")
-        ).pack(pady=20)
-        
+            font=ctk.CTkFont(size=16, weight="bold")
+        ).pack(pady=10)
+
         progreso_label = ctk.CTkLabel(
             ventana_progreso,
-            text="0 / 0",
-            font=ctk.CTkFont(size=14)
+            text="0 / 0 | Éxito: 0",
+            font=ctk.CTkFont(size=13)
         )
-        progreso_label.pack(pady=10)
-        
-        log_text = ctk.CTkTextbox(ventana_progreso, width=650, height=350)
-        log_text.pack(pady=10, padx=20)
-        
+        progreso_label.pack(pady=5)
+
+        barra = ctk.CTkProgressBar(ventana_progreso)
+        barra.pack(pady=5, padx=20, fill="x")
+        barra.set(0)
+
         btn_cerrar = ctk.CTkButton(
             ventana_progreso,
             text="Cerrar",
@@ -733,31 +788,30 @@ class VentanaCargarDocumentos:
             state="disabled"
         )
         btn_cerrar.pack(pady=10)
-        
+
         self.ventana.update()
         
         importados = 0
         errores = 0
         actualizados = 0
+
+        total_docs = len(self.documentos_seleccionados)
         
         for i, archivo in enumerate(self.documentos_seleccionados):
             archivo_docx = None
             
             try:
-                progreso_label.configure(text=f"Procesando {i + 1} / {len(self.documentos_seleccionados)}")
-                self.ventana.update()
-                
+                # Actualizar progreso visual
+                progreso_label.configure(
+                    text=f"Procesando {i + 1} / {total_docs} | Éxito: {importados + actualizados}"
+                )
+                barra.set((i + 1) / total_docs)
+                ventana_progreso.update_idletasks()
+
                 nombre_archivo = os.path.basename(archivo)
-                log_text.insert("end", f"\n📄 Procesando: {nombre_archivo}\n")
-                log_text.see("end")
-                self.ventana.update()
                 
                 # Convertir .doc a .docx si es necesario
                 if archivo.lower().endswith('.doc'):
-                    log_text.insert("end", "   Convirtiendo .doc a .docx...\n")
-                    log_text.see("end")
-                    self.ventana.update()
-                    
                     archivo_docx = convertir_doc_a_docx(archivo)
                     if not archivo_docx:
                         raise Exception("No se pudo convertir el archivo .doc")
@@ -765,10 +819,6 @@ class VentanaCargarDocumentos:
                     archivo_docx = archivo
                 
                 # Extraer datos del documento
-                log_text.insert("end", "   Extrayendo datos...\n")
-                log_text.see("end")
-                self.ventana.update()
-                
                 datos = DocumentExtractor.extraer_datos(archivo_docx)
                 
                 if not datos or not datos.get('dpi'):
@@ -790,10 +840,6 @@ class VentanaCargarDocumentos:
                 nombre_destino = f"{dpi_limpio}_acta_{nombre_limpio}.docx"
                 ruta_destino = os.path.join(DOCUMENTOS_DIR, nombre_destino)
                 
-                log_text.insert("end", f"   💾 Guardando como: {nombre_destino}\n")
-                log_text.see("end")
-                self.ventana.update()
-                
                 # Cerrar cualquier archivo abierto y esperar
                 time.sleep(0.1)
                 
@@ -807,20 +853,15 @@ class VentanaCargarDocumentos:
                         try:
                             os.remove(ruta_destino)
                         except:  # noqa: E722
-                            log_text.insert("end", "   ⚠️ No se pudo eliminar archivo existente\n")
+                            pass
                 
                 # Copiar el archivo
                 try:
                     shutil.copy2(archivo_fuente, ruta_destino)
-                    log_text.insert("end", "   ✅ Archivo copiado exitosamente\n")
                 except Exception as copy_error:
                     raise Exception(f"Error al copiar archivo: {copy_error}")
                 
                 # Guardar persona en la base de datos
-                log_text.insert("end", f"   Guardando en BD: {datos.get('nombre', 'Sin nombre')}\n")
-                log_text.see("end")
-                self.ventana.update()
-                
                 # Asegurar que todos los campos estén presentes
                 datos_persona = {
                     'nombre': datos.get('nombre', ''),
@@ -839,16 +880,12 @@ class VentanaCargarDocumentos:
                 self.db.guardar_documento(persona_id, nombre_destino, ruta_destino, "acta")
                 
                 if resultado == "guardado":
-                    log_text.insert("end", "   ✅ Importado correctamente\n", "success")
                     importados += 1
                 elif resultado == "actualizado":
-                    log_text.insert("end", "   ✅ Actualizado (ya existía)\n", "success")
                     actualizados += 1
                 
-            except Exception as e:
+            except Exception:
                 errores += 1
-                log_text.insert("end", f"   ❌ Error: {str(e)}\n", "error")
-                log_text.see("end")
             
             finally:
                 # Limpiar archivos temporales
@@ -863,20 +900,7 @@ class VentanaCargarDocumentos:
             # Pequeña pausa entre documentos
             time.sleep(0.05)
         
-        # Resumen final
-        log_text.insert("end", f"\n{'='*50}\n")
-        log_text.insert("end", "📊 RESUMEN DE IMPORTACIÓN\n")
-        log_text.insert("end", f"{'='*50}\n")
-        log_text.insert("end", f"✅ Nuevos importados: {importados}\n", "success")
-        log_text.insert("end", f"🔄 Actualizados: {actualizados}\n", "success")
-        log_text.insert("end", f"❌ Errores: {errores}\n", "error")
-        log_text.insert("end", f"📁 Total procesados: {len(self.documentos_seleccionados)}\n")
-        log_text.see("end")
-        
-        # Configurar colores para el texto
-        log_text.tag_config("success", foreground="#2ecc71")
-        log_text.tag_config("error", foreground="#e74c3c")
-        
+        # Habilitar botón cerrar
         btn_cerrar.configure(state="normal")
         
         messagebox.showinfo(

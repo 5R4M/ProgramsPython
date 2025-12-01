@@ -12,14 +12,21 @@ from config import PLANTILLAS_DIR, COLOR_SUCCESS, COLOR_PRIMARY, COLOR_WARNING, 
 from utils import NumeroATexto
 
 class VentanaCrearDocumento:
-    def __init__(self, parent, db, es_integrado=False, solo_formulario=False):
+    def __init__(self, parent, db, es_integrado=False, solo_formulario=False, modo_edicion=False):
         self.db = db
         self.es_integrado = es_integrado
         self.solo_formulario = solo_formulario
+        self.modo_edicion = modo_edicion
+        
         self.callback_actualizar = None
+        self.callback_guardado = None
         self.persona_actual_id = None
         self.documento_preview = None
         self.ruta_documento_actual = None
+        
+        self.ruta_original = None         
+        self.nombre_original = None       
+        self.persona_id_original = None
 
         if es_integrado:
             # Como frame embebido en otra ventana
@@ -28,14 +35,18 @@ class VentanaCrearDocumento:
         else:
             # Como ventana emergente
             self.ventana = ctk.CTkToplevel(parent)
-            self.ventana.title("➕ Crear / Editar Documento")
+
+            # Título según modo
+            if self.solo_formulario or self.modo_edicion:
+                self.ventana.title("✏️ Editar Documento")
+            else:
+                self.ventana.title("➕ Crear Documento")
 
             # Que salga activa y encima del padre
             self.ventana.transient(parent)
             self.ventana.lift()
             self.ventana.focus_force()
-            # Si quieres bloquear la ventana padre mientras está abierta:
-            # self.ventana.grab_set()
+            self.ventana.grab_set()
 
         # Construir interfaz
         self.crear_interfaz()
@@ -48,7 +59,7 @@ class VentanaCrearDocumento:
             self.ventana.update_idletasks()
             if self.solo_formulario:
                 # Modo EDICIÓN: solo formulario
-                self.center_window_tamano(700, 700)
+                self.center_window_tamano(650, 625)
             else:
                 # Modo NORMAL: con visor
                 self.center_window_tamano(1400, 900)
@@ -58,6 +69,22 @@ class VentanaCrearDocumento:
         """Permite establecer un callback para actualizar estadísticas"""
         self.callback_actualizar = callback
 
+    def set_callback_guardado(self, callback):
+        """Callback a llamar cuando se guarda/actualiza un documento (modo edición)."""
+        self.callback_guardado = callback
+
+    def establecer_documento_original(self, ruta_archivo, nombre_archivo, persona_id):
+        """
+        Define el documento original que se está editando.
+        """
+        self.ruta_original = ruta_archivo
+        self.nombre_original = nombre_archivo
+        self.persona_id_original = persona_id
+
+        # Sincronizar con la lógica ya existente
+        self.ruta_documento_actual = ruta_archivo
+        self.persona_actual_id = persona_id
+    
     def center_window_tamano(self, width, height):
         """Centra la ventana con un tamaño específico."""
         if not self.es_integrado:
@@ -73,7 +100,11 @@ class VentanaCrearDocumento:
             self.ventana.state("zoomed")
         
     def verificar_plantilla(self):
-        """Verifica si hay una plantilla activa"""
+        """Verifica la existencia/estado de la plantilla."""
+        # En modo solo_formulario no mostramos nada de plantilla.
+        if self.solo_formulario:
+            return
+        
         plantilla = self.db.obtener_plantilla_activa()
         
         if not plantilla:
@@ -149,13 +180,15 @@ class VentanaCrearDocumento:
         panel_izquierdo.grid(row=0, column=0, sticky="nsew", padx=(0, 5))
         
         # Título
+        titulo_texto = "✏️ Editar Documento" if self.solo_formulario else "➕ Crear Documento"
         ctk.CTkLabel(
             panel_izquierdo,
-            text="➕ Crear Documento",
+            text=titulo_texto,
             font=ctk.CTkFont(size=16, weight="bold")
         ).pack(pady=5)
         
-        # Estado de plantilla
+        # ======= SECCIÓN PLANTILLA =======
+        # Guardamos estos widgets como atributos para poder ocultarlos
         self.lbl_plantilla = ctk.CTkLabel(
             panel_izquierdo,
             text="Verificando plantilla...",
@@ -163,14 +196,14 @@ class VentanaCrearDocumento:
         )
         self.lbl_plantilla.pack(pady=2)
         
-        btn_cambiar_plantilla = ctk.CTkButton(
+        self.btn_cambiar_plantilla = ctk.CTkButton(
             panel_izquierdo,
             text="📋 Plantilla",
             command=self.cargar_plantilla,
             width=140,
             height=26
         )
-        btn_cambiar_plantilla.pack(pady=2)
+        self.btn_cambiar_plantilla.pack(pady=2)
         
         # ----- Sección de Búsqueda Rápida -----
         # IMPORTANTE: guardamos el frame en self.frame_busqueda
@@ -419,9 +452,17 @@ class VentanaCrearDocumento:
             self.visor_scroll.grid_forget()
             self.lbl_visor_estado = None
             
-        # === AL FINAL: si estamos en modo solo_formulario, OCULTAR búsqueda ===
-        if self.solo_formulario and self.frame_busqueda.winfo_manager():
-            self.frame_busqueda.pack_forget()
+        # === AL FINAL: si estamos en modo solo_formulario, ocultar partes ===
+        if self.solo_formulario:
+            # Ocultar búsqueda rápida
+            if self.frame_busqueda.winfo_manager():
+                self.frame_busqueda.pack_forget()
+
+            # Ocultar widgets de plantilla
+            if self.lbl_plantilla.winfo_manager():
+                self.lbl_plantilla.pack_forget()
+            if self.btn_cambiar_plantilla.winfo_manager():
+                self.btn_cambiar_plantilla.pack_forget()
     
     def calcular_edad(self, event=None):
         """Calcula la edad a partir de la fecha de nacimiento"""
@@ -1057,12 +1098,39 @@ class VentanaCrearDocumento:
         reemplazos = []
         
         if hora and minutos:
-            hora_t = NumeroATexto.convertir(int(hora))
-            min_t = NumeroATexto.convertir(int(minutos))
-            reemplazos.append(("diecisiete horas con veinte minutos", f"{hora_t} horas con {min_t} minutos"))
-        
+            hora_num = int(hora)
+            min_num = int(minutos)
+
+            hora_t = NumeroATexto.convertir(hora_num)
+            min_t = NumeroATexto.convertir(min_num)
+
+            # Normalizar "uno" -> "un" en hora
+            if hora_t.endswith(" y uno"):
+                hora_t = hora_t[:-3] + " un"
+            elif hora_t == "uno":
+                hora_t = "un"
+
+            # Normalizar "uno" -> "un" en minutos (por si lo necesitas)
+            if min_t.endswith(" y uno"):
+                min_t = min_t[:-3] + " un"
+            elif min_t == "uno":
+                min_t = "un"
+
+            reemplazos.append((
+                "diecisiete horas con veinte minutos",
+                f"{hora_t} horas con {min_t} minutos"
+            ))
+
         if dia:
-            dia_t = NumeroATexto.convertir(int(dia))
+            dia_num = int(dia)
+            dia_t = NumeroATexto.convertir(dia_num)
+
+            # Normalizar "uno" -> "un" en día
+            if dia_t.endswith(" y uno"):
+                dia_t = dia_t[:-3] + " un"
+            elif dia_t == "uno":
+                dia_t = "un"
+
             reemplazos.append(("veintiocho", dia_t))
             reemplazos.append(("(28)", f"({dia})"))
         
@@ -1163,63 +1231,285 @@ class VentanaCrearDocumento:
         def configure(self, **kwargs):
             pass
     
-    @staticmethod
-    def generar_documento_para_persona(db, datos_persona, ruta_salida):
+    def generar_documento(self):
         """
-        Genera un documento DOCX para una persona usando la plantilla activa,
-        reutilizando crear_documento_con_datos (con runs y helpers), SIN crear
-        widgets reales de Tk/CustomTkinter.
+        Genera o actualiza el documento en la carpeta DOCUMENTOS_DIR.
+
+        - En modo_edicion:
+            * Sobrescribe el archivo existente.
+            * Si cambia el nombre lógico (por nombre/DPI), renombra el archivo
+              y actualiza la fila en 'documentos'.
+        - En modo normal:
+            * Crea/actualiza archivo estándar en DOCUMENTOS_DIR y su registro.
         """
-        import os
+        # Validar datos mínimos
+        if not self.entry_nombre.get().strip() or not self.entry_dpi.get().strip():
+            messagebox.showwarning("Advertencia", "Debe ingresar al menos el nombre y DPI")
+            return
 
-        # Crear instancia "dummy" sin inicializar toda la UI
-        inst = VentanaCrearDocumento.__new__(VentanaCrearDocumento)
-        inst.db = db
-        inst.es_integrado = True
-        inst.callback_actualizar = None
-        inst.persona_actual_id = None
-        inst.documento_preview = None
-        inst.ruta_documento_actual = None
+        # 1) Guardar/actualizar persona
+        try:
+            nombre = self.entry_nombre.get().strip()
+            dpi = self.entry_dpi.get().strip()
 
-        # No necesitamos ventana ni frames reales
-        inst.ventana = None
+            self.entry_edad.configure(state="normal")
+            edad_str = self.entry_edad.get().strip()
+            self.entry_edad.configure(state="readonly")
 
-        # Crear "fake widgets" en lugar de CTkEntry/CTkComboBox
-        hora = datos_persona.get('hora', '17')
-        minutos = datos_persona.get('minutos', '20')
-        dia = datos_persona.get('dia', '28')
-        mes = datos_persona.get('mes', 'noviembre')
-        anio = datos_persona.get('anio', '2025')
+            datos = {
+                'nombre': nombre,
+                'sexo': self.combo_sexo.get(),
+                'fecha_nacimiento': self.entry_fecha_nac.get().strip(),
+                'edad': int(edad_str) if edad_str else None,
+                'estado_civil': self.combo_estado.get(),
+                'apellido_casada': self.entry_casada.get().strip(),
+                'nacionalidad': self.entry_nacionalidad.get().strip(),
+                'nivel_academico': self.entry_nivel.get().strip(),
+                'domicilio': self.entry_domicilio.get().strip(),
+                'dpi': dpi
+            }
 
-        inst.entry_hora = VentanaCrearDocumento._FakeEntry(hora)
-        inst.entry_minutos = VentanaCrearDocumento._FakeEntry(minutos)
-        inst.entry_dia = VentanaCrearDocumento._FakeEntry(dia)
-        inst.combo_mes = VentanaCrearDocumento._FakeCombo(mes)
-        inst.entry_anio = VentanaCrearDocumento._FakeEntry(anio)
+            persona_id, _ = self.db.guardar_persona(datos)
+            self.persona_actual_id = persona_id
 
-        inst.entry_nombre = VentanaCrearDocumento._FakeEntry(datos_persona.get('nombre', ''))
-        inst.combo_sexo = VentanaCrearDocumento._FakeCombo(datos_persona.get('sexo', 'masculino'))
+        except Exception as e:
+            messagebox.showerror("Error", f"Error al guardar los datos:\n{str(e)}")
+            return
 
-        edad_val = datos_persona.get('edad')
-        inst.entry_edad = VentanaCrearDocumento._FakeEntry(str(edad_val) if edad_val is not None else "")
-        # crear_documento_con_datos hace configure(state="normal"/"readonly"), por eso lo soportamos
-        inst.entry_edad.configure(state="readonly")
+        # 2) Asegurar DOCX temporal actualizado (aunque no haya visor)
+        if not self.documento_preview or not os.path.exists(self.documento_preview):
+            try:
+                doc = self.crear_documento_con_datos()
+                temp_docx = tempfile.NamedTemporaryFile(delete=False, suffix=".docx")
+                temp_docx.close()
+                doc.save(temp_docx.name)
+                self.documento_preview = temp_docx.name
+            except Exception as e:
+                messagebox.showerror("Error", f"No se pudo generar el documento:\n{str(e)}")
+                return
 
-        inst.combo_estado = VentanaCrearDocumento._FakeCombo(datos_persona.get('estado_civil', 'soltero'))
-        inst.entry_casada = VentanaCrearDocumento._FakeEntry(datos_persona.get('apellido_casada', ''))
-        inst.entry_nacionalidad = VentanaCrearDocumento._FakeEntry(datos_persona.get('nacionalidad', ''))
-        inst.entry_nivel = VentanaCrearDocumento._FakeEntry(datos_persona.get('nivel_academico', ''))
-        inst.entry_domicilio = VentanaCrearDocumento._FakeEntry(datos_persona.get('domicilio', ''))
-        inst.entry_dpi = VentanaCrearDocumento._FakeEntry(datos_persona.get('dpi', ''))
+        try:
+            anio = self.entry_anio.get().strip()
+            dia = self.entry_dia.get().strip()
+            mes = self.combo_mes.get().strip()
+            hora = self.entry_hora.get().strip()
+            minutos = self.entry_minutos.get().strip()
 
-        # Reutilizar exactamente la lógica de crear_documento_con_datos
-        doc = VentanaCrearDocumento.crear_documento_con_datos(inst)
+            os.makedirs(DOCUMENTOS_DIR, exist_ok=True)
 
-        # Guardar DOCX
-        os.makedirs(os.path.dirname(ruta_salida), exist_ok=True)
-        doc.save(ruta_salida)
+            # ======================================================
+            # MODO EDICIÓN
+            # ======================================================
+            if self.modo_edicion and self.ruta_documento_actual:
+                # 1) Sobrescribir contenido
+                shutil.copy2(self.documento_preview, self.ruta_documento_actual)
 
-        return ruta_salida
+                # 2) Comprobar si el nombre lógico cambia
+                nombre_archivo_nuevo = self._construir_nombre_archivo(nombre, dpi)
+                carpeta_actual = os.path.dirname(self.ruta_documento_actual)
+                nombre_actual = os.path.basename(self.ruta_documento_actual)
+
+                fecha_actual = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+                if nombre_archivo_nuevo != nombre_actual:
+                    ruta_nueva = os.path.join(carpeta_actual, nombre_archivo_nuevo)
+
+                    # Renombrar en disco
+                    os.rename(self.ruta_documento_actual, ruta_nueva)
+                    self.ruta_documento_actual = ruta_nueva
+
+                    # Actualizar fila en 'documentos'
+                    # Intentar localizar por persona_id_original + nombre_original
+                    if self.persona_id_original and self.nombre_original:
+                        self.db.cursor.execute(
+                            "SELECT id FROM documentos WHERE persona_id = ? AND nombre_archivo = ?",
+                            (self.persona_id_original, self.nombre_original)
+                        )
+                        fila_doc = self.db.cursor.fetchone()
+                    else:
+                        # Fallback: buscar por persona_actual_id + ruta_original
+                        self.db.cursor.execute(
+                            "SELECT id FROM documentos WHERE persona_id = ? AND ruta_archivo = ?",
+                            (self.persona_actual_id, self.ruta_original or self.ruta_documento_actual)
+                        )
+                        fila_doc = self.db.cursor.fetchone()
+
+                    if fila_doc:
+                        self.db.cursor.execute(
+                            """
+                            UPDATE documentos
+                            SET nombre_archivo = ?, ruta_archivo = ?, fecha_carga = ?
+                            WHERE id = ?
+                            """,
+                            (nombre_archivo_nuevo, self.ruta_documento_actual, fecha_actual, fila_doc[0])
+                        )
+                    else:
+                        # Si no la encontramos, la insertamos nueva
+                        self.db.guardar_documento(
+                            self.persona_actual_id,
+                            nombre_archivo_nuevo,
+                            self.ruta_documento_actual,
+                            "acta"
+                        )
+                else:
+                    # Mismo nombre, solo actualizar ruta/fecha en BD
+                    self.db.cursor.execute(
+                        "SELECT id FROM documentos WHERE persona_id = ? AND nombre_archivo = ?",
+                        (self.persona_actual_id, nombre_actual)
+                    )
+                    fila_doc = self.db.cursor.fetchone()
+                    if fila_doc:
+                        self.db.cursor.execute(
+                            "UPDATE documentos SET ruta_archivo = ?, fecha_carga = ? WHERE id = ?",
+                            (self.ruta_documento_actual, fecha_actual, fila_doc[0])
+                        )
+
+                # 3) Actualizar historial_actas para ese año
+                if anio:
+                    fecha_acta = f"{dia}/{mes}/{anio}" if dia and mes else datetime.now().strftime("%d/%m/%Y")
+                    self.db.cursor.execute(
+                        "SELECT id FROM historial_actas WHERE persona_id = ? AND anio = ?",
+                        (self.persona_actual_id, int(anio))
+                    )
+                    existe = self.db.cursor.fetchone()
+                    if existe:
+                        self.db.cursor.execute(
+                            """
+                            UPDATE historial_actas
+                            SET fecha_acta = ?, hora = ?, minutos = ?, ruta_documento = ?
+                            WHERE id = ?
+                            """,
+                            (fecha_acta, hora, minutos, self.ruta_documento_actual, existe[0])
+                        )
+                    else:
+                        self.db.guardar_historial_acta(
+                            self.persona_actual_id,
+                            fecha_acta,
+                            hora,
+                            minutos,
+                            int(anio),
+                            self.ruta_documento_actual
+                        )
+
+                self.db.conn.commit()
+
+                messagebox.showinfo(
+                    "Éxito",
+                    f"✅ Documento editado y guardado sobre el original:\n{self.ruta_documento_actual}\n\n"
+                    f"💾 Datos actualizados en la base de datos"
+                )
+
+                # Callbacks de actualización
+                if self.callback_guardado:
+                    self.callback_guardado()
+                if self.callback_actualizar:
+                    self.callback_actualizar()
+
+                # Cerrar ventana en modo edición
+                if not self.es_integrado and self.ventana:
+                    self.ventana.destroy()
+
+                return
+
+            # ======================================================
+            # MODO NORMAL (CREAR / ACTUALIZAR ESTÁNDAR)
+            # ======================================================
+            nombre_archivo = self._construir_nombre_archivo(nombre, dpi)
+            ruta_destino = os.path.join(DOCUMENTOS_DIR, nombre_archivo)
+
+            # CASO 1: ya tenía documento previo
+            if self.persona_actual_id and self.ruta_documento_actual and os.path.exists(self.ruta_documento_actual):
+                if os.path.abspath(os.path.dirname(self.ruta_documento_actual)) != os.path.abspath(DOCUMENTOS_DIR) \
+                   or os.path.basename(self.ruta_documento_actual) != nombre_archivo:
+                    shutil.copy2(self.documento_preview, ruta_destino)
+                    self.ruta_documento_actual = ruta_destino
+                else:
+                    shutil.copy2(self.documento_preview, self.ruta_documento_actual)
+            else:
+                # CASO 2: persona nueva o sin documento previo
+                shutil.copy2(self.documento_preview, ruta_destino)
+                self.ruta_documento_actual = ruta_destino
+
+            # Actualizar/crear fila en 'documentos'
+            fecha_actual = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            self.db.cursor.execute(
+                "SELECT id FROM documentos WHERE persona_id = ? AND nombre_archivo = ?",
+                (self.persona_actual_id, nombre_archivo)
+            )
+            fila = self.db.cursor.fetchone()
+
+            if fila:
+                self.db.cursor.execute(
+                    "UPDATE documentos SET ruta_archivo = ?, fecha_carga = ? WHERE id = ?",
+                    (self.ruta_documento_actual, fecha_actual, fila[0])
+                )
+            else:
+                self.db.guardar_documento(self.persona_actual_id, nombre_archivo, self.ruta_documento_actual, "acta")
+
+            # Historial por año
+            if anio:
+                fecha_acta = f"{dia}/{mes}/{anio}" if dia and mes else datetime.now().strftime("%d/%m/%Y")
+                self.db.cursor.execute(
+                    "SELECT id FROM historial_actas WHERE persona_id = ? AND anio = ?",
+                    (self.persona_actual_id, int(anio))
+                )
+                existe = self.db.cursor.fetchone()
+                if existe:
+                    self.db.cursor.execute(
+                        """
+                        UPDATE historial_actas
+                        SET fecha_acta = ?, hora = ?, minutos = ?, ruta_documento = ?
+                        WHERE id = ?
+                        """,
+                        (fecha_acta, hora, minutos, self.ruta_documento_actual, existe[0])
+                    )
+                else:
+                    self.db.guardar_historial_acta(
+                        self.persona_actual_id,
+                        fecha_acta,
+                        hora,
+                        minutos,
+                        int(anio),
+                        self.ruta_documento_actual
+                    )
+
+            self.db.conn.commit()
+
+            messagebox.showinfo(
+                "Éxito",
+                f"✅ Documento generado/actualizado en carpeta central:\n{self.ruta_documento_actual}\n\n"
+                f"💾 Datos guardados en la base de datos"
+            )
+
+            # Preguntar por copia
+            respuesta = messagebox.askyesno(
+                "Guardar copia",
+                "¿Desea guardar una COPIA del documento en otra ubicación?"
+            )
+            if respuesta:
+                archivo_copia = filedialog.asksaveasfilename(
+                    defaultextension=".docx",
+                    filetypes=[("Documento Word", "*.docx")],
+                    initialfile=nombre_archivo
+                )
+                if archivo_copia:
+                    try:
+                        shutil.copy2(self.ruta_documento_actual, archivo_copia)
+                        messagebox.showinfo(
+                            "Copia guardada",
+                            f"Se ha guardado una copia en:\n{archivo_copia}"
+                        )
+                    except Exception as e:
+                        messagebox.showwarning(
+                            "Advertencia",
+                            f"El documento central fue generado, pero no se pudo guardar la copia:\n{str(e)}"
+                        )
+
+            if self.callback_actualizar:
+                self.callback_actualizar()
+
+        except Exception as e:
+            messagebox.showerror("Error", f"Error al generar el documento:\n{str(e)}")
     
     def reemplazar_genero_documento(self, doc, buscar, reemplazar):
         """Reemplaza la PRIMERA ocurrencia de un texto de género en cada párrafo del documento"""
@@ -1384,170 +1674,7 @@ class VentanaCrearDocumento:
         dpi_sin_espacios = dpi.replace(" ", "") if dpi else "sin_dpi"
         nombre_limpio = (nombre or "sin_nombre").replace(" ", "_")
         return f"{dpi_sin_espacios}_acta_{nombre_limpio}.docx"
-    
-    def generar_documento(self):
-        """
-        Genera o actualiza el documento en la carpeta DOCUMENTOS_DIR y,
-        opcionalmente, permite guardar una copia en otra ubicación.
-        """
-        # Validar datos mínimos
-        if not self.entry_nombre.get().strip() or not self.entry_dpi.get().strip():
-            messagebox.showwarning("Advertencia", "Debe ingresar al menos el nombre y DPI")
-            return
-
-        # 1) Guardar/actualizar persona (igual que en guardar_persona)
-        try:
-            nombre = self.entry_nombre.get().strip()
-            dpi = self.entry_dpi.get().strip()
-
-            self.entry_edad.configure(state="normal")
-            edad_str = self.entry_edad.get().strip()
-            self.entry_edad.configure(state="readonly")
-
-            datos = {
-                'nombre': nombre,
-                'sexo': self.combo_sexo.get(),
-                'fecha_nacimiento': self.entry_fecha_nac.get().strip(),
-                'edad': int(edad_str) if edad_str else None,
-                'estado_civil': self.combo_estado.get(),
-                'apellido_casada': self.entry_casada.get().strip(),
-                'nacionalidad': self.entry_nacionalidad.get().strip(),
-                'nivel_academico': self.entry_nivel.get().strip(),
-                'domicilio': self.entry_domicilio.get().strip(),
-                'dpi': dpi
-            }
-
-            persona_id, _ = self.db.guardar_persona(datos)
-            self.persona_actual_id = persona_id
-
-        except Exception as e:
-            messagebox.showerror("Error", f"Error al guardar los datos:\n{str(e)}")
-            return
-
-        # 2) Asegurar vista previa actualizada
-        if not self.documento_preview or not os.path.exists(self.documento_preview):
-            self.generar_preview()
-            if not self.documento_preview or not os.path.exists(self.documento_preview):
-                messagebox.showerror("Error", "No se pudo generar la vista previa del documento.")
-                return
-
-        try:
-            anio = self.entry_anio.get().strip()
-            dia = self.entry_dia.get().strip()
-            mes = self.combo_mes.get().strip()
-            hora = self.entry_hora.get().strip()
-            minutos = self.entry_minutos.get().strip()
-
-            # 3) Determinar ruta estándar en DOCUMENTOS_DIR
-            os.makedirs(DOCUMENTOS_DIR, exist_ok=True)
-            nombre_archivo = self._construir_nombre_archivo(nombre, dpi)
-            ruta_destino = os.path.join(DOCUMENTOS_DIR, nombre_archivo)
-
-            # CASO 1: persona ya tenía documento previo
-            if self.persona_actual_id and self.ruta_documento_actual and os.path.exists(self.ruta_documento_actual):
-                if os.path.abspath(os.path.dirname(self.ruta_documento_actual)) != os.path.abspath(DOCUMENTOS_DIR) \
-                   or os.path.basename(self.ruta_documento_actual) != nombre_archivo:
-                    shutil.copy2(self.documento_preview, ruta_destino)
-                    self.ruta_documento_actual = ruta_destino
-                else:
-                    shutil.copy2(self.documento_preview, self.ruta_documento_actual)
-            else:
-                # CASO 2: persona nueva o sin documento previo
-                shutil.copy2(self.documento_preview, ruta_destino)
-                self.ruta_documento_actual = ruta_destino
-
-            # 4) Actualizar/crear registro en tabla documentos
-            fecha_actual = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            self.db.cursor.execute(
-                "SELECT id FROM documentos WHERE persona_id = ? AND nombre_archivo = ?",
-                (self.persona_actual_id, nombre_archivo)
-            )
-            fila = self.db.cursor.fetchone()
-
-            if fila:
-                self.db.cursor.execute(
-                    "UPDATE documentos SET ruta_archivo = ?, fecha_carga = ? WHERE id = ?",
-                    (self.ruta_documento_actual, fecha_actual, fila[0])
-                )
-            else:
-                self.db.guardar_documento(self.persona_actual_id, nombre_archivo, self.ruta_documento_actual, "acta")
-
-            # 5) Guardar/actualizar historial_actas (por año)
-            if anio:
-                fecha_acta = f"{dia}/{mes}/{anio}" if dia and mes else datetime.now().strftime("%d/%m/%Y")
-
-                self.db.cursor.execute(
-                    "SELECT id FROM historial_actas WHERE persona_id = ? AND anio = ?",
-                    (self.persona_actual_id, int(anio))
-                )
-                existe = self.db.cursor.fetchone()
-
-                if existe:
-                    self.db.cursor.execute(
-                        """
-                        UPDATE historial_actas
-                        SET fecha_acta = ?, hora = ?, minutos = ?, ruta_documento = ?
-                        WHERE id = ?
-                        """,
-                        (fecha_acta, hora, minutos, self.ruta_documento_actual, existe[0])
-                    )
-                else:
-                    self.db.guardar_historial_acta(
-                        self.persona_actual_id,
-                        fecha_acta,
-                        hora,
-                        minutos,
-                        int(anio),
-                        self.ruta_documento_actual
-                    )
-
-            self.db.conn.commit()
-
-            # 6) Mensaje principal
-            messagebox.showinfo(
-                "Éxito",
-                f"✅ Documento generado/actualizado en carpeta central:\n{self.ruta_documento_actual}\n\n"
-                f"💾 Datos guardados en la base de datos"
-            )
-
-            # 7) Ofrecer guardar una copia en otra ubicación
-            respuesta = messagebox.askyesno(
-                "Guardar copia",
-                "¿Desea guardar una COPIA del documento en otra ubicación?"
-            )
-            if respuesta:
-                archivo_copia = filedialog.asksaveasfilename(
-                    defaultextension=".docx",
-                    filetypes=[("Documento Word", "*.docx")],
-                    initialfile=nombre_archivo
-                )
-                if archivo_copia:
-                    try:
-                        shutil.copy2(self.ruta_documento_actual, archivo_copia)
-                        messagebox.showinfo(
-                            "Copia guardada",
-                            f"Se ha guardado una copia en:\n{archivo_copia}"
-                        )
-                    except Exception as e:
-                        messagebox.showwarning(
-                            "Advertencia",
-                            f"El documento central fue generado, pero no se pudo guardar la copia:\n{str(e)}"
-                        )
-
-            # 8) Actualizar estadísticas
-            if self.callback_actualizar:
-                self.callback_actualizar()
-
-        except Exception as e:
-            messagebox.showerror("Error", f"Error al generar el documento:\n{str(e)}")
-    
-    def reemplazar_en_parrafo(self, paragraph, buscar, reemplazar, reemplazar_todas=False):
-        """Reemplaza texto preservando formato (una o todas las ocurrencias)"""
-        if reemplazar_todas:
-            return self.reemplazar_texto_completo(paragraph, buscar, reemplazar)
-        else:
-            return self.reemplazar_preservando_formato(paragraph, buscar, reemplazar)
-    
+        
     def limpiar_campos(self):
         """Limpia todos los campos del formulario"""
         self.entry_buscar_dpi.delete(0, "end")

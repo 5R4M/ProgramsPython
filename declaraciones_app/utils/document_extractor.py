@@ -45,9 +45,6 @@ class DocumentExtractor:
             
             if nombre_encontrado:
                 datos['nombre'] = nombre_encontrado
-                print(f"✅ Nombre extraído: {datos['nombre']}")
-            else:
-                print("⚠️ No se pudo extraer el nombre")
             
             # ===== EXTRAER EDAD =====
             edad_encontrada = DocumentExtractor._extraer_edad(texto, datos.get('nombre'))
@@ -55,52 +52,56 @@ class DocumentExtractor:
                 datos['edad'] = edad_encontrada
             
             # ===== EXTRAER ESTADO CIVIL =====
-            estados_civiles = ['soltero', 'soltera', 'casado', 'casada', 
-                             'divorciado', 'divorciada', 'viudo', 'viuda']
+            estados_civiles = [
+                'soltero', 'soltera', 'casado', 'casada', 
+                'divorciado', 'divorciada', 'viudo', 'viuda'
+            ]
             for estado in estados_civiles:
                 if re.search(r'\b' + estado + r'\b', texto, re.IGNORECASE):
                     datos['estado_civil'] = estado.lower()
                     break
             
             # ===== EXTRAER NACIONALIDAD =====
-            nacionalidades = ['guatemalteco', 'guatemalteca', 'salvadoreño', 'salvadoreña', 
-                            'hondureño', 'hondureña', 'nicaragüense', 'costarricense', 
-                            'panameño', 'panameña', 'mexicano', 'mexicana']
+            nacionalidades = [
+                'guatemalteco', 'guatemalteca', 'salvadoreño', 'salvadoreña', 
+                'hondureño', 'hondureña', 'nicaragüense', 'costarricense', 
+                'panameño', 'panameña', 'mexicano', 'mexicana'
+            ]
             for nac in nacionalidades:
                 if re.search(r'\b' + nac + r'\b', texto, re.IGNORECASE):
                     datos['nacionalidad'] = nac.lower()
                     break
             
             # ===== EXTRAER DOMICILIO =====
-            domicilio_match = re.search(r'(?:con\s+)?domicilio\s+(?:en\s+)?(?:el\s+)?(.+?)(?:\.|,|\n)', 
-                                       texto, re.IGNORECASE)
+            domicilio_match = re.search(
+                r'(?:con\s+)?domicilio\s+(?:en\s+)?(?:el\s+)?(.+?)(?:\.|,|\n)', 
+                texto, re.IGNORECASE
+            )
             if domicilio_match:
                 datos['domicilio'] = domicilio_match.group(1).strip()
             
             # ===== EXTRAER NIVEL ACADÉMICO =====
-            nivel_match = re.search(r'(Bachiller[^.,\n]+|Licenciado[^.,\n]+|Ingeniero[^.,\n]+|Doctor[^.,\n]+|Maestro[^.,\n]+|Perito[^.,\n]+)', 
-                                   texto, re.IGNORECASE)
+            nivel_match = re.search(
+                r'(Bachiller[^.,\n]+|Licenciado[^.,\n]+|Ingeniero[^.,\n]+|'
+                r'Doctor[^.,\n]+|Maestro[^.,\n]+|Perito[^.,\n]+)', 
+                texto, re.IGNORECASE
+            )
             if nivel_match:
                 datos['nivel_academico'] = nivel_match.group(1).strip()
             
             # ===== EXTRAER APELLIDO DE CASADA =====
-            casada_match = re.search(r'(?:de\s+casada\s+)?([A-ZÁÉÍÓÚÑ][a-záéíóúñ]+\s+de\s+[A-ZÁÉÍÓÚÑ][a-záéíóúñ]+)', 
-                                    texto)
+            casada_match = re.search(
+                r'(?:de\s+casada\s+)?([A-ZÁÉÍÓÚÑ][a-záéíóúñ]+\s+de\s+'
+                r'[A-ZÁÉÍÓÚÑ][a-záéíóúñ]+)', 
+                texto
+            )
             if casada_match:
                 datos['apellido_casada'] = casada_match.group(1).strip()
             
-            # Debug: Mostrar datos extraídos
-            print("\n📋 Datos extraídos del documento:")
-            print(f"   Nombre: {datos.get('nombre', 'No encontrado')}")
-            print(f"   DPI: {datos.get('dpi', 'No encontrado')}")
-            print(f"   Edad: {datos.get('edad', 'No encontrado')}")
-            print(f"   Estado Civil: {datos.get('estado_civil', 'No encontrado')}")
-            print(f"   Nacionalidad: {datos.get('nacionalidad', 'No encontrado')}")
-            
             return datos if datos else None
             
-        except Exception as e:
-            print(f"❌ Error al extraer datos: {str(e)}")
+        except Exception:
+            # En producción, si quieres loguear, usa logging en lugar de print
             return None
     
     @staticmethod
@@ -145,25 +146,33 @@ class DocumentExtractor:
         if dpi:
             dpi.replace(' ', '')
             # Buscar: "NOMBRE, identificado con DPI"
-            patron_dpi = r'([A-ZÁÉÍÓÚÑ][a-záéíóúñ]+(?:\s+[A-ZÁÉÍÓÚÑ][a-záéíóúñ]+){2,5}),?\s+identificad[oa]\s+con\s+(?:DPI|CUI|Documento)'
+            patron_dpi = (
+                r'([A-ZÁÉÍÓÚÑ][a-záéíóúñ]+'
+                r'(?:\s+[A-ZÁÉÍÓÚÑ][a-záéíóúñ]+){2,5}),?\s+'
+                r'identificad[oa]\s+con\s+(?:DPI|CUI|Documento)'
+            )
             match_dpi = re.search(patron_dpi, texto, re.IGNORECASE)
             if match_dpi:
                 nombre = match_dpi.group(1).strip()
                 if es_nombre_valido(nombre):
-                    print(f"   ✓ Nombre encontrado (patrón DPI): {nombre}")
                     return nombre.title()
         
         # ESTRATEGIA 2: Buscar después de "compareció" o "comparece"
-        # Buscar el texto DESPUÉS de mencionar al notario
         patrones_comparece = [
             # "compareció: NOMBRE, de X años"
-            r'comparec(?:ió|e)[:\s]+([A-ZÁÉÍÓÚÑ][a-záéíóúñ]+(?:\s+[A-ZÁÉÍÓÚÑ][a-záéíóúñ]+){2,5}),?\s+de\s+\d+\s+años',
+            r'comparec(?:ió|e)[:\s]+'
+            r'([A-ZÁÉÍÓÚÑ][a-záéíóúñ]+'
+            r'(?:\s+[A-ZÁÉÍÓÚÑ][a-záéíóúñ]+){2,5}),?\s+de\s+\d+\s+años',
             
             # "compareció el señor/la señora NOMBRE"
-            r'comparec(?:ió|e)\s+(?:el\s+señor|la\s+señora|el|la)\s+([A-ZÁÉÍÓÚÑ][a-záéíóúñ]+(?:\s+[A-ZÁÉÍÓÚÑ][a-záéíóúñ]+){2,5})',
+            r'comparec(?:ió|e)\s+(?:el\s+señor|la\s+señora|el|la)\s+'
+            r'([A-ZÁÉÍÓÚÑ][a-záéíóúñ]+'
+            r'(?:\s+[A-ZÁÉÍÓÚÑ][a-záéíóúñ]+){2,5})',
             
             # "ante mí ... compareció NOMBRE"
-            r'ante\s+m[íi].*?comparec(?:ió|e)[:\s]+([A-ZÁÉÍÓÚÑ][a-záéíóúñ]+(?:\s+[A-ZÁÉÍÓÚÑ][a-záéíóúñ]+){2,5})',
+            r'ante\s+m[íi].*?comparec(?:ió|e)[:\s]+'
+            r'([A-ZÁÉÍÓÚÑ][a-záéíóúñ]+'
+            r'(?:\s+[A-ZÁÉÍÓÚÑ][a-záéíóúñ]+){2,5})',
         ]
         
         for patron in patrones_comparece:
@@ -171,33 +180,33 @@ class DocumentExtractor:
             for match in matches:
                 nombre = match.group(1).strip()
                 if es_nombre_valido(nombre):
-                    print(f"   ✓ Nombre encontrado (patrón comparece): {nombre}")
                     return nombre.title()
         
         # ESTRATEGIA 3: Buscar "Yo, NOMBRE, de X años"
-        patron_yo = r'Yo,?\s+([A-ZÁÉÍÓÚÑ][a-záéíóúñ]+(?:\s+[A-ZÁÉÍÓÚÑ][a-záéíóúñ]+){2,5}),?\s+de\s+\d+\s+años'
+        patron_yo = (
+            r'Yo,?\s+([A-ZÁÉÍÓÚÑ][a-záéíóúñ]+'
+            r'(?:\s+[A-ZÁÉÍÓÚÑ][a-záéíóúñ]+){2,5}),?\s+de\s+\d+\s+años'
+        )
         match_yo = re.search(patron_yo, texto, re.IGNORECASE)
         if match_yo:
             nombre = match_yo.group(1).strip()
             if es_nombre_valido(nombre):
-                print(f"   ✓ Nombre encontrado (patrón Yo): {nombre}")
                 return nombre.title()
         
         # ESTRATEGIA 4: Buscar todos los nombres y filtrar
-        # Buscar todos los nombres completos (3-5 palabras capitalizadas)
-        patron_nombres = r'\b([A-ZÁÉÍÓÚÑ][a-záéíóúñ]+(?:\s+[A-ZÁÉÍÓÚÑ][a-záéíóúñ]+){2,4})\b'
+        patron_nombres = (
+            r'\b([A-ZÁÉÍÓÚÑ][a-záéíóúñ]+'
+            r'(?:\s+[A-ZÁÉÍÓÚÑ][a-záéíóúñ]+){2,4})\b'
+        )
         todos_nombres = re.findall(patron_nombres, texto)
         
-        # Filtrar nombres válidos
         nombres_validos = []
         for nombre in todos_nombres:
             if es_nombre_valido(nombre):
                 if nombre not in nombres_validos:
                     nombres_validos.append(nombre)
         
-        # Tomar el primer nombre válido (después de filtrar notarios)
         if nombres_validos:
-            print(f"   ✓ Nombre encontrado (búsqueda general): {nombres_validos[0]}")
             return nombres_validos[0].title()
         
         return None
@@ -208,75 +217,77 @@ class DocumentExtractor:
         
         # ESTRATEGIA 1: Buscar edad en formato "(número)" después del nombre
         if nombre_persona:
-            # Buscar "NOMBRE ... (XX)" donde XX es la edad
             patron_parentesis = re.escape(nombre_persona) + r'.*?\((\d{1,3})\)'
-            match_parentesis = re.search(patron_parentesis, texto, re.IGNORECASE | re.DOTALL)
+            match_parentesis = re.search(
+                patron_parentesis, texto, re.IGNORECASE | re.DOTALL
+            )
             if match_parentesis:
                 edad = int(match_parentesis.group(1))
                 if 18 <= edad <= 120:
-                    print(f"   ✓ Edad encontrada (paréntesis): {edad}")
                     return edad
             
             # Buscar "NOMBRE, de X años"
-            patron_edad_nombre = re.escape(nombre_persona) + r'.*?de\s+(\d{1,3})\s+años'
-            match_edad = re.search(patron_edad_nombre, texto, re.IGNORECASE | re.DOTALL)
+            patron_edad_nombre = (
+                re.escape(nombre_persona) + r'.*?de\s+(\d{1,3})\s+años'
+            )
+            match_edad = re.search(
+                patron_edad_nombre, texto, re.IGNORECASE | re.DOTALL
+            )
             if match_edad:
                 edad = int(match_edad.group(1))
                 if 18 <= edad <= 120:
-                    print(f"   ✓ Edad encontrada (cerca del nombre): {edad}")
                     return edad
         
         # ESTRATEGIA 2: Buscar edad después de "compareció" en formato "(número)"
         patron_comparece_parentesis = r'comparec(?:ió|e).*?\((\d{1,3})\)'
-        match_comparece = re.search(patron_comparece_parentesis, texto, re.IGNORECASE | re.DOTALL)
+        match_comparece = re.search(
+            patron_comparece_parentesis, texto, re.IGNORECASE | re.DOTALL
+        )
         if match_comparece:
             edad = int(match_comparece.group(1))
             if 18 <= edad <= 120:
-                print(f"   ✓ Edad encontrada (compareció + paréntesis): {edad}")
                 return edad
         
-        # ESTRATEGIA 3: Buscar edad después de "compareció" en formato "de X años"
+        # ESTRATEGIA 3: Buscar "compareció ... de X años"
         patron_edad_comparece = r'comparec(?:ió|e).*?de\s+(\d{1,3})\s+años'
-        match_edad = re.search(patron_edad_comparece, texto, re.IGNORECASE | re.DOTALL)
+        match_edad = re.search(
+            patron_edad_comparece, texto, re.IGNORECASE | re.DOTALL
+        )
         if match_edad:
             edad = int(match_edad.group(1))
             if 18 <= edad <= 120:
-                print(f"   ✓ Edad encontrada (compareció): {edad}")
                 return edad
         
-        # ESTRATEGIA 4: Buscar edad en formato "X años de edad"
+        # ESTRATEGIA 4: "de X años de edad"
         patron_edad_general = r'de\s+(\d{1,3})\s+años\s+de\s+edad'
         match_edad = re.search(patron_edad_general, texto, re.IGNORECASE)
         if match_edad:
             edad = int(match_edad.group(1))
             if 18 <= edad <= 120:
-                print(f"   ✓ Edad encontrada (general): {edad}")
                 return edad
         
-        # ESTRATEGIA 5: Buscar cualquier número entre paréntesis que sea una edad válida
-        # (esto es más general y puede capturar la edad si está en paréntesis en cualquier parte)
+        # ESTRATEGIA 5: "(XX) años"
         patron_parentesis_general = r'\((\d{1,3})\)\s*años'
         match_parentesis = re.search(patron_parentesis_general, texto, re.IGNORECASE)
         if match_parentesis:
             edad = int(match_parentesis.group(1))
             if 18 <= edad <= 120:
-                print(f"   ✓ Edad encontrada (paréntesis general): {edad}")
                 return edad
         
-        # ESTRATEGIA 6: Buscar solo número entre paréntesis cerca de "años"
+        # ESTRATEGIA 6: número entre paréntesis en contexto de edad
         patron_solo_parentesis = r'\((\d{1,3})\)'
         matches_parentesis = re.finditer(patron_solo_parentesis, texto)
         for match in matches_parentesis:
             edad = int(match.group(1))
             if 18 <= edad <= 120:
-                # Verificar que esté cerca de palabras relacionadas con edad
                 contexto_antes = texto[max(0, match.start()-50):match.start()]
                 contexto_despues = texto[match.end():min(len(texto), match.end()+50)]
                 contexto = contexto_antes + contexto_despues
                 
-                if any(palabra in contexto.lower() for palabra in ['año', 'edad', 'comparece', 'compareció']):
-                    print(f"   ✓ Edad encontrada (contexto): {edad}")
+                if any(
+                    palabra in contexto.lower()
+                    for palabra in ['año', 'edad', 'comparece', 'compareció']
+                ):
                     return edad
         
-        print("   ⚠️ No se pudo extraer la edad")
         return None

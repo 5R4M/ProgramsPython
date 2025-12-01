@@ -80,6 +80,32 @@ class DatabaseManager:
             )
         ''')
         
+        # Tabla de usuarios (autenticación)
+        self.cursor.execute('''
+            CREATE TABLE IF NOT EXISTS usuarios (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                username TEXT UNIQUE NOT NULL,
+                password TEXT NOT NULL,
+                nombre_completo TEXT,
+                rol TEXT DEFAULT 'usuario',
+                activo INTEGER DEFAULT 1,
+                creado_en TEXT NOT NULL,
+                ultimo_login TEXT
+            )
+        ''')
+        
+        # Crear usuario admin por defecto si no existe
+        self.cursor.execute("SELECT COUNT(*) FROM usuarios")
+        total_usuarios = self.cursor.fetchone()[0]
+        if total_usuarios == 0:
+            ahora = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            # usuario: admin / password por defecto: admin
+            self.cursor.execute('''
+                INSERT INTO usuarios (username, password, nombre_completo, rol, activo, creado_en)
+                VALUES (?, ?, ?, ?, ?, ?)
+            ''', ("admin", "admin", "Administrador", "admin", 1, ahora))
+            self.conn.commit()
+        
         self.conn.commit()
     
     # ===== MÉTODOS PARA PLANTILLAS =====
@@ -536,6 +562,92 @@ class DatabaseManager:
         except Exception as e:
             print(f"Error al eliminar persona: {e}")
             raise
+    
+    # ===== MÉTODOS PARA USUARIOS (LOGIN + CRUD) =====
+
+    def autenticar_usuario(self, username, password):
+        """
+        Verifica credenciales de usuario.
+        Devuelve:
+            - dict con info del usuario si es correcto y está activo
+            - None si no es válido.
+        """
+        self.cursor.execute('''
+            SELECT id, username, nombre_completo, rol, activo
+            FROM usuarios
+            WHERE username = ? AND password = ?
+        ''', (username, password))
+        row = self.cursor.fetchone()
+
+        if not row:
+            return None
+
+        if row[4] != 1:  # activo = 1
+            return None
+
+        # Actualizar último login
+        ahora = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        self.cursor.execute('UPDATE usuarios SET ultimo_login = ? WHERE id = ?', (ahora, row[0]))
+        self.conn.commit()
+
+        return {
+            "id": row[0],
+            "username": row[1],
+            "nombre_completo": row[2],
+            "rol": row[3],
+            "activo": row[4]
+        }
+
+    def crear_usuario(self, username, password, nombre_completo="", rol="usuario", activo=True):
+        """
+        Crea un nuevo usuario. Devuelve (id, 'ok') o lanza excepción si hay error (por ejemplo username duplicado).
+        """
+        ahora = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        self.cursor.execute('''
+            INSERT INTO usuarios (username, password, nombre_completo, rol, activo, creado_en)
+            VALUES (?, ?, ?, ?, ?, ?)
+        ''', (username, password, nombre_completo, rol, 1 if activo else 0, ahora))
+        self.conn.commit()
+        return self.cursor.lastrowid, "ok"
+
+    def actualizar_usuario(self, user_id, username, nombre_completo, rol, activo):
+        """
+        Actualiza datos de un usuario (no cambia la contraseña aquí).
+        """
+        self.cursor.execute('''
+            UPDATE usuarios
+            SET username = ?, nombre_completo = ?, rol = ?, activo = ?
+            WHERE id = ?
+        ''', (username, nombre_completo, rol, 1 if activo else 0, user_id))
+        self.conn.commit()
+
+    def cambiar_password_usuario(self, user_id, nuevo_password):
+        """Cambia la contraseña de un usuario."""
+        self.cursor.execute('UPDATE usuarios SET password = ? WHERE id = ?', (nuevo_password, user_id))
+        self.conn.commit()
+
+    def eliminar_usuario(self, user_id):
+        """Elimina un usuario por ID (no permite borrar el último admin, si quieres puedes extender)."""
+        self.cursor.execute('DELETE FROM usuarios WHERE id = ?', (user_id,))
+        self.conn.commit()
+
+    def obtener_todos_usuarios(self):
+        """Devuelve lista de todos los usuarios."""
+        self.cursor.execute('''
+            SELECT id, username, nombre_completo, rol, activo, creado_en, ultimo_login
+            FROM usuarios
+            ORDER BY username
+        ''')
+        return self.cursor.fetchall()
+
+    def obtener_usuario_por_id(self, user_id):
+        """Devuelve un usuario por ID."""
+        self.cursor.execute('''
+            SELECT id, username, nombre_completo, rol, activo, creado_en, ultimo_login
+            FROM usuarios
+            WHERE id = ?
+        ''', (user_id,))
+        return self.cursor.fetchone()
     
     def cerrar(self):
         """Cierra la conexión a la base de datos"""

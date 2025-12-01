@@ -26,7 +26,6 @@ class VentanaBuscarDocumento:
             # Crear como ventana separada (Toplevel)
             self.ventana = ctk.CTkToplevel(parent)
             self.ventana.title("🔍 Buscar Documento")
-            self.center_window()
             self.ventana.after(100, self.maximizar_ventana)
         
         self.crear_interfaz()
@@ -58,9 +57,9 @@ class VentanaBuscarDocumento:
         container = ctk.CTkFrame(self.ventana)
         container.pack(fill="both", expand=True, padx=10, pady=10)
         
-        container.grid_columnconfigure(0, weight=1)
-        container.grid_columnconfigure(1, weight=1)
-        container.grid_rowconfigure(0, weight=1)
+        container.grid_columnconfigure(0, weight=3) 
+        container.grid_columnconfigure(1, weight=2)
+        container.grid_rowconfigure(1, weight=1)
         
         # ===== PANEL IZQUIERDO: Búsqueda y resultados =====
         panel_izquierdo = ctk.CTkFrame(container)
@@ -285,23 +284,12 @@ class VentanaBuscarDocumento:
                 font=ctk.CTkFont(size=12)
             ).pack(side="left", padx=10, pady=10, expand=True, fill="x")
             
-            # Botón Editar (abre la ventana de edición con la GUI de crear documento)
-            btn_editar = ctk.CTkButton(
-                frame_resultado,
-                text="Editar",
-                command=lambda p=persona: self.abrir_editor_persona(p),
-                width=100,
-                fg_color=COLOR_PRIMARY,
-                hover_color="#2980b9"
-            )
-            btn_editar.pack(side="right", padx=5)
-
             # Botón Seleccionar (solo carga la persona en el panel izquierdo de esta ventana)
             btn_seleccionar = ctk.CTkButton(
                 frame_resultado,
-                text="Seleccionar",
+                text="✅ Seleccionar",          # mini imagen como en "👁️ Ver"
                 command=lambda p=persona: self.seleccionar_persona(p),
-                width=100,
+                width=120,
                 fg_color=COLOR_SUCCESS,
                 hover_color="#27ae60"
             )
@@ -422,7 +410,9 @@ class VentanaBuscarDocumento:
                     # Obtener extensión
                     extension = archivo.lower().split('.')[-1].upper()
                     
-                    self.documentos_persona.append((None, archivo, ruta_completa, fecha_str, extension))
+                    self.documentos_persona.append(
+                        (None, archivo, ruta_completa, fecha_str, extension, self.persona_seleccionada.id)
+                    )
         
         except Exception as e:
             print(f"Error al listar archivos: {e}")
@@ -444,36 +434,50 @@ class VentanaBuscarDocumento:
                 
         # Mostrar documentos
         for i, doc in enumerate(self.documentos_persona):
-            doc_id, nombre_archivo, ruta_archivo, fecha_carga, tipo_documento = doc
-            
+            doc_id, nombre_archivo, ruta_archivo, fecha_carga, tipo_documento, persona_id = doc
+
             frame_doc = ctk.CTkFrame(self.documentos_frame)
             frame_doc.pack(pady=5, padx=10, fill="x")
-            
+
             info_doc = f"📄 {nombre_archivo}\n📅 {fecha_carga} | {tipo_documento}"
-            
+
             ctk.CTkLabel(
-                frame_doc,
-                text=info_doc,
-                anchor="w",
-                justify="left",
-                font=ctk.CTkFont(size=11)
+                    frame_doc,
+                    text=info_doc,
+                    anchor="w",
+                    justify="left",
+                    font=ctk.CTkFont(size=11)
             ).pack(side="left", padx=10, pady=5, expand=True, fill="x")
-            
+
+            # Botón VER – mismo tamaño que Editar, color neutro
             btn_ver = ctk.CTkButton(
                 frame_doc,
                 text="👁️ Ver",
                 command=lambda idx=i: self.ver_documento(idx),
-                width=80
+                width=90,
+                fg_color="#4a4a4a",      # gris oscuro
+                hover_color="#6b6b6b"    # gris más claro al pasar el mouse
             )
             btn_ver.pack(side="right", padx=5)
-    
+
+            # Botón EDITAR – mismo tamaño, color primario
+            btn_editar_doc = ctk.CTkButton(
+                frame_doc,
+                text="✏️ Editar",
+                command=lambda idx=i: self.editar_documento(idx),
+                width=90,
+                fg_color=COLOR_PRIMARY,  # tu color primario
+                hover_color="#2980b9"    # hover azul
+            )
+            btn_editar_doc.pack(side="right", padx=5)
+            
     def ver_documento(self, index):
         """Muestra un documento en el visor"""
         if not self.documentos_persona or index >= len(self.documentos_persona):
             return
         
         doc = self.documentos_persona[index]
-        doc_id, nombre_archivo, ruta_archivo, fecha_carga, tipo_documento = doc
+        doc_id, nombre_archivo, ruta_archivo, fecha_carga, tipo_documento, persona_id = doc
         
         # Verificar que el archivo existe
         if not os.path.exists(ruta_archivo):
@@ -568,6 +572,66 @@ class VentanaBuscarDocumento:
                 text_color="red"
             )
             self.lbl_visor_estado.pack(pady=20)
+    
+    def editar_documento(self, index):
+        """Abre el editor para modificar el documento existente y los datos de la persona."""
+        if not self.documentos_persona or index >= len(self.documentos_persona):
+            return
+
+        doc = self.documentos_persona[index]
+        doc_id, nombre_archivo, ruta_archivo, fecha_carga, tipo_documento, persona_id = doc
+
+        if not os.path.exists(ruta_archivo):
+            messagebox.showerror(
+                "Error",
+                f"El archivo no existe:\n{ruta_archivo}"
+            )
+            return
+
+        try:
+            # Obtener persona completa desde la BD
+            resultado_persona = self.db.obtener_persona_por_id(persona_id)
+            if not resultado_persona:
+                messagebox.showerror(
+                    "Error",
+                    "No se pudo obtener la información completa de la persona asociada."
+                )
+                return
+
+            # Crear ventana de edición usando la GUI de creación
+            editor = VentanaCrearDocumento(
+                self.ventana,
+                self.db,
+                es_integrado=False,
+                solo_formulario=True,   # solo formulario
+                modo_edicion=True       # IMPORTANTE: modo edición
+            )
+
+            # Cargar datos de persona en el formulario
+            editor.cargar_datos_persona(resultado_persona)
+
+            # Indicarle al editor qué documento está editando
+            editor.establecer_documento_original(
+                ruta_archivo=ruta_archivo,
+                nombre_archivo=nombre_archivo,
+                persona_id=persona_id
+            )
+
+            # Callback para refrescar documentos y estadísticas al guardar
+            if hasattr(editor, "set_callback_guardado"):
+                editor.set_callback_guardado(self._callback_despues_edicion)
+
+        except Exception as e:
+            messagebox.showerror("Error", f"No se pudo abrir el editor:\n{str(e)}")
+
+    def _callback_despues_edicion(self):
+        """Se llama después de guardar cambios en el editor."""
+        # Recargar documentos de la persona seleccionada
+        if self.persona_seleccionada:
+            self.cargar_documentos_persona()
+        # Actualizar estadísticas globales si hay callback
+        if self.callback_actualizar:
+            self.callback_actualizar()
     
     def limpiar_documentos(self):
         """Limpia la lista de documentos"""
