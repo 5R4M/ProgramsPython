@@ -318,17 +318,22 @@ class VentanaCargarDocumentos:
         header_frame = ctk.CTkFrame(self.lista_existentes_frame, fg_color="transparent")
         header_frame.pack(pady=10, padx=10, fill="x")
 
+        # Texto multilínea, más legible y adaptado al ancho
         contador_text = (
-            f"📊 Documentos mostrados: {len(self.documentos_existentes)} "
-            f"| 📁 Archivos en carpeta: {len(archivos_carpeta)} "
+            f"📊 Documentos mostrados: {len(self.documentos_existentes)}\n"
+            f"📁 Archivos en carpeta: {len(archivos_carpeta)}\n"
             f"(Ordenados por fecha de modificación, más reciente primero)"
         )
-        ctk.CTkLabel(
+
+        lbl_contador = ctk.CTkLabel(
             header_frame,
             text=contador_text,
             font=ctk.CTkFont(size=13, weight="bold"),
-            text_color="#3498db"
-        ).pack(pady=5)
+            text_color="#3498db",
+            justify="left"
+        )
+        # Ajustar ancho para que haga wrap dentro del frame
+        lbl_contador.pack(pady=5, fill="x")
 
         if not self.documentos_existentes:
             self.lbl_sin_existentes = ctk.CTkLabel(
