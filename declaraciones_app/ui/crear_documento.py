@@ -11,23 +11,26 @@ from docx2pdf import convert
 from config import PLANTILLAS_DIR, COLOR_SUCCESS, COLOR_PRIMARY, COLOR_WARNING, DOCUMENTOS_DIR
 from utils import NumeroATexto
 
+
 class VentanaCrearDocumento:
     def __init__(self, parent, db, es_integrado=False, solo_formulario=False, modo_edicion=False):
         self.db = db
         self.es_integrado = es_integrado
         self.solo_formulario = solo_formulario
         self.modo_edicion = modo_edicion
-        
+
         self.callback_actualizar = None
         self.callback_guardado = None
         self.persona_actual_id = None
         self.documento_preview = None
         self.ruta_documento_actual = None
-        
-        self.ruta_original = None         
-        self.nombre_original = None       
+
+        self.ruta_original = None
+        self.nombre_original = None
         self.persona_id_original = None
 
+        self.fecha_fija_var = ctk.BooleanVar(value=False)
+        
         if es_integrado:
             # Como frame embebido en otra ventana
             self.ventana = ctk.CTkFrame(parent)
@@ -65,6 +68,42 @@ class VentanaCrearDocumento:
                 self.center_window_tamano(1400, 900)
                 self.ventana.after(100, self.maximizar_ventana)
 
+    # =================== VALIDADORES ===================
+
+    def _validar_entero(self, nuevo_valor):
+        """Permite solo números enteros (o vacío)."""
+        if nuevo_valor == "":
+            return True
+        return nuevo_valor.isdigit()
+
+    def _validar_dpi(self, nuevo_valor):
+        """
+        Permite solo dígitos y espacios.
+        Dato final se valida con longitud en guardar/generar.
+        """
+        if nuevo_valor == "":
+            return True
+        for ch in nuevo_valor:
+            if not (ch.isdigit() or ch == " "):
+                return False
+        return True
+
+    def _validar_fecha_ddmmaaaa(self, nuevo_valor):
+        """
+        Permite solo dígitos y '/' y longitud máxima 10.
+        Luego se valida formato real en calcular_edad / guardar.
+        """
+        if nuevo_valor == "":
+            return True
+        if len(nuevo_valor) > 10:
+            return False
+        for ch in nuevo_valor:
+            if not (ch.isdigit() or ch == "/"):
+                return False
+        return True
+
+    # ===================================================
+
     def set_callback_actualizar(self, callback):
         """Permite establecer un callback para actualizar estadísticas"""
         self.callback_actualizar = callback
@@ -84,7 +123,7 @@ class VentanaCrearDocumento:
         # Sincronizar con la lógica ya existente
         self.ruta_documento_actual = ruta_archivo
         self.persona_actual_id = persona_id
-    
+
     def center_window_tamano(self, width, height):
         """Centra la ventana con un tamaño específico."""
         if not self.es_integrado:
@@ -98,22 +137,22 @@ class VentanaCrearDocumento:
         """Maximiza la ventana (solo modo normal)."""
         if not self.es_integrado:
             self.ventana.state("zoomed")
-        
+
     def verificar_plantilla(self):
         """Verifica la existencia/estado de la plantilla."""
         # En modo solo_formulario no mostramos nada de plantilla.
         if self.solo_formulario:
             return
-        
+
         plantilla = self.db.obtener_plantilla_activa()
-        
+
         if not plantilla:
             respuesta = messagebox.askyesno(
                 "Sin plantilla",
                 "No hay ninguna plantilla activa.\n\n"
                 "¿Desea cargar una plantilla ahora?"
             )
-            
+
             if respuesta:
                 self.cargar_plantilla()
             else:
@@ -126,47 +165,52 @@ class VentanaCrearDocumento:
                 text=f"✅ Plantilla activa: {plantilla[1]}",
                 text_color="green"
             )
-    
+
     def cargar_plantilla(self):
         """Permite cargar una nueva plantilla"""
         archivo = filedialog.askopenfilename(
             title="Seleccionar plantilla Word",
             filetypes=[("Documento Word", "*.docx")]
         )
-        
+
         if not archivo:
             return
-        
+
         try:
             # Verificar que sea un archivo válido
             _ = Document(archivo)
-            
+
             # Copiar archivo a carpeta de plantillas
             nombre_archivo = os.path.basename(archivo)
             ruta_destino = os.path.join(PLANTILLAS_DIR, nombre_archivo)
             shutil.copy2(archivo, ruta_destino)
-            
+
             # Guardar en base de datos
             self.db.guardar_plantilla(nombre_archivo, ruta_destino, activar=True)
-            
+
             self.lbl_plantilla.configure(
                 text=f"✅ Plantilla activa: {nombre_archivo}",
                 text_color="green"
             )
-            
+
             messagebox.showinfo(
                 "Éxito",
                 f"Plantilla '{nombre_archivo}' cargada correctamente."
             )
-            
+
         except Exception as e:
             messagebox.showerror(
                 "Error",
                 f"No se pudo cargar la plantilla:\n{str(e)}"
             )
-    
+
     def crear_interfaz(self):
         """Crea la interfaz de creación de documentos"""
+
+        # Necesario para validatecommand
+        vcmd_entero = (self.ventana.register(self._validar_entero), "%P")
+        vcmd_dpi = (self.ventana.register(self._validar_dpi), "%P")
+        vcmd_fecha = (self.ventana.register(self._validar_fecha_ddmmaaaa), "%P")
 
         container = ctk.CTkFrame(self.ventana)
         container.pack(fill="both", expand=True, padx=10, pady=10)
@@ -178,7 +222,7 @@ class VentanaCrearDocumento:
         # ==== PANEL IZQUIERDO: Formulario ====
         panel_izquierdo = ctk.CTkFrame(container)
         panel_izquierdo.grid(row=0, column=0, sticky="nsew", padx=(0, 5))
-        
+
         # Título
         titulo_texto = "✏️ Editar Documento" if self.solo_formulario else "➕ Crear Documento"
         ctk.CTkLabel(
@@ -186,16 +230,15 @@ class VentanaCrearDocumento:
             text=titulo_texto,
             font=ctk.CTkFont(size=16, weight="bold")
         ).pack(pady=5)
-        
+
         # ======= SECCIÓN PLANTILLA =======
-        # Guardamos estos widgets como atributos para poder ocultarlos
         self.lbl_plantilla = ctk.CTkLabel(
             panel_izquierdo,
             text="Verificando plantilla...",
             font=ctk.CTkFont(size=11)
         )
         self.lbl_plantilla.pack(pady=2)
-        
+
         self.btn_cambiar_plantilla = ctk.CTkButton(
             panel_izquierdo,
             text="📋 Plantilla",
@@ -204,40 +247,41 @@ class VentanaCrearDocumento:
             height=26
         )
         self.btn_cambiar_plantilla.pack(pady=2)
-        
+
         # ----- Sección de Búsqueda Rápida -----
-        # IMPORTANTE: guardamos el frame en self.frame_busqueda
         self.frame_busqueda = ctk.CTkFrame(panel_izquierdo)
         self.frame_busqueda.pack(pady=3, padx=8, fill="x")
-        
+
         ctk.CTkLabel(
             self.frame_busqueda,
             text="🔍 Búsqueda Rápida",
             font=ctk.CTkFont(size=12, weight="bold")
         ).pack(pady=2)
-        
+
         ctk.CTkLabel(
             self.frame_busqueda,
             text="Buscar persona existente",
             font=ctk.CTkFont(size=9),
             text_color="gray"
         ).pack(pady=1)
-        
+
         # Búsqueda por DPI
         frame_buscar_dpi = ctk.CTkFrame(self.frame_busqueda)
         frame_buscar_dpi.pack(pady=1, padx=8, fill="x")
-        
+
         frame_buscar_dpi.grid_columnconfigure(1, weight=1)
-        
+
         ctk.CTkLabel(frame_buscar_dpi, text="DPI:", width=55).grid(row=0, column=0, padx=(3, 2), sticky="w")
         self.entry_buscar_dpi = ctk.CTkEntry(
             frame_buscar_dpi,
             placeholder_text="2008 22829 0101",
-            height=26
+            height=26,
+            validate="key",
+            validatecommand=vcmd_dpi
         )
         self.entry_buscar_dpi.grid(row=0, column=1, padx=2, sticky="ew")
         self.entry_buscar_dpi.bind("<Return>", lambda e: self.buscar_persona())
-        
+
         btn_buscar = ctk.CTkButton(
             frame_buscar_dpi,
             text="🔍",
@@ -246,13 +290,13 @@ class VentanaCrearDocumento:
             height=26
         )
         btn_buscar.grid(row=0, column=2, padx=(2, 3))
-        
+
         # Búsqueda por Nombre
         frame_buscar_nombre = ctk.CTkFrame(self.frame_busqueda)
         frame_buscar_nombre.pack(pady=1, padx=8, fill="x")
-        
+
         frame_buscar_nombre.grid_columnconfigure(1, weight=1)
-        
+
         ctk.CTkLabel(frame_buscar_nombre, text="Nombre:", width=55).grid(row=0, column=0, padx=(3, 2), sticky="w")
         self.entry_buscar_nombre = ctk.CTkEntry(
             frame_buscar_nombre,
@@ -261,7 +305,7 @@ class VentanaCrearDocumento:
         )
         self.entry_buscar_nombre.grid(row=0, column=1, padx=2, sticky="ew")
         self.entry_buscar_nombre.bind("<Return>", lambda e: self.buscar_por_nombre())
-        
+
         btn_buscar_nombre = ctk.CTkButton(
             frame_buscar_nombre,
             text="🔍",
@@ -270,7 +314,7 @@ class VentanaCrearDocumento:
             height=26
         )
         btn_buscar_nombre.grid(row=0, column=2, padx=(2, 3))
-        
+
         btn_limpiar = ctk.CTkButton(
             self.frame_busqueda,
             text="🔄 Limpiar",
@@ -281,44 +325,71 @@ class VentanaCrearDocumento:
             hover_color="#e67e22"
         )
         btn_limpiar.pack(pady=2)
-        
+
         # ----- Fecha y Hora -----
         frame_fecha = ctk.CTkFrame(panel_izquierdo)
         frame_fecha.pack(pady=2, padx=8, fill="x")
-        
+
         ctk.CTkLabel(
             frame_fecha,
             text="🕐 Fecha y Hora",
             font=ctk.CTkFont(size=12, weight="bold")
-        ).pack(pady=2)
-        
+        ).pack(pady=(2, 0))
+
+        # Check: fijar fecha manualmente
+        self.chk_fecha_fija = ctk.CTkCheckBox(
+            frame_fecha,
+            text="Fijar fecha manualmente",
+            variable=self.fecha_fija_var,
+            command=self._on_cambiar_modo_fecha
+        )
+        self.chk_fecha_fija.pack(pady=(0, 4), padx=8, anchor="w")
+
         # Hora y Minutos
         frame_hora = ctk.CTkFrame(frame_fecha)
         frame_hora.pack(pady=1, fill="x", padx=8)
-        
+
         frame_hora.grid_columnconfigure(1, weight=1)
         frame_hora.grid_columnconfigure(3, weight=1)
-        
+
         ctk.CTkLabel(frame_hora, text="Hora:", width=55).grid(row=0, column=0, padx=(3, 2), sticky="w")
-        self.entry_hora = ctk.CTkEntry(frame_hora, placeholder_text="17", height=26)
+        self.entry_hora = ctk.CTkEntry(
+            frame_hora,
+            placeholder_text="17",
+            height=26,
+            validate="key",
+            validatecommand=vcmd_entero
+        )
         self.entry_hora.grid(row=0, column=1, padx=2, sticky="ew")
-        
+
         ctk.CTkLabel(frame_hora, text="Min:", width=40).grid(row=0, column=2, padx=(8, 2), sticky="w")
-        self.entry_minutos = ctk.CTkEntry(frame_hora, placeholder_text="20", height=26)
+        self.entry_minutos = ctk.CTkEntry(
+            frame_hora,
+            placeholder_text="20",
+            height=26,
+            validate="key",
+            validatecommand=vcmd_entero
+        )
         self.entry_minutos.grid(row=0, column=3, padx=(2, 3), sticky="ew")
-        
+
         # Día, Mes, Año
         frame_fecha_dia = ctk.CTkFrame(frame_fecha)
         frame_fecha_dia.pack(pady=1, fill="x", padx=8)
-        
+
         frame_fecha_dia.grid_columnconfigure(1, weight=1)
         frame_fecha_dia.grid_columnconfigure(3, weight=2)
         frame_fecha_dia.grid_columnconfigure(5, weight=1)
-        
+
         ctk.CTkLabel(frame_fecha_dia, text="Día:", width=55).grid(row=0, column=0, padx=(3, 2), sticky="w")
-        self.entry_dia = ctk.CTkEntry(frame_fecha_dia, placeholder_text="28", height=26)
+        self.entry_dia = ctk.CTkEntry(
+            frame_fecha_dia,
+            placeholder_text="28",
+            height=26,
+            validate="key",
+            validatecommand=vcmd_entero
+        )
         self.entry_dia.grid(row=0, column=1, padx=2, sticky="ew")
-        
+
         ctk.CTkLabel(frame_fecha_dia, text="Mes:", width=40).grid(row=0, column=2, padx=(8, 2), sticky="w")
         self.combo_mes = ctk.CTkComboBox(
             frame_fecha_dia,
@@ -326,68 +397,101 @@ class VentanaCrearDocumento:
                     "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"],
             height=26
         )
-        self.combo_mes.set("noviembre")
         self.combo_mes.grid(row=0, column=3, padx=2, sticky="ew")
-        
+
         ctk.CTkLabel(frame_fecha_dia, text="Año:", width=40).grid(row=0, column=4, padx=(8, 2), sticky="w")
-        self.entry_anio = ctk.CTkEntry(frame_fecha_dia, placeholder_text="2025", height=26)
+        self.entry_anio = ctk.CTkEntry(
+            frame_fecha_dia,
+            placeholder_text="2025",
+            height=26,
+            validate="key",
+            validatecommand=vcmd_entero
+        )
         self.entry_anio.grid(row=0, column=5, padx=(2, 3), sticky="ew")
-        
+
+        # Inicializar campos de fecha/hora con la fecha actual y deshabilitados (modo automático)
+        self._establecer_fecha_hora_actual()
+        self._actualizar_estado_campos_fecha()
+
         # ----- Datos personales -----
         frame_datos = ctk.CTkFrame(panel_izquierdo)
         frame_datos.pack(pady=2, padx=8, fill="x")
-        
+
         ctk.CTkLabel(
             frame_datos,
             text="👤 Datos Personales",
             font=ctk.CTkFont(size=13, weight="bold")
         ).pack(pady=2)
-        
+
         # FUNCIÓN AUXILIAR para crear campos uniformes
-        def crear_campo(parent, label_text, placeholder="", es_combo=False, valores_combo=None):
+        def crear_campo(parent, label_text, placeholder="", es_combo=False, valores_combo=None,
+                        validar=None):
             frame = ctk.CTkFrame(parent)
             frame.pack(pady=1, fill="x", padx=8)
             frame.grid_columnconfigure(1, weight=1)
-            
+
             ctk.CTkLabel(frame, text=label_text, width=100).grid(row=0, column=0, padx=(3, 2), sticky="w")
-            
+
+            kwargs = {"height": 26}
+            if validar is not None:
+                kwargs.update({"validate": "key", "validatecommand": validar})
+
             if es_combo:
                 widget = ctk.CTkComboBox(frame, values=valores_combo or [], height=26)
                 widget.grid(row=0, column=1, padx=(2, 3), sticky="ew")
             else:
-                widget = ctk.CTkEntry(frame, placeholder_text=placeholder, height=26)
+                widget = ctk.CTkEntry(frame, placeholder_text=placeholder, **kwargs)
                 widget.grid(row=0, column=1, padx=(2, 3), sticky="ew")
-            
+
             return widget
-        
+
         # Crear todos los campos con la función auxiliar
         self.entry_nombre = crear_campo(frame_datos, "Nombre:", "Juan Carlos Pérez López")
-        self.combo_sexo = crear_campo(frame_datos, "Sexo:", es_combo=True, valores_combo=["masculino", "femenino"])
+        self.combo_sexo = crear_campo(frame_datos, "Sexo:", es_combo=True,
+                                      valores_combo=["masculino", "femenino"])
         self.combo_sexo.set("masculino")
-        
-        self.entry_fecha_nac = crear_campo(frame_datos, "Fec. Nacimiento:", "DD/MM/AAAA")
+
+        self.entry_fecha_nac = crear_campo(
+            frame_datos,
+            "Fec. Nacimiento:",
+            "DD/MM/AAAA",
+            validar=vcmd_fecha
+        )
         self.entry_fecha_nac.bind("<FocusOut>", self.calcular_edad)
         self.entry_fecha_nac.bind("<Return>", self.calcular_edad)
-        
-        self.entry_edad = crear_campo(frame_datos, "Edad:", "Automático")
+
+        self.entry_edad = crear_campo(
+            frame_datos,
+            "Edad:",
+            "Automático",
+            validar=vcmd_entero
+        )
         self.entry_edad.configure(state="readonly")
-        
-        self.combo_estado = crear_campo(frame_datos, "Estado Civil:", es_combo=True, 
-                                        valores_combo=["soltero", "soltera", "casado", "casada",
-                                                    "divorciado", "divorciada", "viudo", "viuda"])
+
+        self.combo_estado = crear_campo(
+            frame_datos,
+            "Estado Civil:",
+            es_combo=True,
+            valores_combo=["soltero", "soltera", "casado", "casada",
+                           "divorciado", "divorciada", "viudo", "viuda"]
+        )
         self.combo_estado.set("soltero")
-        
+
         self.entry_casada = crear_campo(frame_datos, "Apell. Casada:", "de López")
         self.entry_nacionalidad = crear_campo(frame_datos, "Nacionalidad:", "guatemalteco")
         self.entry_nivel = crear_campo(frame_datos, "Nivel Académico:", "Bachiller")
         self.entry_domicilio = crear_campo(frame_datos, "Domicilio:", "departamento de Guatemala")
-        self.entry_dpi = crear_campo(frame_datos, "DPI:", "2008 22829 0101")
-        
+        self.entry_dpi = crear_campo(
+            frame_datos,
+            "DPI:",
+            "2008 22829 0101",
+            validar=vcmd_dpi
+        )
+
         # ----- Botones -----
         frame_botones = ctk.CTkFrame(panel_izquierdo)
         frame_botones.pack(pady=5, padx=8)
 
-        # Configurar grid para botones uniformes
         frame_botones.grid_columnconfigure(0, weight=1, uniform="button")
         frame_botones.grid_columnconfigure(1, weight=1, uniform="button")
         frame_botones.grid_columnconfigure(2, weight=1, uniform="button")
@@ -424,7 +528,7 @@ class VentanaCrearDocumento:
             hover_color="#27ae60"
         )
         btn_generar.grid(row=0, column=2, padx=3, sticky="ew")
-        
+
         # ==== PANEL DERECHO: Visor de documento ====
         if not self.solo_formulario:
             panel_derecho = ctk.CTkFrame(container)
@@ -447,32 +551,139 @@ class VentanaCrearDocumento:
             )
             self.lbl_visor_estado.pack(pady=200)
         else:
-            # Dummy para que los métodos que usan visor no revienten
             self.visor_scroll = ctk.CTkFrame(container)
             self.visor_scroll.grid_forget()
             self.lbl_visor_estado = None
-            
+
         # === AL FINAL: si estamos en modo solo_formulario, ocultar partes ===
         if self.solo_formulario:
-            # Ocultar búsqueda rápida
             if self.frame_busqueda.winfo_manager():
                 self.frame_busqueda.pack_forget()
 
-            # Ocultar widgets de plantilla
             if self.lbl_plantilla.winfo_manager():
                 self.lbl_plantilla.pack_forget()
             if self.btn_cambiar_plantilla.winfo_manager():
                 self.btn_cambiar_plantilla.pack_forget()
-    
+
+    # ==================== LÓGICA ====================
+
+    def _validar_fecha_nacimiento_logica(self):
+        """Valida que la fecha de nacimiento (si se ingresó) tenga formato real DD/MM/AAAA."""
+        fecha_nac_str = self.entry_fecha_nac.get().strip()
+        if not fecha_nac_str:
+            return True  # opcional
+
+        try:
+            if '/' in fecha_nac_str:
+                partes = fecha_nac_str.split('/')
+                if len(partes) != 3:
+                    raise ValueError
+                dia, mes, anio = int(partes[0]), int(partes[1]), int(partes[2])
+                datetime(anio, mes, dia)
+                return True
+            else:
+                raise ValueError
+        except Exception:
+            messagebox.showwarning(
+                "Fecha de nacimiento inválida",
+                "Por favor ingrese una fecha de nacimiento válida en formato DD/MM/AAAA."
+            )
+            self.entry_fecha_nac.focus_set()
+            return False
+
+    def _validar_dpi_logico(self):
+        """Valida que el DPI tenga 13 dígitos (permitiendo espacios)."""
+        dpi = self.entry_dpi.get().strip()
+        if not dpi:
+            messagebox.showwarning("Advertencia", "Debe ingresar el DPI.")
+            self.entry_dpi.focus_set()
+            return False
+
+        solo_digitos = dpi.replace(" ", "")
+        if not solo_digitos.isdigit() or len(solo_digitos) != 13:
+            messagebox.showwarning(
+                "DPI inválido",
+                "El DPI debe contener exactamente 13 dígitos (puede llevar espacios)."
+            )
+            self.entry_dpi.focus_set()
+            return False
+
+        return True
+
+    def _validar_fecha_hora_acta(self):
+        """
+        Valida que día, mes (combo), año, hora y minutos sean coherentes
+        antes de generar documento/preview.
+        """
+        dia = self.entry_dia.get().strip()
+        mes_nombre = self.combo_mes.get().strip()
+        anio = self.entry_anio.get().strip()
+        hora = self.entry_hora.get().strip()
+        minutos = self.entry_minutos.get().strip()
+
+        # Día y año requeridos para acta
+        if not dia or not anio:
+            messagebox.showwarning(
+                "Fecha incompleta",
+                "Debe ingresar Día y Año del acta."
+            )
+            return False
+
+        # Validar enteros
+        try:
+            dia_int = int(dia)
+            anio_int = int(anio)
+        except ValueError:
+            messagebox.showwarning(
+                "Fecha inválida",
+                "Día y Año deben ser números válidos."
+            )
+            return False
+
+        # Validar rango de día (1-31) de forma genérica
+        if not (1 <= dia_int <= 31):
+            messagebox.showwarning("Día inválido", "El día debe estar entre 1 y 31.")
+            return False
+
+        # Validar año simple (ejemplo: >= 1900)
+        if anio_int < 1900 or anio_int > 2100:
+            messagebox.showwarning("Año inválido", "Ingrese un año razonable (1900-2100).")
+            return False
+
+        # Hora/minutos opcionales, pero si se ingresan que tengan formato correcto
+        if hora:
+            try:
+                h = int(hora)
+                if not (0 <= h <= 23):
+                    raise ValueError
+            except ValueError:
+                messagebox.showwarning("Hora inválida", "La hora debe estar entre 0 y 23.")
+                return False
+
+        if minutos:
+            try:
+                m = int(minutos)
+                if not (0 <= m <= 59):
+                    raise ValueError
+            except ValueError:
+                messagebox.showwarning("Minutos inválidos", "Los minutos deben estar entre 0 y 59.")
+                return False
+
+        # Mes solo puede ser texto válido del combo (ya lo es), pero aseguramos que no esté vacío
+        if not mes_nombre:
+            messagebox.showwarning("Mes inválido", "Seleccione un mes válido.")
+            return False
+
+        return True
+
     def calcular_edad(self, event=None):
         """Calcula la edad a partir de la fecha de nacimiento"""
         fecha_nac_str = self.entry_fecha_nac.get().strip()
-        
+
         if not fecha_nac_str:
             return
-        
+
         try:
-            # Intentar parsear la fecha
             if '/' in fecha_nac_str:
                 partes = fecha_nac_str.split('/')
                 if len(partes) == 3:
@@ -482,27 +693,24 @@ class VentanaCrearDocumento:
                     return
             else:
                 return
-            
-            # Calcular edad
+
             hoy = datetime.now()
             edad = hoy.year - fecha_nac.year
-            
-            # Ajustar si aún no ha cumplido años este año
+
             if (hoy.month, hoy.day) < (fecha_nac.month, fecha_nac.day):
                 edad -= 1
-            
-            # Actualizar campo de edad
+
             self.entry_edad.configure(state="normal")
             self.entry_edad.delete(0, "end")
             self.entry_edad.insert(0, str(edad))
             self.entry_edad.configure(state="readonly")
-            
+
         except ValueError:
             messagebox.showwarning(
                 "Fecha inválida",
                 "Por favor ingrese una fecha válida en formato DD/MM/AAAA"
             )
-    
+            
     def buscar_persona(self):
         """Busca una persona por DPI y autocompleta los campos"""
         dpi = self.entry_buscar_dpi.get().strip()
@@ -755,6 +963,11 @@ class VentanaCrearDocumento:
         Guarda o actualiza una persona en la base de datos y
         actualiza/crea su documento en la carpeta DOCUMENTOS_DIR.
         """
+        if not self._validar_dpi_logico():
+            return
+        if not self._validar_fecha_nacimiento_logica():
+            return
+        
         nombre = self.entry_nombre.get().strip()
         dpi = self.entry_dpi.get().strip()
 
@@ -878,6 +1091,13 @@ class VentanaCrearDocumento:
     
     def generar_preview(self):
         """Genera una vista previa del documento"""
+        if not self._validar_dpi_logico():
+            return
+        if not self._validar_fecha_nacimiento_logica():
+            return
+        if not self._validar_fecha_hora_acta():
+            return
+        
         if self.solo_formulario:
             # En modo solo_formulario no mostramos visor.
             messagebox.showinfo("Info", "En modo edición rápida no se muestra la vista previa.")
@@ -1242,6 +1462,13 @@ class VentanaCrearDocumento:
         - En modo normal:
             * Crea/actualiza archivo estándar en DOCUMENTOS_DIR y su registro.
         """
+        if not self._validar_dpi_logico():
+            return
+        if not self._validar_fecha_nacimiento_logica():
+            return
+        if not self._validar_fecha_hora_acta():
+            return
+        
         # Validar datos mínimos
         if not self.entry_nombre.get().strip() or not self.entry_dpi.get().strip():
             messagebox.showwarning("Advertencia", "Debe ingresar al menos el nombre y DPI")
@@ -1674,7 +1901,59 @@ class VentanaCrearDocumento:
         dpi_sin_espacios = dpi.replace(" ", "") if dpi else "sin_dpi"
         nombre_limpio = (nombre or "sin_nombre").replace(" ", "_")
         return f"{dpi_sin_espacios}_acta_{nombre_limpio}.docx"
-        
+    
+    def _on_cambiar_modo_fecha(self):
+        """
+        Callback del CheckBox 'Fijar fecha manualmente'.
+        Si está desmarcado: usar siempre fecha/hora actual (campos deshabilitados).
+        Si está marcado: permitir modificar los campos manualmente.
+        """
+        if not self.fecha_fija_var.get():
+            # Volver a la fecha actual y bloquear campos
+            self._establecer_fecha_hora_actual()
+        self._actualizar_estado_campos_fecha()
+
+    def _establecer_fecha_hora_actual(self):
+        """Rellena Día, Mes, Año, Hora y Min con la fecha/hora actual."""
+        ahora = datetime.now()
+
+        # Día
+        self.entry_dia.delete(0, "end")
+        self.entry_dia.insert(0, str(ahora.day))
+
+        # Mes (nombre en español en minúsculas)
+        meses = ["enero", "febrero", "marzo", "abril", "mayo", "junio",
+                 "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"]
+        self.combo_mes.set(meses[ahora.month - 1])
+
+        # Año
+        self.entry_anio.delete(0, "end")
+        self.entry_anio.insert(0, str(ahora.year))
+
+        # Hora
+        self.entry_hora.delete(0, "end")
+        self.entry_hora.insert(0, str(ahora.hour))
+
+        # Minutos (con dos dígitos opcionalmente)
+        self.entry_minutos.delete(0, "end")
+        self.entry_minutos.insert(0, f"{ahora.minute:02d}")
+
+    def _actualizar_estado_campos_fecha(self):
+        """
+        Habilita o deshabilita los campos de fecha/hora
+        según el valor de self.fecha_fija_var.
+        """
+        estado = "normal" if self.fecha_fija_var.get() else "disabled"
+
+        # Hora / Min
+        self.entry_hora.configure(state=estado)
+        self.entry_minutos.configure(state=estado)
+
+        # Día / Mes / Año
+        self.entry_dia.configure(state=estado)
+        self.combo_mes.configure(state=estado)
+        self.entry_anio.configure(state=estado)
+      
     def limpiar_campos(self):
         """Limpia todos los campos del formulario"""
         self.entry_buscar_dpi.delete(0, "end")

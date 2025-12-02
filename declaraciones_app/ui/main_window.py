@@ -1,6 +1,11 @@
 import os
 import customtkinter as ctk
 from tkinter import messagebox
+from backup_util import (
+    hacer_backup_completo,
+    restaurar_backup_completo,
+)
+from tkinter import filedialog
 
 from config import (
     APP_NAME,
@@ -37,6 +42,9 @@ class MainWindow(ctk.CTk):
         ctk.set_appearance_mode("dark")
         ctk.set_default_color_theme("blue")
 
+        # Fondo de la ventana principal para que coincida
+        self.configure(fg_color="gray10")
+        
         # Inicializar base de datos
         self.db = DatabaseManager()
 
@@ -82,8 +90,8 @@ class MainWindow(ctk.CTk):
 
     def actualizar_visibilidad_boton_usuarios(self):
         """
-        Muestra/oculta el botón de gestión de usuarios según el rol:
-        - admin: visible
+        Oculta el botón de gestión de usuarios según el rol:
+        - admin: visible (ya está empaquetado en crear_interfaz)
         - usuario (u otro): oculto
         """
         if not self.btn_usuarios:
@@ -94,8 +102,8 @@ class MainWindow(ctk.CTk):
             rol = self.usuario_actual.get("rol")
 
         if rol == "admin":
-            # Mostrar botón
-            self.btn_usuarios.pack(pady=5, padx=15, fill="x")
+            # Nada que hacer: el botón ya está empaquetado debajo de "Crear Documento"
+            pass
         else:
             # Ocultar botón para usuario normal o si no hay usuario
             self.btn_usuarios.pack_forget()
@@ -139,7 +147,13 @@ class MainWindow(ctk.CTk):
         self.lbl_status_msg.pack(side="right", padx=10)
 
         # ===== CONTENEDOR PRINCIPAL =====
-        container = ctk.CTkFrame(self)
+        # Misma paleta de color, sin bordes, para que no se vea línea entre paneles
+        container = ctk.CTkFrame(
+            self,
+            fg_color="gray10",
+            corner_radius=0,
+            border_width=0,
+        )
         container.pack(fill="both", expand=True)
 
         # Configurar grid
@@ -148,7 +162,13 @@ class MainWindow(ctk.CTk):
         container.grid_rowconfigure(0, weight=1)
 
         # ===== MENÚ LATERAL IZQUIERDO =====
-        menu_lateral = ctk.CTkFrame(container, width=280, corner_radius=0)
+        menu_lateral = ctk.CTkFrame(
+            container,
+            width=280,
+            corner_radius=0,
+            fg_color="gray10",
+            border_width=0,
+        )
         menu_lateral.grid(row=0, column=0, sticky="nsew")
         menu_lateral.grid_propagate(False)
 
@@ -156,11 +176,12 @@ class MainWindow(ctk.CTk):
         frame_logo = ctk.CTkFrame(
             menu_lateral, fg_color="transparent", corner_radius=0
         )
-        frame_logo.pack(fill="x", pady=20)
+        frame_logo.pack(fill="x", pady=25)
 
+        # Icono principal más grande
         ctk.CTkLabel(
-            frame_logo, text="📋", font=ctk.CTkFont(size=40)
-        ).pack(pady=10)
+            frame_logo, text="📋", font=ctk.CTkFont(size=60)
+        ).pack(pady=5)
 
         ctk.CTkLabel(
             frame_logo,
@@ -179,8 +200,8 @@ class MainWindow(ctk.CTk):
             menu_lateral,
             text="🏠  Inicio",
             command=self.mostrar_inicio,
-            height=45,
-            font=ctk.CTkFont(size=14),
+            height=48,
+            font=ctk.CTkFont(size=16),
             fg_color="transparent",
             text_color=("gray10", "gray90"),
             hover_color=("gray70", "gray30"),
@@ -193,8 +214,8 @@ class MainWindow(ctk.CTk):
             menu_lateral,
             text="📥  Cargar Documentos",
             command=self.mostrar_cargar_documentos,
-            height=45,
-            font=ctk.CTkFont(size=14),
+            height=48,
+            font=ctk.CTkFont(size=16),
             fg_color="transparent",
             text_color=("gray10", "gray90"),
             hover_color=("gray70", "gray30"),
@@ -207,8 +228,8 @@ class MainWindow(ctk.CTk):
             menu_lateral,
             text="🔍  Buscar Documento",
             command=self.mostrar_buscar_documento,
-            height=45,
-            font=ctk.CTkFont(size=14),
+            height=48,
+            font=ctk.CTkFont(size=16),
             fg_color="transparent",
             text_color=("gray10", "gray90"),
             hover_color=("gray70", "gray30"),
@@ -221,8 +242,8 @@ class MainWindow(ctk.CTk):
             menu_lateral,
             text="➕  Crear Documento",
             command=self.mostrar_crear_documento,
-            height=45,
-            font=ctk.CTkFont(size=14),
+            height=48,
+            font=ctk.CTkFont(size=16),
             fg_color="transparent",
             text_color=("gray10", "gray90"),
             hover_color=("gray70", "gray30"),
@@ -231,29 +252,59 @@ class MainWindow(ctk.CTk):
         )
         btn_crear.pack(pady=5, padx=15, fill="x")
 
-        # Botón de gestión de usuarios (se mostrará/ocultará según rol)
-        self.btn_usuarios = ctk.CTkButton(
+        # Botón de Backup (se coloca también en el menú lateral)
+        self.btn_backup = ctk.CTkButton(
             menu_lateral,
-            text="👥  Usuarios",
-            command=self.mostrar_gestion_usuarios,
-            height=45,
-            font=ctk.CTkFont(size=14),
+            text="🧾  Backup",
+            command=self._mostrar_dialogo_backup,
+            height=48,
+            font=ctk.CTkFont(size=16),
             fg_color="transparent",
             text_color=("gray10", "gray90"),
             hover_color=("gray70", "gray30"),
             anchor="w",
             corner_radius=8,
         )
-        # No lo empaquetamos aquí; lo hará actualizar_visibilidad_boton_usuarios()
+        self.btn_backup.pack(pady=5, padx=15, fill="x")
+        
+        # Botón de gestión de usuarios (irá DEBAJO de "Crear Documento")
+        self.btn_usuarios = ctk.CTkButton(
+            menu_lateral,
+            text="👥  Usuarios",
+            command=self.mostrar_gestion_usuarios,
+            height=48,
+            font=ctk.CTkFont(size=16),
+            fg_color="transparent",
+            text_color=("gray10", "gray90"),
+            hover_color=("gray70", "gray30"),
+            anchor="w",
+            corner_radius=8,
+        )
+        # Lo empaquetamos ya en la posición deseada
+        self.btn_usuarios.pack(pady=5, padx=15, fill="x")
 
         # Espaciador
         ctk.CTkFrame(menu_lateral, fg_color="transparent").pack(
             fill="both", expand=True
         )
 
+        # Botón Salir del sistema
+        btn_salir = ctk.CTkButton(
+            menu_lateral,
+            text="🚪  Salir del sistema",
+            command=self.on_closing,
+            height=42,
+            font=ctk.CTkFont(size=14, weight="bold"),
+            fg_color="#c0392b",
+            hover_color="#e74c3c",
+            text_color="white",
+            corner_radius=8,
+        )
+        btn_salir.pack(pady=(0, 10), padx=15, fill="x")
+
         # Footer del menú
         footer_menu = ctk.CTkFrame(menu_lateral, fg_color="transparent")
-        footer_menu.pack(fill="x", pady=15, padx=15)
+        footer_menu.pack(fill="x", pady=5, padx=15)
 
         ctk.CTkLabel(
             footer_menu,
@@ -263,7 +314,12 @@ class MainWindow(ctk.CTk):
         ).pack()
 
         # ===== PANEL DE CONTENIDO DERECHO =====
-        self.panel_contenido = ctk.CTkFrame(container, corner_radius=0)
+        self.panel_contenido = ctk.CTkFrame(
+            container,
+            corner_radius=0,
+            fg_color="gray10",
+            border_width=0,
+        )
         self.panel_contenido.grid(row=0, column=1, sticky="nsew", padx=0, pady=0)
 
     def limpiar_panel_contenido(self):
@@ -297,9 +353,11 @@ class MainWindow(ctk.CTk):
         cards_frame = ctk.CTkFrame(frame_inicio, fg_color="transparent")
         cards_frame.pack(pady=60, fill="both", expand=True)
 
+        # Ahora soportamos 4 columnas (la 3 será para Backup)
         cards_frame.grid_columnconfigure(0, weight=1)
         cards_frame.grid_columnconfigure(1, weight=1)
         cards_frame.grid_columnconfigure(2, weight=1)
+        cards_frame.grid_columnconfigure(3, weight=1)
 
         # Card 1 - Cargar documentos
         card1 = ctk.CTkFrame(cards_frame, corner_radius=15)
@@ -382,6 +440,34 @@ class MainWindow(ctk.CTk):
             hover_color="#e67e22",
         ).pack(pady=20)
 
+        # Card 4 - Backup
+        card4 = ctk.CTkFrame(cards_frame, corner_radius=15)
+        card4.grid(row=0, column=3, padx=20, pady=20, sticky="nsew")
+
+        ctk.CTkLabel(card4, text="🧾", font=ctk.CTkFont(size=50)).pack(pady=20)
+
+        ctk.CTkLabel(
+            card4,
+            text="Backup",
+            font=ctk.CTkFont(size=18, weight="bold"),
+        ).pack(pady=10)
+
+        ctk.CTkLabel(
+            card4,
+            text="Crear copia de seguridad\nde documentos y base de datos",
+            font=ctk.CTkFont(size=12),
+            text_color="gray",
+            justify="center",
+        ).pack(pady=10)
+
+        ctk.CTkButton(
+            card4,
+            text="Abrir gestor de backup",
+            command=self._mostrar_dialogo_backup,
+            fg_color=COLOR_PRIMARY,
+            hover_color="#2980b9",
+        ).pack(pady=20)
+        
     def mostrar_cargar_documentos(self):
         """Muestra el módulo de carga de documentos en el panel"""
         self.limpiar_panel_contenido()
@@ -526,11 +612,193 @@ class MainWindow(ctk.CTk):
             else:
                 print(f"Error al actualizar estadísticas: {e}")
 
+    # ================== BACKUP / RESTAURACIÓN ==================
+
+    def _mostrar_dialogo_backup(self):
+        """Muestra una ventana emergente para elegir Exportar / Importar backup."""
+        dialog = ctk.CTkToplevel(self)
+        dialog.title("Backup del sistema")
+
+        # Hacer la ventana modal: bloquear la principal
+        dialog.transient(self)      # asociar al main window
+        dialog.grab_set()           # captura de foco
+
+        dialog.resizable(False, False)
+
+        # Tamaño deseado
+        ancho, alto = 420, 260
+        # Centrar respecto a la ventana principal
+        self.update_idletasks()
+        x = self.winfo_rootx() + (self.winfo_width() // 2) - (ancho // 2)
+        y = self.winfo_rooty() + (self.winfo_height() // 2) - (alto // 2)
+        dialog.geometry(f"{ancho}x{alto}+{x}+{y}")
+
+        frame = ctk.CTkFrame(dialog)
+        frame.pack(fill="both", expand=True, padx=20, pady=20)
+
+        ctk.CTkLabel(
+            frame,
+            text="Gestión de backup",
+            font=ctk.CTkFont(size=18, weight="bold"),
+        ).pack(pady=(10, 5))
+
+        ctk.CTkLabel(
+            frame,
+            text="Seleccione si desea exportar un nuevo backup\n"
+                 "o importar/restaurar uno existente.",
+            font=ctk.CTkFont(size=13),
+            text_color="gray80",
+            justify="center",
+        ).pack(pady=(0, 20))
+
+        btn_exportar = ctk.CTkButton(
+            frame,
+            text="⬆️  Exportar backup",
+            fg_color=COLOR_PRIMARY,
+            hover_color="#2980b9",
+            command=lambda: (dialog.destroy(), self._accion_exportar_backup()),
+        )
+        btn_exportar.pack(pady=5, fill="x")
+
+        btn_importar = ctk.CTkButton(
+            frame,
+            text="⬇️  Importar backup",
+            fg_color=COLOR_SUCCESS,
+            hover_color="#27ae60",
+            command=lambda: (dialog.destroy(), self._accion_importar_backup()),
+        )
+        btn_importar.pack(pady=5, fill="x")
+
+        ctk.CTkButton(
+            frame,
+            text="Cancelar",
+            fg_color="#555555",
+            hover_color="#666666",
+            command=dialog.destroy,
+        ).pack(pady=(20, 5), fill="x")
+
+        # Esperar hasta que se cierre el diálogo (mantiene el bloqueo modal)
+        dialog.wait_window()
+
+    def _accion_exportar_backup(self):
+        """Exporta documentos + base de datos a la carpeta elegida."""
+        carpeta = filedialog.askdirectory(
+            title="Seleccionar carpeta para guardar el backup"
+        )
+
+        if not carpeta:
+            # Usuario canceló
+            return
+
+        try:
+            zip_docs, backup_db = hacer_backup_completo(carpeta)
+            messagebox.showinfo(
+                "Backup",
+                "Backup generado correctamente en:\n\n"
+                f"{carpeta}\n\n"
+                f"- Documentos: {os.path.basename(zip_docs)}\n"
+                f"- Base de datos: {os.path.basename(backup_db)}"
+            )
+        except Exception as e:
+            messagebox.showerror(
+                "Error de backup",
+                f"Ocurrió un error al realizar el backup:\n{e}"
+            )
+
+    def _accion_importar_backup(self):
+        """Importa/restaura documentos + base de datos desde archivos de backup."""
+        # Seleccionar archivo ZIP de documentos
+        zip_docs = filedialog.askopenfilename(
+            title="Seleccionar ZIP de documentos",
+            filetypes=[("Archivos ZIP", "*.zip"), ("Todos los archivos", "*.*")]
+        )
+
+        if not zip_docs:
+            # Usuario canceló
+            return
+
+        # Seleccionar archivo .db de backup
+        backup_db = filedialog.askopenfilename(
+            title="Seleccionar archivo de backup de base de datos",
+            filetypes=[("SQLite DB", "*.db"), ("Todos los archivos", "*.*")]
+        )
+
+        if not backup_db:
+            # Usuario canceló
+            return
+
+        # Confirmación fuerte (puede sobrescribir datos)
+        if not messagebox.askyesno(
+            "Confirmar restauración",
+            "Esta acción sobrescribirá la base de datos actual y puede\n"
+            "reemplazar documentos existentes.\n\n"
+            "¿Desea continuar?"
+        ):
+            return
+
+        try:
+            restaurar_backup_completo(
+                zip_docs=zip_docs,
+                backup_db=backup_db,
+                limpiar_docs=True
+            )
+            messagebox.showinfo(
+                "Restauración completa",
+                "Backup restaurado correctamente.\n"
+                "Se han restaurado documentos y base de datos."
+            )
+            # Actualizar estadísticas tras restaurar
+            self.actualizar_estadisticas_menu()
+        except Exception as e:
+            messagebox.showerror(
+                "Error de restauración",
+                f"Ocurrió un error al restaurar el backup:\n{e}"
+            )
+    
+    def _accion_backup(self):
+        # Seleccionar carpeta destino para el backup
+        carpeta = filedialog.askdirectory(
+            title="Seleccionar carpeta para guardar el backup"
+        )
+
+        if not carpeta:
+            # Usuario canceló
+            return
+
+        try:
+            zip_docs, backup_db = hacer_backup_completo(carpeta)
+            messagebox.showinfo(
+                "Backup",
+                "Backup generado correctamente en:\n\n"
+                f"{carpeta}\n\n"
+                f"- Documentos: {os.path.basename(zip_docs)}\n"
+                f"- Base de datos: {os.path.basename(backup_db)}"
+            )
+        except Exception as e:
+            messagebox.showerror(
+                "Error de backup",
+                f"Ocurrió un error al realizar el backup:\n{e}"
+            )
+    
     def on_closing(self):
-        """Maneja el cierre de la aplicación"""
+        """Maneja el cierre de la aplicación y limpia callbacks pendientes."""
+        # Cerrar DB
         try:
             self.db.cerrar()
         except Exception:
             pass
-        finally:
-            self.destroy()
+
+        # Cancelar afters pendientes asociados a esta ventana
+        try:
+            afters = self.tk.call("after", "info")
+            if afters:
+                for aid in str(afters).split():
+                    try:
+                        self.after_cancel(aid)
+                    except Exception:
+                        pass
+        except Exception:
+            pass
+
+        # Destruir ventana principal
+        self.destroy()
