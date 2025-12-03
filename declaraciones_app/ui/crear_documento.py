@@ -67,7 +67,7 @@ class VentanaCrearDocumento:
                 # Modo NORMAL: con visor
                 self.center_window_tamano(1400, 900)
                 self.ventana.after(100, self.maximizar_ventana)
-
+    
     # =================== VALIDADORES ===================
 
     def _validar_entero(self, nuevo_valor):
@@ -90,19 +90,118 @@ class VentanaCrearDocumento:
 
     def _validar_fecha_ddmmaaaa(self, nuevo_valor):
         """
-        Permite solo dígitos y '/' y longitud máxima 10.
-        Luego se valida formato real en calcular_edad / guardar.
+        Validar SOLO al perder foco: permite vacío o una fecha DD/MM/AAAA correcta.
         """
-        if nuevo_valor == "":
-            return True
-        if len(nuevo_valor) > 10:
-            return False
-        for ch in nuevo_valor:
-            if not (ch.isdigit() or ch == "/"):
-                return False
-        return True
+        nuevo_valor = nuevo_valor.strip()
+        if not nuevo_valor:
+            return True  # permitir vacío
 
-    # ===================================================
+        if len(nuevo_valor) != 10:
+            return False
+
+        try:
+            dia, mes, anio = nuevo_valor.split("/")
+            if len(dia) != 2 or len(mes) != 2 or len(anio) != 4:
+                return False
+            dia, mes, anio = int(dia), int(mes), int(anio)
+            datetime(anio, mes, dia)  # levanta error si es inválida
+            return True
+        except Exception:
+            return False
+    
+    # =================== AUTOCOMPLETADO DESDE BD ===================
+
+    class AutoCompleter:
+        def __init__(self, parent_ventana, entry: ctk.CTkEntry, tipo_palabra: str):
+            """
+            parent_ventana: instancia de VentanaCrearDocumento (para acceder a db y ventana principal)
+            entry: CTkEntry donde se escribe
+            tipo_palabra: 'nombre', 'apellido', 'nacionalidad', 'domicilio', etc.
+            """
+            self.parent = parent_ventana
+            self.entry = entry
+            self.tipo_palabra = tipo_palabra
+
+            self.popup = None  # CTkToplevel con las sugerencias
+            self.sugerencias = []
+
+            # Enlazar eventos
+            self.entry.bind("<KeyRelease>", self._on_key_release)
+            self.entry.bind("<FocusOut>", self._on_focus_out)
+            self.entry.bind("<Down>", self._on_down_key)
+
+        def _on_key_release(self, event):
+            # Ignorar algunas teclas de navegación
+            if event.keysym in ("Up", "Down", "Left", "Right", "Return", "Escape", "Tab"):
+                return
+
+            texto = self.entry.get().strip()
+            if len(texto) < 2:
+                self._cerrar_popup()
+                return
+
+            # Obtener sugerencias desde la BD
+            self.sugerencias = self.parent.db.obtener_sugerencias_palabra(self.tipo_palabra, texto)
+
+            if not self.sugerencias:
+                self._cerrar_popup()
+                return
+
+            self._mostrar_popup()
+
+        def _mostrar_popup(self):
+            # Cerrar popup anterior si existe
+            self._cerrar_popup()
+
+            # Crear nueva ventana flotante
+            self.popup = ctk.CTkToplevel(self.parent.ventana)
+            self.popup.overrideredirect(True)  # sin bordes
+            self.popup.attributes("-topmost", True)
+
+            # Posicionar debajo del Entry
+            self.popup.update_idletasks()
+            x = self.entry.winfo_rootx()
+            y = self.entry.winfo_rooty() + self.entry.winfo_height()
+            self.popup.geometry(f"+{x}+{y}")
+
+            frame = ctk.CTkFrame(self.popup)
+            frame.pack(fill="both", expand=True)
+
+            for sugerencia in self.sugerencias:
+                btn = ctk.CTkButton(
+                    frame,
+                    text=sugerencia,
+                    anchor="w",
+                    command=lambda s=sugerencia: self._usar_sugerencia(s),
+                    height=24
+                )
+                btn.pack(fill="x", padx=2, pady=1)
+
+        def _usar_sugerencia(self, texto):
+            # Reemplazar contenido del entry
+            self.entry.delete(0, "end")
+            self.entry.insert(0, texto)
+            self._cerrar_popup()
+            self.entry.focus_set()
+
+        def _on_focus_out(self, event):
+            # Cerrar popup cuando el entry pierde foco (ligero retraso para permitir clic)
+            self.entry.after(150, self._cerrar_popup)
+
+        def _on_down_key(self, event):
+            # Si hay popup, enfocar el primer botón
+            if self.popup and self.popup.winfo_children():
+                frame = self.popup.winfo_children()[0]
+                if frame.winfo_children():
+                    frame.winfo_children()[0].focus_set()
+            return "break"
+
+        def _cerrar_popup(self):
+            if self.popup and self.popup.winfo_exists():
+                self.popup.destroy()
+            self.popup = None
+    
+    # ==================== CONFIGURACIONES ====================
 
     def set_callback_actualizar(self, callback):
         """Permite establecer un callback para actualizar estadísticas"""
@@ -434,7 +533,7 @@ class VentanaCrearDocumento:
 
             kwargs = {"height": 26}
             if validar is not None:
-                kwargs.update({"validate": "key", "validatecommand": validar})
+                kwargs.update({"validate": "focusout", "validatecommand": validar})
 
             if es_combo:
                 widget = ctk.CTkComboBox(frame, values=valores_combo or [], height=26)
@@ -488,6 +587,13 @@ class VentanaCrearDocumento:
             validar=vcmd_dpi
         )
 
+        # === AUTOCOMPLETADO desde BD de sugerencias ===
+        # Usamos la clase interna AutoCompleter
+        self.autocomplete_nombre = self.AutoCompleter(self, self.entry_nombre, "nombre")
+        self.autocomplete_casada = self.AutoCompleter(self, self.entry_casada, "apellido")
+        self.autocomplete_nacionalidad = self.AutoCompleter(self, self.entry_nacionalidad, "nacionalidad")
+        self.autocomplete_domicilio = self.AutoCompleter(self, self.entry_domicilio, "domicilio")
+        
         # ----- Botones -----
         frame_botones = ctk.CTkFrame(panel_izquierdo)
         frame_botones.pack(pady=5, padx=8)
@@ -998,6 +1104,9 @@ class VentanaCrearDocumento:
             persona_id, resultado = self.db.guardar_persona(datos)
             self.persona_actual_id = persona_id
 
+            # 1.b) Aprender sugerencias para autocompletado a partir de estos datos
+            self.db.aprender_sugerencias_desde_persona(datos)
+
             # 2) Asegurarnos de tener un documento generado con los datos actuales
             if not self.documento_preview or not os.path.exists(self.documento_preview):
                 try:
@@ -1402,20 +1511,15 @@ class VentanaCrearDocumento:
         # Aplicar otros reemplazos
         for paragraph in doc.paragraphs:
             for buscar, reemplazar in reemplazos:
-                if buscar == "Abner Aníbal Ajpop González":
-                    self.reemplazar_en_parrafo(paragraph, buscar, reemplazar, reemplazar_todas=True)
-                else:
-                    self.reemplazar_en_parrafo(paragraph, buscar, reemplazar, reemplazar_todas=False)
+                # Usamos reemplazar_texto_completo que ya preserva formato
+                self.reemplazar_texto_completo(paragraph, buscar, reemplazar)
         
         for table in doc.tables:
             for row in table.rows:
                 for cell in row.cells:
                     for paragraph in cell.paragraphs:
                         for buscar, reemplazar in reemplazos:
-                            if buscar == "Abner Aníbal Ajpop González":
-                                self.reemplazar_en_parrafo(paragraph, buscar, reemplazar, reemplazar_todas=True)
-                            else:
-                                self.reemplazar_en_parrafo(paragraph, buscar, reemplazar, reemplazar_todas=False)
+                            self.reemplazar_texto_completo(paragraph, buscar, reemplazar)
         
         return doc
 

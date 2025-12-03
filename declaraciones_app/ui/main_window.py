@@ -37,6 +37,21 @@ class MainWindow(ctk.CTk):
         """
         super().__init__()
 
+        # ===== ICONO DE LA VENTANA PRINCIPAL =====
+        try:
+            # Ruta base del proyecto (carpeta donde está este archivo)
+            base_dir = os.path.dirname(os.path.abspath(__file__))
+            # Ir un nivel arriba (porque este archivo está en ui/) y entrar a utils/
+            project_root = os.path.dirname(base_dir)
+            icon_path = os.path.join(project_root, "utils", "app_icono.ico")
+
+            if os.path.exists(icon_path):
+                self.iconbitmap(icon_path)
+            else:
+                print(f"[MainWindow] Icono no encontrado: {icon_path}")
+        except Exception as e:
+            print(f"[MainWindow] No se pudo establecer icono: {e}")
+
         self.title(f"{APP_NAME} - v{APP_VERSION}")
 
         ctk.set_appearance_mode("dark")

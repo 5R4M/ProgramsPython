@@ -3,13 +3,12 @@ import customtkinter as ctk
 from tkinter import messagebox
 from database import DatabaseManager
 
-
 class VentanaLogin:
     def __init__(self, root, callback_login_exitoso):
         self.root = root
         self.db = DatabaseManager()
         self.callback_login_exitoso = callback_login_exitoso
-
+        
         self.root.title("Inicio de sesión")
         self.root.resizable(False, False)
 
@@ -101,8 +100,7 @@ class VentanaLogin:
         # Nota
         nota = ctk.CTkLabel(
             form,
-            text="Use el usuario asignado por el administrador.\n"
-                 "Por defecto puede existir 'admin' / 'admin'.",
+            text="Use el usuario asignado por el administrador.",
             font=ctk.CTkFont(size=10),
             text_color="gray70",
             justify="left",

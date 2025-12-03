@@ -15,7 +15,7 @@ def main():
     # Root para LOGIN
     root_login = ctk.CTk()
     root_login.title("Sistema de Declaraciones - Inicio de sesión")
-
+    
     # Variable para guardar el usuario autenticado
     usuario_autenticado = {"data": None}
 
