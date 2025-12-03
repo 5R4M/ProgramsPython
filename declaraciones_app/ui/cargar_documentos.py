@@ -5,12 +5,49 @@ import shutil
 import tempfile
 from PIL import Image, ImageTk
 import fitz  # PyMuPDF
-from docx2pdf import convert
 from config import DOCUMENTOS_DIR, COLOR_SUCCESS, COLOR_PRIMARY
 from utils import convertir_doc_a_docx, DocumentExtractor
 import time
 from .crear_documento import VentanaCrearDocumento
 import datetime
+
+def cancelar_callbacks_widget(widget):
+    """Cancela todos los callbacks after de un widget y sus hijos recursivamente"""
+    try:
+        # Intentar cancelar callbacks del widget actual
+        try:
+            afters = widget.tk.call("after", "info")
+            if afters:
+                for aid in str(afters).split():
+                    try:
+                        widget.after_cancel(aid)
+                    except:  # noqa: E722
+                        pass
+        except:  # noqa: E722
+            pass
+        
+        # Recursivamente para todos los hijos
+        try:
+            for child in widget.winfo_children():
+                cancelar_callbacks_widget(child)
+        except:  # noqa: E722
+            pass
+    except:  # noqa: E722
+        pass
+
+
+def update_seguro(ventana):
+    """Actualiza la ventana de forma segura, capturando errores"""
+    try:
+        ventana.update_idletasks()
+        ventana.update()
+        return True
+    except Exception as e:
+        # Si falla el update, probablemente la ventana fue cerrada
+        error_msg = str(e).lower()
+        if 'invalid command' in error_msg or 'application has been destroyed' in error_msg:
+            return False
+        return True
 
 class VentanaCargarDocumentos:
     def __init__(self, parent, db, es_integrado=False):
@@ -471,14 +508,23 @@ class VentanaCargarDocumentos:
             # Convertir a PDF temporal para visualización
             temp_pdf = tempfile.NamedTemporaryFile(delete=False, suffix=".pdf")
             temp_pdf.close()
-            
-            convert(ruta_archivo, temp_pdf.name)
-            
+
+            # Intentar convertir; si falla, no seguimos
+            if not self._convertir_docx_a_pdf_seguro(ruta_archivo, temp_pdf.name):
+                try:
+                    os.unlink(temp_pdf.name)
+                except Exception:
+                    pass
+                return
+
             # Mostrar PDF
             self.mostrar_pdf_en_visor(temp_pdf.name)
-            
+
             # Limpiar archivo temporal
-            os.unlink(temp_pdf.name)
+            try:
+                os.unlink(temp_pdf.name)
+            except Exception:
+                pass
         
         except Exception as e:
             self.lbl_visor_estado.configure(
@@ -527,21 +573,22 @@ class VentanaCargarDocumentos:
         # Mostrar documentos
         for i, archivo in enumerate(self.documentos_seleccionados):
             nombre_archivo = os.path.basename(archivo)
-            
+            nombre_corto = self._acortar_nombre(nombre_archivo, max_len=50)
+
             frame_item = ctk.CTkFrame(self.lista_frame)
             frame_item.pack(pady=5, padx=10, fill="x")
-            
+
             # Resaltar documento actual
             if i == self.documento_actual_index:
                 frame_item.configure(fg_color=COLOR_SUCCESS)
-            
+
             ctk.CTkLabel(
                 frame_item,
-                text=f"{i + 1}. {nombre_archivo}",
+                text=f"{i + 1}. {nombre_corto}",
                 anchor="w",
                 font=ctk.CTkFont(size=12)
-            ).pack(side="left", padx=10, pady=5, expand=True, fill="x")
-            
+            ).pack(side="left", padx=10, pady=5, fill="x")  # sin expand=True
+
             btn_ver = ctk.CTkButton(
                 frame_item,
                 text="👁️",
@@ -628,16 +675,33 @@ class VentanaCargarDocumentos:
             # Convertir a PDF temporal para visualización
             temp_pdf = tempfile.NamedTemporaryFile(delete=False, suffix=".pdf")
             temp_pdf.close()
-            
-            convert(archivo_docx, temp_pdf.name)
-            
+
+            if not self._convertir_docx_a_pdf_seguro(archivo_docx, temp_pdf.name):
+                try:
+                    os.unlink(temp_pdf.name)
+                except Exception:
+                    pass
+                # Si era un .doc convertido temporalmente, intenta borrarlo
+                if archivo.lower().endswith('.doc') and archivo_docx != archivo:
+                    try:
+                        os.unlink(archivo_docx)
+                    except Exception:
+                        pass
+                return
+
             # Mostrar PDF
             self.mostrar_pdf_en_visor(temp_pdf.name)
-            
+
             # Limpiar archivos temporales
-            os.unlink(temp_pdf.name)
+            try:
+                os.unlink(temp_pdf.name)
+            except Exception:
+                pass
             if archivo.lower().endswith('.doc') and archivo_docx != archivo:
-                os.unlink(archivo_docx)
+                try:
+                    os.unlink(archivo_docx)
+                except Exception:
+                    pass
         
         except Exception as e:
             self.lbl_visor_estado.configure(
@@ -653,9 +717,17 @@ class VentanaCargarDocumentos:
         
         pdf_document = None
         try:
-            pdf_document = fitz.open(pdf_path)
+            # Verificación extra: el archivo existe y tiene tamaño razonable
+            if (not os.path.exists(pdf_path)) or (os.path.getsize(pdf_path) < 100):
+                raise Exception("El PDF generado está vacío o es inválido.")
             
-            for page_num in range(len(pdf_document)):
+            pdf_document = fitz.open(pdf_path)
+            num_pages = len(pdf_document)
+
+            if num_pages == 0:
+                raise Exception("El PDF no contiene páginas.")
+
+            for page_num in range(num_pages):
                 page = pdf_document[page_num]
                 
                 # Renderizar página a imagen
@@ -681,7 +753,7 @@ class VentanaCargarDocumentos:
                 label.pack(pady=10)
                 
                 # Agregar separador entre páginas
-                if page_num < len(pdf_document) - 1:
+                if page_num < num_pages - 1:
                     separador = ctk.CTkLabel(
                         self.visor_scroll,
                         text=f"--- Página {page_num + 1} ---",
@@ -691,6 +763,9 @@ class VentanaCargarDocumentos:
                     separador.pack(pady=5)
             
         except Exception as e:
+            # Mostrar mensaje claro en el visor
+            for widget in self.visor_scroll.winfo_children():
+                widget.destroy()
             self.lbl_visor_estado = ctk.CTkLabel(
                 self.visor_scroll,
                 text=f"Error al mostrar PDF:\n{str(e)}",
@@ -704,7 +779,402 @@ class VentanaCargarDocumentos:
                 pdf_document.close()
     
     def procesar_todos_documentos(self):
-        """Procesa y carga todos los documentos a la base de datos (versión simple, sin log detallado)."""
+        """Procesa y carga todos los documentos a la base de datos con ventana de progreso detallada."""
+        if not self.documentos_seleccionados:
+            messagebox.showwarning("Advertencia", "No hay documentos seleccionados")
+            return
+        
+        respuesta = messagebox.askyesno(
+            "Confirmar",
+            f"¿Desea procesar y cargar {len(self.documentos_seleccionados)} documento(s) a la base de datos?"
+        )
+        
+        if not respuesta:
+            return
+        
+        # Crear ventana de progreso MEJORADA
+        ventana_progreso = ctk.CTkToplevel(self.ventana)
+        ventana_progreso.title("⚙️ Procesando documentos...")
+        ventana_progreso.geometry("700x600")
+        ventana_progreso.grab_set()
+        ventana_progreso.resizable(False, False)
+        self.center_toplevel(ventana_progreso, 700, 600)
+
+        # Frame principal
+        main_frame = ctk.CTkFrame(ventana_progreso)
+        main_frame.pack(fill="both", expand=True, padx=20, pady=20)
+
+        # Título
+        ctk.CTkLabel(
+            main_frame,
+            text="⚙️ Procesando documentos...",
+            font=ctk.CTkFont(size=20, weight="bold")
+        ).pack(pady=(0, 10))
+
+        # Frame de estadísticas
+        stats_frame = ctk.CTkFrame(main_frame)
+        stats_frame.pack(pady=10, fill="x")
+        
+        stats_frame.grid_columnconfigure((0, 1, 2, 3), weight=1)
+        
+        total_label = ctk.CTkLabel(
+            stats_frame,
+            text="📊 Total\n0",
+            font=ctk.CTkFont(size=12, weight="bold"),
+            text_color="#3498db"
+        )
+        total_label.grid(row=0, column=0, padx=5, pady=10)
+        
+        success_label = ctk.CTkLabel(
+            stats_frame,
+            text="✅ Nuevos\n0",
+            font=ctk.CTkFont(size=12, weight="bold"),
+            text_color="#2ecc71"
+        )
+        success_label.grid(row=0, column=1, padx=5, pady=10)
+        
+        updated_label = ctk.CTkLabel(
+            stats_frame,
+            text="🔄 Actualizados\n0",
+            font=ctk.CTkFont(size=12, weight="bold"),
+            text_color="#f39c12"
+        )
+        updated_label.grid(row=0, column=2, padx=5, pady=10)
+        
+        error_label = ctk.CTkLabel(
+            stats_frame,
+            text="❌ Errores\n0",
+            font=ctk.CTkFont(size=12, weight="bold"),
+            text_color="#e74c3c"
+        )
+        error_label.grid(row=0, column=3, padx=5, pady=10)
+
+        # Documento actual
+        current_doc_label = ctk.CTkLabel(
+            main_frame,
+            text="Preparando...",
+            font=ctk.CTkFont(size=13),
+            wraplength=650
+        )
+        current_doc_label.pack(pady=10)
+
+        # Barra de progreso
+        progress_bar = ctk.CTkProgressBar(main_frame, width=650, height=20)
+        progress_bar.pack(pady=10)
+        progress_bar.set(0)
+
+        # Porcentaje
+        percent_label = ctk.CTkLabel(
+            main_frame,
+            text="0%",
+            font=ctk.CTkFont(size=14, weight="bold")
+        )
+        percent_label.pack(pady=5)
+
+        # Separador
+        separator = ctk.CTkFrame(main_frame, height=2, fg_color="gray")
+        separator.pack(fill="x", pady=10)
+
+        # Log de actividad
+        ctk.CTkLabel(
+            main_frame,
+            text="📋 Registro de actividad:",
+            font=ctk.CTkFont(size=12, weight="bold"),
+            anchor="w"
+        ).pack(pady=(5, 5), fill="x")
+
+        log_text = ctk.CTkTextbox(main_frame, width=650, height=220)
+        log_text.pack(pady=5)
+
+        # Configurar tags para colores
+        log_text.tag_config("success", foreground="#2ecc71")
+        log_text.tag_config("error", foreground="#e74c3c")
+        log_text.tag_config("update", foreground="#f39c12")
+        log_text.tag_config("info", foreground="#3498db")
+
+        # Botón cerrar (deshabilitado al inicio)
+        def cerrar_ventana_progreso():
+            """Cierra la ventana de progreso de forma segura"""
+            try:
+                # Cancelar todos los callbacks after pendientes
+                for widget in ventana_progreso.winfo_children():
+                    try:
+                        widget.after_cancel('all')
+                    except:  # noqa: E722
+                        pass
+                
+                # Intentar cancelar afters del root
+                try:
+                    afters = ventana_progreso.tk.call("after", "info")
+                    if afters:
+                        for aid in str(afters).split():
+                            try:
+                                ventana_progreso.after_cancel(aid)
+                            except:  # noqa: E722
+                                pass
+                except:  # noqa: E722
+                    pass
+                
+                # Destruir ventana
+                ventana_progreso.destroy()
+            except:  # noqa: E722
+                pass
+        
+        btn_cerrar = ctk.CTkButton(
+            main_frame,
+            text="Cerrar",
+            command=cerrar_ventana_progreso,
+            state="disabled",
+            height=35,
+            font=ctk.CTkFont(size=13, weight="bold")
+        )
+        btn_cerrar.pack(pady=10)
+
+        # CRÍTICO: Forzar actualización de la ventana
+        ventana_progreso.update_idletasks()
+        ventana_progreso.update()
+        
+        # Variable para controlar si se canceló
+        procesamiento_cancelado = {"value": False}
+        
+        # Contadores
+        importados = 0
+        errores = 0
+        actualizados = 0
+        total_docs = len(self.documentos_seleccionados)
+        
+        # Actualizar total
+        total_label.configure(text=f"📊 Total\n{total_docs}")
+        
+        # Log inicial
+        log_text.insert("end", f"{'='*70}\n", "info")
+        log_text.insert("end", f"Iniciando procesamiento de {total_docs} documento(s)\n", "info")
+        log_text.insert("end", f"{'='*70}\n\n", "info")
+        
+        # CRÍTICO: Actualizar ventana después del log inicial
+        ventana_progreso.update_idletasks()
+        ventana_progreso.update()
+        
+        # Procesar documentos con actualizaciones periódicas de la UI
+        for i, archivo in enumerate(self.documentos_seleccionados):
+            # Verificar si se canceló
+            if procesamiento_cancelado["value"]:
+                break
+                
+            archivo_docx = None
+            nombre_archivo = os.path.basename(archivo)
+            
+            try:
+                # Actualizar progreso visual
+                progreso_actual = (i + 1) / total_docs
+                progress_bar.set(progreso_actual)
+                percent_label.configure(text=f"{int(progreso_actual * 100)}%")
+                
+                current_doc_label.configure(
+                    text=f"📄 Procesando ({i + 1}/{total_docs}): {nombre_archivo}"
+                )
+                
+                log_text.insert("end", f"[{i + 1}/{total_docs}] ", "info")
+                log_text.insert("end", f"📄 {nombre_archivo}\n")
+                log_text.see("end")
+                
+                # CRÍTICO: Actualizar ventana en cada iteración ANTES de operaciones pesadas
+                try:
+                    ventana_progreso.update_idletasks()
+                    ventana_progreso.update()
+                except Exception as update_err:
+                    # Si falla el update, la ventana puede haber sido cerrada
+                    print(f"Error al actualizar ventana: {update_err}")
+                    procesamiento_cancelado["value"] = True
+                    break
+
+                # Convertir .doc a .docx si es necesario
+                if archivo.lower().endswith('.doc'):
+                    log_text.insert("end", "   🔄 Convirtiendo .doc a .docx...\n")
+                    log_text.see("end")
+                    try:
+                        ventana_progreso.update_idletasks()
+                        ventana_progreso.update()
+                    except:  # noqa: E722
+                        pass
+                    
+                    archivo_docx = convertir_doc_a_docx(archivo)
+                    if not archivo_docx:
+                        raise Exception("No se pudo convertir el archivo .doc")
+                else:
+                    archivo_docx = archivo
+                
+                # Extraer datos del documento
+                log_text.insert("end", "   🔍 Extrayendo datos...\n")
+                log_text.see("end")
+                try:
+                    ventana_progreso.update_idletasks()
+                    ventana_progreso.update()
+                except:  # noqa: E722
+                    pass
+                
+                datos = DocumentExtractor.extraer_datos(archivo_docx)
+                
+                if not datos or not datos.get('dpi'):
+                    raise Exception("No se pudo extraer el DPI del documento")
+                
+                dpi_extraido = datos.get('dpi', 'sin_dpi')
+                nombre_extraido = datos.get('nombre', 'sin_nombre')
+                
+                # Asegurar que existe la carpeta de documentos
+                if not os.path.exists(DOCUMENTOS_DIR):
+                    os.makedirs(DOCUMENTOS_DIR, exist_ok=True)
+                
+                # Verificar que el archivo fuente existe
+                archivo_fuente = archivo_docx if archivo.lower().endswith('.doc') else archivo
+                if not os.path.exists(archivo_fuente):
+                    raise Exception(f"Archivo fuente no encontrado: {archivo_fuente}")
+                
+                # Copiar documento a carpeta de documentos
+                log_text.insert("end", "   💾 Copiando documento...\n")
+                log_text.see("end")
+                try:
+                    ventana_progreso.update_idletasks()
+                    ventana_progreso.update()
+                except:  # noqa: E722
+                    pass
+                
+                dpi_limpio = dpi_extraido.replace(' ', '').replace('_', '')
+                nombre_limpio = nombre_extraido.replace(' ', '_')
+                
+                nombre_destino = f"{dpi_limpio}_acta_{nombre_limpio}.docx"
+                ruta_destino = os.path.join(DOCUMENTOS_DIR, nombre_destino)
+                
+                # Cerrar cualquier archivo abierto y esperar
+                time.sleep(0.05)
+                
+                # Si existe el archivo destino, eliminarlo primero
+                if os.path.exists(ruta_destino):
+                    try:
+                        os.remove(ruta_destino)
+                        time.sleep(0.05)
+                    except PermissionError:
+                        time.sleep(0.2)
+                        try:
+                            os.remove(ruta_destino)
+                        except:  # noqa: E722
+                            pass
+                
+                # Copiar el archivo
+                try:
+                    shutil.copy2(archivo_fuente, ruta_destino)
+                except Exception as copy_error:
+                    raise Exception(f"Error al copiar archivo: {copy_error}")
+                
+                # Guardar persona en la base de datos
+                log_text.insert("end", "   💾 Guardando en base de datos...\n")
+                log_text.see("end")
+                try:
+                    ventana_progreso.update_idletasks()
+                    ventana_progreso.update()
+                except:  # noqa: E722
+                    pass
+                
+                datos_persona = {
+                    'nombre': datos.get('nombre', ''),
+                    'dpi': datos.get('dpi', ''),
+                    'edad': datos.get('edad'),
+                    'estado_civil': datos.get('estado_civil', ''),
+                    'nacionalidad': datos.get('nacionalidad', ''),
+                    'domicilio': datos.get('domicilio', ''),
+                    'nivel_academico': datos.get('nivel_academico', ''),
+                    'apellido_casada': datos.get('apellido_casada', '')
+                }
+                
+                persona_id, resultado = self.db.guardar_persona(datos_persona)
+                
+                # Guardar documento en la base de datos
+                self.db.guardar_documento(persona_id, nombre_destino, ruta_destino, "acta")
+                
+                if resultado == "guardado":
+                    importados += 1
+                    log_text.insert("end", f"   ✅ Nuevo registro guardado | DPI: {dpi_extraido}\n\n", "success")
+                    success_label.configure(text=f"✅ Nuevos\n{importados}")
+                elif resultado == "actualizado":
+                    actualizados += 1
+                    log_text.insert("end", f"   🔄 Registro actualizado | DPI: {dpi_extraido}\n\n", "update")
+                    updated_label.configure(text=f"🔄 Actualizados\n{actualizados}")
+                
+                log_text.see("end")
+                
+                # CRÍTICO: Actualizar ventana después de cada documento procesado
+                try:
+                    ventana_progreso.update_idletasks()
+                    ventana_progreso.update()
+                except Exception as update_err:
+                    print(f"Error al actualizar ventana: {update_err}")
+                
+            except Exception as e:
+                errores += 1
+                error_label.configure(text=f"❌ Errores\n{errores}")
+                log_text.insert("end", f"   ❌ ERROR: {str(e)}\n\n", "error")
+                log_text.see("end")
+                try:
+                    ventana_progreso.update_idletasks()
+                    ventana_progreso.update()
+                except:  # noqa: E722
+                    pass
+            
+            finally:
+                # Limpiar archivos temporales
+                if archivo.lower().endswith('.doc') and archivo_docx and archivo_docx != archivo:
+                    try:
+                        time.sleep(0.05)
+                        if os.path.exists(archivo_docx):
+                            os.unlink(archivo_docx)
+                    except:  # noqa: E722
+                        pass
+        
+        # Finalización
+        progress_bar.set(1.0)
+        percent_label.configure(text="100%")
+        current_doc_label.configure(text="✅ Procesamiento completado")
+        
+        # Log final
+        log_text.insert("end", f"\n{'='*70}\n", "info")
+        log_text.insert("end", "📊 RESUMEN DEL PROCESAMIENTO\n", "info")
+        log_text.insert("end", f"{'='*70}\n", "info")
+        log_text.insert("end", f"✅ Nuevos registros: {importados}\n", "success")
+        log_text.insert("end", f"🔄 Registros actualizados: {actualizados}\n", "update")
+        log_text.insert("end", f"❌ Errores: {errores}\n", "error")
+        log_text.insert("end", f"📊 Total procesados: {len(self.documentos_seleccionados)}\n", "info")
+        log_text.insert("end", f"{'='*70}\n", "info")
+        log_text.see("end")
+        
+        # Actualizar ventana final
+        ventana_progreso.update_idletasks()
+        ventana_progreso.update()
+        
+        # Habilitar botón cerrar
+        btn_cerrar.configure(state="normal")
+        
+        messagebox.showinfo(
+            "Importación completada",
+            f"✅ Nuevos: {importados}\n"
+            f"🔄 Actualizados: {actualizados}\n"
+            f"❌ Errores: {errores}\n\n"
+            f"Total procesados: {len(self.documentos_seleccionados)}"
+        )
+        
+        # Recargar documentos existentes
+        self.cargar_documentos_existentes()
+        if self.callback_actualizar:
+            self.callback_actualizar()
+        
+        # Cambiar a la pestaña de documentos cargados
+        self.tabview.set("📚 Cargados")
+        
+        # Limpiar lista de nuevos documentos
+        self.documentos_seleccionados = []
+        self.actualizar_lista_documentos()
+        self.actualizar_navegacion()
+
+        """Procesa y carga todos los documentos a la base de datos con ventana de progreso detallada."""
         if not self.documentos_seleccionados:
             messagebox.showwarning("Advertencia", "No hay documentos seleccionados")
             return
@@ -763,60 +1233,159 @@ class VentanaCargarDocumentos:
         if not respuesta:
             return
         
-        # Crear ventana de progreso SIMPLE
+        # Crear ventana de progreso MEJORADA
         ventana_progreso = ctk.CTkToplevel(self.ventana)
-        ventana_progreso.title("Procesando documentos...")
+        ventana_progreso.title("⚙️ Procesando documentos...")
+        ventana_progreso.geometry("700x600")
         ventana_progreso.grab_set()
-        self.center_toplevel(ventana_progreso, 400, 200)
+        ventana_progreso.resizable(False, False)
+        self.center_toplevel(ventana_progreso, 700, 600)
 
+        # Frame principal
+        main_frame = ctk.CTkFrame(ventana_progreso)
+        main_frame.pack(fill="both", expand=True, padx=20, pady=20)
+
+        # Título
         ctk.CTkLabel(
-            ventana_progreso,
+            main_frame,
             text="⚙️ Procesando documentos...",
-            font=ctk.CTkFont(size=16, weight="bold")
-        ).pack(pady=10)
+            font=ctk.CTkFont(size=20, weight="bold")
+        ).pack(pady=(0, 10))
 
-        progreso_label = ctk.CTkLabel(
-            ventana_progreso,
-            text="0 / 0 | Éxito: 0",
-            font=ctk.CTkFont(size=13)
+        # Frame de estadísticas
+        stats_frame = ctk.CTkFrame(main_frame)
+        stats_frame.pack(pady=10, fill="x")
+        
+        stats_frame.grid_columnconfigure((0, 1, 2, 3), weight=1)
+        
+        total_label = ctk.CTkLabel(
+            stats_frame,
+            text="📊 Total\n0",
+            font=ctk.CTkFont(size=12, weight="bold"),
+            text_color="#3498db"
         )
-        progreso_label.pack(pady=5)
+        total_label.grid(row=0, column=0, padx=5, pady=10)
+        
+        success_label = ctk.CTkLabel(
+            stats_frame,
+            text="✅ Nuevos\n0",
+            font=ctk.CTkFont(size=12, weight="bold"),
+            text_color="#2ecc71"
+        )
+        success_label.grid(row=0, column=1, padx=5, pady=10)
+        
+        updated_label = ctk.CTkLabel(
+            stats_frame,
+            text="🔄 Actualizados\n0",
+            font=ctk.CTkFont(size=12, weight="bold"),
+            text_color="#f39c12"
+        )
+        updated_label.grid(row=0, column=2, padx=5, pady=10)
+        
+        error_label = ctk.CTkLabel(
+            stats_frame,
+            text="❌ Errores\n0",
+            font=ctk.CTkFont(size=12, weight="bold"),
+            text_color="#e74c3c"
+        )
+        error_label.grid(row=0, column=3, padx=5, pady=10)
 
-        barra = ctk.CTkProgressBar(ventana_progreso)
-        barra.pack(pady=5, padx=20, fill="x")
-        barra.set(0)
+        # Documento actual
+        current_doc_label = ctk.CTkLabel(
+            main_frame,
+            text="Preparando...",
+            font=ctk.CTkFont(size=13),
+            wraplength=650
+        )
+        current_doc_label.pack(pady=10)
 
+        # Barra de progreso
+        progress_bar = ctk.CTkProgressBar(main_frame, width=650, height=20)
+        progress_bar.pack(pady=10)
+        progress_bar.set(0)
+
+        # Porcentaje
+        percent_label = ctk.CTkLabel(
+            main_frame,
+            text="0%",
+            font=ctk.CTkFont(size=14, weight="bold")
+        )
+        percent_label.pack(pady=5)
+
+        # Separador
+        separator = ctk.CTkFrame(main_frame, height=2, fg_color="gray")
+        separator.pack(fill="x", pady=10)
+
+        # Log de actividad
+        ctk.CTkLabel(
+            main_frame,
+            text="📋 Registro de actividad:",
+            font=ctk.CTkFont(size=12, weight="bold"),
+            anchor="w"
+        ).pack(pady=(5, 5), fill="x")
+
+        log_text = ctk.CTkTextbox(main_frame, width=650, height=220)
+        log_text.pack(pady=5)
+
+        # Configurar tags para colores
+        log_text.tag_config("success", foreground="#2ecc71")
+        log_text.tag_config("error", foreground="#e74c3c")
+        log_text.tag_config("update", foreground="#f39c12")
+        log_text.tag_config("info", foreground="#3498db")
+
+        # Botón cerrar (deshabilitado al inicio)
         btn_cerrar = ctk.CTkButton(
-            ventana_progreso,
+            main_frame,
             text="Cerrar",
             command=ventana_progreso.destroy,
-            state="disabled"
+            state="disabled",
+            height=35,
+            font=ctk.CTkFont(size=13, weight="bold")
         )
         btn_cerrar.pack(pady=10)
 
-        self.ventana.update()
+        ventana_progreso.update()
         
+        # Contadores
         importados = 0
         errores = 0
         actualizados = 0
-
         total_docs = len(self.documentos_seleccionados)
+        
+        # Actualizar total
+        total_label.configure(text=f"📊 Total\n{total_docs}")
+        
+        # Log inicial
+        log_text.insert("end", f"{'='*70}\n", "info")
+        log_text.insert("end", f"Iniciando procesamiento de {total_docs} documento(s)\n", "info")
+        log_text.insert("end", f"{'='*70}\n\n", "info")
+        ventana_progreso.update()
         
         for i, archivo in enumerate(self.documentos_seleccionados):
             archivo_docx = None
+            nombre_archivo = os.path.basename(archivo)
             
             try:
                 # Actualizar progreso visual
-                progreso_label.configure(
-                    text=f"Procesando {i + 1} / {total_docs} | Éxito: {importados + actualizados}"
-                )
-                barra.set((i + 1) / total_docs)
-                ventana_progreso.update_idletasks()
-
-                nombre_archivo = os.path.basename(archivo)
+                progreso_actual = (i + 1) / total_docs
+                progress_bar.set(progreso_actual)
+                percent_label.configure(text=f"{int(progreso_actual * 100)}%")
                 
+                current_doc_label.configure(
+                    text=f"📄 Procesando ({i + 1}/{total_docs}): {nombre_archivo}"
+                )
+                
+                log_text.insert("end", f"[{i + 1}/{total_docs}] ", "info")
+                log_text.insert("end", f"📄 {nombre_archivo}\n")
+                log_text.see("end")
+                ventana_progreso.update()
+
                 # Convertir .doc a .docx si es necesario
                 if archivo.lower().endswith('.doc'):
+                    log_text.insert("end", "   🔄 Convirtiendo .doc a .docx...\n")
+                    log_text.see("end")
+                    ventana_progreso.update()
+                    
                     archivo_docx = convertir_doc_a_docx(archivo)
                     if not archivo_docx:
                         raise Exception("No se pudo convertir el archivo .doc")
@@ -824,10 +1393,17 @@ class VentanaCargarDocumentos:
                     archivo_docx = archivo
                 
                 # Extraer datos del documento
+                log_text.insert("end", "   🔍 Extrayendo datos...\n")
+                log_text.see("end")
+                ventana_progreso.update()
+                
                 datos = DocumentExtractor.extraer_datos(archivo_docx)
                 
                 if not datos or not datos.get('dpi'):
                     raise Exception("No se pudo extraer el DPI del documento")
+                
+                dpi_extraido = datos.get('dpi', 'sin_dpi')
+                nombre_extraido = datos.get('nombre', 'sin_nombre')
                 
                 # Asegurar que existe la carpeta de documentos
                 if not os.path.exists(DOCUMENTOS_DIR):
@@ -839,8 +1415,12 @@ class VentanaCargarDocumentos:
                     raise Exception(f"Archivo fuente no encontrado: {archivo_fuente}")
                 
                 # Copiar documento a carpeta de documentos
-                dpi_limpio = datos.get('dpi', 'sin_dpi').replace(' ', '').replace('_', '')
-                nombre_limpio = datos.get('nombre', 'sin_nombre').replace(' ', '_')
+                log_text.insert("end", "   💾 Copiando documento...\n")
+                log_text.see("end")
+                ventana_progreso.update()
+                
+                dpi_limpio = dpi_extraido.replace(' ', '').replace('_', '')
+                nombre_limpio = nombre_extraido.replace(' ', '_')
                 
                 nombre_destino = f"{dpi_limpio}_acta_{nombre_limpio}.docx"
                 ruta_destino = os.path.join(DOCUMENTOS_DIR, nombre_destino)
@@ -867,7 +1447,10 @@ class VentanaCargarDocumentos:
                     raise Exception(f"Error al copiar archivo: {copy_error}")
                 
                 # Guardar persona en la base de datos
-                # Asegurar que todos los campos estén presentes
+                log_text.insert("end", "   💾 Guardando en base de datos...\n")
+                log_text.see("end")
+                ventana_progreso.update()
+                
                 datos_persona = {
                     'nombre': datos.get('nombre', ''),
                     'dpi': datos.get('dpi', ''),
@@ -886,11 +1469,22 @@ class VentanaCargarDocumentos:
                 
                 if resultado == "guardado":
                     importados += 1
+                    log_text.insert("end", f"   ✅ Nuevo registro guardado | DPI: {dpi_extraido}\n\n", "success")
+                    success_label.configure(text=f"✅ Nuevos\n{importados}")
                 elif resultado == "actualizado":
                     actualizados += 1
+                    log_text.insert("end", f"   🔄 Registro actualizado | DPI: {dpi_extraido}\n\n", "update")
+                    updated_label.configure(text=f"🔄 Actualizados\n{actualizados}")
                 
-            except Exception:
+                log_text.see("end")
+                ventana_progreso.update()
+                
+            except Exception as e:
                 errores += 1
+                error_label.configure(text=f"❌ Errores\n{errores}")
+                log_text.insert("end", f"   ❌ ERROR: {str(e)}\n\n", "error")
+                log_text.see("end")
+                ventana_progreso.update()
             
             finally:
                 # Limpiar archivos temporales
@@ -904,6 +1498,22 @@ class VentanaCargarDocumentos:
             
             # Pequeña pausa entre documentos
             time.sleep(0.05)
+        
+        # Finalización
+        progress_bar.set(1.0)
+        percent_label.configure(text="100%")
+        current_doc_label.configure(text="✅ Procesamiento completado")
+        
+        # Log final
+        log_text.insert("end", f"\n{'='*70}\n", "info")
+        log_text.insert("end", "📊 RESUMEN DEL PROCESAMIENTO\n", "info")
+        log_text.insert("end", f"{'='*70}\n", "info")
+        log_text.insert("end", f"✅ Nuevos registros: {importados}\n", "success")
+        log_text.insert("end", f"🔄 Registros actualizados: {actualizados}\n", "update")
+        log_text.insert("end", f"❌ Errores: {errores}\n", "error")
+        log_text.insert("end", f"📊 Total procesados: {len(self.documentos_seleccionados)}\n", "info")
+        log_text.insert("end", f"{'='*70}\n", "info")
+        log_text.see("end")
         
         # Habilitar botón cerrar
         btn_cerrar.configure(state="normal")
@@ -1252,3 +1862,174 @@ class VentanaCargarDocumentos:
         self.cargar_documentos_existentes()
         if self.callback_actualizar:
             self.callback_actualizar()
+     
+    def _acortar_nombre(self, nombre, max_len=50):
+        if len(nombre) <= max_len:
+            return nombre
+        return nombre[:max_len - 3] + "..."
+            
+    def _convertir_docx_a_pdf_seguro(self, docx_path, pdf_path):
+        """
+        Envuelve docx2pdf.convert con manejo de errores más robusto para
+        evitar 'NoneType has no attribute write' en el ejecutable.
+        """
+        from tkinter import messagebox
+        import os
+        import sys
+        import io
+        import traceback
+        import subprocess
+        import warnings
+
+        try:
+            # Verificar que el DOCX existe
+            if not os.path.exists(docx_path):
+                raise FileNotFoundError(f"Archivo DOCX no encontrado: {docx_path}")
+
+            # SOLUCIÓN MEJORADA: Proteger completamente stdout/stderr/stdin
+            old_stdout = sys.stdout
+            old_stderr = sys.stderr
+            old_stdin = sys.stdin
+
+            # Crear buffer dummy seguro
+            dummy_buffer = io.StringIO()
+
+            try:
+                # Reemplazar TODOS los streams con buffers seguros
+                sys.stdout = dummy_buffer
+                sys.stderr = dummy_buffer
+                sys.stdin = dummy_buffer
+
+                # Suprimir también warnings
+                warnings.filterwarnings('ignore')
+
+                # Ejecutar conversión en un contexto ultra-protegido
+                try:
+                    from docx2pdf import convert
+
+                    # Intentar conversión normal
+                    convert(docx_path, pdf_path)
+
+                except (AttributeError, Exception) as conv_err:
+                    # Si falla con AttributeError de SaveAs / Word COM
+                    error_msg = str(conv_err).lower()
+
+                    # Ruta 1: problema típico de Word COM (SaveAs / Open)
+                    if 'saveas' in error_msg or 'open.' in error_msg:
+                        try:
+                            import win32com.client
+                            import pythoncom
+
+                            pythoncom.CoInitialize()
+                            try:
+                                word = win32com.client.DispatchEx("Word.Application")
+                                word.Visible = False
+                                word.DisplayAlerts = False
+
+                                # Abrir documento
+                                doc = word.Documents.Open(os.path.abspath(docx_path))
+
+                                # Guardar como PDF (formato 17 = PDF)
+                                doc.SaveAs(os.path.abspath(pdf_path), FileFormat=17)
+
+                                # Cerrar
+                                doc.Close()
+                                word.Quit()
+                            finally:
+                                pythoncom.CoUninitialize()
+
+                        except Exception as word_err:
+                            raise Exception(f"Error al convertir con Word COM: {word_err}")
+
+                    # Ruta 2: otro AttributeError relacionado con 'write' (bug típico en ejecutable)
+                    elif isinstance(conv_err, AttributeError) and 'write' in error_msg:
+                        # Intentar método alternativo con subprocess y _convert_helper.py
+                        helper_locations = [
+                            os.path.join(os.path.dirname(__file__), '_convert_helper.py'),
+                            os.path.join(os.path.dirname(sys.executable), 'ui', '_convert_helper.py'),
+                            os.path.join(sys._MEIPASS, 'ui', '_convert_helper.py') if getattr(sys, 'frozen', False) else None,
+                        ]
+
+                        script_path = None
+                        for location in helper_locations:
+                            if location and os.path.exists(location):
+                                script_path = location
+                                break
+
+                        if script_path:
+                            result = subprocess.run(
+                                [sys.executable, script_path, docx_path, pdf_path],
+                                capture_output=True,
+                                text=True,
+                                timeout=30
+                            )
+                            if result.returncode != 0:
+                                raise Exception(
+                                    f"Conversión fallida con método alternativo. "
+                                    f"STDOUT: {result.stdout}\nSTDERR: {result.stderr}"
+                                )
+                        else:
+                            # No hay helper alternativo, relanzar el error original
+                            raise conv_err
+                    else:
+                        # Cualquier otro error se relanza
+                        raise conv_err
+
+            finally:
+                # Restaurar streams originales SIEMPRE
+                try:
+                    sys.stdout = old_stdout if old_stdout is not None else sys.__stdout__
+                    sys.stderr = old_stderr if old_stderr is not None else sys.__stderr__
+                    sys.stdin = old_stdin if old_stdin is not None else sys.__stdin__
+                except Exception:
+                    # Si falla la restauración, usar los streams por defecto del sistema
+                    sys.stdout = sys.__stdout__
+                    sys.stderr = sys.__stderr__
+                    sys.stdin = sys.__stdin__
+
+            # Verificar que el PDF realmente se creó
+            if not os.path.exists(pdf_path):
+                raise RuntimeError("No se pudo generar el PDF. Archivo de salida no encontrado.")
+
+            if os.path.getsize(pdf_path) == 0:
+                raise RuntimeError("El PDF generado está vacío.")
+
+            return True
+
+        except Exception as e:
+            # Log seguro a consola si es posible
+            try:
+                print(f"Error en conversión DOCX->PDF: {e}")
+                traceback.print_exc()
+            except Exception:
+                pass
+
+            # Preparar mensaje de error amigable
+            error_msg = str(e)
+            low = error_msg.lower()
+
+            if 'saveas' in low or 'open.' in low:
+                error_msg = (
+                    "Error de Microsoft Word (COM) al convertir el documento.\n\n"
+                    "Posibles soluciones:\n"
+                    "• Cierre Microsoft Word completamente.\n"
+                    "• Reinicie la aplicación.\n"
+                    "• Ejecute la aplicación como administrador.\n\n"
+                    f"Detalle técnico: {error_msg}"
+                )
+            elif 'write' in low or 'nonetype' in low:
+                error_msg = (
+                    "Error de compatibilidad con Microsoft Word en el entorno del ejecutable.\n\n"
+                    "Posibles soluciones:\n"
+                    "• Asegúrese de que Microsoft Word esté instalado.\n"
+                    "• Cierre Word si está abierto.\n"
+                    "• Ejecute la aplicación como administrador.\n\n"
+                    f"Detalle técnico: {error_msg}"
+                )
+
+            # Mostrar error al usuario
+            messagebox.showerror(
+                "Error al convertir a PDF",
+                f"No se pudo convertir el documento a PDF para vista previa.\n\n{error_msg}"
+            )
+            return False

@@ -1,8 +1,40 @@
+import sys
+import io
+# Ahora sí, imports normales
 import customtkinter as ctk
 import warnings
 
 from ui import MainWindow
 from ui.ventana_login import VentanaLogin  # ajusta si tu paquete es distinto
+
+# ===== CONFIGURACIÓN CRÍTICA PARA EJECUTABLES =====
+# DEBE estar ANTES de cualquier otro import
+# Previene el error "NoneType has no attribute write" en ejecutables
+
+def setup_streams():
+    """Configura streams seguros para el ejecutable sin consola"""
+    # Verificar si estamos en un ejecutable empaquetado
+    if getattr(sys, 'frozen', False):
+        # Crear streams dummy seguros si son None
+        if sys.stdout is None:
+            sys.stdout = io.StringIO()
+        if sys.stderr is None:
+            sys.stderr = io.StringIO()
+        if sys.stdin is None:
+            sys.stdin = io.StringIO()
+    else:
+        # En desarrollo, también proteger por si acaso
+        if sys.stdout is None:
+            sys.stdout = sys.__stdout__ if sys.__stdout__ else io.StringIO()
+        if sys.stderr is None:
+            sys.stderr = sys.__stderr__ if sys.__stderr__ else io.StringIO()
+        if sys.stdin is None:
+            sys.stdin = sys.__stdin__ if sys.__stdin__ else io.StringIO()
+
+# Ejecutar configuración INMEDIATAMENTE
+setup_streams()
+
+# ===== FIN DE CONFIGURACIÓN CRÍTICA =====
 
 warnings.filterwarnings("ignore", category=UserWarning, module="customtkinter")
 

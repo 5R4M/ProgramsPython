@@ -37,3 +37,15 @@ exe = EXE(
     entitlements_file=None,
     icon=['utils\\app_icono.ico'],
 )
+
+hiddenimports=[
+    'win32com',
+    'win32com.client',
+    'pythoncom',
+    'pywintypes',
+    'comtypes',
+    'comtypes.client',
+    'docx2pdf',
+    'io',
+    'subprocess',
+],
