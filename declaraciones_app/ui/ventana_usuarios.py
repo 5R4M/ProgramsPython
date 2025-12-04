@@ -158,16 +158,28 @@ class VentanaGestionUsuarios:
         )
         self.entry_password = ctk.CTkEntry(
             frame_form,
-            placeholder_text="(nueva o cambio de contraseña)",
+            placeholder_text="Mínimo 4 caracteres",
             show="*",
         )
         self.entry_password.grid(row=row, column=1, sticky="ew", padx=10, pady=4)
         row += 1
 
+        # Confirmar contraseña
+        ctk.CTkLabel(frame_form, text="Confirmar contraseña:").grid(
+            row=row, column=0, sticky="w", padx=10, pady=4
+        )
+        self.entry_password_confirm = ctk.CTkEntry(
+            frame_form,
+            placeholder_text="Repita la contraseña",
+            show="*",
+        )
+        self.entry_password_confirm.grid(row=row, column=1, sticky="ew", padx=10, pady=4)
+        row += 1
+
         # Nota sobre contraseña
         ctk.CTkLabel(
             frame_form,
-            text="Deje la contraseña vacía para mantener la actual\n(al actualizar un usuario).",
+            text="• Al crear: contraseña es obligatoria.\n• Al editar: deje vacío para mantener la actual.\n• Los nombres de usuario no distinguen mayúsculas/minúsculas.",
             font=ctk.CTkFont(size=10),
             text_color="gray70",
             justify="left",
@@ -274,7 +286,9 @@ class VentanaGestionUsuarios:
         else:
             self.switch_activo.deselect()
 
+        # Limpiar campos de contraseña
         self.entry_password.delete(0, "end")
+        self.entry_password_confirm.delete(0, "end")
 
     def nuevo_usuario(self):
         """Limpia el formulario para registrar un nuevo usuario (rol usuario por defecto)."""
@@ -284,38 +298,124 @@ class VentanaGestionUsuarios:
         self.combo_rol.set("usuario")
         self.switch_activo.select()
         self.entry_password.delete(0, "end")
+        self.entry_password_confirm.delete(0, "end")
 
     def guardar_usuario(self):
-        """Crea o actualiza un usuario, guardando también el rol (admin/usuario)."""
+        """Crea o actualiza un usuario con validaciones completas."""
         username = self.entry_username.get().strip()
         nombre = self.entry_nombre.get().strip()
         rol = self.combo_rol.get().strip()
         activo = bool(self.switch_activo.get())
         password = self.entry_password.get().strip()
+        password_confirm = self.entry_password_confirm.get().strip()
 
+        # ===== VALIDACIONES =====
+        
+        # 1. Usuario obligatorio
         if not username:
             messagebox.showwarning("Advertencia", "El campo 'Usuario' es obligatorio.")
+            self.entry_username.focus_set()
             return
 
-        # Validar rol por si acaso
+        # 2. Usuario no debe tener espacios
+        if " " in username:
+            messagebox.showwarning("Advertencia", "El nombre de usuario no puede contener espacios.")
+            self.entry_username.focus_set()
+            return
+
+        # 3. Usuario mínimo 3 caracteres
+        if len(username) < 3:
+            messagebox.showwarning("Advertencia", "El nombre de usuario debe tener al menos 3 caracteres.")
+            self.entry_username.focus_set()
+            return
+
+        # 4. Validar rol
         if rol not in ("admin", "usuario"):
             messagebox.showwarning("Advertencia", "Rol inválido. Debe ser 'admin' o 'usuario'.")
             return
 
-        try:
-            if self.usuario_seleccionado_id is None:
-                # Crear
-                if not password:
+        # 5. Verificar duplicados (case-insensitive)
+        if self.usuario_seleccionado_id is None:
+            # Modo CREAR: verificar que no exista (case-insensitive)
+            if self.db.verificar_usuario_existe_case_insensitive(username):
+                messagebox.showerror(
+                    "Error",
+                    f"Ya existe un usuario con el nombre '{username}' (sin distinguir mayúsculas/minúsculas).\n\n"
+                    "Por favor elija otro nombre."
+                )
+                self.entry_username.focus_set()
+                return
+        else:
+            # Modo EDITAR: verificar que no exista otro usuario con ese nombre
+            if self.db.verificar_usuario_existe_case_insensitive(username, excluir_id=self.usuario_seleccionado_id):
+                messagebox.showerror(
+                    "Error",
+                    f"Ya existe otro usuario con el nombre '{username}' (sin distinguir mayúsculas/minúsculas).\n\n"
+                    "Por favor elija otro nombre."
+                )
+                self.entry_username.focus_set()
+                return
+
+        # 6. Validación de contraseña según modo (crear o editar)
+        if self.usuario_seleccionado_id is None:
+            # MODO CREAR: contraseña obligatoria
+            if not password:
+                messagebox.showwarning(
+                    "Advertencia",
+                    "Debe indicar una contraseña para el nuevo usuario.",
+                )
+                self.entry_password.focus_set()
+                return
+            
+            # Contraseña mínimo 4 caracteres
+            if len(password) < 4:
+                messagebox.showwarning(
+                    "Advertencia",
+                    "La contraseña debe tener al menos 4 caracteres.",
+                )
+                self.entry_password.focus_set()
+                return
+            
+            # Confirmar contraseña
+            if password != password_confirm:
+                messagebox.showwarning(
+                    "Advertencia",
+                    "Las contraseñas no coinciden. Por favor verifique.",
+                )
+                self.entry_password_confirm.focus_set()
+                return
+        else:
+            # MODO EDITAR: contraseña opcional
+            if password:  # Si se ingresó contraseña
+                # Validar longitud mínima
+                if len(password) < 4:
                     messagebox.showwarning(
                         "Advertencia",
-                        "Debe indicar una contraseña para el nuevo usuario.",
+                        "La contraseña debe tener al menos 4 caracteres.",
                     )
+                    self.entry_password.focus_set()
+                    return
+                
+                # Confirmar contraseña
+                if password != password_confirm:
+                    messagebox.showwarning(
+                        "Advertencia",
+                        "Las contraseñas no coinciden. Por favor verifique.",
+                    )
+                    self.entry_password_confirm.focus_set()
                     return
 
-                self.db.crear_usuario(username, password, nombre, rol, activo)
-                messagebox.showinfo("Éxito", "Usuario creado correctamente.")
+        # ===== GUARDAR EN BASE DE DATOS =====
+        
+        try:
+            if self.usuario_seleccionado_id is None:
+                # === CREAR NUEVO USUARIO ===
+                user_id, resultado = self.db.crear_usuario(username, password, nombre, rol, activo)
+                messagebox.showinfo("Éxito", f"✅ Usuario '{username}' creado correctamente con contraseña encriptada.")
             else:
-                # Actualizar
+                # === ACTUALIZAR USUARIO EXISTENTE ===
+                
+                # Actualizar datos básicos
                 self.db.actualizar_usuario(
                     self.usuario_seleccionado_id,
                     username,
@@ -323,10 +423,15 @@ class VentanaGestionUsuarios:
                     rol,
                     activo,
                 )
+                
+                # Cambiar contraseña solo si se ingresó una nueva
                 if password:
                     self.db.cambiar_password_usuario(self.usuario_seleccionado_id, password)
-                messagebox.showinfo("Éxito", "Usuario actualizado correctamente.")
+                    messagebox.showinfo("Éxito", f"✅ Usuario '{username}' actualizado correctamente.\n🔐 Nueva contraseña encriptada guardada.")
+                else:
+                    messagebox.showinfo("Éxito", f"✅ Usuario '{username}' actualizado correctamente.")
 
+            # Recargar lista y limpiar formulario
             self.cargar_usuarios()
             self.nuevo_usuario()
 
@@ -334,22 +439,49 @@ class VentanaGestionUsuarios:
             messagebox.showerror("Error", f"No se pudo guardar el usuario:\n{str(e)}")
 
     def eliminar_usuario(self):
-        """Elimina el usuario seleccionado."""
+        """Elimina el usuario seleccionado con validaciones."""
         if self.usuario_seleccionado_id is None:
             messagebox.showwarning("Advertencia", "Seleccione un usuario para eliminar.")
             return
 
-        resp = messagebox.askyesno(
-            "Confirmar eliminación",
-            "¿Seguro que desea eliminar este usuario?\nEsta acción no se puede deshacer.",
-        )
-        if not resp:
-            return
-
+        # Obtener información del usuario
         try:
+            usuario = self.db.obtener_usuario_por_id(self.usuario_seleccionado_id)
+            if not usuario:
+                messagebox.showerror("Error", "No se pudo obtener la información del usuario.")
+                return
+            
+            username = usuario[1]
+            rol = usuario[3]
+            
+            # Verificar que no sea el último admin
+            if rol == "admin":
+                self.db.cursor.execute("SELECT COUNT(*) FROM usuarios WHERE rol = 'admin' AND activo = 1")
+                total_admins = self.db.cursor.fetchone()[0]
+                
+                if total_admins <= 1:
+                    messagebox.showwarning(
+                        "No se puede eliminar",
+                        "No se puede eliminar el último administrador activo del sistema.\n\n"
+                        "Debe haber al menos un administrador activo."
+                    )
+                    return
+            
+            # Confirmar eliminación
+            resp = messagebox.askyesno(
+                "Confirmar eliminación",
+                f"¿Seguro que desea eliminar el usuario '{username}'?\n\n"
+                "Esta acción no se puede deshacer.",
+            )
+            
+            if not resp:
+                return
+
             self.db.eliminar_usuario(self.usuario_seleccionado_id)
-            messagebox.showinfo("Éxito", "Usuario eliminado correctamente.")
+            messagebox.showinfo("Éxito", f"✅ Usuario '{username}' eliminado correctamente.")
+            
             self.cargar_usuarios()
             self.nuevo_usuario()
+            
         except Exception as e:
             messagebox.showerror("Error", f"No se pudo eliminar el usuario:\n{str(e)}")

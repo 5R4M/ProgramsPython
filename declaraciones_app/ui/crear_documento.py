@@ -2173,3 +2173,138 @@ class VentanaCrearDocumento:
             font=ctk.CTkFont(size=14)
         )
         self.lbl_visor_estado.pack(pady=200)
+    
+    @staticmethod
+    def generar_documento_para_persona(db, datos_persona, ruta_destino):
+        """
+        Genera un documento Word para una persona específica usando la plantilla activa.
+        
+        Args:
+            db: Instancia de DatabaseManager
+            datos_persona: Diccionario con los datos de la persona
+            ruta_destino: Ruta donde se guardará el documento (.docx)
+        """
+        from docx import Document
+        from datetime import datetime
+        import os
+        
+        # Obtener plantilla activa
+        plantilla_activa = db.obtener_plantilla_activa()
+        
+        if not plantilla_activa:
+            raise Exception("No hay plantilla activa configurada. Por favor, configure una plantilla primero.")
+        
+        ruta_plantilla = plantilla_activa[2]
+        
+        # Verificar que la plantilla existe
+        if not os.path.exists(ruta_plantilla):
+            raise Exception(f"La plantilla no existe en: {ruta_plantilla}")
+        
+        # Cargar plantilla
+        try:
+            doc = Document(ruta_plantilla)
+        except Exception as e:
+            raise Exception(f"Error al cargar la plantilla: {str(e)}")
+        
+        # Obtener fecha y hora actual
+        ahora = datetime.now()
+        dia = ahora.day
+        mes_num = ahora.month
+        anio = ahora.year
+        hora = ahora.hour
+        minutos = ahora.minute
+        
+        # Mapeo de meses
+        meses_es = {
+            1: "enero", 2: "febrero", 3: "marzo", 4: "abril",
+            5: "mayo", 6: "junio", 7: "julio", 8: "agosto",
+            9: "septiembre", 10: "octubre", 11: "noviembre", 12: "diciembre"
+        }
+        mes = meses_es.get(mes_num, "enero")
+        
+        # Extraer datos de la persona
+        nombre = datos_persona.get('nombre', '') or datos_persona.get('nombre_completo', '')
+        dpi = datos_persona.get('dpi', '')
+        edad = str(datos_persona.get('edad', '')) if datos_persona.get('edad') else ''
+        estado_civil = datos_persona.get('estado_civil', '')
+        nacionalidad = datos_persona.get('nacionalidad', 'guatemalteco')
+        domicilio = datos_persona.get('domicilio', '')
+        nivel_academico = datos_persona.get('nivel_academico', '')
+        apellido_casada = datos_persona.get('apellido_casada', '')
+        sexo = datos_persona.get('sexo', 'masculino')
+        
+        # Usar valores personalizados si están disponibles
+        hora_custom = datos_persona.get('hora', str(hora))
+        minutos_custom = datos_persona.get('minutos', str(minutos).zfill(2))
+        dia_custom = datos_persona.get('dia', str(dia))
+        mes_custom = datos_persona.get('mes', mes)
+        anio_custom = datos_persona.get('anio', str(anio))
+        
+        # Determinar artículo según sexo
+        articulo = "el" if sexo and sexo.lower() == "masculino" else "la"
+        senor_a = "señor" if sexo and sexo.lower() == "masculino" else "señora"
+        
+        # Diccionario de reemplazos
+        reemplazos = {
+            "{{dia}}": str(dia_custom),
+            "{{mes}}": str(mes_custom),
+            "{{anio}}": str(anio_custom),
+            "{{hora}}": str(hora_custom),
+            "{{minutos}}": str(minutos_custom).zfill(2),
+            "{{articulo}}": articulo,
+            "{{senor_a}}": senor_a,
+            "{{nombre}}": nombre,
+            "{{edad}}": str(edad),
+            "{{estado_civil}}": estado_civil,
+            "{{nacionalidad}}": nacionalidad,
+            "{{domicilio}}": domicilio,
+            "{{dpi}}": dpi,
+            "{{nivel_academico}}": nivel_academico,
+            "{{apellido_casada}}": apellido_casada if apellido_casada else ""
+        }
+        
+        # Reemplazar en párrafos
+        for paragraph in doc.paragraphs:
+            for key, value in reemplazos.items():
+                if key in paragraph.text:
+                    # Reemplazar manteniendo el formato
+                    for run in paragraph.runs:
+                        if key in run.text:
+                            run.text = run.text.replace(key, str(value))
+        
+        # Reemplazar en tablas
+        for table in doc.tables:
+            for row in table.rows:
+                for cell in row.cells:
+                    for paragraph in cell.paragraphs:
+                        for key, value in reemplazos.items():
+                            if key in paragraph.text:
+                                for run in paragraph.runs:
+                                    if key in run.text:
+                                        run.text = run.text.replace(key, str(value))
+        
+        # Reemplazar en encabezados y pies de página
+        for section in doc.sections:
+            # Encabezado
+            header = section.header
+            for paragraph in header.paragraphs:
+                for key, value in reemplazos.items():
+                    if key in paragraph.text:
+                        for run in paragraph.runs:
+                            if key in run.text:
+                                run.text = run.text.replace(key, str(value))
+            
+            # Pie de página
+            footer = section.footer
+            for paragraph in footer.paragraphs:
+                for key, value in reemplazos.items():
+                    if key in paragraph.text:
+                        for run in paragraph.runs:
+                            if key in run.text:
+                                run.text = run.text.replace(key, str(value))
+        
+        # Guardar documento
+        try:
+            doc.save(ruta_destino)
+        except Exception as e:
+            raise Exception(f"Error al guardar el documento: {str(e)}")

@@ -1,6 +1,7 @@
 import sqlite3
 from datetime import datetime
 from config import DB_PATH
+import bcrypt
 
 class DatabaseManager:
     def __init__(self):
@@ -571,28 +572,52 @@ class DatabaseManager:
         except Exception as e:
             print(f"Error al eliminar persona: {e}")
             raise
-    
-    # ===== MÉTODOS PARA USUARIOS (LOGIN + CRUD) =====
+
+    # ===== MÉTODOS PARA USUARIOS (LOGIN + CRUD CON BCRYPT) =====
 
     def autenticar_usuario(self, username, password):
         """
-        Verifica credenciales de usuario.
+        Verifica credenciales de usuario con bcrypt (case-insensitive para username).
         Devuelve:
             - dict con info del usuario si es correcto y está activo
             - None si no es válido.
         """
+        # Buscar usuario (case-insensitive)
         self.cursor.execute('''
-            SELECT id, username, nombre_completo, rol, activo
+            SELECT id, username, password, nombre_completo, rol, activo
             FROM usuarios
-            WHERE username = ? AND password = ?
-        ''', (username, password))
+            WHERE LOWER(username) = LOWER(?)
+        ''', (username,))
         row = self.cursor.fetchone()
 
         if not row:
             return None
 
-        if row[4] != 1:  # activo = 1
+        # Verificar si está activo
+        if row[5] != 1:  # activo = 1
             return None
+
+        # Verificar contraseña con bcrypt
+        password_hash = row[2]
+        
+        try:
+            # Intentar verificar con bcrypt
+            if not bcrypt.checkpw(password.encode('utf-8'), password_hash.encode('utf-8')):
+                return None
+        except Exception:
+            # Si falla (contraseña en texto plano antigua), verificar directamente
+            # Esto es para compatibilidad con usuarios antiguos
+            if password != password_hash:
+                return None
+            
+            # MIGRACIÓN AUTOMÁTICA: actualizar a bcrypt
+            try:
+                nuevo_hash = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
+                self.cursor.execute('UPDATE usuarios SET password = ? WHERE id = ?', (nuevo_hash, row[0]))
+                self.conn.commit()
+                print(f"✅ Contraseña migrada a bcrypt para usuario: {row[1]}")
+            except Exception as e:
+                print(f"⚠️ No se pudo migrar contraseña a bcrypt: {e}")
 
         # Actualizar último login
         ahora = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -602,20 +627,25 @@ class DatabaseManager:
         return {
             "id": row[0],
             "username": row[1],
-            "nombre_completo": row[2],
-            "rol": row[3],
-            "activo": row[4]
+            "nombre_completo": row[3],
+            "rol": row[4],
+            "activo": row[5]
         }
 
     def crear_usuario(self, username, password, nombre_completo="", rol="usuario", activo=True):
         """
-        Crea un nuevo usuario. Devuelve (id, 'ok') o lanza excepción si hay error (por ejemplo username duplicado).
+        Crea un nuevo usuario con contraseña encriptada usando bcrypt.
+        Username es case-insensitive (se guarda como fue escrito pero se valida en minúsculas).
         """
         ahora = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        
+        # Encriptar contraseña con bcrypt
+        password_hash = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
+        
         self.cursor.execute('''
             INSERT INTO usuarios (username, password, nombre_completo, rol, activo, creado_en)
             VALUES (?, ?, ?, ?, ?, ?)
-        ''', (username, password, nombre_completo, rol, 1 if activo else 0, ahora))
+        ''', (username, password_hash, nombre_completo, rol, 1 if activo else 0, ahora))
         self.conn.commit()
         return self.cursor.lastrowid, "ok"
 
@@ -631,12 +661,13 @@ class DatabaseManager:
         self.conn.commit()
 
     def cambiar_password_usuario(self, user_id, nuevo_password):
-        """Cambia la contraseña de un usuario."""
-        self.cursor.execute('UPDATE usuarios SET password = ? WHERE id = ?', (nuevo_password, user_id))
+        """Cambia la contraseña de un usuario (encriptada con bcrypt)."""
+        password_hash = bcrypt.hashpw(nuevo_password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
+        self.cursor.execute('UPDATE usuarios SET password = ? WHERE id = ?', (password_hash, user_id))
         self.conn.commit()
 
     def eliminar_usuario(self, user_id):
-        """Elimina un usuario por ID (no permite borrar el último admin, si quieres puedes extender)."""
+        """Elimina un usuario por ID."""
         self.cursor.execute('DELETE FROM usuarios WHERE id = ?', (user_id,))
         self.conn.commit()
 
@@ -657,7 +688,28 @@ class DatabaseManager:
             WHERE id = ?
         ''', (user_id,))
         return self.cursor.fetchone()
-    
+
+    def verificar_usuario_existe_case_insensitive(self, username, excluir_id=None):
+        """
+        Verifica si existe un usuario con ese nombre (case-insensitive).
+        Si se proporciona excluir_id, no cuenta ese usuario (útil para edición).
+        Retorna True si existe, False si no.
+        """
+        if excluir_id is None:
+            self.cursor.execute('''
+                SELECT COUNT(*) FROM usuarios 
+                WHERE LOWER(username) = LOWER(?)
+            ''', (username,))
+        else:
+            self.cursor.execute('''
+                SELECT COUNT(*) FROM usuarios 
+                WHERE LOWER(username) = LOWER(?) AND id != ?
+            ''', (username, excluir_id))
+        
+        count = self.cursor.fetchone()[0]
+        return count > 0
+
+
     # ===== MÉTODOS PARA SUGERENCIAS DE PALABRAS =====
 
     def obtener_sugerencias_palabra(self, tipo, prefijo, limite=10):

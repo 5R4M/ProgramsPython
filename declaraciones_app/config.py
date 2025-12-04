@@ -1,7 +1,23 @@
 import os
+import sys
+
+# Función para obtener el directorio base correctamente en ejecutable y desarrollo
+def get_base_dir():
+    """
+    Retorna el directorio base de la aplicación.
+    - En desarrollo: carpeta del script config.py
+    - En ejecutable: carpeta donde está el .exe
+    """
+    if getattr(sys, 'frozen', False):
+        # Estamos en un ejecutable de PyInstaller
+        # sys.executable apunta al .exe
+        return os.path.dirname(sys.executable)
+    else:
+        # Estamos en desarrollo
+        return os.path.dirname(os.path.abspath(__file__))
 
 # Configuración de rutas
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+BASE_DIR = get_base_dir()
 DATA_DIR = os.path.join(BASE_DIR, 'data')
 PLANTILLAS_DIR = os.path.join(DATA_DIR, 'plantillas')
 DOCUMENTOS_DIR = os.path.join(DATA_DIR, 'documentos')
