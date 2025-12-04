@@ -1,5 +1,6 @@
 import customtkinter as ctk
 from tkinter import filedialog, messagebox
+import tkinter as tk
 import os
 import shutil
 import tempfile
@@ -10,6 +11,8 @@ import fitz  # PyMuPDF
 from docx2pdf import convert
 from config import PLANTILLAS_DIR, COLOR_SUCCESS, COLOR_PRIMARY, COLOR_WARNING, DOCUMENTOS_DIR
 from utils import NumeroATexto
+import subprocess
+import platform
 
 
 class VentanaCrearDocumento:
@@ -62,11 +65,108 @@ class VentanaCrearDocumento:
             self.ventana.update_idletasks()
             if self.solo_formulario:
                 # Modo EDICIÓN: solo formulario
-                self.center_window_tamano(650, 625)
+                self.center_window_tamano(740, 625)
             else:
                 # Modo NORMAL: con visor
                 self.center_window_tamano(1400, 900)
                 self.ventana.after(100, self.maximizar_ventana)
+    
+    def capitalizar_texto(self, texto):
+        """Convierte texto a formato título (Primera Letra Mayúscula)"""
+        return ' '.join(word.capitalize() for word in texto.split())
+
+    def _capitalizar_entry(self, entry_widget):
+        """Capitaliza el contenido de un entry solo si cambió"""
+        texto_actual = entry_widget.get().strip()
+        if texto_actual:
+            texto_capitalizado = self.capitalizar_texto(texto_actual)
+            if texto_actual != texto_capitalizado:
+                entry_widget.delete(0, "end")
+                entry_widget.insert(0, texto_capitalizado)
+            
+    def formatear_dpi_automatico(self, event=None):
+        """
+        Formatea el DPI automáticamente mientras se escribe.
+        Formato: 1234 12345 1234 (13 dígitos con espacios)
+        """
+        # Obtener texto actual
+        texto = self.entry_dpi.get()
+        
+        # Guardar posición del cursor
+        cursor_pos = self.entry_dpi.index(tk.INSERT)
+        
+        # Eliminar todo excepto dígitos
+        solo_digitos = ''.join(filter(str.isdigit, texto))
+        
+        # Limitar a 13 dígitos
+        solo_digitos = solo_digitos[:13]
+        
+        # Aplicar formato: 1234 12345 1234
+        if len(solo_digitos) <= 4:
+            texto_formateado = solo_digitos
+        elif len(solo_digitos) <= 9:
+            texto_formateado = f"{solo_digitos[:4]} {solo_digitos[4:]}"
+        else:
+            texto_formateado = f"{solo_digitos[:4]} {solo_digitos[4:9]} {solo_digitos[9:]}"
+        
+        # Actualizar entry solo si cambió
+        if texto != texto_formateado:
+            self.entry_dpi.delete(0, tk.END)
+            self.entry_dpi.insert(0, texto_formateado)
+            
+            # Ajustar posición del cursor
+            # Si se agregó un espacio, mover cursor una posición extra
+            espacios_antes = texto[:cursor_pos].count(' ')
+            espacios_despues = texto_formateado[:cursor_pos].count(' ')
+            
+            if espacios_despues > espacios_antes:
+                cursor_pos += 1
+            
+            # Asegurar que el cursor no se salga del texto
+            cursor_pos = min(cursor_pos, len(texto_formateado))
+            self.entry_dpi.icursor(cursor_pos)
+
+    def validar_dpi_completo(self):
+        """
+        Valida que el DPI tenga exactamente 13 dígitos.
+        Retorna: (es_valido: bool, dpi_limpio: str, mensaje_error: str)
+        """
+        dpi = self.entry_dpi.get().strip()
+        
+        # Eliminar espacios
+        dpi_limpio = dpi.replace(" ", "")
+        
+        # Validar longitud
+        if len(dpi_limpio) != 13:
+            return False, dpi_limpio, f"El DPI debe tener exactamente 13 dígitos.\nActualmente tiene: {len(dpi_limpio)} dígitos"
+        
+        # Validar que solo contenga números
+        if not dpi_limpio.isdigit():
+            return False, dpi_limpio, "El DPI solo debe contener números"
+        
+        return True, dpi_limpio, ""
+
+    def formatear_fecha_auto(self, event):
+        """Formatea la fecha automáticamente mientras se escribe"""
+        widget = event.widget
+        texto = widget.get().replace("/", "")  # Elimina barras existentes
+        
+        # Solo permite números
+        if not texto.isdigit():
+            texto = ''.join(filter(str.isdigit, texto))
+        
+        # Limita a 8 dígitos
+        texto = texto[:8]
+        
+        # Formatea con barras
+        if len(texto) >= 2:
+            texto = texto[:2] + '/' + texto[2:]
+        if len(texto) >= 5:
+            texto = texto[:5] + '/' + texto[5:]
+        
+        # Actualizar entry
+        widget.delete(0, "end")
+        widget.insert(0, texto)
     
     # =================== VALIDADORES ===================
 
@@ -546,6 +646,7 @@ class VentanaCrearDocumento:
 
         # Crear todos los campos con la función auxiliar
         self.entry_nombre = crear_campo(frame_datos, "Nombre:", "Juan Carlos Pérez López")
+        self.entry_nombre.bind("<FocusOut>", lambda e: self._capitalizar_entry(self.entry_nombre))
         self.combo_sexo = crear_campo(frame_datos, "Sexo:", es_combo=True,
                                       valores_combo=["masculino", "femenino"])
         self.combo_sexo.set("masculino")
@@ -556,6 +657,8 @@ class VentanaCrearDocumento:
             "DD/MM/AAAA",
             validar=vcmd_fecha
         )
+        # REEMPLAZAR las líneas existentes de bind por estas:
+        self.entry_fecha_nac.bind("<KeyRelease>", self.formatear_fecha_auto)
         self.entry_fecha_nac.bind("<FocusOut>", self.calcular_edad)
         self.entry_fecha_nac.bind("<Return>", self.calcular_edad)
 
@@ -571,21 +674,30 @@ class VentanaCrearDocumento:
             frame_datos,
             "Estado Civil:",
             es_combo=True,
-            valores_combo=["soltero", "soltera", "casado", "casada",
-                           "divorciado", "divorciada", "viudo", "viuda"]
+            valores_combo=["soltero", "soltera", "casado", "casada"]
         )
         self.combo_estado.set("soltero")
 
         self.entry_casada = crear_campo(frame_datos, "Apell. Casada:", "de López")
+        self.entry_casada.bind("<FocusOut>", lambda e: self._capitalizar_entry(self.entry_casada))
+
         self.entry_nacionalidad = crear_campo(frame_datos, "Nacionalidad:", "guatemalteco")
+        self.entry_nacionalidad.bind("<FocusOut>", lambda e: self._capitalizar_entry(self.entry_nacionalidad))
+
         self.entry_nivel = crear_campo(frame_datos, "Nivel Académico:", "Bachiller")
+        self.entry_nivel.bind("<FocusOut>", lambda e: self._capitalizar_entry(self.entry_nivel))
+
         self.entry_domicilio = crear_campo(frame_datos, "Domicilio:", "departamento de Guatemala")
+        self.entry_domicilio.bind("<FocusOut>", lambda e: self._capitalizar_entry(self.entry_domicilio))
+
         self.entry_dpi = crear_campo(
             frame_datos,
             "DPI:",
             "2008 22829 0101",
             validar=vcmd_dpi
         )
+        # Configurar formato automático de DPI (solo números, máximo 13 dígitos)
+        self.entry_dpi.bind('<KeyRelease>', self.formatear_dpi_automatico)
 
         # === AUTOCOMPLETADO desde BD de sugerencias ===
         # Usamos la clase interna AutoCompleter
@@ -605,7 +717,7 @@ class VentanaCrearDocumento:
 
         btn_guardar = ctk.CTkButton(
             frame_botones,
-            text="💾 Guardar",
+            text="💾 Guardar y Generar",  # CAMBIO DE TEXTO
             command=self.guardar_persona,
             height=32,
             font=ctk.CTkFont(size=12, weight="bold"),
@@ -638,8 +750,8 @@ class VentanaCrearDocumento:
 
         btn_generar = ctk.CTkButton(
             frame_botones,
-            text="✅ Generar",
-            command=self.generar_documento,
+            text="📁 Generar en Otra Ubicación",  # CAMBIO DE TEXTO
+            command=self.generar_documento_otra_ubicacion,  # CAMBIO DE COMANDO
             height=32,
             font=ctk.CTkFont(size=12, weight="bold"),
             fg_color=COLOR_SUCCESS,
@@ -887,10 +999,14 @@ class VentanaCrearDocumento:
             if resultado[5]:
                 self.entry_nacionalidad.insert(0, resultado[5])
             
-            # Domicilio
+            # Domicilio (solo mostrar nombre del departamento, sin "departamento de")
             self.entry_domicilio.delete(0, "end")
             if resultado[6]:
-                self.entry_domicilio.insert(0, resultado[6])
+                domicilio_bd = resultado[6].strip()
+                # Remover "departamento de" si existe
+                if domicilio_bd.lower().startswith("departamento de "):
+                    domicilio_bd = domicilio_bd[16:]  # Quitar "departamento de "
+                self.entry_domicilio.insert(0, domicilio_bd)
             
             # Nivel académico
             self.entry_nivel.delete(0, "end")
@@ -1070,7 +1186,11 @@ class VentanaCrearDocumento:
         
         self.entry_domicilio.delete(0, "end")
         if resultado[6]:
-            self.entry_domicilio.insert(0, resultado[6])
+            domicilio_bd = resultado[6].strip()
+            # Remover "departamento de" si existe
+            if domicilio_bd.lower().startswith("departamento de "):
+                domicilio_bd = domicilio_bd[16:]  # Quitar "departamento de "
+            self.entry_domicilio.insert(0, domicilio_bd)
         
         self.entry_nivel.delete(0, "end")
         if resultado[7]:
@@ -1099,137 +1219,213 @@ class VentanaCrearDocumento:
     
     def guardar_persona(self):
         """
-        Guarda o actualiza una persona en la base de datos y
-        actualiza/crea su documento en la carpeta DOCUMENTOS_DIR.
+        Guarda la persona en BD, genera documento en DOCUMENTOS_DIR y abre carpeta.
         """
-        if not self._validar_dpi_logico():
-            return
-        if not self._validar_fecha_nacimiento_logica():
-            return
-        
+        # Validar campos obligatorios
         nombre = self.entry_nombre.get().strip()
         dpi = self.entry_dpi.get().strip()
-
-        if not nombre or not dpi:
-            messagebox.showwarning("Advertencia", "Debe ingresar al menos el nombre y DPI")
+        
+        if not nombre:
+            messagebox.showerror("Error", "El nombre es obligatorio")
+            self.entry_nombre.focus()
             return
-
+        
+        # ✅ VALIDAR DPI CON 13 DÍGITOS
+        es_valido, dpi_limpio, mensaje_error = self.validar_dpi_completo()
+        if not es_valido:
+            messagebox.showerror("DPI Inválido", mensaje_error)
+            self.entry_dpi.focus()
+            return
+        
+        # Verificar plantilla activa
+        plantilla = self.db.obtener_plantilla_activa()
+        if not plantilla:
+            messagebox.showerror("Error", "No hay ninguna plantilla activa.\n\nPor favor, carga una plantilla primero.")
+            return
+        
         try:
-            # Obtener edad del campo (puede ser calculada o manual)
+            # Recopilar datos
             self.entry_edad.configure(state="normal")
             edad_str = self.entry_edad.get().strip()
             self.entry_edad.configure(state="readonly")
-
-            datos = {
-                'nombre': nombre,
+            
+            datos_persona = {
+                'nombre': self.capitalizar_texto(nombre),
                 'sexo': self.combo_sexo.get(),
                 'fecha_nacimiento': self.entry_fecha_nac.get().strip(),
                 'edad': int(edad_str) if edad_str else None,
                 'estado_civil': self.combo_estado.get(),
-                'apellido_casada': self.entry_casada.get().strip(),
-                'nacionalidad': self.entry_nacionalidad.get().strip(),
-                'nivel_academico': self.entry_nivel.get().strip(),
-                'domicilio': self.entry_domicilio.get().strip(),
+                'apellido_casada': self.capitalizar_texto(self.entry_casada.get().strip()),
+                'nacionalidad': self.capitalizar_texto(self.entry_nacionalidad.get().strip()),
+                'nivel_academico': self.capitalizar_texto(self.entry_nivel.get().strip()),
+                'domicilio': self.capitalizar_texto(self.entry_domicilio.get().strip()),
                 'dpi': dpi
             }
-
-            # 1) Guardar/actualizar persona
-            persona_id, resultado = self.db.guardar_persona(datos)
-            self.persona_actual_id = persona_id
-
-            # 1.b) Aprender sugerencias para autocompletado a partir de estos datos
-            self.db.aprender_sugerencias_desde_persona(datos)
-
-            # 2) Asegurarnos de tener un documento generado con los datos actuales
-            if not self.documento_preview or not os.path.exists(self.documento_preview):
-                try:
-                    doc = self.crear_documento_con_datos()
-                    temp_docx = tempfile.NamedTemporaryFile(delete=False, suffix=".docx")
-                    temp_docx.close()
-                    doc.save(temp_docx.name)
-                    self.documento_preview = temp_docx.name
-                except Exception as e:
-                    messagebox.showwarning(
-                        "Advertencia",
-                        f"Persona guardada pero no se pudo generar documento automático:\n{str(e)}"
-                    )
-                    self.documento_preview = None
-
-            # 3) Decidir ruta de documento en carpeta central
-            os.makedirs(DOCUMENTOS_DIR, exist_ok=True)
-            nombre_archivo = self._construir_nombre_archivo(nombre, dpi)
+            
+            # Guardar en base de datos
+            persona_id, accion = self.db.guardar_persona(datos_persona)
+            
+            # Aprender sugerencias
+            self.db.aprender_sugerencias_desde_persona(datos_persona)
+            
+            # Generar documento en DOCUMENTOS_DIR con formato completo
+            nombre_limpio = self.capitalizar_texto(nombre).replace(" ", "_")
+            nombre_archivo = f"{dpi_limpio}_acta_{nombre_limpio}.docx"
             ruta_destino = os.path.join(DOCUMENTOS_DIR, nombre_archivo)
 
-            # CASO A: ya teníamos documento previo asociado
-            if self.ruta_documento_actual and os.path.exists(self.ruta_documento_actual):
+            # Si existe un archivo anterior con el mismo DPI, eliminarlo
+            archivos_existentes = [f for f in os.listdir(DOCUMENTOS_DIR) if f.startswith(f"{dpi_limpio}_acta_")]
+            for archivo_viejo in archivos_existentes:
                 try:
-                    # Si la ruta anterior no coincide con la estándar, copiamos al estándar
-                    if os.path.abspath(os.path.dirname(self.ruta_documento_actual)) != os.path.abspath(DOCUMENTOS_DIR) \
-                       or os.path.basename(self.ruta_documento_actual) != nombre_archivo:
-
-                        shutil.copy2(self.documento_preview or self.ruta_documento_actual, ruta_destino)
-                        self.ruta_documento_actual = ruta_destino
-                    else:
-                        # Misma carpeta/nombre: sobrescribir
-                        shutil.copy2(self.documento_preview or self.ruta_documento_actual, self.ruta_documento_actual)
-
-                    # Actualizar fila de documentos en BD
-                    self.db.cursor.execute(
-                        "SELECT id FROM documentos WHERE persona_id = ? AND nombre_archivo = ?",
-                        (persona_id, nombre_archivo)
-                    )
-                    fila = self.db.cursor.fetchone()
-                    fecha_actual = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-
-                    if fila:
-                        self.db.cursor.execute(
-                            "UPDATE documentos SET ruta_archivo = ?, fecha_carga = ? WHERE id = ?",
-                            (self.ruta_documento_actual, fecha_actual, fila[0])
-                        )
-                    else:
-                        self.db.guardar_documento(persona_id, nombre_archivo, self.ruta_documento_actual, "acta")
-
-                    self.db.conn.commit()
-
+                    os.remove(os.path.join(DOCUMENTOS_DIR, archivo_viejo))
                 except Exception as e:
-                    messagebox.showwarning(
-                        "Advertencia",
-                        f"Persona guardada pero no se pudo actualizar el documento en carpeta:\n{str(e)}"
-                    )
-            else:
-                # CASO B: persona sin documento previo -> crear nuevo archivo en DOCUMENTOS_DIR
-                try:
-                    if self.documento_preview and os.path.exists(self.documento_preview):
-                        shutil.copy2(self.documento_preview, ruta_destino)
-                        self.ruta_documento_actual = ruta_destino
-
-                        # Registrar en tabla documentos
-                        self.db.guardar_documento(persona_id, nombre_archivo, ruta_destino, "acta")
-                    else:
-                        self.ruta_documento_actual = None
-                except Exception as e:
-                    messagebox.showwarning(
-                        "Advertencia",
-                        f"Persona guardada pero no se pudo crear el documento en carpeta:\n{str(e)}"
-                    )
-
-            # 4) Mensajes finales
-            if resultado == "guardado":
-                msg = "Persona registrada correctamente"
-            else:
-                msg = "Persona actualizada correctamente"
-
-            if self.ruta_documento_actual:
-                msg += f"\n\n✓ Documento en carpeta actualizado:\n{self.ruta_documento_actual}"
-
-            messagebox.showinfo("Éxito", msg)
-
-            # Actualizar estadísticas del menú principal
-            if self.callback_actualizar:
-                self.callback_actualizar()
-
+                    print(f"No se pudo eliminar archivo anterior: {e}")
+            
+            # Generar documento con datos actuales
+            doc = self.crear_documento_con_datos()
+            doc.save(ruta_destino)
+            
+            # Registrar en BD
+            self.db.guardar_documento(
+                persona_id=persona_id,
+                nombre_archivo=nombre_archivo,
+                ruta_archivo=ruta_destino,
+                tipo_documento="acta"
+            )
+            
+            # Actualizar referencias internas
+            self.persona_actual_id = persona_id
+            self.ruta_documento_actual = ruta_destino
+            
+            # Mensaje de éxito
+            messagebox.showinfo(
+                "Éxito",
+                f"Persona {accion} correctamente.\n\n"
+                f"Documento generado:\n{nombre_archivo}"
+            )
+            
+            # Abrir carpeta
+            self.abrir_carpeta_documento(ruta_destino)
+            
+            # Limpiar formulario
+            self.limpiar_campos()
+            
         except Exception as e:
-            messagebox.showerror("Error", f"Error al guardar persona:\n{str(e)}")
+            messagebox.showerror("Error", f"Error al guardar:\n{str(e)}")
+            print(f"Error completo: {e}")
+
+    def generar_documento_otra_ubicacion(self):
+        """
+        Guarda en BD, genera en DOCUMENTOS_DIR, genera en ubicación personalizada y abre carpeta personalizada.
+        """
+        # Validar campos obligatorios
+        nombre = self.entry_nombre.get().strip()
+        dpi = self.entry_dpi.get().strip()
+        
+        if not nombre:
+            messagebox.showerror("Error", "El nombre es obligatorio")
+            self.entry_nombre.focus()
+            return
+        
+        # ✅ VALIDAR DPI CON 13 DÍGITOS
+        es_valido, dpi_limpio, mensaje_error = self.validar_dpi_completo()
+        if not es_valido:
+            messagebox.showerror("DPI Inválido", mensaje_error)
+            self.entry_dpi.focus()
+            return
+        
+        # Verificar plantilla activa
+        plantilla = self.db.obtener_plantilla_activa()
+        if not plantilla:
+            messagebox.showerror("Error", "No hay ninguna plantilla activa.\n\nPor favor, carga una plantilla primero.")
+            return
+        
+        # Seleccionar carpeta de destino
+        carpeta_destino = filedialog.askdirectory(
+            title="Seleccionar carpeta para guardar el documento"
+        )
+        
+        if not carpeta_destino:
+            return  # Usuario canceló
+        
+        try:
+            # Recopilar datos
+            self.entry_edad.configure(state="normal")
+            edad_str = self.entry_edad.get().strip()
+            self.entry_edad.configure(state="readonly")
+            
+            datos_persona = {
+                'nombre': self.capitalizar_texto(nombre),
+                'sexo': self.combo_sexo.get(),
+                'fecha_nacimiento': self.entry_fecha_nac.get().strip(),
+                'edad': int(edad_str) if edad_str else None,
+                'estado_civil': self.combo_estado.get(),
+                'apellido_casada': self.capitalizar_texto(self.entry_casada.get().strip()),
+                'nacionalidad': self.capitalizar_texto(self.entry_nacionalidad.get().strip()),
+                'nivel_academico': self.capitalizar_texto(self.entry_nivel.get().strip()),
+                'domicilio': self.capitalizar_texto(self.entry_domicilio.get().strip()),
+                'dpi': dpi
+            }
+            
+            # Guardar en base de datos
+            persona_id, accion = self.db.guardar_persona(datos_persona)
+            
+            # Aprender sugerencias
+            self.db.aprender_sugerencias_desde_persona(datos_persona)
+            
+            # Generar nombre de archivo con formato completo
+            nombre_limpio = self.capitalizar_texto(nombre).replace(" ", "_")
+            nombre_archivo = f"{dpi_limpio}_acta_{nombre_limpio}.docx"
+
+            # Eliminar archivos anteriores con el mismo DPI
+            archivos_existentes = [f for f in os.listdir(DOCUMENTOS_DIR) if f.startswith(f"{dpi_limpio}_acta_")]
+            for archivo_viejo in archivos_existentes:
+                try:
+                    os.remove(os.path.join(DOCUMENTOS_DIR, archivo_viejo))
+                except Exception as e:
+                    print(f"No se pudo eliminar archivo anterior: {e}")
+            
+            # ===== 1) GENERAR EN DOCUMENTOS_DIR =====
+            ruta_documentos_dir = os.path.join(DOCUMENTOS_DIR, nombre_archivo)
+            doc_principal = self.crear_documento_con_datos()
+            doc_principal.save(ruta_documentos_dir)
+            
+            # Registrar en BD
+            self.db.guardar_documento(
+                persona_id=persona_id,
+                nombre_archivo=nombre_archivo,
+                ruta_archivo=ruta_documentos_dir,
+                tipo_documento="acta"
+            )
+            
+            # ===== 2) GENERAR EN UBICACIÓN PERSONALIZADA =====
+            ruta_personalizada = os.path.join(carpeta_destino, nombre_archivo)
+            doc_personalizado = self.crear_documento_con_datos()
+            doc_personalizado.save(ruta_personalizada)
+            
+            # Actualizar referencias internas
+            self.persona_actual_id = persona_id
+            self.ruta_documento_actual = ruta_documentos_dir
+            
+            # Mensaje de éxito
+            messagebox.showinfo(
+                "Éxito",
+                f"Persona {accion} correctamente.\n\n"
+                f"Documentos generados:\n"
+                f"1. {DOCUMENTOS_DIR}\n"
+                f"2. {carpeta_destino}\n\n"
+                f"Archivo: {nombre_archivo}"
+            )
+            
+            # Abrir carpeta personalizada
+            self.abrir_carpeta_documento(ruta_personalizada)
+            
+            # Limpiar formulario
+            self.limpiar_campos()
+            
+        except Exception as e:
+            messagebox.showerror("Error", f"Error al generar documento:\n{str(e)}")
+            print(f"Error completo: {e}")
     
     def generar_preview(self):
         """Genera una vista previa del documento"""
@@ -1410,6 +1606,18 @@ class VentanaCrearDocumento:
             print(f"No se pudo eliminar archivo temporal: {e}")
             pass
     
+    def abrir_carpeta_documento(self, ruta_archivo):
+        """Abre la carpeta donde se guardó el documento y selecciona el archivo"""
+        try:
+            if platform.system() == "Windows":
+                subprocess.run(['explorer', '/select,', os.path.abspath(ruta_archivo)])
+            elif platform.system() == "Darwin":  # macOS
+                subprocess.run(['open', '-R', ruta_archivo])
+            else:  # Linux
+                subprocess.run(['xdg-open', os.path.dirname(ruta_archivo)])
+        except Exception as e:
+            messagebox.showwarning("Advertencia", f"No se pudo abrir la carpeta:\n{str(e)}")
+    
     def crear_documento_con_datos(self):
         """Crea un documento con los datos del formulario SIEMPRE desde la plantilla original"""
         
@@ -1426,7 +1634,7 @@ class VentanaCrearDocumento:
         dia = self.entry_dia.get().strip()
         mes = self.combo_mes.get().strip()
         anio = self.entry_anio.get().strip()
-        nombre = self.entry_nombre.get().strip()
+        nombre = self.capitalizar_texto(self.entry_nombre.get().strip())
         sexo = self.combo_sexo.get().strip()
         
         # Obtener edad
@@ -1435,10 +1643,10 @@ class VentanaCrearDocumento:
         self.entry_edad.configure(state="readonly")
         
         estado_civil = self.combo_estado.get().strip()
-        apellido_casada = self.entry_casada.get().strip()
-        nacionalidad = self.entry_nacionalidad.get().strip()
-        nivel_academico = self.entry_nivel.get().strip()
-        domicilio = self.entry_domicilio.get().strip()
+        apellido_casada = self.capitalizar_texto(self.entry_casada.get().strip())
+        nacionalidad = self.capitalizar_texto(self.entry_nacionalidad.get().strip())
+        nivel_academico = self.capitalizar_texto(self.entry_nivel.get().strip())
+        domicilio = self.capitalizar_texto(self.entry_domicilio.get().strip())
         dpi = self.entry_dpi.get().strip()
         
         # Construir nombre completo con apellido de casada
@@ -1575,7 +1783,11 @@ class VentanaCrearDocumento:
             reemplazos.append(("Bachiller en Ciencias y Letras con Orientación en Computación", nivel_academico))
         
         if domicilio:
-            reemplazos.append(("con domicilio en el departamento de Guatemala", f"con domicilio en el {domicilio}"))
+            # Agregar "departamento de" si no lo tiene
+            domicilio_completo = domicilio
+            if not domicilio.lower().startswith("departamento de "):
+                domicilio_completo = f"departamento de {domicilio}"
+            reemplazos.append(("con domicilio en el departamento de Guatemala", f"con domicilio en el {domicilio_completo}"))
         
         if dpi:
             dpi_formateado = dpi.replace(" ", "")
@@ -1621,7 +1833,6 @@ class VentanaCrearDocumento:
             # para aceptar state="readonly", etc., sin hacer nada
             pass
 
-
     class _FakeCombo:
         def __init__(self, value=""):
             self._value = str(value)
@@ -1634,294 +1845,7 @@ class VentanaCrearDocumento:
 
         def configure(self, **kwargs):
             pass
-    
-    def generar_documento(self):
-        """
-        Genera o actualiza el documento en la carpeta DOCUMENTOS_DIR.
-
-        - En modo_edicion:
-            * Sobrescribe el archivo existente.
-            * Si cambia el nombre lógico (por nombre/DPI), renombra el archivo
-              y actualiza la fila en 'documentos'.
-        - En modo normal:
-            * Crea/actualiza archivo estándar en DOCUMENTOS_DIR y su registro.
-        """
-        if not self._validar_dpi_logico():
-            return
-        if not self._validar_fecha_nacimiento_logica():
-            return
-        if not self._validar_fecha_hora_acta():
-            return
-        
-        # Validar datos mínimos
-        if not self.entry_nombre.get().strip() or not self.entry_dpi.get().strip():
-            messagebox.showwarning("Advertencia", "Debe ingresar al menos el nombre y DPI")
-            return
-
-        # 1) Guardar/actualizar persona
-        try:
-            nombre = self.entry_nombre.get().strip()
-            dpi = self.entry_dpi.get().strip()
-
-            self.entry_edad.configure(state="normal")
-            edad_str = self.entry_edad.get().strip()
-            self.entry_edad.configure(state="readonly")
-
-            datos = {
-                'nombre': nombre,
-                'sexo': self.combo_sexo.get(),
-                'fecha_nacimiento': self.entry_fecha_nac.get().strip(),
-                'edad': int(edad_str) if edad_str else None,
-                'estado_civil': self.combo_estado.get(),
-                'apellido_casada': self.entry_casada.get().strip(),
-                'nacionalidad': self.entry_nacionalidad.get().strip(),
-                'nivel_academico': self.entry_nivel.get().strip(),
-                'domicilio': self.entry_domicilio.get().strip(),
-                'dpi': dpi
-            }
-
-            persona_id, _ = self.db.guardar_persona(datos)
-            self.persona_actual_id = persona_id
-
-        except Exception as e:
-            messagebox.showerror("Error", f"Error al guardar los datos:\n{str(e)}")
-            return
-
-        # 2) Asegurar DOCX temporal actualizado (aunque no haya visor)
-        if not self.documento_preview or not os.path.exists(self.documento_preview):
-            try:
-                doc = self.crear_documento_con_datos()
-                temp_docx = tempfile.NamedTemporaryFile(delete=False, suffix=".docx")
-                temp_docx.close()
-                doc.save(temp_docx.name)
-                self.documento_preview = temp_docx.name
-            except Exception as e:
-                messagebox.showerror("Error", f"No se pudo generar el documento:\n{str(e)}")
-                return
-
-        try:
-            anio = self.entry_anio.get().strip()
-            dia = self.entry_dia.get().strip()
-            mes = self.combo_mes.get().strip()
-            hora = self.entry_hora.get().strip()
-            minutos = self.entry_minutos.get().strip()
-
-            os.makedirs(DOCUMENTOS_DIR, exist_ok=True)
-
-            # ======================================================
-            # MODO EDICIÓN
-            # ======================================================
-            if self.modo_edicion and self.ruta_documento_actual:
-                # 1) Sobrescribir contenido
-                shutil.copy2(self.documento_preview, self.ruta_documento_actual)
-
-                # 2) Comprobar si el nombre lógico cambia
-                nombre_archivo_nuevo = self._construir_nombre_archivo(nombre, dpi)
-                carpeta_actual = os.path.dirname(self.ruta_documento_actual)
-                nombre_actual = os.path.basename(self.ruta_documento_actual)
-
-                fecha_actual = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-
-                if nombre_archivo_nuevo != nombre_actual:
-                    ruta_nueva = os.path.join(carpeta_actual, nombre_archivo_nuevo)
-
-                    # Renombrar en disco
-                    os.rename(self.ruta_documento_actual, ruta_nueva)
-                    self.ruta_documento_actual = ruta_nueva
-
-                    # Actualizar fila en 'documentos'
-                    # Intentar localizar por persona_id_original + nombre_original
-                    if self.persona_id_original and self.nombre_original:
-                        self.db.cursor.execute(
-                            "SELECT id FROM documentos WHERE persona_id = ? AND nombre_archivo = ?",
-                            (self.persona_id_original, self.nombre_original)
-                        )
-                        fila_doc = self.db.cursor.fetchone()
-                    else:
-                        # Fallback: buscar por persona_actual_id + ruta_original
-                        self.db.cursor.execute(
-                            "SELECT id FROM documentos WHERE persona_id = ? AND ruta_archivo = ?",
-                            (self.persona_actual_id, self.ruta_original or self.ruta_documento_actual)
-                        )
-                        fila_doc = self.db.cursor.fetchone()
-
-                    if fila_doc:
-                        self.db.cursor.execute(
-                            """
-                            UPDATE documentos
-                            SET nombre_archivo = ?, ruta_archivo = ?, fecha_carga = ?
-                            WHERE id = ?
-                            """,
-                            (nombre_archivo_nuevo, self.ruta_documento_actual, fecha_actual, fila_doc[0])
-                        )
-                    else:
-                        # Si no la encontramos, la insertamos nueva
-                        self.db.guardar_documento(
-                            self.persona_actual_id,
-                            nombre_archivo_nuevo,
-                            self.ruta_documento_actual,
-                            "acta"
-                        )
-                else:
-                    # Mismo nombre, solo actualizar ruta/fecha en BD
-                    self.db.cursor.execute(
-                        "SELECT id FROM documentos WHERE persona_id = ? AND nombre_archivo = ?",
-                        (self.persona_actual_id, nombre_actual)
-                    )
-                    fila_doc = self.db.cursor.fetchone()
-                    if fila_doc:
-                        self.db.cursor.execute(
-                            "UPDATE documentos SET ruta_archivo = ?, fecha_carga = ? WHERE id = ?",
-                            (self.ruta_documento_actual, fecha_actual, fila_doc[0])
-                        )
-
-                # 3) Actualizar historial_actas para ese año
-                if anio:
-                    fecha_acta = f"{dia}/{mes}/{anio}" if dia and mes else datetime.now().strftime("%d/%m/%Y")
-                    self.db.cursor.execute(
-                        "SELECT id FROM historial_actas WHERE persona_id = ? AND anio = ?",
-                        (self.persona_actual_id, int(anio))
-                    )
-                    existe = self.db.cursor.fetchone()
-                    if existe:
-                        self.db.cursor.execute(
-                            """
-                            UPDATE historial_actas
-                            SET fecha_acta = ?, hora = ?, minutos = ?, ruta_documento = ?
-                            WHERE id = ?
-                            """,
-                            (fecha_acta, hora, minutos, self.ruta_documento_actual, existe[0])
-                        )
-                    else:
-                        self.db.guardar_historial_acta(
-                            self.persona_actual_id,
-                            fecha_acta,
-                            hora,
-                            minutos,
-                            int(anio),
-                            self.ruta_documento_actual
-                        )
-
-                self.db.conn.commit()
-
-                messagebox.showinfo(
-                    "Éxito",
-                    f"✅ Documento editado y guardado sobre el original:\n{self.ruta_documento_actual}\n\n"
-                    f"💾 Datos actualizados en la base de datos"
-                )
-
-                # Callbacks de actualización
-                if self.callback_guardado:
-                    self.callback_guardado()
-                if self.callback_actualizar:
-                    self.callback_actualizar()
-
-                # Cerrar ventana en modo edición
-                if not self.es_integrado and self.ventana:
-                    self.ventana.destroy()
-
-                return
-
-            # ======================================================
-            # MODO NORMAL (CREAR / ACTUALIZAR ESTÁNDAR)
-            # ======================================================
-            nombre_archivo = self._construir_nombre_archivo(nombre, dpi)
-            ruta_destino = os.path.join(DOCUMENTOS_DIR, nombre_archivo)
-
-            # CASO 1: ya tenía documento previo
-            if self.persona_actual_id and self.ruta_documento_actual and os.path.exists(self.ruta_documento_actual):
-                if os.path.abspath(os.path.dirname(self.ruta_documento_actual)) != os.path.abspath(DOCUMENTOS_DIR) \
-                   or os.path.basename(self.ruta_documento_actual) != nombre_archivo:
-                    shutil.copy2(self.documento_preview, ruta_destino)
-                    self.ruta_documento_actual = ruta_destino
-                else:
-                    shutil.copy2(self.documento_preview, self.ruta_documento_actual)
-            else:
-                # CASO 2: persona nueva o sin documento previo
-                shutil.copy2(self.documento_preview, ruta_destino)
-                self.ruta_documento_actual = ruta_destino
-
-            # Actualizar/crear fila en 'documentos'
-            fecha_actual = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            self.db.cursor.execute(
-                "SELECT id FROM documentos WHERE persona_id = ? AND nombre_archivo = ?",
-                (self.persona_actual_id, nombre_archivo)
-            )
-            fila = self.db.cursor.fetchone()
-
-            if fila:
-                self.db.cursor.execute(
-                    "UPDATE documentos SET ruta_archivo = ?, fecha_carga = ? WHERE id = ?",
-                    (self.ruta_documento_actual, fecha_actual, fila[0])
-                )
-            else:
-                self.db.guardar_documento(self.persona_actual_id, nombre_archivo, self.ruta_documento_actual, "acta")
-
-            # Historial por año
-            if anio:
-                fecha_acta = f"{dia}/{mes}/{anio}" if dia and mes else datetime.now().strftime("%d/%m/%Y")
-                self.db.cursor.execute(
-                    "SELECT id FROM historial_actas WHERE persona_id = ? AND anio = ?",
-                    (self.persona_actual_id, int(anio))
-                )
-                existe = self.db.cursor.fetchone()
-                if existe:
-                    self.db.cursor.execute(
-                        """
-                        UPDATE historial_actas
-                        SET fecha_acta = ?, hora = ?, minutos = ?, ruta_documento = ?
-                        WHERE id = ?
-                        """,
-                        (fecha_acta, hora, minutos, self.ruta_documento_actual, existe[0])
-                    )
-                else:
-                    self.db.guardar_historial_acta(
-                        self.persona_actual_id,
-                        fecha_acta,
-                        hora,
-                        minutos,
-                        int(anio),
-                        self.ruta_documento_actual
-                    )
-
-            self.db.conn.commit()
-
-            messagebox.showinfo(
-                "Éxito",
-                f"✅ Documento generado/actualizado en carpeta central:\n{self.ruta_documento_actual}\n\n"
-                f"💾 Datos guardados en la base de datos"
-            )
-
-            # Preguntar por copia
-            respuesta = messagebox.askyesno(
-                "Guardar copia",
-                "¿Desea guardar una COPIA del documento en otra ubicación?"
-            )
-            if respuesta:
-                archivo_copia = filedialog.asksaveasfilename(
-                    defaultextension=".docx",
-                    filetypes=[("Documento Word", "*.docx")],
-                    initialfile=nombre_archivo
-                )
-                if archivo_copia:
-                    try:
-                        shutil.copy2(self.ruta_documento_actual, archivo_copia)
-                        messagebox.showinfo(
-                            "Copia guardada",
-                            f"Se ha guardado una copia en:\n{archivo_copia}"
-                        )
-                    except Exception as e:
-                        messagebox.showwarning(
-                            "Advertencia",
-                            f"El documento central fue generado, pero no se pudo guardar la copia:\n{str(e)}"
-                        )
-
-            if self.callback_actualizar:
-                self.callback_actualizar()
-
-        except Exception as e:
-            messagebox.showerror("Error", f"Error al generar el documento:\n{str(e)}")
-    
+            
     def reemplazar_genero_documento(self, doc, buscar, reemplazar):
         """Reemplaza la PRIMERA ocurrencia de un texto de género en cada párrafo del documento"""
         reemplazos_totales = 0

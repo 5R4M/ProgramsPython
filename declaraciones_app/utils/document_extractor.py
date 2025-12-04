@@ -72,13 +72,42 @@ class DocumentExtractor:
                     datos['nacionalidad'] = nac.lower()
                     break
             
-            # ===== EXTRAER DOMICILIO =====
+            # ===== EXTRAER DOMICILIO (SOLO NOMBRE DEL DEPARTAMENTO) =====
+            departamentos_guatemala = [
+                'Alta Verapaz', 'Baja Verapaz', 'Chimaltenango', 'Chiquimula',
+                'El Progreso', 'Escuintla', 'Guatemala', 'Huehuetenango',
+                'Izabal', 'Jalapa', 'Jutiapa', 'Petén', 'Quetzaltenango',
+                'Quiché', 'Retalhuleu', 'Sacatepéquez', 'San Marcos',
+                'Santa Rosa', 'Sololá', 'Suchitepéquez', 'Totonicapán', 'Zacapa'
+            ]
+
+            # Buscar patrón: "domicilio en el departamento de NOMBRE"
             domicilio_match = re.search(
-                r'(?:con\s+)?domicilio\s+(?:en\s+)?(?:el\s+)?(.+?)(?:\.|,|\n)', 
-                texto, re.IGNORECASE
+                r'domicilio\s+en\s+el\s+departamento\s+de\s+([A-ZÁÉÍÓÚa-záéíóúñ\s]+?)(?:\.|,|\n|$)',
+                texto,
+                re.IGNORECASE
             )
+
             if domicilio_match:
-                datos['domicilio'] = domicilio_match.group(1).strip()
+                departamento_extraido = domicilio_match.group(1).strip()
+                
+                # Verificar si es un departamento válido
+                for depto in departamentos_guatemala:
+                    if depto.lower() in departamento_extraido.lower():
+                        datos['domicilio'] = depto  # Solo el nombre del departamento
+                        break
+                
+                # Si no se encontró coincidencia exacta, usar lo extraído
+                if 'domicilio' not in datos:
+                    datos['domicilio'] = departamento_extraido.title()
+            else:
+                # Buscar solo el nombre del departamento sin "departamento de"
+                for depto in departamentos_guatemala:
+                    # Buscar el departamento en el texto
+                    patron_depto = r'\b' + re.escape(depto) + r'\b'
+                    if re.search(patron_depto, texto, re.IGNORECASE):
+                        datos['domicilio'] = depto  # Solo el nombre del departamento
+                        break
             
             # ===== EXTRAER NIVEL ACADÉMICO =====
             nivel_match = re.search(
