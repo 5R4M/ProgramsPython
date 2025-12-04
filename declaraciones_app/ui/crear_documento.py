@@ -601,6 +601,7 @@ class VentanaCrearDocumento:
         frame_botones.grid_columnconfigure(0, weight=1, uniform="button")
         frame_botones.grid_columnconfigure(1, weight=1, uniform="button")
         frame_botones.grid_columnconfigure(2, weight=1, uniform="button")
+        frame_botones.grid_columnconfigure(3, weight=1, uniform="button")
 
         btn_guardar = ctk.CTkButton(
             frame_botones,
@@ -624,6 +625,17 @@ class VentanaCrearDocumento:
         )
         btn_preview.grid(row=0, column=1, padx=3, sticky="ew")
 
+        btn_imprimir = ctk.CTkButton(
+            frame_botones,
+            text="🖨️ Imprimir",
+            command=self.imprimir_documento_temporal,
+            height=32,
+            font=ctk.CTkFont(size=12, weight="bold"),
+            fg_color="#9b59b6",  # Color morado
+            hover_color="#8e44ad"
+        )
+        btn_imprimir.grid(row=0, column=2, padx=3, sticky="ew")
+
         btn_generar = ctk.CTkButton(
             frame_botones,
             text="✅ Generar",
@@ -633,7 +645,7 @@ class VentanaCrearDocumento:
             fg_color=COLOR_SUCCESS,
             hover_color="#27ae60"
         )
-        btn_generar.grid(row=0, column=2, padx=3, sticky="ew")
+        btn_generar.grid(row=0, column=3, padx=3, sticky="ew")
 
         # ==== PANEL DERECHO: Visor de documento ====
         if not self.solo_formulario:
@@ -957,9 +969,30 @@ class VentanaCrearDocumento:
         """Muestra una ventana para seleccionar entre múltiples personas"""
         ventana = ctk.CTkToplevel(self.ventana)
         ventana.title("Seleccionar Persona")
-        ventana.geometry("600x400")
+        
+        # Configurar ventana modal
         ventana.transient(self.ventana)
-        ventana.grab_set()
+        ventana.grab_set()  # Bloquear interacción con ventana padre
+        
+        # IMPORTANTE: Actualizar geometría ANTES de calcular posición
+        ventana.update_idletasks()
+        
+        # Dimensiones
+        width = 600
+        height = 500
+        
+        # Calcular posición centrada
+        screen_width = ventana.winfo_screenwidth()
+        screen_height = ventana.winfo_screenheight()
+        x = (screen_width // 2) - (width // 2)
+        y = (screen_height // 2) - (height // 2)
+        
+        # Establecer geometría con posición centrada
+        ventana.geometry(f"{width}x{height}+{x}+{y}")
+        
+        # Traer al frente
+        ventana.lift()
+        ventana.focus_force()
         
         ctk.CTkLabel(
             ventana,
@@ -1329,6 +1362,53 @@ class VentanaCrearDocumento:
                 text_color="red"
             )
             self.lbl_visor_estado.pack(pady=20)
+    
+    def imprimir_documento_temporal(self):
+        """Abre el documento en el visor de PDF predeterminado para impresión manual"""
+        if not self.documento_preview or not os.path.exists(self.documento_preview):
+            messagebox.showwarning(
+                "Sin documento",
+                "Primero genere una vista previa del documento."
+            )
+            return
+        
+        try:
+            # Convertir a PDF temporal para imprimir
+            temp_pdf = tempfile.NamedTemporaryFile(delete=False, suffix=".pdf")
+            temp_pdf.close()
+            
+            # Convertir DOCX a PDF
+            convert(self.documento_preview, temp_pdf.name)
+            
+            # Abrir con el visor predeterminado
+            messagebox.showinfo(
+                "Abrir documento",
+                "📄 Se abrirá el visor de PDF para la impresión del documento."
+            )
+            
+            # Abrir el PDF con el programa predeterminado
+            os.startfile(temp_pdf.name)
+            
+            # Limpiar PDF temporal después de 30 segundos
+            # (tiempo suficiente para que se abra el visor)
+            self.ventana.after(30000, lambda: self._limpiar_pdf_temp(temp_pdf.name))
+            
+        except Exception as e:
+            messagebox.showerror(
+                "Error al abrir documento",
+                f"No se pudo procesar el documento:\n{str(e)}"
+            )
+
+
+    def _limpiar_pdf_temp(self, pdf_path):
+        """Limpia archivo PDF temporal después de imprimir"""
+        try:
+            if os.path.exists(pdf_path):
+                os.unlink(pdf_path)
+        except Exception as e:
+            # Ignorar errores de limpieza (archivo puede estar en uso)
+            print(f"No se pudo eliminar archivo temporal: {e}")
+            pass
     
     def crear_documento_con_datos(self):
         """Crea un documento con los datos del formulario SIEMPRE desde la plantilla original"""

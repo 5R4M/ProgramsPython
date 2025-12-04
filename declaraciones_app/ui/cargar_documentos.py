@@ -795,10 +795,10 @@ class VentanaCargarDocumentos:
         # Crear ventana de progreso MEJORADA
         ventana_progreso = ctk.CTkToplevel(self.ventana)
         ventana_progreso.title("⚙️ Procesando documentos...")
-        ventana_progreso.geometry("700x600")
+        ventana_progreso.geometry("700x700")
         ventana_progreso.grab_set()
         ventana_progreso.resizable(False, False)
-        self.center_toplevel(ventana_progreso, 700, 600)
+        self.center_toplevel(ventana_progreso, 700, 700)
 
         # Frame principal
         main_frame = ctk.CTkFrame(ventana_progreso)
