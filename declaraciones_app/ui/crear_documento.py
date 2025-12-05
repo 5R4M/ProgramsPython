@@ -216,7 +216,7 @@ class VentanaCrearDocumento:
             """
             parent_ventana: instancia de VentanaCrearDocumento (para acceder a db y ventana principal)
             entry: CTkEntry donde se escribe
-            tipo_palabra: 'nombre', 'apellido', 'nacionalidad', 'domicilio', etc.
+            tipo_palabra: 'nombre', 'apellido', 'nacionalidad', 'domicilio', 'nivel_academico'
             """
             self.parent = parent_ventana
             self.entry = entry
@@ -224,11 +224,13 @@ class VentanaCrearDocumento:
 
             self.popup = None  # CTkToplevel con las sugerencias
             self.sugerencias = []
+            self.cerrando_popup = False  # Flag para evitar cierre prematuro
 
             # Enlazar eventos
             self.entry.bind("<KeyRelease>", self._on_key_release)
             self.entry.bind("<FocusOut>", self._on_focus_out)
             self.entry.bind("<Down>", self._on_down_key)
+            self.entry.bind("<Escape>", lambda e: self._cerrar_popup())
 
         def _on_key_release(self, event):
             # Ignorar algunas teclas de navegación
@@ -262,10 +264,13 @@ class VentanaCrearDocumento:
             self.popup.update_idletasks()
             x = self.entry.winfo_rootx()
             y = self.entry.winfo_rooty() + self.entry.winfo_height()
-            self.popup.geometry(f"+{x}+{y}")
+            
+            # Calcular ancho del popup (mismo que el entry)
+            ancho = self.entry.winfo_width()
+            self.popup.geometry(f"{ancho}x{min(len(self.sugerencias) * 30, 200)}+{x}+{y}")
 
-            frame = ctk.CTkFrame(self.popup)
-            frame.pack(fill="both", expand=True)
+            frame = ctk.CTkScrollableFrame(self.popup, width=ancho-10)
+            frame.pack(fill="both", expand=True, padx=2, pady=2)
 
             for sugerencia in self.sugerencias:
                 btn = ctk.CTkButton(
@@ -273,9 +278,16 @@ class VentanaCrearDocumento:
                     text=sugerencia,
                     anchor="w",
                     command=lambda s=sugerencia: self._usar_sugerencia(s),
-                    height=24
+                    height=28,
+                    fg_color="transparent",
+                    hover_color=COLOR_PRIMARY,
+                    corner_radius=5
                 )
                 btn.pack(fill="x", padx=2, pady=1)
+                
+                # Evitar que el botón cierre el popup al hacer hover
+                btn.bind("<Enter>", lambda e: self._cancelar_cierre())
+                btn.bind("<Leave>", lambda e: None)
 
         def _usar_sugerencia(self, texto):
             # Reemplazar contenido del entry
@@ -283,23 +295,43 @@ class VentanaCrearDocumento:
             self.entry.insert(0, texto)
             self._cerrar_popup()
             self.entry.focus_set()
+            
+            # Mover cursor al final
+            self.entry.icursor("end")
+
+        def _cancelar_cierre(self):
+            """Cancela el cierre programado del popup"""
+            self.cerrando_popup = False
 
         def _on_focus_out(self, event):
-            # Cerrar popup cuando el entry pierde foco (ligero retraso para permitir clic)
-            self.entry.after(150, self._cerrar_popup)
+            """Cerrar popup cuando el entry pierde foco (con retraso para permitir clic)"""
+            self.cerrando_popup = True
+            self.entry.after(200, self._verificar_y_cerrar)
+
+        def _verificar_y_cerrar(self):
+            """Verifica si debe cerrar el popup"""
+            if self.cerrando_popup:
+                self._cerrar_popup()
 
         def _on_down_key(self, event):
             # Si hay popup, enfocar el primer botón
-            if self.popup and self.popup.winfo_children():
-                frame = self.popup.winfo_children()[0]
-                if frame.winfo_children():
-                    frame.winfo_children()[0].focus_set()
+            if self.popup and self.popup.winfo_exists():
+                try:
+                    frame = self.popup.winfo_children()[0]
+                    if frame.winfo_children():
+                        frame.winfo_children()[0].focus_set()
+                except:  # noqa: E722
+                    pass
             return "break"
 
         def _cerrar_popup(self):
             if self.popup and self.popup.winfo_exists():
-                self.popup.destroy()
+                try:
+                    self.popup.destroy()
+                except:  # noqa: E722
+                    pass
             self.popup = None
+            self.cerrando_popup = False
     
     # ==================== CONFIGURACIONES ====================
 
@@ -705,6 +737,7 @@ class VentanaCrearDocumento:
         self.autocomplete_casada = self.AutoCompleter(self, self.entry_casada, "apellido")
         self.autocomplete_nacionalidad = self.AutoCompleter(self, self.entry_nacionalidad, "nacionalidad")
         self.autocomplete_domicilio = self.AutoCompleter(self, self.entry_domicilio, "domicilio")
+        self.autocomplete_nivel = self.AutoCompleter(self, self.entry_nivel, "nivel_academico")
         
         # ----- Botones -----
         frame_botones = ctk.CTkFrame(panel_izquierdo)

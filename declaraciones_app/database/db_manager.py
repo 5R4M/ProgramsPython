@@ -712,181 +712,109 @@ class DatabaseManager:
 
     # ===== MÉTODOS PARA SUGERENCIAS DE PALABRAS =====
 
-    def obtener_sugerencias_palabra(self, tipo, prefijo, limite=10):
+    def obtener_sugerencias_palabra(self, tipo_palabra, texto_parcial):
         """
-        Devuelve hasta 'limite' palabras de la tabla sugerencias_palabras
-        cuyo texto inicie con el prefijo (case-insensitive).
-        tipo: 'nombre', 'apellido', 'nacionalidad', 'domicilio', etc.
+        Obtiene sugerencias de palabras desde la tabla de sugerencias.
+        
+        Args:
+            tipo_palabra: 'nombre', 'apellido', 'nacionalidad', 'domicilio', 'nivel_academico'
+            texto_parcial: Texto que el usuario está escribiendo
+        
+        Returns:
+            Lista de sugerencias ordenadas por frecuencia
         """
         try:
-            prefijo = prefijo.strip()
-            if not prefijo:
-                return []
-
-            like_pat = prefijo + "%"
-            self.cursor.execute(
-                """
-                SELECT palabra
+            # Crear tabla si no existe
+            self.cursor.execute("""
+                CREATE TABLE IF NOT EXISTS sugerencias_palabras (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    tipo TEXT NOT NULL,
+                    palabra TEXT NOT NULL,
+                    frecuencia INTEGER DEFAULT 1,
+                    UNIQUE(tipo, palabra)
+                )
+            """)
+            self.conn.commit()
+            
+            # Buscar sugerencias que coincidan
+            self.cursor.execute("""
+                SELECT palabra, frecuencia
                 FROM sugerencias_palabras
-                WHERE tipo = ? AND LOWER(palabra) LIKE LOWER(?)
-                ORDER BY palabra ASC
-                LIMIT ?
-                """,
-                (tipo, like_pat, limite)
-            )
-            filas = self.cursor.fetchall()
-            return [f[0] for f in filas]
+                WHERE tipo = ? AND palabra LIKE ?
+                ORDER BY frecuencia DESC, palabra ASC
+                LIMIT 10
+            """, (tipo_palabra, f"{texto_parcial}%"))
+            
+            resultados = self.cursor.fetchall()
+            return [r[0] for r in resultados]
+        
         except Exception as e:
-            print(f"Error en obtener_sugerencias_palabra: {e}")
+            print(f"Error al obtener sugerencias: {e}")
             return []
 
-    def agregar_sugerencia_si_no_existe(self, palabra, tipo):
+    def aprender_sugerencias_desde_persona(self, datos_persona):
         """
-        Inserta 'palabra' en sugerencias_palabras si no existe para ese 'tipo'.
-        No distingue mayúsculas/minúsculas al verificar existencia.
-        """
-        try:
-            palabra = palabra.strip()
-            if not palabra:
-                return
-
-            # Verificar si ya existe (case-insensitive)
-            self.cursor.execute(
-                """
-                SELECT 1 FROM sugerencias_palabras
-                WHERE tipo = ? AND LOWER(palabra) = LOWER(?)
-                LIMIT 1
-                """,
-                (tipo, palabra)
-            )
-            existe = self.cursor.fetchone()
-            if existe:
-                return
-
-            self.cursor.execute(
-                "INSERT INTO sugerencias_palabras (palabra, tipo) VALUES (?, ?)",
-                (palabra, tipo)
-            )
-            self.conn.commit()
-        except Exception as e:
-            print(f"Error en agregar_sugerencia_si_no_existe: {e}")
-
-    def aprender_sugerencias_desde_persona(self, datos_persona: dict):
-        """
-        A partir de los datos de una persona, registra sugerencias en la tabla.
-        Espera un dict con claves como:
-        - nombre       (campo de la GUI con nombre completo)
-        - apellido_casada
-        - nacionalidad
-        - domicilio
+        Aprende sugerencias desde los datos de una persona guardada.
+        
+        Args:
+            datos_persona: Diccionario con los datos de la persona
         """
         try:
-            conectores = {"de", "del", "la", "las", "los", "y"}
-
-            # ===== 1) Nombres y apellidos desde 'nombre' =====
-            nombre_completo = (datos_persona.get("nombre") or "").strip()
-            if nombre_completo:
-                partes = nombre_completo.split()
-                n = len(partes)
-
-                # Normalización rápida (para lógica interna, no para guardar):
-                partes_lower = [p.lower() for p in partes]
-
-                # Heurística:
-                # - Si solo hay 1 palabra: la consideramos nombre.
-                # - Si hay 2 palabras: 1 nombre + 1 apellido.
-                # - Si hay 3 o más:
-                #     * Tomamos típicamente 2-3 tokens iniciales como nombres
-                #     * Y 1-2 tokens finales como apellidos (incluyendo conectores anteriores).
-
-                nombres_tokens = []
-                apellidos_tokens = []
-
-                if n == 1:
-                    nombres_tokens = [partes[0]]
-                elif n == 2:
-                    nombres_tokens = [partes[0]]
-                    apellidos_tokens = [partes[1]]
+            # Crear tabla si no existe
+            self.cursor.execute("""
+                CREATE TABLE IF NOT EXISTS sugerencias_palabras (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    tipo TEXT NOT NULL,
+                    palabra TEXT NOT NULL,
+                    frecuencia INTEGER DEFAULT 1,
+                    UNIQUE(tipo, palabra)
+                )
+            """)
+            
+            # Mapeo de campos a tipos de sugerencias
+            mapeo = {
+                'nombre': 'nombre',
+                'apellido_casada': 'apellido',
+                'nacionalidad': 'nacionalidad',
+                'domicilio': 'domicilio',
+                'nivel_academico': 'nivel_academico'
+            }
+            
+            for campo, tipo in mapeo.items():
+                valor = datos_persona.get(campo, '').strip()
+                
+                if not valor:
+                    continue
+                
+                # Para nombres, aprender cada palabra por separado
+                if tipo == 'nombre':
+                    palabras = valor.split()
+                    for palabra in palabras:
+                        if len(palabra) >= 2:
+                            self._incrementar_sugerencia(tipo, palabra)
                 else:
-                    # n >= 3
-                    # Regla básica inicial: 2 primeros tokens como nombres
-                    idx_fin_nombres = 2
-
-                    # Si el tercer token parece también parte del nombre (por conector o nombre compuesto),
-                    # lo añadimos a nombres.
-                    if n >= 3:
-                        # Si el tercer token es un conector o un nombre típico de pila, lo sumamos
-                        if partes_lower[2] in conectores:
-                            idx_fin_nombres = 3
-                        else:
-                            # Si el segundo token es un conector ("del Carmen"): también sumamos el tercero
-                            if partes_lower[1] in conectores:
-                                idx_fin_nombres = 3
-
-                    # Definir nombres
-                    nombres_tokens = partes[:idx_fin_nombres]
-
-                    # El resto lo consideramos zona de apellidos
-                    resto = partes[idx_fin_nombres:]
-                    partes_lower[idx_fin_nombres:]
-
-                    # Si en el resto hay conectores tipo "de la Cruz", mantenerlos con el apellido
-                    # pero para registrar sugerencias, generaremos:
-                    #  - tokens individuales
-                    #  - algunas combinaciones consecutivas
-                    apellidos_tokens = resto
-
-                # Registrar nombres como sugerencias tipo "nombre"
-                for token in nombres_tokens:
-                    token = token.strip()
-                    if token:
-                        self.agregar_sugerencia_si_no_existe(token, "nombre")
-
-                # Registrar apellidos
-                if apellidos_tokens:
-                    # 1) Tokens individuales
-                    for token in apellidos_tokens:
-                        t = token.strip()
-                        if t:
-                            self.agregar_sugerencia_si_no_existe(t, "apellido")
-
-                    # 2) Combinaciones consecutivas (máximo 3 en cadena) para apellidos compuestos
-                    #    Ej: ["de", "la", "Cruz", "García"] -> "de la Cruz", "Cruz García", "de la Cruz García"
-                    m = len(apellidos_tokens)
-                    for i in range(m):
-                        # Longitud 2
-                        if i + 1 < m:
-                            combo2 = f"{apellidos_tokens[i]} {apellidos_tokens[i+1]}".strip()
-                            self.agregar_sugerencia_si_no_existe(combo2, "apellido")
-                        # Longitud 3
-                        if i + 2 < m:
-                            combo3 = f"{apellidos_tokens[i]} {apellidos_tokens[i+1]} {apellidos_tokens[i+2]}".strip()
-                            self.agregar_sugerencia_si_no_existe(combo3, "apellido")
-
-            # ===== 2) Apellido de casada (texto completo) =====
-            ap_casada = (datos_persona.get("apellido_casada") or "").strip()
-            if ap_casada:
-                # Registrar texto completo
-                self.agregar_sugerencia_si_no_existe(ap_casada, "apellido")
-                # Y también tokens individuales
-                partes_casada = ap_casada.split()
-                for t in partes_casada:
-                    t = t.strip()
-                    if t:
-                        self.agregar_sugerencia_si_no_existe(t, "apellido")
-
-            # ===== 3) Nacionalidad =====
-            nacionalidad = (datos_persona.get("nacionalidad") or "").strip()
-            if nacionalidad:
-                self.agregar_sugerencia_si_no_existe(nacionalidad, "nacionalidad")
-
-            # ===== 4) Domicilio =====
-            domicilio = (datos_persona.get("domicilio") or "").strip()
-            if domicilio:
-                self.agregar_sugerencia_si_no_existe(domicilio, "domicilio")
-
+                    # Para otros campos, aprender la frase completa
+                    if len(valor) >= 2:
+                        self._incrementar_sugerencia(tipo, valor)
+            
+            self.conn.commit()
+        
         except Exception as e:
-            print(f"Error en aprender_sugerencias_desde_persona: {e}")
+            print(f"Error al aprender sugerencias: {e}")
+            import traceback
+            traceback.print_exc()
+
+    def _incrementar_sugerencia(self, tipo, palabra):
+        """Incrementa la frecuencia de una sugerencia o la crea si no existe"""
+        try:
+            self.cursor.execute("""
+                INSERT INTO sugerencias_palabras (tipo, palabra, frecuencia)
+                VALUES (?, ?, 1)
+                ON CONFLICT(tipo, palabra) DO UPDATE SET
+                    frecuencia = frecuencia + 1
+            """, (tipo, palabra))
+        except Exception as e:
+            print(f"Error al incrementar sugerencia: {e}")
      
     def cerrar(self):
         """Cierra la conexión a la base de datos"""

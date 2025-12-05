@@ -254,6 +254,23 @@ class VentanaCargarDocumentos:
         )
         btn_refrescar.pack(side="left", padx=5)
         
+        # ✅ Selector de año
+        ctk.CTkLabel(
+            frame_busqueda,
+            text="📅 Año:",
+            font=ctk.CTkFont(size=14)
+        ).pack(side="left", padx=(10, 5))
+
+        self.combo_año_filtro = ctk.CTkComboBox(
+            frame_busqueda,
+            values=["Todos"],
+            command=lambda año: self.filtrar_documentos_existentes(),
+            width=100,
+            state="readonly"
+        )
+        self.combo_año_filtro.pack(side="left", padx=5)
+        self.combo_año_filtro.set("Todos")
+        
         # Frame scrollable para documentos existentes
         self.lista_existentes_frame = ctk.CTkScrollableFrame(tab_existentes, height=500)
         self.lista_existentes_frame.pack(pady=5, padx=10, fill="both", expand=True)
@@ -336,14 +353,32 @@ class VentanaCargarDocumentos:
                     None                  # persona_id
                 )
 
-            # Obtener fecha de modificación del archivo
+            # ✅ Extraer año del documento
+            año_doc = None
+            try:
+                datos_extraidos = DocumentExtractor.extraer_datos(ruta_archivo)
+                if datos_extraidos and 'año' in datos_extraidos:
+                    año_doc = datos_extraidos['año']
+            except Exception:
+                pass
+
+            # Si no se pudo extraer, usar año de modificación del archivo
+            if not año_doc:
+                try:
+                    mtime = os.path.getmtime(ruta_archivo)
+                    import datetime
+                    año_doc = datetime.datetime.fromtimestamp(mtime).year
+                except OSError:
+                    año_doc = datetime.datetime.now().year  # Año actual por defecto
+
+            # Obtener fecha de modificación para ordenar
             try:
                 mtime = os.path.getmtime(ruta_archivo)
             except OSError:
-                mtime = 0  # si falla, que aparezca al final
+                mtime = 0
 
-            # Extendemos la tupla doc añadiendo mtime como último campo
-            doc_con_mtime = doc + (mtime,)
+            # Extendemos la tupla doc añadiendo mtime y año_doc
+            doc_con_mtime = doc + (mtime, año_doc)
             docs_con_mtime.append((doc_con_mtime, mtime))
 
         # Ordenar por mtime descendente (más reciente primero)
@@ -352,6 +387,17 @@ class VentanaCargarDocumentos:
         # Guardar solo la parte doc (ya con mtime dentro)
         self.documentos_existentes = [item[0] for item in docs_con_mtime]
 
+        # ✅ Extraer años únicos y actualizar ComboBox
+        años_disponibles = set()
+        for doc in self.documentos_existentes:
+            año_doc = doc[8] if len(doc) > 8 else None
+            if año_doc:
+                años_disponibles.add(año_doc)
+
+        años_ordenados = sorted(años_disponibles, reverse=True)
+        valores_combo = ["Todos"] + [str(año) for año in años_ordenados]
+        self.combo_año_filtro.configure(values=valores_combo)
+        
         # Encabezado con contador
         header_frame = ctk.CTkFrame(self.lista_existentes_frame, fg_color="transparent")
         header_frame.pack(pady=10, padx=10, fill="x")
@@ -413,6 +459,7 @@ class VentanaCargarDocumentos:
             nombre_persona = doc[4] if doc[4] else "Desconocido"
             dpi_persona = doc[5] if doc[5] else "N/A"
             mtime = doc[7] if len(doc) > 7 else 0
+            año_doc = doc[8] if len(doc) > 8 else None 
 
             # Convertir mtime a texto amigable
             if mtime:
@@ -428,7 +475,8 @@ class VentanaCargarDocumentos:
                 f"📄 {nombre_archivo}\n"
                 f"👤 {nombre_persona}\n"
                 f"📋 DPI: {dpi_persona}\n"
-                f"📅 BD: {fecha_carga_bd}\n"
+                f"📅 Año: {año_doc if año_doc else 'N/A'}\n"
+                f"📥 Cargado: {fecha_carga_bd}\n"  # ✅ Mostrar fecha de carga
                 f"🕒 Última modificación: {fecha_mod_str}"
             )
 
@@ -461,12 +509,9 @@ class VentanaCargarDocumentos:
             btn_eliminar.pack(side="right", padx=5)
         
     def filtrar_documentos_existentes(self):
-        """Filtra los documentos existentes según el texto de búsqueda"""
+        """Filtra los documentos existentes según el texto de búsqueda y año"""
         texto_busqueda = self.entry_buscar.get().strip().lower()
-        
-        if not texto_busqueda:
-            self.mostrar_documentos_existentes(self.documentos_existentes)
-            return
+        año_seleccionado = self.combo_año_filtro.get()
         
         # Filtrar documentos
         documentos_filtrados = []
@@ -474,11 +519,23 @@ class VentanaCargarDocumentos:
             nombre_archivo = doc[1].lower()
             nombre_persona = doc[4].lower() if doc[4] else ""
             dpi_persona = doc[5].lower() if doc[5] else ""
+            año_doc = doc[8] if len(doc) > 8 else None
             
-            # Buscar en nombre de archivo, nombre de persona o DPI
-            if (texto_busqueda in nombre_archivo or
+            # Filtro de texto
+            coincide_texto = (
+                not texto_busqueda or
+                texto_busqueda in nombre_archivo or
                 texto_busqueda in nombre_persona or
-                texto_busqueda in dpi_persona):
+                texto_busqueda in dpi_persona
+            )
+            
+            # Filtro de año
+            coincide_año = (
+                año_seleccionado == "Todos" or
+                (año_doc and str(año_doc) == año_seleccionado)
+            )
+            
+            if coincide_texto and coincide_año:
                 documentos_filtrados.append(doc)
         
         self.mostrar_documentos_existentes(documentos_filtrados)

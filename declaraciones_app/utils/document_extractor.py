@@ -127,11 +127,72 @@ class DocumentExtractor:
             if casada_match:
                 datos['apellido_casada'] = casada_match.group(1).strip()
             
+            # ===== EXTRAER AÑO DEL DOCUMENTO =====
+            año_documento = DocumentExtractor._extraer_año_documento(texto)
+            if año_documento:
+                datos['año'] = año_documento
+
             return datos if datos else None
             
         except Exception:
             # En producción, si quieres loguear, usa logging en lugar de print
             return None
+    
+    @staticmethod
+    def _extraer_año_documento(texto):
+        """Extrae el año del documento desde el texto"""
+        
+        # ESTRATEGIA 1: Buscar patrón "día X de MES de AÑO"
+        # Ejemplo: "día 28 de noviembre de 2025"
+        patron_fecha_completa = r'día\s+\d{1,2}\s+de\s+\w+\s+de\s+(\d{4})'
+        match = re.search(patron_fecha_completa, texto, re.IGNORECASE)
+        if match:
+            año = int(match.group(1))
+            if 1900 <= año <= 2100:
+                return año
+        
+        # ESTRATEGIA 2: Buscar "MES de AÑO" o "MES del AÑO"
+        # Ejemplo: "noviembre de 2025" o "noviembre del 2025"
+        patron_mes_año = r'(?:enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|octubre|noviembre|diciembre)\s+de[l]?\s+(\d{4})'
+        match = re.search(patron_mes_año, texto, re.IGNORECASE)
+        if match:
+            año = int(match.group(1))
+            if 1900 <= año <= 2100:
+                return año
+        
+        # ESTRATEGIA 3: Buscar "año AÑO" o "año de AÑO"
+        # Ejemplo: "año 2025" o "año de 2025"
+        patron_año = r'año\s+(?:de\s+)?(\d{4})'
+        match = re.search(patron_año, texto, re.IGNORECASE)
+        if match:
+            año = int(match.group(1))
+            if 1900 <= año <= 2100:
+                return año
+        
+        # ESTRATEGIA 4: Buscar formato de fecha DD/MM/AAAA o DD-MM-AAAA
+        patron_fecha_numerica = r'\b\d{1,2}[/-]\d{1,2}[/-](\d{4})\b'
+        matches = re.finditer(patron_fecha_numerica, texto)
+        for match in matches:
+            año = int(match.group(1))
+            if 1900 <= año <= 2100:
+                return año
+        
+        # ESTRATEGIA 5: Buscar cualquier año de 4 dígitos en el rango válido
+        # (última opción, menos confiable)
+        patron_año_simple = r'\b(20\d{2}|19\d{2})\b'
+        matches = re.finditer(patron_año_simple, texto)
+        años_encontrados = []
+        for match in matches:
+            año = int(match.group(1))
+            if 1900 <= año <= 2100:
+                años_encontrados.append(año)
+        
+        # Si encontramos años, devolver el más reciente
+        if años_encontrados:
+            return max(años_encontrados)
+        
+        # Si no se encontró nada, devolver None
+        return None
     
     @staticmethod
     def _extraer_nombre_persona(texto, dpi=None):

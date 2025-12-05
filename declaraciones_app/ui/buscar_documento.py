@@ -5,7 +5,7 @@ from PIL import Image, ImageTk
 import fitz  # PyMuPDF
 import tempfile
 from docx2pdf import convert
-from config import COLOR_SUCCESS, COLOR_PRIMARY, DOCUMENTOS_DIR
+from config import COLOR_SUCCESS,COLOR_PRIMARY,DOCUMENTOS_DIR
 from models import Persona
 from ui.crear_documento import VentanaCrearDocumento
 
@@ -15,8 +15,9 @@ class VentanaBuscarDocumento:
         self.es_integrado = es_integrado
         self.callback_actualizar = None
         self.persona_seleccionada = None
-        self.documentos_persona = []
-        self.documento_actual_index = 0
+        
+        self.todos_documentos = []      
+        self.resultados_busqueda = []   
         
         if es_integrado:
             # Crear como Frame integrado
@@ -29,6 +30,9 @@ class VentanaBuscarDocumento:
             self.ventana.after(100, self.maximizar_ventana)
         
         self.crear_interfaz()
+        
+        # ✅ AGREGAR ESTA LÍNEA:
+        self.cargar_todos_documentos_iniciales()
     
     def set_callback_actualizar(self, callback):
         """Permite establecer un callback para actualizar estadísticas"""
@@ -135,7 +139,27 @@ class VentanaBuscarDocumento:
             width=50
         )
         btn_buscar_nombre.pack(side="left", padx=5)
-        
+
+        # ✅ Selector de año para búsqueda
+        frame_filtro_año = ctk.CTkFrame(frame_busqueda, fg_color="transparent")
+        frame_filtro_año.pack(pady=(15, 5), padx=10, fill="x")
+
+        ctk.CTkLabel(
+            frame_filtro_año,
+            text="Filtrar por año:",
+            font=ctk.CTkFont(size=12, weight="bold")
+        ).pack(side="left", padx=(0, 10))
+
+        self.combo_año_busqueda = ctk.CTkComboBox(
+            frame_filtro_año,
+            values=["Todos"],
+            command=self.filtrar_busqueda_por_año,
+            width=120,
+            state="readonly"
+        )
+        self.combo_año_busqueda.pack(side="left")
+        self.combo_año_busqueda.set("Todos")
+
         # Frame de resultados
         ctk.CTkLabel(
             panel_izquierdo,
@@ -143,7 +167,7 @@ class VentanaBuscarDocumento:
             font=ctk.CTkFont(size=16, weight="bold")
         ).pack(pady=(20, 10), padx=20, anchor="w")
         
-        self.resultados_frame = ctk.CTkScrollableFrame(panel_izquierdo, height=300)
+        self.resultados_frame = ctk.CTkScrollableFrame(panel_izquierdo)
         self.resultados_frame.pack(pady=10, padx=20, fill="both", expand=True)
         
         self.lbl_sin_resultados = ctk.CTkLabel(
@@ -165,8 +189,8 @@ class VentanaBuscarDocumento:
             text="Documentos de la persona:",
             font=ctk.CTkFont(size=16, weight="bold")
         ).pack(pady=(10, 5), padx=20, anchor="w")
-        
-        self.documentos_frame = ctk.CTkScrollableFrame(panel_izquierdo, height=200)
+
+        self.documentos_frame = ctk.CTkScrollableFrame(panel_izquierdo)
         self.documentos_frame.pack(pady=10, padx=20, fill="both", expand=True)
         
         self.lbl_sin_documentos = ctk.CTkLabel(
@@ -200,6 +224,175 @@ class VentanaBuscarDocumento:
         )
         self.lbl_visor_estado.pack(pady=200)
     
+    def cargar_todos_documentos_iniciales(self):
+        """Carga todos los documentos al iniciar la ventana"""
+        import datetime
+        
+        self.todos_documentos = []
+        documentos_por_año_temp = {}
+        
+        directorio_docs = DOCUMENTOS_DIR
+        
+        if not os.path.exists(directorio_docs):
+            return
+        
+        try:
+            # Obtener todas las personas de la BD
+            todas_personas = self.db.obtener_todas_personas()
+            
+            if not todas_personas:
+                return
+            
+            archivos = os.listdir(directorio_docs)
+            
+            for resultado in todas_personas:
+                # Extraer datos directamente de la tupla
+                # Formato: (id, nombre_completo, dpi, edad, estado_civil, nacionalidad, 
+                #           domicilio, nivel_academico, apellido_casada, fecha_registro, sexo, fecha_nacimiento)
+                persona_id = resultado[0]
+                nombre_completo = resultado[1]
+                dpi = resultado[2]
+                
+                dpi_normalizado = self.normalizar_dpi(dpi)
+                
+                for archivo in archivos:
+                    # Verificar extensión válida
+                    if not (archivo.lower().endswith('.docx') or archivo.lower().endswith('.pdf')):
+                        continue
+                    
+                    # Normalizar nombre del archivo
+                    archivo_normalizado = archivo.replace(" ", "").replace("_", "").replace("-", "")
+                    
+                    # Verificar si contiene el DPI
+                    if dpi_normalizado.lower() in archivo_normalizado.lower():
+                        ruta_completa = os.path.join(directorio_docs, archivo)
+                        
+                        # Extraer año del documento
+                        año = None
+                        try:
+                            from utils.document_extractor import DocumentExtractor
+                            datos_extraidos = DocumentExtractor.extraer_datos(ruta_completa)
+                            if datos_extraidos and 'año' in datos_extraidos:
+                                año = datos_extraidos['año']
+                        except Exception as e:
+                            print(f"Error al extraer año de {archivo}: {e}")
+                        
+                        # Si no se pudo extraer, usar fecha de modificación
+                        if not año:
+                            fecha_modificacion = os.path.getmtime(ruta_completa)
+                            fecha_obj = datetime.datetime.fromtimestamp(fecha_modificacion)
+                            año = fecha_obj.year
+                        
+                        # Obtener fecha de modificación
+                        fecha_modificacion = os.path.getmtime(ruta_completa)
+                        fecha_obj = datetime.datetime.fromtimestamp(fecha_modificacion)
+                        fecha_str = fecha_obj.strftime("%Y-%m-%d %H:%M:%S")
+                        
+                        # Obtener extensión
+                        extension = archivo.lower().split('.')[-1].upper()
+                        
+                        # Formato: (doc_id, nombre_archivo, ruta_archivo, fecha_carga, tipo_documento, persona_id, año, nombre_persona)
+                        doc_info = (None, archivo, ruta_completa, fecha_str, extension, persona_id, año, nombre_completo)
+                        self.todos_documentos.append(doc_info)
+                        
+                        # Agrupar por año
+                        if año not in documentos_por_año_temp:
+                            documentos_por_año_temp[año] = []
+                        documentos_por_año_temp[año].append(doc_info)
+            
+            # Actualizar ComboBox de año
+            if documentos_por_año_temp:
+                años_disponibles = sorted(documentos_por_año_temp.keys(), reverse=True)
+                valores_combo = ["Todos"] + [str(año) for año in años_disponibles]
+                self.combo_año_busqueda.configure(values=valores_combo)
+                self.combo_año_busqueda.set("Todos")
+                
+                # Guardar referencia
+                self.documentos_por_año_busqueda = documentos_por_año_temp
+                
+                # Mostrar TODOS los documentos
+                self.mostrar_documentos_iniciales(documentos_por_año_temp)
+            else:
+                # No hay documentos, mostrar mensaje
+                for widget in self.resultados_frame.winfo_children():
+                    widget.destroy()
+                
+                ctk.CTkLabel(
+                    self.resultados_frame,
+                    text="No hay documentos registrados",
+                    text_color="gray",
+                    font=ctk.CTkFont(size=14)
+                ).pack(pady=50)
+                
+                self.combo_año_busqueda.configure(values=["Todos"])
+                self.combo_año_busqueda.set("Todos")
+        
+        except Exception as e:
+            print(f"Error al cargar documentos iniciales: {e}")
+            import traceback
+            traceback.print_exc()
+
+    def mostrar_documentos_iniciales(self, documentos_por_año_temp):
+        """Muestra todos los documentos iniciales agrupados por año"""
+        # Limpiar frame de resultados
+        for widget in self.resultados_frame.winfo_children():
+            widget.destroy()
+        
+        # Ordenar años de más reciente a más antiguo
+        años_ordenados = sorted(documentos_por_año_temp.keys(), reverse=True)
+        
+        for año in años_ordenados:
+            # Título del año
+            ctk.CTkLabel(
+                self.resultados_frame,
+                text=f"📅 Documentos de {año}",
+                font=ctk.CTkFont(size=14, weight="bold"),
+                text_color=COLOR_PRIMARY
+            ).pack(pady=(15, 10), padx=10, anchor="w")
+            
+            # Documentos del año ordenados por fecha
+            documentos_año = sorted(
+                documentos_por_año_temp[año],
+                key=lambda x: x[3],  # fecha
+                reverse=True
+            )
+            
+            for doc in documentos_año:
+                # Formato: (doc_id, nombre_archivo, ruta_archivo, fecha_carga, tipo_documento, persona_id, año, nombre_persona)
+                doc_id, nombre_archivo, ruta_archivo, fecha_carga, tipo_documento, persona_id, año_doc, nombre_persona = doc
+                
+                frame_doc = ctk.CTkFrame(self.resultados_frame)
+                frame_doc.pack(pady=5, padx=10, fill="x")
+                
+                info_doc = f"📄 {nombre_archivo}\n👤 {nombre_persona}\n📅 {fecha_carga} | {tipo_documento}"
+                
+                ctk.CTkLabel(
+                    frame_doc,
+                    text=info_doc,
+                    anchor="w",
+                    justify="left",
+                    font=ctk.CTkFont(size=11)
+                ).pack(side="left", padx=10, pady=5, expand=True, fill="x")
+                
+                # Botón SELECCIONAR
+                btn_seleccionar = ctk.CTkButton(
+                    frame_doc,
+                    text="✅ Seleccionar",
+                    command=lambda pid=persona_id: self.seleccionar_persona_por_id(pid),
+                    width=120,
+                    fg_color=COLOR_SUCCESS,
+                    hover_color="#27ae60"
+                )
+                btn_seleccionar.pack(side="right", padx=5)
+            
+            # Separador entre años
+            if año != años_ordenados[-1]:
+                ctk.CTkFrame(
+                    self.resultados_frame,
+                    height=2,
+                    fg_color="gray"
+                ).pack(pady=10, padx=20, fill="x")
+        
     def buscar_por_dpi(self):
         """Busca una persona por DPI"""
         dpi = self.entry_dpi.get().strip()
@@ -228,9 +421,11 @@ class VentanaBuscarDocumento:
             messagebox.showwarning("Advertencia", "Ingrese un nombre para buscar")
             return
         
-        resultados = self.db.buscar_personas_por_nombre(nombre)  # <-- AQUÍ (plural)
+        resultados = self.db.buscar_personas_por_nombre(nombre)
         
         if resultados:
+            self.resultados_busqueda = resultados  # ✅ Guardar resultados
+            self.cargar_todos_documentos_busqueda(resultados)  # ✅ Cargar documentos
             self.mostrar_resultados(resultados)
         else:
             self.mostrar_sin_resultados()
@@ -240,6 +435,225 @@ class VentanaBuscarDocumento:
                 "Puede crear un nuevo documento desde el menú principal."
             )
     
+    def cargar_todos_documentos_busqueda(self, resultados):
+        """Carga todos los documentos de las personas encontradas en la búsqueda"""
+        import datetime
+        
+        self.todos_documentos = []
+        documentos_por_año_temp = {}
+        
+        directorio_docs = DOCUMENTOS_DIR
+        
+        if not os.path.exists(directorio_docs):
+            return
+        
+        try:
+            archivos = os.listdir(directorio_docs)
+            
+            for resultado in resultados:
+                persona = Persona.from_tuple(resultado)
+                dpi_normalizado = self.normalizar_dpi(persona.dpi)
+                
+                for archivo in archivos:
+                    # Verificar extensión válida
+                    if not (archivo.lower().endswith('.docx') or archivo.lower().endswith('.pdf')):
+                        continue
+                    
+                    # Normalizar nombre del archivo
+                    archivo_normalizado = archivo.replace(" ", "").replace("_", "").replace("-", "")
+                    
+                    # Verificar si contiene el DPI
+                    if dpi_normalizado.lower() in archivo_normalizado.lower():
+                        ruta_completa = os.path.join(directorio_docs, archivo)
+                        
+                        # ✅ Extraer año del documento usando DocumentExtractor
+                        año = None
+                        try:
+                            from utils.document_extractor import DocumentExtractor
+                            datos_extraidos = DocumentExtractor.extraer_datos(ruta_completa)
+                            if datos_extraidos and 'año' in datos_extraidos:
+                                año = datos_extraidos['año']
+                        except Exception as e:
+                            print(f"Error al extraer año de {archivo}: {e}")
+                        
+                        # Si no se pudo extraer, usar fecha de modificación como fallback
+                        if not año:
+                            fecha_modificacion = os.path.getmtime(ruta_completa)
+                            fecha_obj = datetime.datetime.fromtimestamp(fecha_modificacion)
+                            año = fecha_obj.year
+                        
+                        # Obtener fecha de modificación para mostrar
+                        fecha_modificacion = os.path.getmtime(ruta_completa)
+                        fecha_obj = datetime.datetime.fromtimestamp(fecha_modificacion)
+                        fecha_str = fecha_obj.strftime("%Y-%m-%d %H:%M:%S")
+                        
+                        # Obtener fecha de modificación para mostrar
+                        fecha_modificacion = os.path.getmtime(ruta_completa)
+                        fecha_obj = datetime.datetime.fromtimestamp(fecha_modificacion)
+                        fecha_str = fecha_obj.strftime("%Y-%m-%d %H:%M:%S")
+                        
+                        # Obtener extensión
+                        extension = archivo.lower().split('.')[-1].upper()
+                        
+                        doc_info = (None, archivo, ruta_completa, fecha_str, extension, persona.id, año, persona.nombre_completo)
+                        self.todos_documentos.append(doc_info)
+                        
+                        # Agrupar por año
+                        if año not in documentos_por_año_temp:
+                            documentos_por_año_temp[año] = []
+                        documentos_por_año_temp[año].append(doc_info)
+            
+            # Actualizar ComboBox de año en búsqueda
+            if documentos_por_año_temp:
+                años_disponibles = sorted(documentos_por_año_temp.keys(), reverse=True)
+                valores_combo = ["Todos"] + [str(año) for año in años_disponibles]
+                self.combo_año_busqueda.configure(values=valores_combo)
+                
+                # ✅ Seleccionar "Todos" por defecto
+                self.combo_año_busqueda.set("Todos")
+                
+                # ✅ Guardar referencia para filtrado
+                self.documentos_por_año_busqueda = documentos_por_año_temp
+                
+                # ✅ Mostrar TODOS los documentos por defecto
+                self.mostrar_documentos_busqueda_por_año("Todos", documentos_por_año_temp)
+            else:
+                self.combo_año_busqueda.configure(values=["Todos"])
+                self.combo_año_busqueda.set("Todos")
+        
+        except Exception as e:
+            print(f"Error al cargar documentos de búsqueda: {e}")
+            import traceback
+            traceback.print_exc()
+    
+    def filtrar_busqueda_por_año(self, año_str):
+        """Filtra los documentos de búsqueda por año"""
+        if not self.todos_documentos:
+            return
+        
+        # Usar la referencia guardada
+        if hasattr(self, 'documentos_por_año_busqueda'):
+            self.mostrar_documentos_busqueda_por_año(año_str, self.documentos_por_año_busqueda)
+        else:
+            # Reagrupar documentos por año si no existe la referencia
+            documentos_por_año_temp = {}
+            for doc in self.todos_documentos:
+                año = doc[6]
+                if año not in documentos_por_año_temp:
+                    documentos_por_año_temp[año] = []
+                documentos_por_año_temp[año].append(doc)
+            
+            self.mostrar_documentos_busqueda_por_año(año_str, documentos_por_año_temp)
+    
+    def mostrar_documentos_busqueda_por_año(self, año_str, documentos_por_año_temp):
+        """Muestra los documentos de búsqueda filtrados por año"""
+        # Limpiar frame de resultados
+        for widget in self.resultados_frame.winfo_children():
+            widget.destroy()
+        
+        if año_str == "Todos":
+            # Mostrar todos los años
+            años_ordenados = sorted(documentos_por_año_temp.keys(), reverse=True)
+            
+            for año in años_ordenados:
+                # Título del año
+                ctk.CTkLabel(
+                    self.resultados_frame,
+                    text=f"📅 Documentos de {año}",
+                    font=ctk.CTkFont(size=14, weight="bold"),
+                    text_color=COLOR_PRIMARY
+                ).pack(pady=(15, 10), padx=10, anchor="w")
+                
+                # Documentos del año
+                documentos_año = sorted(
+                    documentos_por_año_temp[año],
+                    key=lambda x: x[3],  # fecha
+                    reverse=True
+                )
+                
+                for doc in documentos_año:
+                    # Formato: (doc_id, nombre_archivo, ruta_archivo, fecha_carga, tipo_documento, persona_id, año, nombre_persona)
+                    doc_id, nombre_archivo, ruta_archivo, fecha_carga, tipo_documento, persona_id, año_doc, nombre_persona = doc
+                    
+                    frame_doc = ctk.CTkFrame(self.resultados_frame)
+                    frame_doc.pack(pady=5, padx=10, fill="x")
+                    
+                    info_doc = f"📄 {nombre_archivo}\n👤 {nombre_persona}\n📅 {fecha_carga} | {tipo_documento}"
+                    
+                    ctk.CTkLabel(
+                        frame_doc,
+                        text=info_doc,
+                        anchor="w",
+                        justify="left",
+                        font=ctk.CTkFont(size=11)
+                    ).pack(side="left", padx=10, pady=5, expand=True, fill="x")
+                    
+                    # Botón SELECCIONAR
+                    btn_seleccionar = ctk.CTkButton(
+                        frame_doc,
+                        text="✅ Seleccionar",
+                        command=lambda pid=persona_id: self.seleccionar_persona_por_id(pid),
+                        width=120,
+                        fg_color=COLOR_SUCCESS,
+                        hover_color="#27ae60"
+                    )
+                    btn_seleccionar.pack(side="right", padx=5)
+                
+                # Separador entre años
+                ctk.CTkFrame(
+                    self.resultados_frame,
+                    height=2,
+                    fg_color="gray"
+                ).pack(pady=10, padx=20, fill="x")
+        
+        else:
+            # Mostrar solo el año seleccionado
+            año = int(año_str)
+            
+            if año in documentos_por_año_temp:
+                # Título del año
+                ctk.CTkLabel(
+                    self.resultados_frame,
+                    text=f"📅 Documentos de {año}",
+                    font=ctk.CTkFont(size=14, weight="bold"),
+                    text_color=COLOR_PRIMARY
+                ).pack(pady=(10, 15), padx=10, anchor="w")
+                
+                # Documentos del año
+                documentos_año = sorted(
+                    documentos_por_año_temp[año],
+                    key=lambda x: x[3],
+                    reverse=True
+                )
+                
+                for doc in documentos_año:
+                    # Formato: (doc_id, nombre_archivo, ruta_archivo, fecha_carga, tipo_documento, persona_id, año, nombre_persona)
+                    doc_id, nombre_archivo, ruta_archivo, fecha_carga, tipo_documento, persona_id, año_doc, nombre_persona = doc
+                    
+                    frame_doc = ctk.CTkFrame(self.resultados_frame)
+                    frame_doc.pack(pady=5, padx=10, fill="x")
+                    
+                    info_doc = f"📄 {nombre_archivo}\n👤 {nombre_persona}\n📅 {fecha_carga} | {tipo_documento}"
+                    
+                    ctk.CTkLabel(
+                        frame_doc,
+                        text=info_doc,
+                        anchor="w",
+                        justify="left",
+                        font=ctk.CTkFont(size=11)
+                    ).pack(side="left", padx=10, pady=5, expand=True, fill="x")
+                    
+                    # Botón SELECCIONAR
+                    btn_seleccionar = ctk.CTkButton(
+                        frame_doc,
+                        text="✅ Seleccionar",
+                        command=lambda pid=persona_id: self.seleccionar_persona_por_id(pid),
+                        width=120,
+                        fg_color=COLOR_SUCCESS,
+                        hover_color="#27ae60"
+                    )
+                    btn_seleccionar.pack(side="right", padx=5)
+        
     def mostrar_sin_resultados(self):
         """Muestra mensaje cuando no hay resultados"""
         # Limpiar resultados
@@ -305,6 +719,28 @@ class VentanaBuscarDocumento:
         # Cargar documentos de la persona
         self.cargar_documentos_persona()
     
+    def seleccionar_persona_por_id(self, persona_id):
+        """Selecciona una persona por su ID y muestra su información"""
+        try:
+            # Obtener persona completa desde la BD
+            resultado_persona = self.db.obtener_persona_por_id(persona_id)
+            
+            if not resultado_persona:
+                messagebox.showerror("Error", "No se pudo obtener la información de la persona.")
+                return
+            
+            # Convertir a objeto Persona
+            persona = Persona.from_tuple(resultado_persona)
+            
+            # Usar el método existente
+            self.seleccionar_persona(persona)
+        
+        except Exception as e:
+            messagebox.showerror("Error", f"Error al seleccionar persona:\n{str(e)}")
+            print(f"Error en seleccionar_persona_por_id: {e}")
+            import traceback
+            traceback.print_exc()
+        
     def abrir_editor_persona(self, persona):
         try:
             editor = VentanaCrearDocumento(
@@ -363,7 +799,7 @@ class VentanaBuscarDocumento:
         return dpi.replace(" ", "").replace("_", "").replace("-", "")
     
     def cargar_documentos_persona(self):
-        """Carga los documentos de la persona seleccionada"""
+        """Carga los documentos de la persona seleccionada y los agrupa por año"""
         # Limpiar frame de documentos
         for widget in self.documentos_frame.winfo_children():
             widget.destroy()
@@ -386,8 +822,10 @@ class VentanaBuscarDocumento:
         
         # Buscar todos los archivos
         self.documentos_persona = []
+        self.documentos_por_año = {}  # ✅ Reiniciar agrupación
         
         try:
+            import datetime
             archivos = os.listdir(directorio_docs)
             
             for archivo in archivos:
@@ -402,17 +840,37 @@ class VentanaBuscarDocumento:
                 if dpi_normalizado.lower() in archivo_normalizado.lower():
                     ruta_completa = os.path.join(directorio_docs, archivo)
                     
-                    # Obtener fecha de modificación
-                    import datetime
+                    # ✅ Extraer año del documento usando DocumentExtractor
+                    año = None
+                    try:
+                        from utils.document_extractor import DocumentExtractor
+                        datos_extraidos = DocumentExtractor.extraer_datos(ruta_completa)
+                        if datos_extraidos and 'año' in datos_extraidos:
+                            año = datos_extraidos['año']
+                    except Exception as e:
+                        print(f"Error al extraer año de {archivo}: {e}")
+                    
+                    # Si no se pudo extraer, usar fecha de modificación como fallback
+                    if not año:
+                        fecha_modificacion = os.path.getmtime(ruta_completa)
+                        fecha_obj = datetime.datetime.fromtimestamp(fecha_modificacion)
+                        año = fecha_obj.year
+                    
+                    # Obtener fecha de modificación para mostrar
                     fecha_modificacion = os.path.getmtime(ruta_completa)
-                    fecha_str = datetime.datetime.fromtimestamp(fecha_modificacion).strftime("%Y-%m-%d %H:%M:%S")
+                    fecha_obj = datetime.datetime.fromtimestamp(fecha_modificacion)
+                    fecha_str = fecha_obj.strftime("%Y-%m-%d %H:%M:%S")
                     
                     # Obtener extensión
                     extension = archivo.lower().split('.')[-1].upper()
                     
-                    self.documentos_persona.append(
-                        (None, archivo, ruta_completa, fecha_str, extension, self.persona_seleccionada.id)
-                    )
+                    doc_info = (None, archivo, ruta_completa, fecha_str, extension, self.persona_seleccionada.id, año)
+                    self.documentos_persona.append(doc_info)
+                    
+                    # ✅ Agrupar por año
+                    if año not in self.documentos_por_año:
+                        self.documentos_por_año[año] = []
+                    self.documentos_por_año[año].append(doc_info)
         
         except Exception as e:
             print(f"Error al listar archivos: {e}")
@@ -429,55 +887,91 @@ class VentanaBuscarDocumento:
             self.lbl_sin_documentos.pack(pady=30)
             return
         
-        # Ordenar por fecha
-        self.documentos_persona.sort(key=lambda x: x[3], reverse=True)
-                
-        # Mostrar documentos
-        for i, doc in enumerate(self.documentos_persona):
-            doc_id, nombre_archivo, ruta_archivo, fecha_carga, tipo_documento, persona_id = doc
 
-            frame_doc = ctk.CTkFrame(self.documentos_frame)
-            frame_doc.pack(pady=5, padx=10, fill="x")
-
-            info_doc = f"📄 {nombre_archivo}\n📅 {fecha_carga} | {tipo_documento}"
-
+        # ✅ Mostrar todos los documentos agrupados por año
+        self.mostrar_todos_documentos_persona()
+    
+    def mostrar_todos_documentos_persona(self):
+        """Muestra todos los documentos de la persona agrupados por año"""
+        # Limpiar frame
+        for widget in self.documentos_frame.winfo_children():
+            widget.destroy()
+        
+        # Ordenar años de más reciente a más antiguo
+        años_ordenados = sorted(self.documentos_por_año.keys(), reverse=True)
+        
+        for año in años_ordenados:
+            # Título del año
             ctk.CTkLabel(
+                self.documentos_frame,
+                text=f"📅 {año}",
+                font=ctk.CTkFont(size=14, weight="bold"),
+                text_color=COLOR_PRIMARY
+            ).pack(pady=(15, 10), padx=10, anchor="w")
+            
+            # Documentos del año ordenados por fecha
+            documentos_año = sorted(
+                self.documentos_por_año[año],
+                key=lambda x: x[3],  # fecha_carga
+                reverse=True
+            )
+            
+            for doc in documentos_año:
+                doc_id, nombre_archivo, ruta_archivo, fecha_carga, tipo_documento, persona_id, año_doc = doc
+                
+                # Encontrar índice en la lista completa
+                index = next(i for i, d in enumerate(self.documentos_persona) if d[2] == ruta_archivo)
+                
+                frame_doc = ctk.CTkFrame(self.documentos_frame)
+                frame_doc.pack(pady=5, padx=10, fill="x")
+                
+                info_doc = f"📄 {nombre_archivo}\n📅 {fecha_carga} | {tipo_documento}"
+                
+                ctk.CTkLabel(
                     frame_doc,
                     text=info_doc,
                     anchor="w",
                     justify="left",
                     font=ctk.CTkFont(size=11)
-            ).pack(side="left", padx=10, pady=5, expand=True, fill="x")
-
-            # Botón VER – mismo tamaño que Editar, color neutro
-            btn_ver = ctk.CTkButton(
-                frame_doc,
-                text="👁️ Ver",
-                command=lambda idx=i: self.ver_documento(idx),
-                width=90,
-                fg_color="#4a4a4a",      # gris oscuro
-                hover_color="#6b6b6b"    # gris más claro al pasar el mouse
-            )
-            btn_ver.pack(side="right", padx=5)
-
-            # Botón EDITAR – mismo tamaño, color primario
-            btn_editar_doc = ctk.CTkButton(
-                frame_doc,
-                text="✏️ Editar",
-                command=lambda idx=i: self.editar_documento(idx),
-                width=90,
-                fg_color=COLOR_PRIMARY,  # tu color primario
-                hover_color="#2980b9"    # hover azul
-            )
-            btn_editar_doc.pack(side="right", padx=5)
+                ).pack(side="left", padx=10, pady=5, expand=True, fill="x")
+                
+                # Botón VER
+                btn_ver = ctk.CTkButton(
+                    frame_doc,
+                    text="👁️ Ver",
+                    command=lambda idx=index: self.ver_documento(idx),
+                    width=90,
+                    fg_color="#4a4a4a",
+                    hover_color="#6b6b6b"
+                )
+                btn_ver.pack(side="right", padx=5)
+                
+                # Botón EDITAR
+                btn_editar_doc = ctk.CTkButton(
+                    frame_doc,
+                    text="✏️ Editar",
+                    command=lambda idx=index: self.editar_documento(idx),
+                    width=90,
+                    fg_color=COLOR_PRIMARY,
+                    hover_color="#2980b9"
+                )
+                btn_editar_doc.pack(side="right", padx=5)
             
+            # Separador entre años
+            if año != años_ordenados[-1]:  # No agregar separador después del último año
+                ctk.CTkFrame(
+                    self.documentos_frame,
+                    height=2,
+                    fg_color="gray"
+                ).pack(pady=10, padx=20, fill="x")
+                    
     def ver_documento(self, index):
         """Muestra un documento en el visor"""
         if not self.documentos_persona or index >= len(self.documentos_persona):
             return
         
         doc = self.documentos_persona[index]
-        doc_id, nombre_archivo, ruta_archivo, fecha_carga, tipo_documento, persona_id = doc
+        doc_id, nombre_archivo, ruta_archivo, fecha_carga, tipo_documento, persona_id, año_doc = doc
         
         # Verificar que el archivo existe
         if not os.path.exists(ruta_archivo):
@@ -579,7 +1073,7 @@ class VentanaBuscarDocumento:
             return
 
         doc = self.documentos_persona[index]
-        doc_id, nombre_archivo, ruta_archivo, fecha_carga, tipo_documento, persona_id = doc
+        doc_id, nombre_archivo, ruta_archivo, fecha_carga, tipo_documento, persona_id, año_doc = doc
 
         if not os.path.exists(ruta_archivo):
             messagebox.showerror(
@@ -630,6 +1124,78 @@ class VentanaBuscarDocumento:
         if self.persona_seleccionada:
             self.cargar_documentos_persona()
         # Actualizar estadísticas globales si hay callback
+        if self.callback_actualizar:
+            self.callback_actualizar()
+    
+    def ver_documento_directo(self, ruta_archivo):
+        """Muestra un documento directamente desde la ruta"""
+        if not os.path.exists(ruta_archivo):
+            messagebox.showerror("Error", f"El archivo no existe:\n{ruta_archivo}")
+            return
+        
+        # Limpiar visor
+        for widget in self.visor_scroll.winfo_children():
+            widget.destroy()
+        
+        self.lbl_visor_estado = ctk.CTkLabel(
+            self.visor_scroll,
+            text="Cargando documento...",
+            text_color="orange",
+            font=ctk.CTkFont(size=14)
+        )
+        self.lbl_visor_estado.pack(pady=20)
+        self.ventana.update()
+        
+        try:
+            temp_pdf = tempfile.NamedTemporaryFile(delete=False, suffix=".pdf")
+            temp_pdf.close()
+            
+            convert(ruta_archivo, temp_pdf.name)
+            self.mostrar_pdf_en_visor(temp_pdf.name)
+            os.unlink(temp_pdf.name)
+        
+        except Exception as e:
+            self.lbl_visor_estado.configure(
+                text=f"Error al cargar documento:\n{str(e)}",
+                text_color="red"
+            )
+
+    def editar_documento_directo(self, ruta_archivo, persona_id, nombre_archivo):
+        """Edita un documento directamente"""
+        try:
+            resultado_persona = self.db.obtener_persona_por_id(persona_id)
+            if not resultado_persona:
+                messagebox.showerror("Error", "No se pudo obtener la información de la persona.")
+                return
+            
+            editor = VentanaCrearDocumento(
+                self.ventana,
+                self.db,
+                es_integrado=False,
+                solo_formulario=True,
+                modo_edicion=True
+            )
+            
+            editor.cargar_datos_persona(resultado_persona)
+            editor.establecer_documento_original(
+                ruta_archivo=ruta_archivo,
+                nombre_archivo=nombre_archivo,
+                persona_id=persona_id
+            )
+            
+            if hasattr(editor, "set_callback_guardado"):
+                editor.set_callback_guardado(self._callback_despues_edicion_busqueda)
+        
+        except Exception as e:
+            messagebox.showerror("Error", f"No se pudo abrir el editor:\n{str(e)}")
+
+    def _callback_despues_edicion_busqueda(self):
+        """Callback después de editar desde búsqueda"""
+        # Recargar documentos de búsqueda
+        if self.resultados_busqueda:
+            self.cargar_todos_documentos_busqueda(self.resultados_busqueda)
+        
+        # Actualizar estadísticas
         if self.callback_actualizar:
             self.callback_actualizar()
     
