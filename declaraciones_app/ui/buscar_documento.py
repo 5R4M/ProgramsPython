@@ -8,6 +8,98 @@ from docx2pdf import convert
 from config import COLOR_SUCCESS,COLOR_PRIMARY,DOCUMENTOS_DIR
 from models import Persona
 from ui.crear_documento import VentanaCrearDocumento
+import json
+from pathlib import Path
+import re
+from docx import Document
+
+class CacheAños:
+    """Cache persistente para años de documentos"""
+    
+    def __init__(self, cache_file="cache_años_busqueda.json"):
+        self.cache_file = Path(DOCUMENTOS_DIR) / cache_file
+        self.cache = self._cargar_cache()
+    
+    def _cargar_cache(self):
+        """Carga el cache desde disco"""
+        if self.cache_file.exists():
+            try:
+                with open(self.cache_file, 'r', encoding='utf-8') as f:
+                    return json.load(f)
+            except:  # noqa: E722
+                return {}
+        return {}
+    
+    def _guardar_cache(self):
+        """Guarda el cache a disco"""
+        try:
+            with open(self.cache_file, 'w', encoding='utf-8') as f:
+                json.dump(self.cache, f, ensure_ascii=False, indent=2)
+        except Exception as e:
+            print(f"Error al guardar cache: {e}")
+    
+    def obtener_año(self, ruta_archivo):
+        """Obtiene el año de un documento usando cache"""
+        import datetime
+        
+        nombre = os.path.basename(ruta_archivo)
+        
+        try:
+            mtime = os.path.getmtime(ruta_archivo)
+            cache_key = f"{nombre}_{int(mtime)}"
+            
+            # Verificar cache
+            if cache_key in self.cache:
+                return self.cache[cache_key]
+            
+            # Extraer año rápido (solo del documento, no fecha modificación primero)
+            año = self._extraer_año_rapido(ruta_archivo)
+            
+            # Guardar en cache
+            self.cache[cache_key] = año
+            self._guardar_cache()
+            
+            return año
+            
+        except Exception as e:
+            print(f"Error obteniendo año de {nombre}: {e}")
+            return datetime.datetime.now().year
+    
+    def _extraer_año_rapido(self, ruta_archivo):
+        """Extrae SOLO el año del documento de forma rápida"""
+        import datetime
+        
+        año = None
+        
+        try:
+            if ruta_archivo.lower().endswith('.docx'):
+                doc = Document(ruta_archivo)
+                
+                # Buscar solo en los primeros 5 párrafos (mucho más rápido)
+                texto_busqueda = ""
+                for i, para in enumerate(doc.paragraphs[:5]):
+                    texto_busqueda += para.text + " "
+                    if i >= 4:  # Solo 5 párrafos máximo
+                        break
+                
+                # Buscar patrón de año (2020-2099)
+                matches = re.findall(r'\b(20\d{2})\b', texto_busqueda)
+                
+                if matches:
+                    año = int(matches[0])
+        
+        except Exception as e:
+            print(f"Error extrayendo año: {e}")
+        
+        # Fallback: fecha de modificación
+        if not año:
+            try:
+                mtime = os.path.getmtime(ruta_archivo)
+                año = datetime.datetime.fromtimestamp(mtime).year
+            except:  # noqa: E722
+                año = datetime.datetime.now().year
+        
+        return año
 
 class VentanaBuscarDocumento:
     def __init__(self, parent, db, es_integrado=False):
@@ -18,6 +110,8 @@ class VentanaBuscarDocumento:
         
         self.todos_documentos = []      
         self.resultados_busqueda = []   
+        
+        self._cache_años = CacheAños()
         
         if es_integrado:
             # Crear como Frame integrado
@@ -225,8 +319,15 @@ class VentanaBuscarDocumento:
         self.lbl_visor_estado.pack(pady=200)
     
     def cargar_todos_documentos_iniciales(self):
-        """Carga todos los documentos al iniciar la ventana"""
+        """
+        VERSIÓN OPTIMIZADA - Carga todos los documentos al iniciar la ventana.
+        Usa cache y carga progresiva para no bloquear la UI.
+        """
         import datetime
+        
+        # Inicializar cache si no existe
+        if not hasattr(self, '_cache_años'):
+            self._cache_años = CacheAños()
         
         self.todos_documentos = []
         documentos_por_año_temp = {}
@@ -237,100 +338,143 @@ class VentanaBuscarDocumento:
             return
         
         try:
-            # Obtener todas las personas de la BD
+            # OPTIMIZACIÓN 1: Obtener todas las personas UNA SOLA VEZ
             todas_personas = self.db.obtener_todas_personas()
             
             if not todas_personas:
                 return
             
-            archivos = os.listdir(directorio_docs)
-            
-            for resultado in todas_personas:
-                # Extraer datos directamente de la tupla
-                # Formato: (id, nombre_completo, dpi, edad, estado_civil, nacionalidad, 
-                #           domicilio, nivel_academico, apellido_casada, fecha_registro, sexo, fecha_nacimiento)
-                persona_id = resultado[0]
-                nombre_completo = resultado[1]
-                dpi = resultado[2]
-                
+            # OPTIMIZACIÓN 2: Crear mapa de búsqueda rápida (O(1) lookup)
+            personas_por_dpi = {}
+            for persona in todas_personas:
+                persona_id = persona[0]
+                nombre_completo = persona[1]
+                dpi = persona[2]
                 dpi_normalizado = self.normalizar_dpi(dpi)
+                personas_por_dpi[dpi_normalizado.lower()] = (persona_id, nombre_completo, dpi)
+            
+            # OPTIMIZACIÓN 3: Listar archivos UNA SOLA VEZ
+            archivos = [
+                f for f in os.listdir(directorio_docs)
+                if f.lower().endswith(('.docx', '.pdf'))
+            ]
+            
+            # OPTIMIZACIÓN 4: Procesar archivos en batch (sin bloquear UI)
+            BATCH_SIZE = 10  # Procesar de 10 en 10
+            total_archivos = len(archivos)
+            
+            def procesar_batch(inicio):
+                fin = min(inicio + BATCH_SIZE, total_archivos)
                 
-                for archivo in archivos:
-                    # Verificar extensión válida
-                    if not (archivo.lower().endswith('.docx') or archivo.lower().endswith('.pdf')):
+                for archivo in archivos[inicio:fin]:
+                    # Normalizar nombre del archivo
+                    archivo_normalizado = archivo.replace(" ", "").replace("_", "").replace("-", "").lower()
+                    
+                    # Buscar coincidencia de DPI
+                    persona_info = None
+                    for dpi_norm, info in personas_por_dpi.items():
+                        if dpi_norm in archivo_normalizado:
+                            persona_info = info
+                            break
+                    
+                    if not persona_info:
                         continue
                     
-                    # Normalizar nombre del archivo
-                    archivo_normalizado = archivo.replace(" ", "").replace("_", "").replace("-", "")
+                    persona_id, nombre_completo, dpi = persona_info
+                    ruta_completa = os.path.join(directorio_docs, archivo)
                     
-                    # Verificar si contiene el DPI
-                    if dpi_normalizado.lower() in archivo_normalizado.lower():
-                        ruta_completa = os.path.join(directorio_docs, archivo)
-                        
-                        # Extraer año del documento
-                        año = None
-                        try:
-                            from utils.document_extractor import DocumentExtractor
-                            datos_extraidos = DocumentExtractor.extraer_datos(ruta_completa)
-                            if datos_extraidos and 'año' in datos_extraidos:
-                                año = datos_extraidos['año']
-                        except Exception as e:
-                            print(f"Error al extraer año de {archivo}: {e}")
-                        
-                        # Si no se pudo extraer, usar fecha de modificación
-                        if not año:
-                            fecha_modificacion = os.path.getmtime(ruta_completa)
-                            fecha_obj = datetime.datetime.fromtimestamp(fecha_modificacion)
-                            año = fecha_obj.year
-                        
-                        # Obtener fecha de modificación
-                        fecha_modificacion = os.path.getmtime(ruta_completa)
-                        fecha_obj = datetime.datetime.fromtimestamp(fecha_modificacion)
+                    # OPTIMIZACIÓN 5: Usar cache para años (NO extraer datos completos)
+                    año = self._cache_años.obtener_año(ruta_completa)
+                    
+                    # OPTIMIZACIÓN 6: Obtener solo mtime (sin datetime completo todavía)
+                    try:
+                        mtime = os.path.getmtime(ruta_completa)
+                        fecha_obj = datetime.datetime.fromtimestamp(mtime)
                         fecha_str = fecha_obj.strftime("%Y-%m-%d %H:%M:%S")
-                        
-                        # Obtener extensión
-                        extension = archivo.lower().split('.')[-1].upper()
-                        
-                        # Formato: (doc_id, nombre_archivo, ruta_archivo, fecha_carga, tipo_documento, persona_id, año, nombre_persona)
-                        doc_info = (None, archivo, ruta_completa, fecha_str, extension, persona_id, año, nombre_completo)
-                        self.todos_documentos.append(doc_info)
-                        
-                        # Agrupar por año
-                        if año not in documentos_por_año_temp:
-                            documentos_por_año_temp[año] = []
-                        documentos_por_año_temp[año].append(doc_info)
+                    except OSError:
+                        fecha_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                    
+                    # Obtener extensión
+                    extension = archivo.lower().split('.')[-1].upper()
+                    
+                    # Formato: (doc_id, nombre_archivo, ruta_archivo, fecha_carga, tipo_documento, persona_id, año, nombre_persona)
+                    doc_info = (None, archivo, ruta_completa, fecha_str, extension, persona_id, año, nombre_completo)
+                    self.todos_documentos.append(doc_info)
+                    
+                    # Agrupar por año
+                    if año not in documentos_por_año_temp:
+                        documentos_por_año_temp[año] = []
+                    documentos_por_año_temp[año].append(doc_info)
+                
+                # Si hay más archivos, procesar siguiente batch (sin bloquear UI)
+                if fin < total_archivos:
+                    progreso = int((fin / total_archivos) * 100)
+                    # Actualizar indicador de progreso si existe
+                    if hasattr(self, 'lbl_progreso_carga'):
+                        self.lbl_progreso_carga.configure(
+                            text=f"⏳ Cargando documentos... {progreso}% ({fin}/{total_archivos})"
+                        )
+                    
+                    # Programar siguiente batch después de 50ms
+                    self.ventana.after(50, lambda: procesar_batch(fin))
+                else:
+                    # FINALIZAR: Actualizar UI
+                    self._finalizar_carga_inicial(documentos_por_año_temp)
             
-            # Actualizar ComboBox de año
-            if documentos_por_año_temp:
-                años_disponibles = sorted(documentos_por_año_temp.keys(), reverse=True)
-                valores_combo = ["Todos"] + [str(año) for año in años_disponibles]
-                self.combo_año_busqueda.configure(values=valores_combo)
-                self.combo_año_busqueda.set("Todos")
-                
-                # Guardar referencia
-                self.documentos_por_año_busqueda = documentos_por_año_temp
-                
-                # Mostrar TODOS los documentos
-                self.mostrar_documentos_iniciales(documentos_por_año_temp)
-            else:
-                # No hay documentos, mostrar mensaje
+            # Mostrar indicador de carga
+            if hasattr(self, 'resultados_frame'):
                 for widget in self.resultados_frame.winfo_children():
                     widget.destroy()
                 
-                ctk.CTkLabel(
+                self.lbl_progreso_carga = ctk.CTkLabel(
                     self.resultados_frame,
-                    text="No hay documentos registrados",
-                    text_color="gray",
-                    font=ctk.CTkFont(size=14)
-                ).pack(pady=50)
-                
-                self.combo_año_busqueda.configure(values=["Todos"])
-                self.combo_año_busqueda.set("Todos")
+                    text="⏳ Cargando documentos... 0%",
+                    font=ctk.CTkFont(size=14),
+                    text_color="orange"
+                )
+                self.lbl_progreso_carga.pack(pady=50)
+            
+            # Iniciar procesamiento por batches
+            procesar_batch(0)
         
         except Exception as e:
             print(f"Error al cargar documentos iniciales: {e}")
             import traceback
             traceback.print_exc()
+
+    def _finalizar_carga_inicial(self, documentos_por_año_temp):
+        """Finaliza la carga y actualiza la UI"""
+        # Eliminar indicador de progreso
+        if hasattr(self, 'lbl_progreso_carga'):
+            self.lbl_progreso_carga.destroy()
+            delattr(self, 'lbl_progreso_carga')
+        
+        # Actualizar ComboBox de año
+        if documentos_por_año_temp:
+            años_disponibles = sorted(documentos_por_año_temp.keys(), reverse=True)
+            valores_combo = ["Todos"] + [str(año) for año in años_disponibles]
+            self.combo_año_busqueda.configure(values=valores_combo)
+            self.combo_año_busqueda.set("Todos")
+            
+            # Guardar referencia
+            self.documentos_por_año_busqueda = documentos_por_año_temp
+            
+            # Mostrar documentos
+            self.mostrar_documentos_iniciales(documentos_por_año_temp)
+        else:
+            # No hay documentos
+            for widget in self.resultados_frame.winfo_children():
+                widget.destroy()
+            
+            ctk.CTkLabel(
+                self.resultados_frame,
+                text="No hay documentos registrados",
+                text_color="gray",
+                font=ctk.CTkFont(size=14)
+            ).pack(pady=50)
+            
+            self.combo_año_busqueda.configure(values=["Todos"])
+            self.combo_año_busqueda.set("Todos")
 
     def mostrar_documentos_iniciales(self, documentos_por_año_temp):
         """Muestra todos los documentos iniciales agrupados por año"""
@@ -436,8 +580,14 @@ class VentanaBuscarDocumento:
             )
     
     def cargar_todos_documentos_busqueda(self, resultados):
-        """Carga todos los documentos de las personas encontradas en la búsqueda"""
+        """
+        VERSIÓN OPTIMIZADA - Carga documentos de las personas encontradas.
+        """
         import datetime
+        
+        # Inicializar cache si no existe
+        if not hasattr(self, '_cache_años'):
+            self._cache_años = CacheAños()
         
         self.todos_documentos = []
         documentos_por_año_temp = {}
@@ -448,74 +598,64 @@ class VentanaBuscarDocumento:
             return
         
         try:
-            archivos = os.listdir(directorio_docs)
-            
+            # Crear mapa de personas por DPI normalizado
+            personas_map = {}
             for resultado in resultados:
                 persona = Persona.from_tuple(resultado)
                 dpi_normalizado = self.normalizar_dpi(persona.dpi)
-                
-                for archivo in archivos:
-                    # Verificar extensión válida
-                    if not (archivo.lower().endswith('.docx') or archivo.lower().endswith('.pdf')):
-                        continue
-                    
-                    # Normalizar nombre del archivo
-                    archivo_normalizado = archivo.replace(" ", "").replace("_", "").replace("-", "")
-                    
-                    # Verificar si contiene el DPI
-                    if dpi_normalizado.lower() in archivo_normalizado.lower():
-                        ruta_completa = os.path.join(directorio_docs, archivo)
-                        
-                        # ✅ Extraer año del documento usando DocumentExtractor
-                        año = None
-                        try:
-                            from utils.document_extractor import DocumentExtractor
-                            datos_extraidos = DocumentExtractor.extraer_datos(ruta_completa)
-                            if datos_extraidos and 'año' in datos_extraidos:
-                                año = datos_extraidos['año']
-                        except Exception as e:
-                            print(f"Error al extraer año de {archivo}: {e}")
-                        
-                        # Si no se pudo extraer, usar fecha de modificación como fallback
-                        if not año:
-                            fecha_modificacion = os.path.getmtime(ruta_completa)
-                            fecha_obj = datetime.datetime.fromtimestamp(fecha_modificacion)
-                            año = fecha_obj.year
-                        
-                        # Obtener fecha de modificación para mostrar
-                        fecha_modificacion = os.path.getmtime(ruta_completa)
-                        fecha_obj = datetime.datetime.fromtimestamp(fecha_modificacion)
-                        fecha_str = fecha_obj.strftime("%Y-%m-%d %H:%M:%S")
-                        
-                        # Obtener fecha de modificación para mostrar
-                        fecha_modificacion = os.path.getmtime(ruta_completa)
-                        fecha_obj = datetime.datetime.fromtimestamp(fecha_modificacion)
-                        fecha_str = fecha_obj.strftime("%Y-%m-%d %H:%M:%S")
-                        
-                        # Obtener extensión
-                        extension = archivo.lower().split('.')[-1].upper()
-                        
-                        doc_info = (None, archivo, ruta_completa, fecha_str, extension, persona.id, año, persona.nombre_completo)
-                        self.todos_documentos.append(doc_info)
-                        
-                        # Agrupar por año
-                        if año not in documentos_por_año_temp:
-                            documentos_por_año_temp[año] = []
-                        documentos_por_año_temp[año].append(doc_info)
+                personas_map[dpi_normalizado.lower()] = persona
             
-            # Actualizar ComboBox de año en búsqueda
+            # Listar archivos válidos una sola vez
+            archivos = [
+                f for f in os.listdir(directorio_docs)
+                if f.lower().endswith(('.docx', '.pdf'))
+            ]
+            
+            # Procesar archivos (usar cache)
+            for archivo in archivos:
+                archivo_normalizado = archivo.replace(" ", "").replace("_", "").replace("-", "").lower()
+                
+                # Buscar coincidencia
+                persona_encontrada = None
+                for dpi_norm, persona in personas_map.items():
+                    if dpi_norm in archivo_normalizado:
+                        persona_encontrada = persona
+                        break
+                
+                if not persona_encontrada:
+                    continue
+                
+                ruta_completa = os.path.join(directorio_docs, archivo)
+                
+                # USAR CACHE para año (NO extraer todos los datos)
+                año = self._cache_años.obtener_año(ruta_completa)
+                
+                # Fecha de modificación
+                try:
+                    fecha_modificacion = os.path.getmtime(ruta_completa)
+                    fecha_obj = datetime.datetime.fromtimestamp(fecha_modificacion)
+                    fecha_str = fecha_obj.strftime("%Y-%m-%d %H:%M:%S")
+                except OSError:
+                    fecha_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                
+                extension = archivo.lower().split('.')[-1].upper()
+                
+                doc_info = (None, archivo, ruta_completa, fecha_str, extension, persona_encontrada.id, año, persona_encontrada.nombre_completo)
+                self.todos_documentos.append(doc_info)
+                
+                # Agrupar por año
+                if año not in documentos_por_año_temp:
+                    documentos_por_año_temp[año] = []
+                documentos_por_año_temp[año].append(doc_info)
+            
+            # Actualizar ComboBox y mostrar
             if documentos_por_año_temp:
                 años_disponibles = sorted(documentos_por_año_temp.keys(), reverse=True)
                 valores_combo = ["Todos"] + [str(año) for año in años_disponibles]
                 self.combo_año_busqueda.configure(values=valores_combo)
-                
-                # ✅ Seleccionar "Todos" por defecto
                 self.combo_año_busqueda.set("Todos")
                 
-                # ✅ Guardar referencia para filtrado
                 self.documentos_por_año_busqueda = documentos_por_año_temp
-                
-                # ✅ Mostrar TODOS los documentos por defecto
                 self.mostrar_documentos_busqueda_por_año("Todos", documentos_por_año_temp)
             else:
                 self.combo_año_busqueda.configure(values=["Todos"])
@@ -799,78 +939,70 @@ class VentanaBuscarDocumento:
         return dpi.replace(" ", "").replace("_", "").replace("-", "")
     
     def cargar_documentos_persona(self):
-        """Carga los documentos de la persona seleccionada y los agrupa por año"""
-        # Limpiar frame de documentos
+        """
+        VERSIÓN OPTIMIZADA - Carga documentos de la persona seleccionada.
+        """
+        # Limpiar frame
         for widget in self.documentos_frame.winfo_children():
             widget.destroy()
         
-        # Directorio de documentos (centralizado)
         directorio_docs = DOCUMENTOS_DIR
         
         if not os.path.exists(directorio_docs):
-            self.lbl_sin_documentos = ctk.CTkLabel(
+            ctk.CTkLabel(
                 self.documentos_frame,
                 text="No existe el directorio de documentos",
                 text_color="red",
                 font=ctk.CTkFont(size=12)
-            )
-            self.lbl_sin_documentos.pack(pady=30)
+            ).pack(pady=30)
             return
-                
-        # Normalizar DPI de la persona seleccionada
-        dpi_normalizado = self.normalizar_dpi(self.persona_seleccionada.dpi)
         
-        # Buscar todos los archivos
+        # Inicializar cache
+        if not hasattr(self, '_cache_años'):
+            self._cache_años = CacheAños()
+        
+        # Normalizar DPI
+        dpi_normalizado = self.normalizar_dpi(self.persona_seleccionada.dpi).lower()
+        
         self.documentos_persona = []
-        self.documentos_por_año = {}  # ✅ Reiniciar agrupación
+        self.documentos_por_año = {}
         
         try:
             import datetime
-            archivos = os.listdir(directorio_docs)
+            
+            # Filtrar archivos al listar
+            archivos = [
+                f for f in os.listdir(directorio_docs)
+                if f.lower().endswith(('.docx', '.pdf'))
+            ]
             
             for archivo in archivos:
-                # Verificar extensión válida
-                if not (archivo.lower().endswith('.docx') or archivo.lower().endswith('.pdf')):
+                archivo_normalizado = archivo.replace(" ", "").replace("_", "").replace("-", "").lower()
+                
+                if dpi_normalizado not in archivo_normalizado:
                     continue
                 
-                # Normalizar nombre del archivo
-                archivo_normalizado = archivo.replace(" ", "").replace("_", "").replace("-", "")
+                ruta_completa = os.path.join(directorio_docs, archivo)
                 
-                # Verificar si contiene el DPI (sin separadores)
-                if dpi_normalizado.lower() in archivo_normalizado.lower():
-                    ruta_completa = os.path.join(directorio_docs, archivo)
-                    
-                    # ✅ Extraer año del documento usando DocumentExtractor
-                    año = None
-                    try:
-                        from utils.document_extractor import DocumentExtractor
-                        datos_extraidos = DocumentExtractor.extraer_datos(ruta_completa)
-                        if datos_extraidos and 'año' in datos_extraidos:
-                            año = datos_extraidos['año']
-                    except Exception as e:
-                        print(f"Error al extraer año de {archivo}: {e}")
-                    
-                    # Si no se pudo extraer, usar fecha de modificación como fallback
-                    if not año:
-                        fecha_modificacion = os.path.getmtime(ruta_completa)
-                        fecha_obj = datetime.datetime.fromtimestamp(fecha_modificacion)
-                        año = fecha_obj.year
-                    
-                    # Obtener fecha de modificación para mostrar
+                # USAR CACHE para año
+                año = self._cache_años.obtener_año(ruta_completa)
+                
+                # Fecha
+                try:
                     fecha_modificacion = os.path.getmtime(ruta_completa)
                     fecha_obj = datetime.datetime.fromtimestamp(fecha_modificacion)
                     fecha_str = fecha_obj.strftime("%Y-%m-%d %H:%M:%S")
-                    
-                    # Obtener extensión
-                    extension = archivo.lower().split('.')[-1].upper()
-                    
-                    doc_info = (None, archivo, ruta_completa, fecha_str, extension, self.persona_seleccionada.id, año)
-                    self.documentos_persona.append(doc_info)
-                    
-                    # ✅ Agrupar por año
-                    if año not in self.documentos_por_año:
-                        self.documentos_por_año[año] = []
-                    self.documentos_por_año[año].append(doc_info)
+                except OSError:
+                    fecha_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                
+                extension = archivo.lower().split('.')[-1].upper()
+                
+                doc_info = (None, archivo, ruta_completa, fecha_str, extension, self.persona_seleccionada.id, año)
+                self.documentos_persona.append(doc_info)
+                
+                if año not in self.documentos_por_año:
+                    self.documentos_por_año[año] = []
+                self.documentos_por_año[año].append(doc_info)
         
         except Exception as e:
             print(f"Error al listar archivos: {e}")
@@ -878,17 +1010,14 @@ class VentanaBuscarDocumento:
             traceback.print_exc()
         
         if not self.documentos_persona:
-            self.lbl_sin_documentos = ctk.CTkLabel(
+            ctk.CTkLabel(
                 self.documentos_frame,
                 text=f"No se encontraron documentos para el DPI: {self.persona_seleccionada.dpi}",
                 text_color="orange",
                 font=ctk.CTkFont(size=12)
-            )
-            self.lbl_sin_documentos.pack(pady=30)
+            ).pack(pady=30)
             return
         
-
-        # ✅ Mostrar todos los documentos agrupados por año
         self.mostrar_todos_documentos_persona()
     
     def mostrar_todos_documentos_persona(self):

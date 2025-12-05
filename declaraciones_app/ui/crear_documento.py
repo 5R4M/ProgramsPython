@@ -222,83 +222,407 @@ class VentanaCrearDocumento:
             self.entry = entry
             self.tipo_palabra = tipo_palabra
 
-            self.popup = None  # CTkToplevel con las sugerencias
+            self.popup = None
+            self.frame_scroll = None  # NUEVO
+            self.botones_popup = []   # NUEVO
+            self.idx_seleccionado = -1  # NUEVO
             self.sugerencias = []
-            self.cerrando_popup = False  # Flag para evitar cierre prematuro
+            self.cerrando_popup = False
 
             # Enlazar eventos
             self.entry.bind("<KeyRelease>", self._on_key_release)
             self.entry.bind("<FocusOut>", self._on_focus_out)
             self.entry.bind("<Down>", self._on_down_key)
+            self.entry.bind("<Up>", self._on_up_key)      # NUEVO
+            self.entry.bind("<Return>", self._on_return_key)  # NUEVO
             self.entry.bind("<Escape>", lambda e: self._cerrar_popup())
 
+        def _obtener_palabra_actual(self):
+            """
+            Obtiene la palabra que se está escribiendo actualmente.
+            Para nombres: detecta la palabra donde está el cursor.
+            Para otros campos: usa el texto completo.
+            """
+            try:
+                texto_completo = self.entry.get().strip()
+                
+                if not texto_completo:
+                    return ""
+                
+                # Para nombres, detectar palabra actual según posición del cursor
+                if self.tipo_palabra == "nombre":
+                    try:
+                        cursor_pos = self.entry.index(tk.INSERT)
+                        
+                        # Asegurar que cursor_pos esté dentro del rango
+                        if cursor_pos > len(texto_completo):
+                            cursor_pos = len(texto_completo)
+                        
+                        # Encontrar inicio de la palabra actual
+                        inicio = cursor_pos
+                        while inicio > 0 and inicio <= len(texto_completo):
+                            # Verificar que podemos acceder al índice
+                            if inicio - 1 < 0:
+                                break
+                            if texto_completo[inicio - 1] in (' ', '\t', '\n'):
+                                break
+                            inicio -= 1
+                        
+                        # Encontrar fin de la palabra actual
+                        fin = cursor_pos
+                        while fin < len(texto_completo):
+                            if texto_completo[fin] in (' ', '\t', '\n'):
+                                break
+                            fin += 1
+                        
+                        # Extraer palabra con validación de índices
+                        if inicio >= 0 and fin <= len(texto_completo) and inicio <= fin:
+                            palabra_actual = texto_completo[inicio:fin].strip()
+                            return palabra_actual if len(palabra_actual) >= 2 else ""
+                        else:
+                            return ""
+                            
+                    except Exception as e:
+                        print(f"⚠️ Error detectando palabra (usando fallback): {e}")
+                        # Fallback: usar última palabra
+                        palabras = texto_completo.split()
+                        if palabras and len(palabras[-1]) >= 2:
+                            return palabras[-1]
+                        return ""
+                else:
+                    # Para otros campos, usar texto completo
+                    return texto_completo if len(texto_completo) >= 2 else ""
+                    
+            except Exception as e:
+                print(f"❌ Error crítico en _obtener_palabra_actual: {e}")
+                return ""
+
         def _on_key_release(self, event):
-            # Ignorar algunas teclas de navegación
-            if event.keysym in ("Up", "Down", "Left", "Right", "Return", "Escape", "Tab"):
+            """Maneja la liberación de teclas para actualizar sugerencias"""
+            # Ignorar teclas de navegación
+            if event.keysym in ("Up", "Down", "Left", "Right", "Return", "Escape", "Tab", "Shift_L", "Shift_R", "Control_L", "Control_R", "Alt_L", "Alt_R"):
                 return
 
-            texto = self.entry.get().strip()
-            if len(texto) < 2:
+            try:
+                palabra_buscar = self._obtener_palabra_actual()
+                
+                if len(palabra_buscar) < 2:
+                    self._cerrar_popup()
+                    return
+
+                # Obtener sugerencias desde la BD (case-insensitive)
+                self.sugerencias = self.parent.db.obtener_sugerencias_palabra(
+                    self.tipo_palabra, 
+                    palabra_buscar
+                )
+
+                if not self.sugerencias:
+                    self._cerrar_popup()
+                    return
+
+                self._mostrar_popup()
+                
+            except Exception as e:
+                print(f"❌ Error en _on_key_release: {e}")
                 self._cerrar_popup()
-                return
-
-            # Obtener sugerencias desde la BD
-            self.sugerencias = self.parent.db.obtener_sugerencias_palabra(self.tipo_palabra, texto)
-
-            if not self.sugerencias:
-                self._cerrar_popup()
-                return
-
-            self._mostrar_popup()
 
         def _mostrar_popup(self):
-            # Cerrar popup anterior si existe
-            self._cerrar_popup()
-
-            # Crear nueva ventana flotante
-            self.popup = ctk.CTkToplevel(self.parent.ventana)
-            self.popup.overrideredirect(True)  # sin bordes
-            self.popup.attributes("-topmost", True)
-
-            # Posicionar debajo del Entry
-            self.popup.update_idletasks()
-            x = self.entry.winfo_rootx()
-            y = self.entry.winfo_rooty() + self.entry.winfo_height()
-            
-            # Calcular ancho del popup (mismo que el entry)
-            ancho = self.entry.winfo_width()
-            self.popup.geometry(f"{ancho}x{min(len(self.sugerencias) * 30, 200)}+{x}+{y}")
-
-            frame = ctk.CTkScrollableFrame(self.popup, width=ancho-10)
-            frame.pack(fill="both", expand=True, padx=2, pady=2)
-
-            for sugerencia in self.sugerencias:
-                btn = ctk.CTkButton(
-                    frame,
-                    text=sugerencia,
-                    anchor="w",
-                    command=lambda s=sugerencia: self._usar_sugerencia(s),
-                    height=28,
-                    fg_color="transparent",
-                    hover_color=COLOR_PRIMARY,
-                    corner_radius=5
-                )
-                btn.pack(fill="x", padx=2, pady=1)
+            """Muestra el popup con sugerencias"""
+            try:
+                # Cerrar popup anterior si existe
+                self._cerrar_popup()
                 
-                # Evitar que el botón cierre el popup al hacer hover
-                btn.bind("<Enter>", lambda e: self._cancelar_cierre())
-                btn.bind("<Leave>", lambda e: None)
+                # Verificar que hay sugerencias
+                if not self.sugerencias:
+                    return
 
+                # Crear nueva ventana flotante
+                self.popup = ctk.CTkToplevel(self.parent.ventana)
+                self.popup.overrideredirect(True)
+                self.popup.attributes("-topmost", True)
+
+                # Posicionar debajo del Entry
+                try:
+                    self.popup.update_idletasks()
+                    x = self.entry.winfo_rootx()
+                    y = self.entry.winfo_rooty() + self.entry.winfo_height()
+                    
+                    ancho = max(self.entry.winfo_width(), 200)
+                    
+                    # CAMBIO: Calcular altura según cantidad de sugerencias
+                    if len(self.sugerencias) == 1:
+                        altura = 50  # Altura fija para una sola palabra
+                    else:
+                        altura = min(len(self.sugerencias) * 38 + 15, 250)  # Más espacio por botón
+                    
+                    self.popup.geometry(f"{ancho}x{altura}+{x}+{y}")
+                except Exception as e:
+                    print(f"⚠️ Error al posicionar popup: {e}")
+                    self._cerrar_popup()
+                    return
+
+                # Frame con scroll
+                self.frame_scroll = ctk.CTkScrollableFrame(
+                    self.popup, 
+                    width=ancho-20,
+                    height=altura-10,
+                    fg_color=("white", "gray20")
+                )
+                self.frame_scroll.pack(fill="both", expand=True, padx=5, pady=5)
+
+                # Obtener palabra actual con manejo de errores
+                try:
+                    palabra_actual = self._obtener_palabra_actual().lower()
+                except Exception:
+                    palabra_actual = ""
+
+                # Lista para almacenar los botones
+                self.botones_popup = []
+
+                for sugerencia in self.sugerencias:
+                    # Resaltar coincidencia con color SUCCESS (verde)
+                    if palabra_actual and palabra_actual in sugerencia.lower():
+                        texto_mostrar = f"💡 {sugerencia}"
+                        text_color = COLOR_SUCCESS
+                    else:
+                        texto_mostrar = f"   {sugerencia}"
+                        text_color = ("gray20", "gray90")
+                    
+                    btn = ctk.CTkButton(
+                        self.frame_scroll,
+                        text=texto_mostrar,
+                        anchor="w",
+                        command=lambda s=sugerencia: self._usar_sugerencia(s),
+                        height=35,  # CAMBIO: Aumentar altura de botón a 35
+                        fg_color="transparent",
+                        hover_color=("gray85", "gray30"),
+                        text_color=text_color,
+                        corner_radius=5,
+                        font=("Segoe UI", 11)
+                    )
+                    btn.pack(fill="x", padx=2, pady=2)
+                    
+                    btn.bind("<Enter>", lambda e: self._cancelar_cierre())
+                    btn.bind("<Leave>", lambda e: None)
+                    
+                    # Guardar referencia al botón
+                    self.botones_popup.append(btn)
+                
+                # Índice del botón actualmente seleccionado
+                self.idx_seleccionado = -1
+                
+            except Exception as e:
+                print(f"❌ Error al mostrar popup: {e}")
+                self._cerrar_popup()
+
+        def _actualizar_seleccion(self):
+            """Actualiza visualmente el botón seleccionado y hace scroll"""
+            try:
+                # Resetear todos los botones
+                for btn in self.botones_popup:
+                    btn.configure(
+                        fg_color="transparent",
+                        text_color=("gray20", "gray90")
+                    )
+                
+                # Resaltar el botón seleccionado
+                if 0 <= self.idx_seleccionado < len(self.botones_popup):
+                    btn_seleccionado = self.botones_popup[self.idx_seleccionado]
+                    btn_seleccionado.configure(
+                        fg_color=COLOR_WARNING,
+                        text_color="white"
+                    )
+                    
+                    # CAMBIO: Hacer scroll DESPUÉS de actualizar el widget
+                    self.popup.update_idletasks()
+                    self.frame_scroll.update_idletasks()
+                    btn_seleccionado.update_idletasks()
+                    
+                    # Pequeño delay para asegurar que el widget se actualizó
+                    self.popup.after(10, lambda: self._scroll_to_button(btn_seleccionado))
+                    
+            except Exception as e:
+                print(f"Error al actualizar selección: {e}")
+
+        def _scroll_to_button(self, button):
+            """Hace scroll en el frame para mostrar el botón seleccionado"""
+            try:
+                # Forzar actualización de widgets
+                self.frame_scroll._parent_canvas.update_idletasks()
+                button.update_idletasks()
+                
+                # El CTkScrollableFrame tiene un método interno _parent_canvas
+                # que es el canvas real que podemos controlar
+                if hasattr(self.frame_scroll, '_parent_canvas'):
+                    canvas = self.frame_scroll._parent_canvas
+                else:
+                    # Buscar el canvas manualmente si no está disponible
+                    canvas = None
+                    for widget in self.frame_scroll.winfo_children():
+                        if isinstance(widget, tk.Canvas):
+                            canvas = widget
+                            break
+                
+                if not canvas:
+                    return
+                
+                # Obtener posición del botón relativa al frame scrollable
+                button_y = button.winfo_y()
+                button_height = button.winfo_height()
+                
+                # Altura visible del canvas
+                canvas_height = canvas.winfo_height()
+                
+                # Obtener el scrollregion total
+                scrollregion = canvas.cget('scrollregion')
+                if not scrollregion:
+                    return
+                
+                # Parsear scrollregion: "x1 y1 x2 y2"
+                coords = scrollregion.split()
+                if len(coords) < 4:
+                    return
+                
+                total_height = float(coords[3])
+                
+                # Si todo cabe en la vista, no hacer scroll
+                if total_height <= canvas_height:
+                    return
+                
+                # Calcular centro del botón
+                button_center = button_y + (button_height / 2)
+                
+                # Calcular posición de scroll para centrar el botón
+                # Queremos que el centro del botón esté en el centro de la vista
+                target_scroll = (button_center - (canvas_height / 2)) / total_height
+                
+                # Limitar entre 0 y 1
+                target_scroll = max(0.0, min(1.0, target_scroll))
+                
+                # Aplicar scroll
+                canvas.yview_moveto(target_scroll)
+                
+            except Exception as e:
+                print(f"Error al hacer scroll: {e}")
+                import traceback
+                traceback.print_exc()
+
+        def _on_down_key(self, event):
+            """Navegar al popup con flecha abajo"""
+            if self.popup and self.popup.winfo_exists() and self.botones_popup:
+                try:
+                    # Si no hay botón seleccionado, seleccionar el primero
+                    if self.idx_seleccionado == -1:
+                        self.idx_seleccionado = 0
+                    else:
+                        # Avanzar al siguiente botón
+                        self.idx_seleccionado = (self.idx_seleccionado + 1) % len(self.botones_popup)
+                    
+                    self._actualizar_seleccion()
+                    
+                except Exception as e:
+                    print(f"Error en navegación: {e}")
+            return "break"
+
+        def _on_up_key(self, event):
+            """Navegar hacia arriba en el popup"""
+            if self.popup and self.popup.winfo_exists() and self.botones_popup:
+                try:
+                    # Si no hay botón seleccionado, seleccionar el último
+                    if self.idx_seleccionado == -1:
+                        self.idx_seleccionado = len(self.botones_popup) - 1
+                    else:
+                        # Retroceder al botón anterior
+                        self.idx_seleccionado = (self.idx_seleccionado - 1) % len(self.botones_popup)
+                    
+                    self._actualizar_seleccion()
+                    
+                except Exception as e:
+                    print(f"Error en navegación: {e}")
+            return "break"
+
+        def _on_return_key(self, event):
+            """Seleccionar sugerencia con Enter"""
+            if self.popup and self.popup.winfo_exists() and self.botones_popup:
+                if 0 <= self.idx_seleccionado < len(self.botones_popup):
+                    # Usar la sugerencia correspondiente
+                    sugerencia = self.sugerencias[self.idx_seleccionado]
+                    self._usar_sugerencia(sugerencia)
+                return "break"
+        
         def _usar_sugerencia(self, texto):
-            # Reemplazar contenido del entry
-            self.entry.delete(0, "end")
-            self.entry.insert(0, texto)
-            self._cerrar_popup()
-            self.entry.focus_set()
-            
-            # Mover cursor al final
-            self.entry.icursor("end")
-
+            """Reemplaza la palabra actual con la sugerencia seleccionada"""
+            try:
+                if self.tipo_palabra == "nombre":
+                    # Para nombres, reemplazar solo la palabra actual
+                    try:
+                        texto_completo = self.entry.get()
+                        cursor_pos = self.entry.index(tk.INSERT)
+                        
+                        # Validar cursor_pos
+                        if cursor_pos > len(texto_completo):
+                            cursor_pos = len(texto_completo)
+                        
+                        # Encontrar inicio de la palabra actual
+                        inicio = cursor_pos
+                        while inicio > 0:
+                            if inicio - 1 < 0 or texto_completo[inicio - 1] in (' ', '\t', '\n'):
+                                break
+                            inicio -= 1
+                        
+                        # Encontrar fin de la palabra actual
+                        fin = cursor_pos
+                        while fin < len(texto_completo):
+                            if texto_completo[fin] in (' ', '\t', '\n'):
+                                break
+                            fin += 1
+                        
+                        # Validar índices antes de usar
+                        if inicio < 0:
+                            inicio = 0
+                        if fin > len(texto_completo):
+                            fin = len(texto_completo)
+                        
+                        # Construir nuevo texto
+                        nuevo_texto = texto_completo[:inicio] + texto
+                        
+                        # Agregar texto después de la palabra solo si existe
+                        if fin < len(texto_completo):
+                            nuevo_texto += texto_completo[fin:]
+                        
+                        # Actualizar entry
+                        self.entry.delete(0, "end")
+                        self.entry.insert(0, nuevo_texto)
+                        
+                        # Posicionar cursor después de la palabra insertada
+                        nueva_pos = inicio + len(texto)
+                        
+                        # Agregar espacio automáticamente si no hay texto después o si no es un espacio
+                        if nueva_pos >= len(nuevo_texto) or nuevo_texto[nueva_pos:nueva_pos+1] != ' ':
+                            self.entry.insert(nueva_pos, ' ')
+                            self.entry.icursor(nueva_pos + 1)
+                        else:
+                            self.entry.icursor(nueva_pos)
+                        
+                    except Exception as e:
+                        print(f"⚠️ Error al usar sugerencia en nombre (usando fallback): {e}")
+                        # Fallback: reemplazar todo
+                        self.entry.delete(0, "end")
+                        self.entry.insert(0, texto + " ")
+                        self.entry.icursor("end")
+                else:
+                    # Para otros campos, reemplazar todo el contenido
+                    self.entry.delete(0, "end")
+                    self.entry.insert(0, texto)
+                    self.entry.icursor("end")
+                
+                self._cerrar_popup()
+                self.entry.focus_set()
+                
+            except Exception as e:
+                print(f"❌ Error crítico al usar sugerencia: {e}")
+                self._cerrar_popup()
+    
         def _cancelar_cierre(self):
             """Cancela el cierre programado del popup"""
             self.cerrando_popup = False
@@ -313,17 +637,6 @@ class VentanaCrearDocumento:
             if self.cerrando_popup:
                 self._cerrar_popup()
 
-        def _on_down_key(self, event):
-            # Si hay popup, enfocar el primer botón
-            if self.popup and self.popup.winfo_exists():
-                try:
-                    frame = self.popup.winfo_children()[0]
-                    if frame.winfo_children():
-                        frame.winfo_children()[0].focus_set()
-                except:  # noqa: E722
-                    pass
-            return "break"
-
         def _cerrar_popup(self):
             if self.popup and self.popup.winfo_exists():
                 try:
@@ -332,7 +645,7 @@ class VentanaCrearDocumento:
                     pass
             self.popup = None
             self.cerrando_popup = False
-    
+        
     # ==================== CONFIGURACIONES ====================
 
     def set_callback_actualizar(self, callback):
@@ -719,7 +1032,7 @@ class VentanaCrearDocumento:
         self.entry_nivel = crear_campo(frame_datos, "Nivel Académico:", "Bachiller")
         self.entry_nivel.bind("<FocusOut>", lambda e: self._capitalizar_entry(self.entry_nivel))
 
-        self.entry_domicilio = crear_campo(frame_datos, "Domicilio:", "departamento de Guatemala")
+        self.entry_domicilio = crear_campo(frame_datos, "Domicilio:", "Guatemala")
         self.entry_domicilio.bind("<FocusOut>", lambda e: self._capitalizar_entry(self.entry_domicilio))
 
         self.entry_dpi = crear_campo(

@@ -10,6 +10,106 @@ from utils import convertir_doc_a_docx, DocumentExtractor
 import time
 from .crear_documento import VentanaCrearDocumento
 import datetime
+import json
+from pathlib import Path
+
+class CacheAños:
+    """Cache persistente para años de documentos"""
+    
+    def __init__(self, cache_file="cache_años.json"):
+        self.cache_file = Path(DOCUMENTOS_DIR) / cache_file
+        self.cache = self._cargar_cache()
+    
+    def _cargar_cache(self):
+        """Carga el cache desde disco"""
+        if self.cache_file.exists():
+            try:
+                with open(self.cache_file, 'r', encoding='utf-8') as f:
+                    return json.load(f)
+            except:  # noqa: E722
+                return {}
+        return {}
+    
+    def _guardar_cache(self):
+        """Guarda el cache a disco"""
+        try:
+            with open(self.cache_file, 'w', encoding='utf-8') as f:
+                json.dump(self.cache, f, ensure_ascii=False, indent=2)
+        except Exception as e:
+            print(f"Error al guardar cache: {e}")
+    
+    def obtener_año(self, ruta_archivo, force_update=False):
+        """
+        Obtiene el año de un documento.
+        Usa cache si está disponible, sino extrae y guarda.
+        """
+        import datetime
+        
+        # Clave del cache: nombre_archivo + mtime
+        nombre = os.path.basename(ruta_archivo)
+        
+        try:
+            mtime = os.path.getmtime(ruta_archivo)
+            cache_key = f"{nombre}_{int(mtime)}"
+            
+            # Verificar cache
+            if not force_update and cache_key in self.cache:
+                return self.cache[cache_key]
+            
+            # OPTIMIZACIÓN: Extraer SOLO el año, no todos los datos
+            año = self._extraer_año_rapido(ruta_archivo)
+            
+            # Guardar en cache
+            self.cache[cache_key] = año
+            self._guardar_cache()
+            
+            return año
+            
+        except Exception as e:
+            print(f"Error obteniendo año de {nombre}: {e}")
+            return datetime.datetime.now().year
+    
+    def _extraer_año_rapido(self, ruta_archivo):
+        """
+        Extrae SOLO el año del documento de forma rápida.
+        Evita extraer todos los datos.
+        """
+        import datetime
+        import re
+        from docx import Document
+        
+        año = None
+        
+        try:
+            # Para archivos DOCX: buscar solo el año en el texto
+            if ruta_archivo.lower().endswith('.docx'):
+                doc = Document(ruta_archivo)
+                
+                # Buscar en los primeros 3 párrafos (más rápido)
+                texto_busqueda = ""
+                for i, para in enumerate(doc.paragraphs[:5]):
+                    texto_busqueda += para.text + " "
+                
+                # Buscar patrón de año (2020-2099)
+                patron_año = r'\b(20\d{2})\b'
+                matches = re.findall(patron_año, texto_busqueda)
+                
+                if matches:
+                    # Tomar el primer año encontrado
+                    año = int(matches[0])
+        
+        except Exception as e:
+            print(f"Error extrayendo año rápido: {e}")
+        
+        # Fallback: fecha de modificación
+        if not año:
+            try:
+                mtime = os.path.getmtime(ruta_archivo)
+                año = datetime.datetime.fromtimestamp(mtime).year
+            except:  # noqa: E722
+                año = datetime.datetime.now().year
+        
+        return año
 
 def cancelar_callbacks_widget(widget):
     """Cancela todos los callbacks after de un widget y sus hijos recursivamente"""
@@ -57,6 +157,8 @@ class VentanaCargarDocumentos:
         self.documentos_seleccionados = []
         self.documento_actual_index = 0
         
+        self._cache_años = CacheAños()
+        
         # Asegurar que existe el directorio de documentos (sin print)
         if not os.path.exists(DOCUMENTOS_DIR):
             os.makedirs(DOCUMENTOS_DIR, exist_ok=True)
@@ -78,15 +180,37 @@ class VentanaCargarDocumentos:
 
         # Crear UI
         self.crear_interfaz()
-        self.cargar_documentos_existentes()
-        self.verificar_personas_sin_documento()
-        self.verificar_documentos_sin_registro_bd()
+        self.cargar_documentos_existentes_optimizado()
+        # Sincronización automática al iniciar
+        self.ventana.after(500, self.sincronizar_bd_con_archivos)
+        
+        self.verificar_e_inicializar_sugerencias()
 
         # IMPORTANTE: centrar DESPUÉS de crear la interfaz
         if not self.es_integrado:
             self.center_window()
             # Recentrar una vez que todo terminó de dibujarse
             self.ventana.after(50, self.center_window)
+    
+    def verificar_e_inicializar_sugerencias(self):
+        """Verifica si la tabla de sugerencias está vacía y la alimenta si es necesario"""
+        try:
+            cursor = self.db.conn.cursor()
+            cursor.execute("SELECT COUNT(*) FROM sugerencias_palabras")
+            total_sugerencias = cursor.fetchone()[0]
+            
+            if total_sugerencias == 0:
+                print("🔄 Tabla de sugerencias vacía. Alimentando desde datos existentes...")
+                
+                # Alimentar desde personas existentes
+                total_alimentado = self.db.alimentar_sugerencias_desde_bd()
+                
+                if total_alimentado > 0:
+                    print(f"✅ {total_alimentado} personas procesadas para sugerencias")
+                else:
+                    print("⚠️ No hay datos para alimentar sugerencias")
+        except Exception as e:
+            print(f"⚠️ Error al verificar sugerencias: {e}")
     
     def set_callback_actualizar(self, callback):
         """Permite establecer un callback para actualizar estadísticas"""
@@ -158,6 +282,17 @@ class VentanaCargarDocumentos:
         )
         btn_seleccionar.pack(pady=5, fill="x")
         
+        btn_limpiar_listado = ctk.CTkButton(
+            frame_botones,
+            text="🗑️ Limpiar Listado",
+            command=self.limpiar_listado_completo,
+            height=40,
+            font=ctk.CTkFont(size=14, weight="bold"),
+            fg_color="#e74c3c",
+            hover_color="#c0392b"
+        )
+        btn_limpiar_listado.pack(pady=5, fill="x")
+        
         btn_procesar = ctk.CTkButton(
             frame_botones,
             text="⚙️ Procesar y Cargar Todos",
@@ -168,6 +303,17 @@ class VentanaCargarDocumentos:
             hover_color="#27ae60"
         )
         btn_procesar.pack(pady=5, fill="x")
+        
+        btn_sincronizar = ctk.CTkButton(
+            frame_botones,
+            text="🔄 Sincronizar BD con Archivos",
+            command=self.sincronizar_bd_con_archivos,
+            height=40,
+            font=ctk.CTkFont(size=14, weight="bold"),
+            fg_color="#9b59b6",
+            hover_color="#8e44ad"
+        )
+        btn_sincronizar.pack(pady=5, fill="x")
         
         # Pestañas para documentos nuevos y existentes
         self.tabview = ctk.CTkTabview(panel_izquierdo)
@@ -249,7 +395,7 @@ class VentanaCargarDocumentos:
         btn_refrescar = ctk.CTkButton(
             frame_busqueda,
             text="🔄",
-            command=self.cargar_documentos_existentes,
+            command=self.cargar_documentos_existentes_optimizado,
             width=40
         )
         btn_refrescar.pack(side="left", padx=5)
@@ -306,129 +452,155 @@ class VentanaCargarDocumentos:
         )
         self.lbl_visor_estado.pack(pady=200)
 
-    def cargar_documentos_existentes(self):
-        """Carga documentos existentes basados en los archivos de la carpeta.
-        Ordena por fecha de modificación (más reciente primero) y guarda mtime.
+    def cargar_documentos_existentes_optimizado(self):
         """
+        Versión optimizada de cargar_documentos_existentes.
+        Carga inicial rápida, luego completa los años en background.
+        """
+               
         # Limpiar lista visual
         for widget in self.lista_existentes_frame.winfo_children():
             widget.destroy()
-
-        # Archivos físicos en la carpeta
+        
+        # Mostrar indicador de carga
+        lbl_cargando = ctk.CTkLabel(
+            self.lista_existentes_frame,
+            text="⏳ Cargando documentos...",
+            font=ctk.CTkFont(size=14),
+            text_color="orange"
+        )
+        lbl_cargando.pack(pady=50)
+        self.ventana.update()
+        
+        # Archivos físicos
         archivos_carpeta = []
         if os.path.exists(DOCUMENTOS_DIR):
             archivos_carpeta = [
                 f for f in os.listdir(DOCUMENTOS_DIR)
                 if f.lower().endswith(('.doc', '.docx'))
             ]
-
-        # Obtener todos los documentos de la BD
+        
+        # Obtener documentos BD (una sola vez)
         documentos_bd = self.db.obtener_todos_documentos()
-
-        # Mapa por nombre_archivo -> fila de BD (si existe)
-        mapa_doc_por_nombre = {}
-        for doc in documentos_bd:
-            # Formato esperado:
-            # (id, nombre_archivo, ruta_archivo, fecha_carga, nombre_persona, dpi, persona_id)
-            nombre_archivo = doc[1]
-            mapa_doc_por_nombre[nombre_archivo] = doc
-
-        # Lista de (doc_con_mtime, mtime)
+        mapa_doc_por_nombre = {doc[1]: doc for doc in documentos_bd}
+        
+        # FASE 1: Carga rápida SIN años (solo metadata básica)
         docs_con_mtime = []
-
+        
         for nombre_archivo in archivos_carpeta:
             ruta_archivo = os.path.join(DOCUMENTOS_DIR, nombre_archivo)
-
-            if nombre_archivo in mapa_doc_por_nombre:
-                doc = mapa_doc_por_nombre[nombre_archivo]
-            else:
-                # Si no existe en BD, construimos una fila mínima:
-                doc = (
-                    None,                 # id_documento
-                    nombre_archivo,       # nombre_archivo
-                    ruta_archivo,         # ruta_archivo
-                    "",                   # fecha_carga (BD)
-                    "Desconocido",        # nombre_persona
-                    "N/A",                # dpi
-                    None                  # persona_id
-                )
-
-            # ✅ Extraer año del documento
-            año_doc = None
-            try:
-                datos_extraidos = DocumentExtractor.extraer_datos(ruta_archivo)
-                if datos_extraidos and 'año' in datos_extraidos:
-                    año_doc = datos_extraidos['año']
-            except Exception:
-                pass
-
-            # Si no se pudo extraer, usar año de modificación del archivo
-            if not año_doc:
-                try:
-                    mtime = os.path.getmtime(ruta_archivo)
-                    import datetime
-                    año_doc = datetime.datetime.fromtimestamp(mtime).year
-                except OSError:
-                    año_doc = datetime.datetime.now().year  # Año actual por defecto
-
-            # Obtener fecha de modificación para ordenar
+            
             try:
                 mtime = os.path.getmtime(ruta_archivo)
             except OSError:
                 mtime = 0
-
-            # Extendemos la tupla doc añadiendo mtime y año_doc
-            doc_con_mtime = doc + (mtime, año_doc)
+            
+            if nombre_archivo in mapa_doc_por_nombre:
+                doc = mapa_doc_por_nombre[nombre_archivo]
+            else:
+                doc = (
+                    None, nombre_archivo, ruta_archivo, "",
+                    "Desconocido", "N/A", None
+                )
+            
+            # Agregar con año temporal (None)
+            doc_con_mtime = doc + (mtime, None)  # año = None
             docs_con_mtime.append((doc_con_mtime, mtime))
-
-        # Ordenar por mtime descendente (más reciente primero)
-        docs_con_mtime.sort(key=lambda x: x[1], reverse=True)
-
-        # Guardar solo la parte doc (ya con mtime dentro)
-        self.documentos_existentes = [item[0] for item in docs_con_mtime]
-
-        # ✅ Extraer años únicos y actualizar ComboBox
-        años_disponibles = set()
-        for doc in self.documentos_existentes:
-            año_doc = doc[8] if len(doc) > 8 else None
-            if año_doc:
-                años_disponibles.add(año_doc)
-
-        años_ordenados = sorted(años_disponibles, reverse=True)
-        valores_combo = ["Todos"] + [str(año) for año in años_ordenados]
-        self.combo_año_filtro.configure(values=valores_combo)
         
-        # Encabezado con contador
+        # Ordenar por mtime
+        docs_con_mtime.sort(key=lambda x: x[1], reverse=True)
+        self.documentos_existentes = [item[0] for item in docs_con_mtime]
+        
+        # Eliminar indicador de carga
+        lbl_cargando.destroy()
+        
+        # Mostrar documentos inmediatamente (SIN años todavía)
+        self._mostrar_documentos_sin_años()
+        
+        # FASE 2: Cargar años en background
+        self.ventana.after(100, lambda: self._cargar_años_background())
+
+
+    def _mostrar_documentos_sin_años(self):
+        """Muestra documentos sin esperar a cargar los años"""
+        # Encabezado
         header_frame = ctk.CTkFrame(self.lista_existentes_frame, fg_color="transparent")
         header_frame.pack(pady=10, padx=10, fill="x")
-
-        # Texto multilínea, más legible y adaptado al ancho
+        
         contador_text = (
-            f"📊 Documentos mostrados: {len(self.documentos_existentes)}\n"
-            f"📁 Archivos en carpeta: {len(archivos_carpeta)}\n"
-            f"(Ordenados por fecha de modificación, más reciente primero)"
+            f"📊 Documentos: {len(self.documentos_existentes)}\n"
+            f"⏳ Cargando información adicional..."
         )
-
-        lbl_contador = ctk.CTkLabel(
+        
+        self.lbl_contador_docs = ctk.CTkLabel(
             header_frame,
             text=contador_text,
             font=ctk.CTkFont(size=13, weight="bold"),
-            text_color="#3498db",
-            justify="left"
+            text_color="#3498db"
         )
-        # Ajustar ancho para que haga wrap dentro del frame
-        lbl_contador.pack(pady=5, fill="x")
+        self.lbl_contador_docs.pack(pady=5)
+        
+        # Mostrar documentos
+        self.mostrar_documentos_existentes(self.documentos_existentes)
 
-        if not self.documentos_existentes:
-            self.lbl_sin_existentes = ctk.CTkLabel(
-                self.lista_existentes_frame,
-                text="No hay documentos en la carpeta de documentos.",
-                text_color="gray",
-                font=ctk.CTkFont(size=14)
+
+    def _cargar_años_background(self):
+        """Carga los años de documentos en background"""
+        if not hasattr(self, '_cache_años'):
+            self._cache_años = CacheAños()
+        
+        documentos_actualizados = []
+        años_dict = {}
+        
+        # Procesar en lotes pequeños para no bloquear UI
+        BATCH_SIZE = 5
+        
+        def procesar_lote(inicio):
+            fin = min(inicio + BATCH_SIZE, len(self.documentos_existentes))
+            
+            for i in range(inicio, fin):
+                doc = self.documentos_existentes[i]
+                ruta_archivo = doc[2]
+                
+                # Obtener año (usa cache)
+                año = self._cache_años.obtener_año(ruta_archivo)
+                
+                # Actualizar tupla
+                doc_actualizado = doc[:-1] + (año,)
+                documentos_actualizados.append(doc_actualizado)
+                
+                if año not in años_dict:
+                    años_dict[año] = []
+                años_dict[año].append(doc_actualizado)
+            
+            # Si hay más documentos, programar siguiente lote
+            if fin < len(self.documentos_existentes):
+                self.ventana.after(50, lambda: procesar_lote(fin))
+            else:
+                # Terminó: actualizar UI
+                self._finalizar_carga_años(documentos_actualizados, años_dict)
+        
+        # Iniciar procesamiento
+        procesar_lote(0)
+
+
+    def _finalizar_carga_años(self, documentos_actualizados, años_dict):
+        """Finaliza la carga actualizando la UI con los años"""
+        self.documentos_existentes = documentos_actualizados
+        
+        # Actualizar ComboBox de años
+        años_ordenados = sorted(años_dict.keys(), reverse=True)
+        valores_combo = ["Todos"] + [str(año) for año in años_ordenados]
+        self.combo_año_filtro.configure(values=valores_combo)
+        
+        # Actualizar contador
+        if hasattr(self, 'lbl_contador_docs'):
+            self.lbl_contador_docs.configure(
+                text=f"📊 Documentos: {len(self.documentos_existentes)}\n"
+                    f"✅ Información completa cargada"
             )
-            self.lbl_sin_existentes.pack(pady=50)
-            return
-
+        
+        # Refrescar vista con años
         self.mostrar_documentos_existentes(self.documentos_existentes)
             
     def mostrar_documentos_existentes(self, documentos):
@@ -631,7 +803,7 @@ class VentanaCargarDocumentos:
         # Mostrar documentos
         for i, archivo in enumerate(self.documentos_seleccionados):
             nombre_archivo = os.path.basename(archivo)
-            nombre_corto = self._acortar_nombre(nombre_archivo, max_len=50)
+            nombre_corto = self._acortar_nombre(nombre_archivo, max_len=40)
 
             frame_item = ctk.CTkFrame(self.lista_frame)
             frame_item.pack(pady=5, padx=10, fill="x")
@@ -640,20 +812,34 @@ class VentanaCargarDocumentos:
             if i == self.documento_actual_index:
                 frame_item.configure(fg_color=COLOR_SUCCESS)
 
+            # Label con número y nombre
             ctk.CTkLabel(
                 frame_item,
                 text=f"{i + 1}. {nombre_corto}",
                 anchor="w",
+                justify="left",
                 font=ctk.CTkFont(size=12)
-            ).pack(side="left", padx=10, pady=5, fill="x")  # sin expand=True
+            ).pack(side="left", padx=10, pady=5, fill="x", expand=True)
 
+            # Botón Ver
             btn_ver = ctk.CTkButton(
                 frame_item,
                 text="👁️",
                 command=lambda idx=i: self.ver_documento(idx),
                 width=40
             )
-            btn_ver.pack(side="right", padx=5)
+            btn_ver.pack(side="right", padx=2)
+            
+            # ✅ NUEVO: Botón Eliminar del listado
+            btn_eliminar = ctk.CTkButton(
+                frame_item,
+                text="🗑️",
+                command=lambda idx=i: self.eliminar_del_listado(idx),
+                width=40,
+                fg_color="#e74c3c",
+                hover_color="#c0392b"
+            )
+            btn_eliminar.pack(side="right", padx=2)
     
     def actualizar_navegacion(self):
         """Actualiza los controles de navegación"""
@@ -1098,7 +1284,10 @@ class VentanaCargarDocumentos:
                 }
                 
                 persona_id, resultado = self.db.guardar_persona(datos_persona)
-                
+
+                # ✅ APRENDER SUGERENCIAS DE LOS DATOS EXTRAÍDOS
+                self.db.aprender_sugerencias_desde_persona(datos_persona)
+
                 # Guardar documento en la base de datos
                 self.db.guardar_documento(persona_id, nombre_destino, ruta_destino, "acta")
                 
@@ -1165,7 +1354,7 @@ class VentanaCargarDocumentos:
         cerrar_ventana_progreso()
         
         # Recargar documentos existentes
-        self.cargar_documentos_existentes()
+        self.cargar_documentos_existentes_optimizado()
         if self.callback_actualizar:
             self.callback_actualizar()
         
@@ -1176,7 +1365,10 @@ class VentanaCargarDocumentos:
         self.documentos_seleccionados = []
         self.actualizar_lista_documentos()
         self.actualizar_navegacion()
-    
+        
+        # ✅ SINCRONIZAR después de cargar documentos
+        self.ventana.after(100, self.sincronizar_bd_con_archivos)
+        
     def eliminar_documento_existente(self, doc_id, ruta_archivo, nombre_archivo):
         """
         Elimina un documento de la BD y del sistema de archivos,
@@ -1234,7 +1426,7 @@ class VentanaCargarDocumentos:
         # 2) Si no hay persona asociada, terminamos aquí
         if not persona_id:
             messagebox.showinfo("Éxito", "Documento eliminado correctamente.")
-            self.cargar_documentos_existentes()
+            self.cargar_documentos_existentes_optimizado()
             if self.callback_actualizar:
                 self.callback_actualizar()
             return
@@ -1273,31 +1465,25 @@ class VentanaCargarDocumentos:
             )
 
         # 4) Recargar lista y estadísticas
-        self.cargar_documentos_existentes()
+        self.cargar_documentos_existentes_optimizado()
         if self.callback_actualizar:
             self.callback_actualizar()
         
+        # ✅ SINCRONIZAR después de eliminar
+        self.ventana.after(100, self.sincronizar_bd_con_archivos)
+        
     def verificar_personas_sin_documento(self):
         """
-        Verifica qué personas en la BD no tienen documento en la carpeta
-        (coincidiendo con lo que se muestra en '📚 Cargados').
-        Solo muestra mensaje si realmente hay personas sin documento.
+        Verifica qué personas en la BD no tienen documento en la carpeta.
+        VERSIÓN OPTIMIZADA.
         """
-        # Obtener todas las personas
         try:
             personas = self.db.obtener_todas_personas()
         except Exception as e:
-            # Si no existe el método o falla, no molestamos al usuario
             print(f"Error al obtener personas: {e}")
             return
 
-        # Personas con documento (por persona_id) según documentos_filtrados
-        documentos_bd = self.db.obtener_todos_documentos()
-
-        # Construir set de persona_id que tienen documento válido en carpeta
-        personas_con_doc = set()
-
-        # Archivos válidos en carpeta (mismo criterio que cargar_documentos_existentes)
+        # ✅ OPTIMIZACIÓN: Obtener archivos una sola vez
         archivos_carpeta = set()
         if os.path.exists(DOCUMENTOS_DIR):
             archivos_carpeta = {
@@ -1305,57 +1491,46 @@ class VentanaCargarDocumentos:
                 if f.lower().endswith(('.doc', '.docx'))
             }
 
+        # ✅ OPTIMIZACIÓN: Obtener documentos BD una sola vez
+        documentos_bd = self.db.obtener_todos_documentos()
+
+        # Set de persona_id con documento válido
+        personas_con_doc = set()
+
         for doc in documentos_bd:
-            # Ajusta índices según tu estructura real:
-            # Ejemplo asumido: (id, nombre_archivo, ruta_archivo, fecha_carga, nombre_persona, dpi, persona_id)
             nombre_archivo = doc[1]
-            ruta_archivo = doc[2]
             persona_id = doc[6] if len(doc) > 6 else None
 
             if not persona_id:
                 continue
 
-            # Validar igual que en cargar_documentos_existentes
+            # Validar que existe físicamente
             if nombre_archivo not in archivos_carpeta:
-                continue
-            if not ruta_archivo or not os.path.exists(ruta_archivo):
                 continue
 
             personas_con_doc.add(persona_id)
 
-        # Construir lista de personas sin documento
-        personas_sin_doc = []
-        for p in personas:
-            # Asumo formato: (id, nombre_completo, dpi, edad, estado_civil,
-            #                nacionalidad, domicilio, nivel_academico,
-            #                apellido_casada, fecha_registro, sexo, fecha_nacimiento)
-            persona_id = p[0]
+        # Personas sin documento
+        personas_sin_doc = [p for p in personas if p[0] not in personas_con_doc]
 
-            if persona_id not in personas_con_doc:
-                personas_sin_doc.append(p)
-
-        # Si no hay personas sin documento, no mostramos nada
         if not personas_sin_doc:
             return
 
-        # Si hay, preguntar si quiere generar en bloque
         respuesta = messagebox.askyesno(
             "Personas sin documento",
-            f"Se encontraron {len(personas_sin_doc)} persona(s) en la base de datos "
-            "que no tienen documento en la carpeta.\n\n"
-            "¿Desea generar automáticamente los documentos para ellas?"
+            f"Se encontraron {len(personas_sin_doc)} persona(s) sin documento.\n\n"
+            "¿Desea generar automáticamente los documentos?"
         )
 
         if respuesta:
-            # Llamar a la función de generación masiva (que ya tienes)
             self.generar_documentos_faltantes(personas_sin_doc)
     
     def verificar_documentos_sin_registro_bd(self):
         """
-        Verifica qué documentos físicos en la carpeta no tienen registro en la BD.
-        Ofrece procesarlos automáticamente.
+        Verifica documentos físicos sin registro en BD.
+        VERSIÓN OPTIMIZADA.
         """
-        # Obtener archivos físicos en carpeta
+        # ✅ OPTIMIZACIÓN: Obtener archivos una sola vez
         archivos_carpeta = []
         if os.path.exists(DOCUMENTOS_DIR):
             archivos_carpeta = [
@@ -1366,27 +1541,24 @@ class VentanaCargarDocumentos:
         if not archivos_carpeta:
             return
         
-        # Obtener documentos registrados en BD
+        # ✅ OPTIMIZACIÓN: Crear set de nombres en BD
         documentos_bd = self.db.obtener_todos_documentos()
-        nombres_en_bd = {doc[1] for doc in documentos_bd}  # doc[1] = nombre_archivo
+        nombres_en_bd = {doc[1] for doc in documentos_bd}
         
-        # Encontrar documentos huérfanos (en carpeta pero no en BD)
-        documentos_huerfanos = []
-        for nombre_archivo in archivos_carpeta:
-            if nombre_archivo not in nombres_en_bd:
-                ruta_completa = os.path.join(DOCUMENTOS_DIR, nombre_archivo)
-                documentos_huerfanos.append((nombre_archivo, ruta_completa))
+        # Encontrar huérfanos
+        documentos_huerfanos = [
+            (nombre, os.path.join(DOCUMENTOS_DIR, nombre))
+            for nombre in archivos_carpeta
+            if nombre not in nombres_en_bd
+        ]
         
-        # Si no hay huérfanos, no mostrar nada
         if not documentos_huerfanos:
             return
         
-        # Preguntar si quiere procesarlos
         respuesta = messagebox.askyesno(
             "Documentos sin registro",
-            f"Se encontraron {len(documentos_huerfanos)} documento(s) en la carpeta "
-            "que NO están registrados en la base de datos.\n\n"
-            "¿Desea procesarlos y registrarlos automáticamente?"
+            f"Se encontraron {len(documentos_huerfanos)} documento(s) sin registro en BD.\n\n"
+            "¿Desea procesarlos y registrarlos?"
         )
         
         if respuesta:
@@ -1486,7 +1658,10 @@ class VentanaCargarDocumentos:
                 }
                 
                 persona_id, resultado = self.db.guardar_persona(datos_persona)
-                
+
+                # ✅ APRENDER SUGERENCIAS DE LOS DATOS EXTRAÍDOS
+                self.db.aprender_sugerencias_desde_persona(datos_persona)
+
                 # Guardar documento en BD
                 self.db.guardar_documento(persona_id, nombre_archivo, ruta_archivo, "acta")
                 
@@ -1519,7 +1694,7 @@ class VentanaCargarDocumentos:
         cerrar_ventana_progreso()
         
         # Recargar lista
-        self.cargar_documentos_existentes()
+        self.cargar_documentos_existentes_optimizado()
         if self.callback_actualizar:
             self.callback_actualizar()
     
@@ -1676,6 +1851,9 @@ class VentanaCargarDocumentos:
                 # Guardar documento en BD
                 self.db.guardar_documento(persona_id, nombre_destino, ruta_destino, "acta")
 
+                # ✅ APRENDER SUGERENCIAS DE LOS DATOS GENERADOS
+                self.db.aprender_sugerencias_desde_persona(datos_persona)
+
                 generados += 1
                 log_text.insert("end", f"   ✅ Documento generado: {nombre_destino}\n\n", "success")
                 log_text.see("end")
@@ -1715,7 +1893,7 @@ class VentanaCargarDocumentos:
         cerrar_ventana_progreso()
 
         # Recargar documentos existentes
-        self.cargar_documentos_existentes()
+        self.cargar_documentos_existentes_optimizado()
         if self.callback_actualizar:
             self.callback_actualizar()
         
@@ -1889,3 +2067,505 @@ class VentanaCargarDocumentos:
                 f"No se pudo convertir el documento a PDF para vista previa.\n\n{error_msg}"
             )
             return False
+    
+    def sincronizar_bd_con_archivos(self):
+        """
+        Sincroniza la base de datos con los archivos físicos.
+        - Elimina registros de documentos que no existen físicamente
+        - Identifica personas sin documentos
+        - Identifica documentos sin registro en BD
+        """
+        # Obtener archivos físicos
+        archivos_fisicos = set()
+        if os.path.exists(DOCUMENTOS_DIR):
+            archivos_fisicos = {
+                f for f in os.listdir(DOCUMENTOS_DIR)
+                if f.lower().endswith(('.doc', '.docx'))
+            }
+        
+        # Obtener documentos en BD
+        documentos_bd = self.db.obtener_todos_documentos()
+        
+        # 1. Limpiar registros huérfanos en BD (documentos que no existen físicamente)
+        registros_huerfanos = []
+        for doc in documentos_bd:
+            nombre_archivo = doc[1]
+            if nombre_archivo not in archivos_fisicos:
+                registros_huerfanos.append(doc)
+        
+        if registros_huerfanos:
+            respuesta = messagebox.askyesno(
+                "Registros huérfanos en BD",
+                f"Se encontraron {len(registros_huerfanos)} registro(s) en la base de datos "
+                f"cuyos archivos ya no existen.\n\n"
+                f"¿Desea eliminar estos registros de la base de datos?"
+            )
+            
+            if respuesta:
+                eliminados = 0
+                for doc in registros_huerfanos:
+                    try:
+                        self.db.eliminar_documento_por_id(doc[0])
+                        eliminados += 1
+                    except Exception as e:
+                        print(f"Error al eliminar registro {doc[0]}: {e}")
+                
+                messagebox.showinfo(
+                    "Limpieza completada",
+                    f"Se eliminaron {eliminados} registro(s) huérfano(s) de la base de datos."
+                )
+        
+        # 2. Verificar consistencia personas-documentos
+        self.verificar_consistencia_personas_documentos()
+
+    def verificar_consistencia_personas_documentos(self):
+        """
+        Verifica que cada persona tenga exactamente un documento y viceversa.
+        """
+        try:
+            # Obtener todas las personas
+            personas = self.db.obtener_todas_personas()
+            
+            # Obtener archivos físicos válidos
+            archivos_fisicos = set()
+            if os.path.exists(DOCUMENTOS_DIR):
+                archivos_fisicos = {
+                    f for f in os.listdir(DOCUMENTOS_DIR)
+                    if f.lower().endswith(('.doc', '.docx'))
+                }
+            
+            # Obtener documentos en BD
+            documentos_bd = self.db.obtener_todos_documentos()
+            
+            # Crear mapas de relación
+            personas_con_doc = set()
+            docs_por_persona = {}
+            
+            for doc in documentos_bd:
+                nombre_archivo = doc[1]
+                persona_id = doc[6] if len(doc) > 6 else None
+                
+                # Solo contar si el archivo existe físicamente
+                if nombre_archivo in archivos_fisicos and persona_id:
+                    personas_con_doc.add(persona_id)
+                    if persona_id not in docs_por_persona:
+                        docs_por_persona[persona_id] = []
+                    docs_por_persona[persona_id].append(nombre_archivo)
+            
+            # Identificar problemas
+            personas_sin_doc = []
+            personas_con_multiples_docs = []
+            
+            for persona in personas:
+                persona_id = persona[0]
+                
+                if persona_id not in personas_con_doc:
+                    personas_sin_doc.append(persona)
+                elif len(docs_por_persona[persona_id]) > 1:
+                    personas_con_multiples_docs.append((persona, docs_por_persona[persona_id]))
+            
+            # Documentos huérfanos (sin persona asociada o con persona inexistente)
+            personas_ids_validos = {p[0] for p in personas}
+            docs_huerfanos = []
+            
+            for doc in documentos_bd:
+                nombre_archivo = doc[1]
+                persona_id = doc[6] if len(doc) > 6 else None
+                
+                if nombre_archivo in archivos_fisicos:
+                    if not persona_id or persona_id not in personas_ids_validos:
+                        docs_huerfanos.append((nombre_archivo, os.path.join(DOCUMENTOS_DIR, nombre_archivo)))
+            
+            # Construir reporte
+            problemas = []
+            
+            if personas_sin_doc:
+                problemas.append(f"❌ {len(personas_sin_doc)} persona(s) sin documento")
+            
+            if personas_con_multiples_docs:
+                problemas.append(f"⚠️ {len(personas_con_multiples_docs)} persona(s) con múltiples documentos")
+            
+            if docs_huerfanos:
+                problemas.append(f"📄 {len(docs_huerfanos)} documento(s) sin persona asociada")
+            
+            # Mostrar reporte si hay problemas
+            if problemas:
+                mensaje = (
+                    "⚠️ PROBLEMAS DE SINCRONIZACIÓN DETECTADOS:\n\n" +
+                    "\n".join(problemas) +
+                    "\n\n¿Desea corregir estos problemas automáticamente?"
+                )
+                
+                respuesta = messagebox.askyesno("Problemas de sincronización", mensaje)
+                
+                if respuesta:
+                    self.corregir_problemas_sincronizacion(
+                        personas_sin_doc,
+                        personas_con_multiples_docs,
+                        docs_huerfanos
+                    )
+            else:
+                messagebox.showinfo(
+                    "Sincronización correcta",
+                    "✅ Todos los datos están sincronizados correctamente.\n\n"
+                    f"📊 Total personas: {len(personas)}\n"
+                    f"📄 Total documentos: {len([d for d in documentos_bd if d[1] in archivos_fisicos])}"
+                )
+        
+        except Exception as e:
+            messagebox.showerror("Error", f"Error al verificar consistencia:\n{str(e)}")
+
+    def corregir_problemas_sincronizacion(self, personas_sin_doc, personas_con_multiples, docs_huerfanos):
+        """
+        Corrige problemas de sincronización detectados.
+        """
+        # 1. Generar documentos para personas sin documento
+        if personas_sin_doc:
+            respuesta = messagebox.askyesno(
+                "Generar documentos faltantes",
+                f"¿Generar documentos para {len(personas_sin_doc)} persona(s) sin documento?"
+            )
+            if respuesta:
+                self.generar_documentos_faltantes(personas_sin_doc)
+        
+        # 2. Manejar personas con múltiples documentos - ELIMINACIÓN AUTOMÁTICA
+        if personas_con_multiples:
+            mensaje = (
+                f"⚠️ Se encontraron {len(personas_con_multiples)} persona(s) con múltiples documentos.\n\n"
+                "Se conservará únicamente el documento más reciente y se eliminarán los demás.\n\n"
+                "Personas afectadas:\n"
+            )
+            
+            for persona, docs in personas_con_multiples[:5]:
+                mensaje += f"• {persona[1]} (DPI: {persona[2]}): {len(docs)} documentos → se conservará 1\n"
+            
+            if len(personas_con_multiples) > 5:
+                mensaje += f"... y {len(personas_con_multiples) - 5} más\n"
+            
+            mensaje += "\n¿Desea continuar con la limpieza automática?"
+            
+            respuesta = messagebox.askyesno(
+                "Limpieza de documentos duplicados",
+                mensaje,
+                icon='warning'
+            )
+            
+            if respuesta:
+                self.limpiar_documentos_duplicados(personas_con_multiples)
+        
+        # 3. Procesar documentos huérfanos
+        if docs_huerfanos:
+            respuesta = messagebox.askyesno(
+                "Documentos sin persona",
+                f"¿Procesar {len(docs_huerfanos)} documento(s) sin persona asociada?"
+            )
+            if respuesta:
+                self.procesar_documentos_huerfanos(docs_huerfanos)
+        
+        # Recargar todo
+        self.cargar_documentos_existentes_optimizado()
+        if self.callback_actualizar:
+            self.callback_actualizar()
+    
+    def limpiar_documentos_duplicados(self, personas_con_multiples):
+        """
+        Elimina documentos duplicados, conservando solo el más reciente por persona.
+        """
+        # Crear ventana de progreso
+        ventana_progreso = ctk.CTkToplevel(self.ventana)
+        ventana_progreso.title("🧹 Limpiando documentos duplicados...")
+        ventana_progreso.grab_set()
+        ventana_progreso.resizable(False, False)
+        ventana_progreso.protocol("WM_DELETE_WINDOW", lambda: None)
+        
+        main_frame = ctk.CTkFrame(ventana_progreso)
+        main_frame.pack(fill="both", expand=True, padx=20, pady=20)
+        
+        ctk.CTkLabel(
+            main_frame,
+            text="🧹 Limpiando documentos duplicados...",
+            font=ctk.CTkFont(size=18, weight="bold")
+        ).pack(pady=10)
+        
+        # Estadísticas
+        stats_frame = ctk.CTkFrame(main_frame)
+        stats_frame.pack(pady=10, fill="x")
+        stats_frame.grid_columnconfigure((0, 1), weight=1)
+        
+        conservados_label = ctk.CTkLabel(
+            stats_frame,
+            text="✅ Conservados\n0",
+            font=ctk.CTkFont(size=12, weight="bold"),
+            text_color="#2ecc71"
+        )
+        conservados_label.grid(row=0, column=0, padx=5, pady=10)
+        
+        eliminados_label = ctk.CTkLabel(
+            stats_frame,
+            text="🗑️ Eliminados\n0",
+            font=ctk.CTkFont(size=12, weight="bold"),
+            text_color="#e74c3c"
+        )
+        eliminados_label.grid(row=0, column=1, padx=5, pady=10)
+        
+        # Progreso
+        progreso_label = ctk.CTkLabel(
+            main_frame,
+            text="Preparando...",
+            font=ctk.CTkFont(size=13)
+        )
+        progreso_label.pack(pady=10)
+        
+        # Log
+        log_text = ctk.CTkTextbox(main_frame, width=650, height=300)
+        log_text.pack(pady=10)
+        
+        log_text.tag_config("success", foreground="#2ecc71")
+        log_text.tag_config("error", foreground="#e74c3c")
+        log_text.tag_config("info", foreground="#3498db")
+        log_text.tag_config("warning", foreground="#f39c12")
+        
+        def cerrar_ventana():
+            try:
+                cancelar_callbacks_widget(ventana_progreso)
+                ventana_progreso.destroy()
+            except:  # noqa: E722
+                pass
+        
+        btn_cerrar = ctk.CTkButton(
+            main_frame,
+            text="✓ Cerrar",
+            command=cerrar_ventana,
+            height=35,
+            width=150,
+            font=ctk.CTkFont(size=13, weight="bold"),
+            fg_color=COLOR_PRIMARY,
+            hover_color="#2980b9",
+            state="disabled"
+        )
+        btn_cerrar.pack(pady=10)
+        
+        self.center_toplevel(ventana_progreso, 700, 600)
+        ventana_progreso.update()
+        
+        # Contadores
+        total_conservados = 0
+        total_eliminados = 0
+        errores = 0
+        
+        log_text.insert("end", f"{'='*70}\n", "info")
+        log_text.insert("end", f"Procesando {len(personas_con_multiples)} persona(s) con documentos duplicados\n", "info")
+        log_text.insert("end", f"{'='*70}\n\n", "info")
+        ventana_progreso.update()
+        
+        # Obtener todos los documentos de BD
+        documentos_bd = self.db.obtener_todos_documentos()
+        
+        for i, (persona, nombres_docs) in enumerate(personas_con_multiples):
+            try:
+                persona_id = persona[0]
+                nombre_persona = persona[1]
+                dpi_persona = persona[2]
+
+                progreso_label.configure(
+                    text=f"Procesando {i + 1} / {len(personas_con_multiples)}: {nombre_persona}"
+                )
+                ventana_progreso.update()
+
+                log_text.insert("end", f"[{i + 1}/{len(personas_con_multiples)}] ", "info")
+                log_text.insert("end", f"👤 {nombre_persona} (DPI: {dpi_persona}) [ID: {persona_id}]\n")
+                log_text.insert("end", f"   📄 Encontrados {len(nombres_docs)} documentos\n", "warning")
+                log_text.see("end")
+                ventana_progreso.update()
+                
+                # Buscar información completa de cada documento
+                docs_persona = []
+                for doc in documentos_bd:
+                    if doc[1] in nombres_docs:  # doc[1] = nombre_archivo
+                        ruta_archivo = os.path.join(DOCUMENTOS_DIR, doc[1])
+                        if os.path.exists(ruta_archivo):
+                            try:
+                                mtime = os.path.getmtime(ruta_archivo)
+                                docs_persona.append({
+                                    'id': doc[0],
+                                    'nombre': doc[1],
+                                    'ruta': ruta_archivo,
+                                    'mtime': mtime
+                                })
+                            except OSError:
+                                log_text.insert("end", f"   ⚠️ No se pudo obtener fecha de: {doc[1]}\n", "warning")
+                
+                if not docs_persona:
+                    log_text.insert("end", "   ⚠️ No se encontraron archivos físicos\n\n", "warning")
+                    continue
+                
+                # Ordenar por fecha de modificación (más reciente primero)
+                docs_persona.sort(key=lambda x: x['mtime'], reverse=True)
+                
+                # El primero es el más reciente (se conserva)
+                doc_conservar = docs_persona[0]
+                docs_eliminar = docs_persona[1:]
+                
+                # Mostrar documento a conservar
+                fecha_conservar = datetime.datetime.fromtimestamp(doc_conservar['mtime']).strftime("%Y-%m-%d %H:%M:%S")
+                log_text.insert("end", f"   ✅ CONSERVAR: {doc_conservar['nombre']}\n", "success")
+                log_text.insert("end", f"      Fecha: {fecha_conservar}\n", "success")
+                
+                total_conservados += 1
+                conservados_label.configure(text=f"✅ Conservados\n{total_conservados}")
+                
+                # Eliminar los demás documentos
+                for doc_elim in docs_eliminar:
+                    try:
+                        fecha_elim = datetime.datetime.fromtimestamp(doc_elim['mtime']).strftime("%Y-%m-%d %H:%M:%S")
+                        
+                        # Eliminar archivo físico
+                        if os.path.exists(doc_elim['ruta']):
+                            os.remove(doc_elim['ruta'])
+                            log_text.insert("end", f"   🗑️ ELIMINADO: {doc_elim['nombre']}\n", "error")
+                            log_text.insert("end", f"      Fecha: {fecha_elim}\n", "error")
+                        
+                        # Eliminar registro de BD
+                        self.db.eliminar_documento_por_id(doc_elim['id'])
+                        
+                        total_eliminados += 1
+                        eliminados_label.configure(text=f"🗑️ Eliminados\n{total_eliminados}")
+                        
+                    except Exception as e:
+                        log_text.insert("end", f"   ❌ Error al eliminar {doc_elim['nombre']}: {str(e)}\n", "error")
+                        errores += 1
+                
+                log_text.insert("end", "\n")
+                log_text.see("end")
+                ventana_progreso.update()
+                
+            except Exception as e:
+                log_text.insert("end", f"   ❌ Error general: {str(e)}\n\n", "error")
+                errores += 1
+                log_text.see("end")
+                ventana_progreso.update()
+        
+        # Resumen final
+        log_text.insert("end", f"\n{'='*70}\n", "info")
+        log_text.insert("end", "📊 RESUMEN DE LIMPIEZA\n", "info")
+        log_text.insert("end", f"{'='*70}\n", "info")
+        log_text.insert("end", f"✅ Documentos conservados: {total_conservados}\n", "success")
+        log_text.insert("end", f"🗑️ Documentos eliminados: {total_eliminados}\n", "error")
+        if errores > 0:
+            log_text.insert("end", f"❌ Errores: {errores}\n", "error")
+        log_text.insert("end", f"📊 Personas procesadas: {len(personas_con_multiples)}\n", "info")
+        log_text.insert("end", f"{'='*70}\n", "info")
+        log_text.see("end")
+        
+        # Habilitar botón cerrar
+        btn_cerrar.configure(state="normal")
+        
+        # Mensaje final
+        mensaje_final = (
+            f"✅ Documentos conservados: {total_conservados}\n"
+            f"🗑️ Documentos eliminados: {total_eliminados}\n"
+            f"📊 Personas procesadas: {len(personas_con_multiples)}"
+        )
+        
+        if errores > 0:
+            mensaje_final += f"\n❌ Errores: {errores}"
+        
+        messagebox.showinfo("Limpieza completada", mensaje_final)
+        
+        # Cerrar ventana
+        cerrar_ventana()
+    
+    def eliminar_del_listado(self, index):
+        """
+        Elimina un documento del listado de documentos a procesar (antes de cargar a BD).
+        """
+        if index < 0 or index >= len(self.documentos_seleccionados):
+            return
+        
+        nombre_archivo = os.path.basename(self.documentos_seleccionados[index])
+        
+        respuesta = messagebox.askyesno(
+            "Confirmar eliminación",
+            f"¿Desea eliminar este documento del listado?\n\n"
+            f"📄 {nombre_archivo}\n\n"
+            f"Nota: El documento NO se procesará ni se cargará a la base de datos.",
+            icon='warning'
+        )
+        
+        if not respuesta:
+            return
+        
+        # Eliminar del listado
+        self.documentos_seleccionados.pop(index)
+        
+        # Ajustar índice actual si es necesario
+        if self.documento_actual_index >= len(self.documentos_seleccionados):
+            self.documento_actual_index = max(0, len(self.documentos_seleccionados) - 1)
+        
+        # Actualizar UI
+        self.actualizar_lista_documentos()
+        self.actualizar_navegacion()
+        
+        # Mostrar documento actual si hay documentos
+        if self.documentos_seleccionados:
+            self.mostrar_documento_actual()
+        else:
+            # Limpiar visor si no hay más documentos
+            for widget in self.visor_scroll.winfo_children():
+                widget.destroy()
+            
+            self.lbl_visor_estado = ctk.CTkLabel(
+                self.visor_scroll,
+                text="Seleccione documentos para visualizar",
+                text_color="gray",
+                font=ctk.CTkFont(size=14)
+            )
+            self.lbl_visor_estado.pack(pady=200)
+        
+        # Mensaje de confirmación
+        messagebox.showinfo(
+            "Eliminado",
+            f"Documento eliminado del listado:\n{nombre_archivo}\n\n"
+            f"Documentos restantes: {len(self.documentos_seleccionados)}"
+        )
+    
+    def limpiar_listado_completo(self):
+        """
+        Limpia completamente el listado de documentos a procesar.
+        """
+        if not self.documentos_seleccionados:
+            messagebox.showinfo("Información", "No hay documentos en el listado.")
+            return
+        
+        respuesta = messagebox.askyesno(
+            "Confirmar limpieza",
+            f"¿Desea eliminar TODOS los documentos del listado?\n\n"
+            f"📊 Total: {len(self.documentos_seleccionados)} documento(s)\n\n"
+            f"Nota: Los documentos NO se procesarán ni se cargarán a la base de datos.",
+            icon='warning'
+        )
+        
+        if not respuesta:
+            return
+        
+        # Limpiar todo
+        self.documentos_seleccionados = []
+        self.documento_actual_index = 0
+        
+        # Actualizar UI
+        self.actualizar_lista_documentos()
+        self.actualizar_navegacion()
+        
+        # Limpiar visor
+        for widget in self.visor_scroll.winfo_children():
+            widget.destroy()
+        
+        self.lbl_visor_estado = ctk.CTkLabel(
+            self.visor_scroll,
+            text="Seleccione documentos para visualizar",
+            text_color="gray",
+            font=ctk.CTkFont(size=14)
+        )
+        self.lbl_visor_estado.pack(pady=200)
+        
+        messagebox.showinfo("Limpieza completada", "Se eliminaron todos los documentos del listado.")

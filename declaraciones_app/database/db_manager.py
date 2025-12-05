@@ -9,6 +9,8 @@ class DatabaseManager:
         self.cursor = self.conn.cursor()
         self.crear_tablas()
         
+        self.verificar_tabla_sugerencias()
+        
         self.verificar_y_cargar_plantillas_existentes()
     
     def crear_tablas(self):
@@ -99,8 +101,10 @@ class DatabaseManager:
         self.cursor.execute('''
             CREATE TABLE IF NOT EXISTS sugerencias_palabras (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
+                tipo TEXT NOT NULL,
                 palabra TEXT NOT NULL,
-                tipo   TEXT NOT NULL   -- 'nombre', 'apellido', 'nacionalidad', 'domicilio', etc.
+                frecuencia INTEGER DEFAULT 1,
+                UNIQUE(tipo, palabra)
             )
         ''')
         
@@ -724,23 +728,11 @@ class DatabaseManager:
             Lista de sugerencias ordenadas por frecuencia
         """
         try:
-            # Crear tabla si no existe
-            self.cursor.execute("""
-                CREATE TABLE IF NOT EXISTS sugerencias_palabras (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    tipo TEXT NOT NULL,
-                    palabra TEXT NOT NULL,
-                    frecuencia INTEGER DEFAULT 1,
-                    UNIQUE(tipo, palabra)
-                )
-            """)
-            self.conn.commit()
-            
-            # Buscar sugerencias que coincidan
+            # Buscar sugerencias que coincidan (case-insensitive)
             self.cursor.execute("""
                 SELECT palabra, frecuencia
                 FROM sugerencias_palabras
-                WHERE tipo = ? AND palabra LIKE ?
+                WHERE tipo = ? AND LOWER(palabra) LIKE LOWER(?)
                 ORDER BY frecuencia DESC, palabra ASC
                 LIMIT 10
             """, (tipo_palabra, f"{texto_parcial}%"))
@@ -750,8 +742,10 @@ class DatabaseManager:
         
         except Exception as e:
             print(f"Error al obtener sugerencias: {e}")
+            import traceback
+            traceback.print_exc()
             return []
-
+    
     def aprender_sugerencias_desde_persona(self, datos_persona):
         """
         Aprende sugerencias desde los datos de una persona guardada.
@@ -815,7 +809,108 @@ class DatabaseManager:
             """, (tipo, palabra))
         except Exception as e:
             print(f"Error al incrementar sugerencia: {e}")
-     
+    
+    def verificar_tabla_sugerencias(self):
+        """Verifica y repara la tabla de sugerencias si es necesario"""
+        # Verificar si la tabla existe
+        self.cursor.execute("""
+            SELECT name FROM sqlite_master 
+            WHERE type='table' AND name='sugerencias_palabras'
+        """)
+        
+        tabla_existe = self.cursor.fetchone()
+        
+        if tabla_existe:
+            # Verificar estructura de la tabla
+            self.cursor.execute("PRAGMA table_info(sugerencias_palabras)")
+            columnas = {col[1] for col in self.cursor.fetchall()}
+            
+            # Si no tiene la columna 'frecuencia', recrear la tabla
+            if 'frecuencia' not in columnas:
+                # Respaldar datos si existen
+                self.cursor.execute("SELECT * FROM sugerencias_palabras")
+                datos_antiguos = self.cursor.fetchall()
+                
+                # Eliminar tabla antigua
+                self.cursor.execute("DROP TABLE sugerencias_palabras")
+                
+                # Crear tabla nueva
+                self.cursor.execute("""
+                    CREATE TABLE sugerencias_palabras (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        tipo TEXT NOT NULL,
+                        palabra TEXT NOT NULL,
+                        frecuencia INTEGER DEFAULT 1,
+                        UNIQUE(tipo, palabra)
+                    )
+                """)
+                
+                # Restaurar datos si había
+                if datos_antiguos:
+                    for dato in datos_antiguos:
+                        try:
+                            # Intentar insertar con frecuencia 1
+                            # dato[0] = id, dato[1] = palabra, dato[2] = tipo (orden antiguo)
+                            self.cursor.execute("""
+                                INSERT INTO sugerencias_palabras (tipo, palabra, frecuencia)
+                                VALUES (?, ?, 1)
+                            """, (dato[2], dato[1]))
+                        except:  # noqa: E722
+                            pass
+                
+                self.conn.commit()
+        else:
+            # Crear tabla desde cero
+            self.cursor.execute("""
+                CREATE TABLE sugerencias_palabras (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    tipo TEXT NOT NULL,
+                    palabra TEXT NOT NULL,
+                    frecuencia INTEGER DEFAULT 1,
+                    UNIQUE(tipo, palabra)
+                )
+            """)
+            self.conn.commit()
+    
+    def _es_valor_invalido(self, valor):
+        """Verifica si un valor es inválido y no debe aprenderse"""
+        if not valor or valor == 'None':
+            return True
+        
+        textos_invalidos = [
+            'personal de identificación',
+            'documento personal',
+            'identificación',
+            'dpi',
+            'cui',
+            'código único',
+            'renap',
+            'registro nacional',
+            'notario',
+            'notarial',
+            'abogado',
+            'licenciado'
+        ]
+        
+        valor_lower = valor.lower()
+        for texto_invalido in textos_invalidos:
+            if texto_invalido in valor_lower:
+                return True
+        
+        return False
+
+    def _es_palabra_invalida(self, palabra):
+        """Verifica si una palabra individual es inválida"""
+        if len(palabra) < 2:
+            return True
+        
+        palabras_invalidas = [
+            'de', 'del', 'la', 'el', 'los', 'las', 'con', 'por', 'para',
+            'documento', 'personal', 'identificación', 'dpi', 'cui'
+        ]
+        
+        return palabra.lower() in palabras_invalidas
+        
     def cerrar(self):
         """Cierra la conexión a la base de datos"""
         self.conn.close()
