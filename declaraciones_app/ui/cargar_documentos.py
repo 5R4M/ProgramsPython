@@ -159,6 +159,10 @@ class VentanaCargarDocumentos:
         
         self._cache_años = CacheAños()
         
+        # Control de ventana activa para evitar actualizaciones fantasma
+        self.ventana_activa = True
+        self.after_ids = []
+        
         # Asegurar que existe el directorio de documentos (sin print)
         if not os.path.exists(DOCUMENTOS_DIR):
             os.makedirs(DOCUMENTOS_DIR, exist_ok=True)
@@ -177,6 +181,9 @@ class VentanaCargarDocumentos:
             self.ventana.lift()
             self.ventana.focus_force()
             self.ventana.grab_set()   # bloquea interacciones con el padre
+            
+            # Manejar cierre de ventana
+            self.ventana.protocol("WM_DELETE_WINDOW", self.cerrar_ventana)
 
         # Crear UI
         self.crear_interfaz()
@@ -211,6 +218,22 @@ class VentanaCargarDocumentos:
                     print("⚠️ No hay datos para alimentar sugerencias")
         except Exception as e:
             print(f"⚠️ Error al verificar sugerencias: {e}")
+    
+    def cerrar_ventana(self):
+        """Maneja el cierre seguro de la ventana"""
+        # Cancelar todos los callbacks pendientes
+        self.ventana_activa = False
+        try:
+            # Cancelar todos los after callbacks
+            for after_id in self.after_ids:
+                self.ventana.after_cancel(after_id)
+            self.after_ids.clear()
+            
+            # Destruir la ventana
+            if not self.es_integrado:
+                self.ventana.destroy()
+        except Exception as e:
+            print(f"Error al cerrar ventana: {e}")
     
     def set_callback_actualizar(self, callback):
         """Permite establecer un callback para actualizar estadísticas"""
