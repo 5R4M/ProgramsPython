@@ -170,27 +170,8 @@ class DatabaseManager:
         """Guarda o actualiza una persona"""
         fecha_actual = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         
-        # Limpiar apellido de casada si contiene texto inválido
-        apellido_casada = datos.get('apellido_casada', '').strip()
-        
-        if apellido_casada:
-            textos_invalidos = [
-                "personal de identificación",
-                "documento personal",
-                "identificación",
-                "dpi",
-                "cui",
-                "código único",
-                "renap"
-            ]
-            
-            apellido_lower = apellido_casada.lower()
-            for texto_invalido in textos_invalidos:
-                if texto_invalido in apellido_lower:
-                    apellido_casada = None
-                    break
-        else:
-            apellido_casada = None
+       # Validar y normalizar apellido de casada (solo para sexo femenino)
+        apellido_casada = self._normalizar_apellido_casada(datos)
         
         # Verificar si existe
         dpi_limpio = datos['dpi'].replace(" ", "")
@@ -910,7 +891,177 @@ class DatabaseManager:
         ]
         
         return palabra.lower() in palabras_invalidas
+    
+    def _normalizar_apellido_casada(self, datos):
+        """
+        Valida y normaliza el apellido de casada.
+
+        Reglas:
+        - Solo se acepta si:
+            * sexo = femenino
+            * estado_civil = casada
+        - Se limpia texto basura.
+        - Se intenta dejar en formato 'de Apellido...' sin romper casos especiales.
+        """
+        apellido_casada = datos.get('apellido_casada', '')
+        if not apellido_casada:
+            return None
+
+        apellido_casada = apellido_casada.strip()
+        if not apellido_casada:
+            return None
+
+        # 1) Solo sexo F y estado civil CASADA
+        sexo = (datos.get('sexo') or '').strip().lower()
+        estado_civil = (datos.get('estado_civil') or '').strip().lower()
+
+        es_femenino = sexo in ('femenino', 'f', 'mujer')
+        es_casada = estado_civil == 'casada'
+
+        if not (es_femenino and es_casada):
+            # No se guarda apellido de casada para otros casos
+            return None
+
+        # 2) Descartar textos inválidos
+        textos_invalidos = [
+            "personal de identificación",
+            "documento personal",
+            "identificación",
+            "dpi",
+            "cui",
+            "código único",
+            "renap",
+            "registro nacional",
+            "notario",
+            "notarial",
+            "abogado",
+            "licenciado"
+        ]
+        ap_lower = apellido_casada.lower()
+        for t in textos_invalidos:
+            if t in ap_lower:
+                return None
+
+        # 3) Casos especiales que se respetan tal cual
+        casos_especiales = [
+            "de la mata de gonzalez",
+            # aquí puedes agregar más patrones especiales
+        ]
+        for ce in casos_especiales:
+            if ce in ap_lower:
+                return apellido_casada.title()
+
+        # 4) Normalizar:
+        #    - Si ya tiene 'de', capitalizamos y listo.
+        #    - Si no, asumimos que es solo el apellido del esposo: "Gonzalez" -> "de Gonzalez"
+        import re
+
+        if re.search(r'\bde\b', ap_lower):
+            return apellido_casada.strip().title()
+
+        return f"de {apellido_casada.strip().title()}"
+    
+    def contar_personas(self):
+        """Cuenta el total de personas en la base de datos"""
+        try:
+            self.cursor.execute("SELECT COUNT(*) FROM personas")
+            return self.cursor.fetchone()[0]
+        except Exception as e:
+            print(f"Error al contar personas: {e}")
+            return 0
+
+    def obtener_documentos_huerfanos(self):
+        """
+        Obtiene documentos registrados en BD cuyo archivo físico ya no existe.
+        VERSIÓN MEJORADA: Compara solo por nombre de archivo, no por ruta completa.
+        Retorna: lista de tuplas (id_documento, persona_id, nombre_archivo, ruta_archivo)
+        """
+        try:
+            import os
+            from config import DOCUMENTOS_DIR
+            
+            # Obtener todos los archivos físicos (solo nombres)
+            archivos_fisicos = set()
+            if os.path.exists(DOCUMENTOS_DIR):
+                archivos_fisicos = {
+                    f for f in os.listdir(DOCUMENTOS_DIR)
+                    if f.lower().endswith(('.pdf', '.doc', '.docx'))
+                }
+            
+            # Obtener todos los documentos de la BD
+            self.cursor.execute("""
+                SELECT id, persona_id, nombre_archivo, ruta_archivo
+                FROM documentos
+            """)
+            
+            todos_documentos = self.cursor.fetchall()
+            huerfanos = []
+            
+            # Verificar cuáles no existen físicamente
+            for doc in todos_documentos:
+                nombre_archivo = doc[2]  # nombre_archivo
+                
+                # Verificar si el archivo existe físicamente
+                if nombre_archivo not in archivos_fisicos:
+                    huerfanos.append(doc)
+            
+            return huerfanos
         
+        except Exception as e:
+            print(f"Error al obtener documentos huérfanos: {e}")
+            import traceback
+            traceback.print_exc()
+            return []
+
+    def actualizar_ruta_documento(self, documento_id, nuevo_nombre, nueva_ruta):
+        """Actualiza el nombre y ruta de un documento en la BD"""
+        try:
+            self.cursor.execute("""
+                UPDATE documentos 
+                SET nombre_archivo = ?, ruta_archivo = ?
+                WHERE id = ?
+            """, (nuevo_nombre, nueva_ruta, documento_id))
+            self.conn.commit()
+        except Exception as e:
+            print(f"Error al actualizar ruta de documento: {e}")
+            raise
+
+    def obtener_persona_por_dpi(self, dpi):
+        """
+        Obtiene una persona por su DPI (normalizado sin espacios).
+        Retorna la tupla completa de la persona o None.
+        """
+        try:
+            dpi_limpio = dpi.replace(" ", "").replace("_", "")
+            self.cursor.execute("""
+                SELECT id, nombre_completo, dpi, edad, estado_civil, 
+                    nacionalidad, domicilio, nivel_academico, 
+                    apellido_casada, fecha_registro, sexo, fecha_nacimiento
+                FROM personas
+                WHERE REPLACE(REPLACE(dpi, ' ', ''), '_', '') = ?
+            """, (dpi_limpio,))
+            return self.cursor.fetchone()
+        except Exception as e:
+            print(f"Error al obtener persona por DPI: {e}")
+            return None
+
+    def obtener_documentos_por_persona(self, persona_id):
+        """
+        Obtiene todos los documentos de una persona específica.
+        Retorna lista de tuplas (id, nombre_archivo, ruta_archivo, fecha_carga, tipo_documento)
+        """
+        try:
+            self.cursor.execute("""
+                SELECT id, nombre_archivo, ruta_archivo, fecha_carga, tipo_documento
+                FROM documentos
+                WHERE persona_id = ?
+                ORDER BY fecha_carga DESC
+            """, (persona_id,))
+            return self.cursor.fetchall()
+        except Exception as e:
+            print(f"Error al obtener documentos por persona: {e}")
+            return []
+      
     def cerrar(self):
         """Cierra la conexión a la base de datos"""
         self.conn.close()

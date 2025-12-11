@@ -40,6 +40,10 @@ class NumeroATexto:
     @staticmethod
     def _numero_a_texto_centenas(num: int) -> str:
         """Convierte números de 100 a 999 a texto"""
+        # CORRECCIÓN: Si el número es >= 1000, usar el método de miles
+        if num >= 1000:
+            return NumeroATexto._convertir_numero_miles(num)
+        
         if num < 100:
             return NumeroATexto._numero_a_texto(num)
         
@@ -51,6 +55,10 @@ class NumeroATexto:
         
         if num == 100:
             return "cien"
+        
+        # CORRECCIÓN: Validar que c esté en el rango válido
+        if c > 9:
+            return NumeroATexto._convertir_numero_miles(num)
         
         resultado = centenas_texto[c]
         if resto > 0:
@@ -71,7 +79,14 @@ class NumeroATexto:
         if miles == 1:
             texto_partes.append("mil")
         else:
-            texto_partes.append(NumeroATexto._numero_a_texto(miles) + " mil")
+            # CORRECCIÓN: Usar el método correcto según el tamaño de 'miles'
+            if miles < 100:
+                texto_partes.append(NumeroATexto._numero_a_texto(miles) + " mil")
+            elif miles < 1000:
+                texto_partes.append(NumeroATexto._numero_a_texto_centenas(miles) + " mil")
+            else:
+                # Para números muy grandes (millones)
+                texto_partes.append(str(miles) + " mil")
         
         if resto > 0:
             texto_partes.append(NumeroATexto._numero_a_texto_centenas(resto))
@@ -81,14 +96,18 @@ class NumeroATexto:
     @staticmethod
     def convertir_dpi(dpi: str) -> str:
         """Convierte un DPI a texto"""
-        dpi_limpio = dpi.replace(" ", "")
+        # Limpiar el DPI
+        dpi_limpio = dpi.replace(" ", "").strip()
         
-        if len(dpi_limpio) == 13 and dpi_limpio.isdigit():
-            partes = [dpi_limpio[:4], dpi_limpio[4:9], dpi_limpio[9:13]]
-        else:
-            partes = dpi.strip().split()
-            if len(partes) != 3:
-                return dpi
+        # Validar que sea numérico y tenga 13 dígitos
+        if not dpi_limpio.isdigit():
+            return dpi
+        
+        if len(dpi_limpio) != 13:
+            return dpi
+        
+        # Separar en partes: AAAA MMMMM CCCC
+        partes = [dpi_limpio[:4], dpi_limpio[4:9], dpi_limpio[9:13]]
         
         resultado = []
         
@@ -99,13 +118,20 @@ class NumeroATexto:
             
             num = int(parte)
             
-            if i == 0:  # Primera parte (año)
-                if num >= 2000:
+            if i == 0:  # Primera parte (año) - 4 dígitos
+                # CORRECCIÓN: Manejar años de 4 dígitos correctamente
+                if num >= 3000:
+                    # Ejemplo: 3445 = tres mil cuatrocientos cuarenta y cinco
+                    resultado.append(NumeroATexto._convertir_numero_miles(num))
+                elif num >= 2000:
                     resto = num - 2000
                     if resto == 0:
                         resultado.append("dos mil")
                     else:
-                        if resto >= 100:
+                        # CORRECCIÓN: Usar el método correcto según el tamaño
+                        if resto >= 1000:
+                            resultado.append("dos mil " + NumeroATexto._convertir_numero_miles(resto))
+                        elif resto >= 100:
                             resultado.append("dos mil " + NumeroATexto._numero_a_texto_centenas(resto))
                         else:
                             resultado.append("dos mil " + NumeroATexto._numero_a_texto(resto))
@@ -114,7 +140,7 @@ class NumeroATexto:
                 else:
                     resultado.append(NumeroATexto._numero_a_texto_centenas(num))
             
-            elif i == 1:  # Segunda parte (código municipal)
+            elif i == 1:  # Segunda parte (código municipal) - 5 dígitos
                 if parte.startswith("0") and len(parte) == 5:
                     resto_num = int(parte[1:])
                     if resto_num == 0:
@@ -124,13 +150,14 @@ class NumeroATexto:
                 else:
                     resultado.append(NumeroATexto._convertir_numero_miles(num))
             
-            elif i == 2:  # Tercera parte (correlativo)
+            elif i == 2:  # Tercera parte (correlativo) - 4 dígitos
                 if parte.startswith("0") and len(parte) == 4:
                     resto_num = int(parte[1:])
                     if resto_num == 0:
                         resultado.append("cero cero")
                     else:
-                        resultado.append("cero " + NumeroATexto._numero_a_texto_centenas(resto_num))
+                        # CORRECCIÓN: Usar convertir() general que maneja todos los tamaños
+                        resultado.append("cero " + NumeroATexto.convertir(resto_num))
                 else:
                     if num == 0:
                         resultado.append("cero")

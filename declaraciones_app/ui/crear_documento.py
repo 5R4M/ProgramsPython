@@ -1997,21 +1997,26 @@ class VentanaCrearDocumento:
         
         # Construir nombre completo con apellido de casada
         nombre_completo = nombre
-        if apellido_casada:
-            # Verificar que el apellido de casada no esté vacío o solo espacios
-            apellido_casada_limpio = apellido_casada.strip()
-            if apellido_casada_limpio and estado_civil in ["casada", "divorciada", "viuda"]:
-                partes = nombre.split()
-                if len(partes) >= 4:
-                    # Insertar apellido de casada después del segundo apellido
-                    # Formato: Nombre1 Nombre2 Apellido1 Apellido2 → Nombre1 Nombre2 Apellido1 Apellido2 de_Casada
-                    nombre_completo = f"{partes[0]} {partes[1]} {partes[2]} {partes[3]} {apellido_casada_limpio}"
-                    # Agregar apellidos adicionales si existen
-                    if len(partes) > 4:
-                        nombre_completo += " " + " ".join(partes[4:])
-                elif len(partes) >= 2:
-                    # Si no tiene suficientes partes, agregar al final
-                    nombre_completo = f"{nombre} {apellido_casada_limpio}"
+
+        apellido_casada_limpio = apellido_casada.strip() if apellido_casada else ""
+
+        # Solo aplicar apellido de casada si:
+        # - hay valor
+        # - sexo femenino
+        # - estado civil corresponde
+        if (
+            apellido_casada_limpio
+            and sexo.lower() == "femenino"
+            and estado_civil.lower() in ["casada", "divorciada", "viuda"]
+        ):
+            # Caso especial: si el nombre YA contiene la frase de apellido de casada
+            # (por ejemplo: "Juana Garcia de la Mata de Gonzalez"), no duplicamos.
+            nombre_lower = nombre.lower()
+            ap_lower = apellido_casada_limpio.lower()
+            if ap_lower not in nombre_lower:
+                # Regla general: apellido de casada va al final del nombre completo
+                # Ej: "Juana Garcia Lopez Guevara" + "de Sosos"
+                nombre_completo = f"{nombre} {apellido_casada_limpio}"
         
         # Convertir año a texto
         anio_texto = None
@@ -2448,6 +2453,7 @@ class VentanaCrearDocumento:
     def generar_documento_para_persona(db, datos_persona, ruta_destino):
         """
         Genera un documento Word para una persona específica usando la plantilla activa.
+        USA LA MISMA LÓGICA QUE crear_documento_con_datos() para asegurar consistencia.
         
         Args:
             db: Instancia de DatabaseManager
@@ -2462,118 +2468,340 @@ class VentanaCrearDocumento:
         plantilla_activa = db.obtener_plantilla_activa()
         
         if not plantilla_activa:
-            raise Exception("No hay plantilla activa configurada. Por favor, configure una plantilla primero.")
+            raise Exception("No hay plantilla activa configurada.")
         
         ruta_plantilla = plantilla_activa[2]
         
-        # Verificar que la plantilla existe
         if not os.path.exists(ruta_plantilla):
             raise Exception(f"La plantilla no existe en: {ruta_plantilla}")
         
-        # Cargar plantilla
+        # Cargar plantilla ORIGINAL (no un documento modificado)
         try:
             doc = Document(ruta_plantilla)
         except Exception as e:
             raise Exception(f"Error al cargar la plantilla: {str(e)}")
         
-        # Obtener fecha y hora actual
+        # ===== EXTRAER DATOS (con validación de None) =====
+        nombre = (datos_persona.get('nombre') or '').strip()
+        dpi = (datos_persona.get('dpi') or '').strip()
+        edad = datos_persona.get('edad')
+        estado_civil = (datos_persona.get('estado_civil') or 'soltero').strip()
+        nacionalidad = (datos_persona.get('nacionalidad') or 'guatemalteco').strip()
+        domicilio = (datos_persona.get('domicilio') or 'Guatemala').strip()
+        nivel_academico = (datos_persona.get('nivel_academico') or '').strip()
+        apellido_casada = (datos_persona.get('apellido_casada') or '').strip()
+        sexo = (datos_persona.get('sexo') or 'masculino').strip()
+        
+        # Fecha/hora (usar valores custom o actuales)
         ahora = datetime.now()
-        dia = ahora.day
-        mes_num = ahora.month
-        anio = ahora.year
-        hora = ahora.hour
-        minutos = ahora.minute
+        hora = datos_persona.get('hora', str(ahora.hour))
+        minutos = datos_persona.get('minutos', f"{ahora.minute:02d}")
+        dia = datos_persona.get('dia', str(ahora.day))
         
-        # Mapeo de meses
-        meses_es = {
-            1: "enero", 2: "febrero", 3: "marzo", 4: "abril",
-            5: "mayo", 6: "junio", 7: "julio", 8: "agosto",
-            9: "septiembre", 10: "octubre", 11: "noviembre", 12: "diciembre"
-        }
-        mes = meses_es.get(mes_num, "enero")
+        meses_es = ["enero", "febrero", "marzo", "abril", "mayo", "junio",
+                    "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"]
+        mes = datos_persona.get('mes', meses_es[ahora.month - 1])
+        anio = datos_persona.get('anio', str(ahora.year))
         
-        # Extraer datos de la persona
-        nombre = datos_persona.get('nombre', '') or datos_persona.get('nombre_completo', '')
-        dpi = datos_persona.get('dpi', '')
-        edad = str(datos_persona.get('edad', '')) if datos_persona.get('edad') else ''
-        estado_civil = datos_persona.get('estado_civil', '')
-        nacionalidad = datos_persona.get('nacionalidad', 'guatemalteco')
-        domicilio = datos_persona.get('domicilio', '')
-        nivel_academico = datos_persona.get('nivel_academico', '')
-        apellido_casada = datos_persona.get('apellido_casada', '')
-        sexo = datos_persona.get('sexo', 'masculino')
+        # ===== CONSTRUIR NOMBRE COMPLETO CON APELLIDO DE CASADA =====
+        nombre_completo = nombre
+        apellido_casada_limpio = apellido_casada.strip() if apellido_casada else ""
         
-        # Usar valores personalizados si están disponibles
-        hora_custom = datos_persona.get('hora', str(hora))
-        minutos_custom = datos_persona.get('minutos', str(minutos).zfill(2))
-        dia_custom = datos_persona.get('dia', str(dia))
-        mes_custom = datos_persona.get('mes', mes)
-        anio_custom = datos_persona.get('anio', str(anio))
+        if (apellido_casada_limpio 
+            and sexo.lower() == "femenino" 
+            and estado_civil.lower() in ["casada", "divorciada", "viuda"]):
+            
+            nombre_lower = nombre.lower()
+            ap_lower = apellido_casada_limpio.lower()
+            
+            if ap_lower not in nombre_lower:
+                nombre_completo = f"{nombre} {apellido_casada_limpio}"
         
-        # Determinar artículo según sexo
-        articulo = "el" if sexo and sexo.lower() == "masculino" else "la"
-        senor_a = "señor" if sexo and sexo.lower() == "masculino" else "señora"
+        # ===== REEMPLAZOS DE GÉNERO =====
+        # Crear instancia temporal de VentanaCrearDocumento para usar sus métodos
+        # (necesitamos acceso a reemplazar_genero_documento y otros métodos)
+        class TempVentana:
+            @staticmethod
+            def reemplazar_genero_documento(doc, buscar, reemplazar):
+                """Reemplaza texto de género en el documento"""
+                reemplazos_totales = 0
+                
+                for paragraph in doc.paragraphs:
+                    while buscar in ''.join(run.text for run in paragraph.runs):
+                        if TempVentana.reemplazar_preservando_formato(paragraph, buscar, reemplazar):
+                            reemplazos_totales += 1
+                        else:
+                            break
+                        if reemplazos_totales > 100:
+                            return
+                
+                for table in doc.tables:
+                    for row in table.rows:
+                        for cell in row.cells:
+                            for paragraph in cell.paragraphs:
+                                while buscar in ''.join(run.text for run in paragraph.runs):
+                                    if TempVentana.reemplazar_preservando_formato(paragraph, buscar, reemplazar):
+                                        reemplazos_totales += 1
+                                    else:
+                                        break
+                                    if reemplazos_totales > 100:
+                                        return
+            
+            @staticmethod
+            def clonar_formato_run(run_origen, run_destino):
+                """Clona formato de un run a otro"""
+                try:
+                    if run_origen.bold is not None:
+                        run_destino.bold = run_origen.bold
+                    if run_origen.italic is not None:
+                        run_destino.italic = run_origen.italic
+                    if run_origen.underline is not None:
+                        run_destino.underline = run_origen.underline
+                    
+                    if run_origen.font.name:
+                        run_destino.font.name = run_origen.font.name
+                    if run_origen.font.size:
+                        run_destino.font.size = run_origen.font.size
+                    if run_origen.font.color.rgb:
+                        run_destino.font.color.rgb = run_origen.font.color.rgb
+                    
+                    if run_origen.font.strike is not None:
+                        run_destino.font.strike = run_origen.font.strike
+                    if run_origen.font.all_caps is not None:
+                        run_destino.font.all_caps = run_origen.font.all_caps
+                    if run_origen.font.small_caps is not None:
+                        run_destino.font.small_caps = run_origen.font.small_caps
+                    if run_origen.font.highlight_color is not None:
+                        run_destino.font.highlight_color = run_origen.font.highlight_color
+                except Exception as e:
+                    print("Error al clonar formato:", e)
+            
+            @staticmethod
+            def reemplazar_preservando_formato(paragraph, buscar, reemplazar):
+                """Reemplaza texto preservando formato"""
+                texto_completo = ''.join(run.text for run in paragraph.runs)
+                
+                if buscar not in texto_completo:
+                    return False
+                
+                pos_inicio = texto_completo.find(buscar)
+                pos_fin = pos_inicio + len(buscar)
+                
+                mapa_runs = []
+                pos_actual = 0
+                
+                for i, run in enumerate(paragraph.runs):
+                    for char in run.text:
+                        mapa_runs.append((char, i, run))
+                        pos_actual += 1
+                
+                nuevos_runs = []
+                pos = 0
+                
+                while pos < len(mapa_runs):
+                    if pos == pos_inicio:
+                        if pos_inicio < len(mapa_runs):
+                            run_formato = mapa_runs[pos_inicio][2]
+                            nuevos_runs.append((reemplazar, run_formato))
+                        else:
+                            run_formato = paragraph.runs[-1] if paragraph.runs else None
+                            nuevos_runs.append((reemplazar, run_formato))
+                        
+                        pos = pos_fin
+                    else:
+                        char, run_idx, run_orig = mapa_runs[pos]
+                        
+                        texto_grupo = char
+                        run_grupo = run_orig
+                        pos += 1
+                        
+                        while pos < len(mapa_runs) and pos != pos_inicio:
+                            next_char, next_run_idx, next_run = mapa_runs[pos]
+                            if next_run_idx == run_idx:
+                                texto_grupo += next_char
+                                pos += 1
+                            else:
+                                break
+                        
+                        nuevos_runs.append((texto_grupo, run_grupo))
+                
+                for i in range(len(paragraph.runs) - 1, -1, -1):
+                    paragraph._element.remove(paragraph.runs[i]._element)
+                
+                for texto, run_formato in nuevos_runs:
+                    if texto:
+                        nuevo_run = paragraph.add_run(texto)
+                        if run_formato:
+                            TempVentana.clonar_formato_run(run_formato, nuevo_run)
+                
+                return True
+            
+            @staticmethod
+            def reemplazar_texto_completo(paragraph, buscar, reemplazar):
+                """Reemplaza TODAS las ocurrencias preservando formato"""
+                texto_completo = ''.join(run.text for run in paragraph.runs)
+                ocurrencias = texto_completo.count(buscar)
+                
+                if ocurrencias == 0:
+                    return False
+                
+                reemplazos_hechos = 0
+                while reemplazos_hechos < ocurrencias:
+                    if not TempVentana.reemplazar_preservando_formato(paragraph, buscar, reemplazar):
+                        break
+                    reemplazos_hechos += 1
+                
+                return reemplazos_hechos > 0
         
-        # Diccionario de reemplazos
-        reemplazos = {
-            "{{dia}}": str(dia_custom),
-            "{{mes}}": str(mes_custom),
-            "{{anio}}": str(anio_custom),
-            "{{hora}}": str(hora_custom),
-            "{{minutos}}": str(minutos_custom).zfill(2),
-            "{{articulo}}": articulo,
-            "{{senor_a}}": senor_a,
-            "{{nombre}}": nombre,
-            "{{edad}}": str(edad),
-            "{{estado_civil}}": estado_civil,
-            "{{nacionalidad}}": nacionalidad,
-            "{{domicilio}}": domicilio,
-            "{{dpi}}": dpi,
-            "{{nivel_academico}}": nivel_academico,
-            "{{apellido_casada}}": apellido_casada if apellido_casada else ""
-        }
+        # ===== APLICAR REEMPLAZOS DE GÉNERO =====
+        if sexo == "femenino":
+            TempVentana.reemplazar_genero_documento(doc, "al requirente", "a la requirente")
+            TempVentana.reemplazar_genero_documento(doc, "el requirente", "la requirente")
+            TempVentana.reemplazar_genero_documento(doc, "El requirente", "La requirente")
+            TempVentana.reemplazar_genero_documento(doc, "el señor", "la señora")
+            TempVentana.reemplazar_genero_documento(doc, "El señor", "La señora")
+            TempVentana.reemplazar_genero_documento(doc, " advertido ", " advertida ")
+            TempVentana.reemplazar_genero_documento(doc, " enterado ", " enterada ")
+            TempVentana.reemplazar_genero_documento(doc, " deudor ", " deudora ")
+            TempVentana.reemplazar_genero_documento(doc, " moroso ", " morosa ")
+            TempVentana.reemplazar_genero_documento(doc, " incluido ", " incluida ")
+        else:
+            TempVentana.reemplazar_genero_documento(doc, "a la requirente", "al requirente")
+            TempVentana.reemplazar_genero_documento(doc, "la requirente", "el requirente")
+            TempVentana.reemplazar_genero_documento(doc, "La requirente", "El requirente")
+            TempVentana.reemplazar_genero_documento(doc, "la señora", "el señor")
+            TempVentana.reemplazar_genero_documento(doc, "La señora", "El señor")
+            TempVentana.reemplazar_genero_documento(doc, " advertida ", " advertido ")
+            TempVentana.reemplazar_genero_documento(doc, " enterada ", " enterado ")
+            TempVentana.reemplazar_genero_documento(doc, " deudora ", " deudor ")
+            TempVentana.reemplazar_genero_documento(doc, " morosa ", " moroso ")
+            TempVentana.reemplazar_genero_documento(doc, " incluida ", " incluido ")
         
-        # Reemplazar en párrafos
+        # ===== PREPARAR REEMPLAZOS DE DATOS =====
+        from utils import NumeroATexto  # Importar la clase para convertir números
+        
+        reemplazos = []
+        
+        # Hora y minutos
+        if hora and minutos:
+            hora_num = int(hora)
+            min_num = int(minutos)
+            
+            hora_t = NumeroATexto.convertir(hora_num)
+            min_t = NumeroATexto.convertir(min_num)
+            
+            # Normalizar "uno" -> "un"
+            if hora_t.endswith(" y uno"):
+                hora_t = hora_t[:-3] + " un"
+            elif hora_t == "uno":
+                hora_t = "un"
+            
+            if min_t.endswith(" y uno"):
+                min_t = min_t[:-3] + " un"
+            elif min_t == "uno":
+                min_t = "un"
+            
+            reemplazos.append((
+                "diecisiete horas con veinte minutos",
+                f"{hora_t} horas con {min_t} minutos"
+            ))
+        
+        # Día
+        if dia:
+            dia_num = int(dia)
+            dia_t = NumeroATexto.convertir(dia_num)
+            
+            if dia_t.endswith(" y uno"):
+                dia_t = dia_t[:-3] + " un"
+            elif dia_t == "uno":
+                dia_t = "un"
+            
+            reemplazos.append(("veintiocho", dia_t))
+            reemplazos.append(("(28)", f"({dia})"))
+        
+        # Mes
+        if mes:
+            reemplazos.append(("noviembre", mes))
+        
+        # Año
+        if anio:
+            anio_num = int(anio)
+            if 2000 <= anio_num < 2100:
+                resto = anio_num - 2000
+                if resto == 0:
+                    anio_texto = "dos mil"
+                else:
+                    anio_texto = "dos mil " + NumeroATexto.convertir(resto)
+            else:
+                anio_texto = str(anio)
+            
+            reemplazos.append(("dos mil veinticinco", anio_texto))
+            reemplazos.append(("(2025)", f"({anio})"))
+        
+        # Nombre
+        if nombre_completo:
+            reemplazos.append(("Abner Aníbal Ajpop González", nombre_completo))
+        
+        # Edad
+        if edad:
+            edad_num = int(edad)
+            edad_t = NumeroATexto.convertir(edad_num)
+            
+            if edad_t.endswith(" y uno"):
+                edad_t = edad_t[:-3] + " un"
+            elif edad_t == "uno":
+                edad_t = "un"
+            
+            reemplazos.append(("veintiún", edad_t))
+            reemplazos.append(("(21)", f"({edad})"))
+        
+        # Estado civil
+        if estado_civil:
+            reemplazos.append(("soltero", estado_civil))
+        
+        # Nacionalidad
+        if nacionalidad:
+            reemplazos.append(("guatemalteco", nacionalidad))
+        
+        # Nivel académico
+        if nivel_academico:
+            reemplazos.append(("Bachiller en Ciencias y Letras con Orientación en Computación", nivel_academico))
+        
+        # Domicilio
+        if domicilio:
+            domicilio_completo = domicilio
+            if not domicilio.lower().startswith("departamento de "):
+                domicilio_completo = f"departamento de {domicilio}"
+            reemplazos.append(("con domicilio en el departamento de Guatemala", f"con domicilio en el {domicilio_completo}"))
+        
+        # DPI
+        if dpi:
+            dpi_formateado = dpi.replace(" ", "")
+            if len(dpi_formateado) == 13:
+                dpi_con_espacios = f"{dpi_formateado[:4]} {dpi_formateado[4:9]} {dpi_formateado[9:13]}"
+            else:
+                dpi_con_espacios = dpi
+            
+            dpi_texto = NumeroATexto.convertir_dpi(dpi)
+            reemplazos.append((
+                "dos mil ocho espacio veintidós mil ochocientos veintinueve espacio cero ciento uno",
+                dpi_texto
+            ))
+            reemplazos.append(("(2008 22829 0101)", f"({dpi_con_espacios})"))
+        
+        # ===== APLICAR REEMPLAZOS =====
         for paragraph in doc.paragraphs:
-            for key, value in reemplazos.items():
-                if key in paragraph.text:
-                    # Reemplazar manteniendo el formato
-                    for run in paragraph.runs:
-                        if key in run.text:
-                            run.text = run.text.replace(key, str(value))
+            for buscar, reemplazar in reemplazos:
+                TempVentana.reemplazar_texto_completo(paragraph, buscar, reemplazar)
         
-        # Reemplazar en tablas
         for table in doc.tables:
             for row in table.rows:
                 for cell in row.cells:
                     for paragraph in cell.paragraphs:
-                        for key, value in reemplazos.items():
-                            if key in paragraph.text:
-                                for run in paragraph.runs:
-                                    if key in run.text:
-                                        run.text = run.text.replace(key, str(value))
+                        for buscar, reemplazar in reemplazos:
+                            TempVentana.reemplazar_texto_completo(paragraph, buscar, reemplazar)
         
-        # Reemplazar en encabezados y pies de página
-        for section in doc.sections:
-            # Encabezado
-            header = section.header
-            for paragraph in header.paragraphs:
-                for key, value in reemplazos.items():
-                    if key in paragraph.text:
-                        for run in paragraph.runs:
-                            if key in run.text:
-                                run.text = run.text.replace(key, str(value))
-            
-            # Pie de página
-            footer = section.footer
-            for paragraph in footer.paragraphs:
-                for key, value in reemplazos.items():
-                    if key in paragraph.text:
-                        for run in paragraph.runs:
-                            if key in run.text:
-                                run.text = run.text.replace(key, str(value))
-        
-        # Guardar documento
+        # ===== GUARDAR DOCUMENTO =====
         try:
             doc.save(ruta_destino)
         except Exception as e:

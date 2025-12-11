@@ -338,6 +338,17 @@ class VentanaCargarDocumentos:
         )
         btn_sincronizar.pack(pady=5, fill="x")
         
+        btn_regenerar_docs = ctk.CTkButton(
+            frame_botones,
+            text="♻ Regenerar todos desde BD",
+            command=self.regenerar_todos_los_documentos_desde_bd,
+            height=40,
+            font=ctk.CTkFont(size=14, weight="bold"),
+            fg_color="#e67e22",
+            hover_color="#d35400"
+        )
+        btn_regenerar_docs.pack(pady=5, fill="x")
+        
         # Pestañas para documentos nuevos y existentes
         self.tabview = ctk.CTkTabview(panel_izquierdo)
         self.tabview.pack(pady=10, padx=20, fill="both", expand=True)
@@ -546,12 +557,23 @@ class VentanaCargarDocumentos:
 
     def _mostrar_documentos_sin_años(self):
         """Muestra documentos sin esperar a cargar los años"""
+        # ✅ CONTAR SOLO ARCHIVOS FÍSICOS
+        total_archivos_fisicos = 0
+        if os.path.exists(DOCUMENTOS_DIR):
+            archivos = [f for f in os.listdir(DOCUMENTOS_DIR) 
+                    if f.lower().endswith(('.doc', '.docx'))]
+            total_archivos_fisicos = len(archivos)
+        
+        # ✅ CONTAR PERSONAS EN BD
+        total_personas = self.db.contar_personas()
+        
         # Encabezado
         header_frame = ctk.CTkFrame(self.lista_existentes_frame, fg_color="transparent")
         header_frame.pack(pady=10, padx=10, fill="x")
         
         contador_text = (
-            f"📊 Documentos: {len(self.documentos_existentes)}\n"
+            f"📊 Documentos físicos: {total_archivos_fisicos}\n"
+            f"👥 Personas en BD: {total_personas}\n"
             f"⏳ Cargando información adicional..."
         )
         
@@ -616,10 +638,21 @@ class VentanaCargarDocumentos:
         valores_combo = ["Todos"] + [str(año) for año in años_ordenados]
         self.combo_año_filtro.configure(values=valores_combo)
         
+        # ✅ CONTAR ARCHIVOS FÍSICOS (NO REGISTROS EN MEMORIA)
+        total_archivos_fisicos = 0
+        if os.path.exists(DOCUMENTOS_DIR):
+            archivos = [f for f in os.listdir(DOCUMENTOS_DIR) 
+                    if f.lower().endswith(('.doc', '.docx'))]
+            total_archivos_fisicos = len(archivos)
+        
+        # ✅ CONTAR PERSONAS EN BD
+        total_personas = self.db.contar_personas()
+        
         # Actualizar contador
         if hasattr(self, 'lbl_contador_docs'):
             self.lbl_contador_docs.configure(
-                text=f"📊 Documentos: {len(self.documentos_existentes)}\n"
+                text=f"📊 Documentos físicos: {total_archivos_fisicos}\n"
+                    f"👥 Personas en BD: {total_personas}\n"
                     f"✅ Información completa cargada"
             )
         
@@ -1587,139 +1620,332 @@ class VentanaCargarDocumentos:
         if respuesta:
             self.procesar_documentos_huerfanos(documentos_huerfanos)
     
-    def procesar_documentos_huerfanos(self, documentos_huerfanos):
+    def procesar_documentos_huerfanos(self):
         """
-        Procesa documentos que existen físicamente pero no están en la BD.
+        Procesa documentos huérfanos: registros en BD sin archivo físico.
+        VERSIÓN MEJORADA: Actualiza nombres con apellido_casada o regenera.
         """
-        if not documentos_huerfanos:
-            return
+        import traceback
         
-        # Crear ventana de progreso
-        ventana_progreso = ctk.CTkToplevel(self.ventana)
-        ventana_progreso.title("⚙️ Procesando documentos huérfanos...")
-        ventana_progreso.grab_set()
-        ventana_progreso.resizable(False, False)
-        ventana_progreso.protocol("WM_DELETE_WINDOW", lambda: None)  # Bloquear cierre con X
-        
-        main_frame = ctk.CTkFrame(ventana_progreso)
-        main_frame.pack(fill="both", expand=True, padx=20, pady=20)
-        
-        ctk.CTkLabel(
-            main_frame,
-            text="⚙️ Registrando documentos en la base de datos...",
-            font=ctk.CTkFont(size=18, weight="bold")
-        ).pack(pady=10)
-        
-        progreso_label = ctk.CTkLabel(
-            main_frame,
-            text="0 / 0",
-            font=ctk.CTkFont(size=13)
-        )
-        progreso_label.pack(pady=5)
-        
-        log_text = ctk.CTkTextbox(main_frame, width=650, height=350)
-        log_text.pack(pady=10)
-        
-        log_text.tag_config("success", foreground="#2ecc71")
-        log_text.tag_config("error", foreground="#e74c3c")
-        log_text.tag_config("info", foreground="#3498db")
-        
-        def cerrar_ventana_progreso():
-            try:
-                cancelar_callbacks_widget(ventana_progreso)
-                ventana_progreso.destroy()
-            except:  # noqa: E722
-                pass
-        
-        btn_cerrar = ctk.CTkButton(
-            main_frame,
-            text="✓ Cerrar",
-            command=cerrar_ventana_progreso,
-            height=35,
-            width=150,
-            font=ctk.CTkFont(size=13, weight="bold"),
-            fg_color=COLOR_PRIMARY,
-            hover_color="#2980b9",
-            state="disabled"
-        )
-        btn_cerrar.pack(pady=10)
-        
-        # Centrar ventana
-        self.center_toplevel(ventana_progreso, 700, 550)
-        ventana_progreso.update()
-        
-        # Contadores
-        registrados = 0
-        errores = 0
-        total = len(documentos_huerfanos)
-        
-        log_text.insert("end", f"Procesando {total} documento(s) huérfano(s)...\n\n", "info")
-        
-        for i, (nombre_archivo, ruta_archivo) in enumerate(documentos_huerfanos):
-            try:
-                progreso_label.configure(text=f"{i + 1} / {total}")
-                log_text.insert("end", f"[{i + 1}/{total}] 📄 {nombre_archivo}\n")
-                log_text.see("end")
-                ventana_progreso.update()
-                
-                # Extraer datos del documento
-                datos = DocumentExtractor.extraer_datos(ruta_archivo)
-                
-                if not datos or not datos.get('dpi'):
-                    raise Exception("No se pudo extraer el DPI del documento")
-                
-                # Guardar persona en BD
-                datos_persona = {
-                    'nombre': datos.get('nombre', ''),
-                    'dpi': datos.get('dpi', ''),
-                    'edad': datos.get('edad'),
-                    'estado_civil': datos.get('estado_civil', ''),
-                    'nacionalidad': datos.get('nacionalidad', ''),
-                    'domicilio': datos.get('domicilio', ''),
-                    'nivel_academico': datos.get('nivel_academico', ''),
-                    'apellido_casada': datos.get('apellido_casada', '')
-                }
-                
-                persona_id, resultado = self.db.guardar_persona(datos_persona)
-
-                # ✅ APRENDER SUGERENCIAS DE LOS DATOS EXTRAÍDOS
-                self.db.aprender_sugerencias_desde_persona(datos_persona)
-
-                # Guardar documento en BD
-                self.db.guardar_documento(persona_id, nombre_archivo, ruta_archivo, "acta")
-                
-                registrados += 1
-                log_text.insert("end", f"   ✅ Registrado | DPI: {datos.get('dpi')}\n\n", "success")
-                
-            except Exception as e:
-                errores += 1
-                log_text.insert("end", f"   ❌ ERROR: {str(e)}\n\n", "error")
+        try:
+            # Obtener documentos huérfanos
+            documentos_huerfanos = self.db.obtener_documentos_huerfanos()
             
-            log_text.see("end")
+            if not documentos_huerfanos:
+                messagebox.showinfo(
+                    "Sin Huérfanos",
+                    "✅ No hay documentos huérfanos.\n\n"
+                    "Todos los registros de la base de datos tienen su archivo físico correspondiente."
+                )
+                return
+            
+            total_huerfanos = len(documentos_huerfanos)
+            
+            # Confirmar acción
+            respuesta = messagebox.askyesno(
+                "Procesar Documentos Huérfanos",
+                f"Se encontraron {total_huerfanos} registros en la base de datos "
+                f"cuyos archivos ya no existen.\n\n"
+                f"¿Desea procesarlos?\n\n"
+                f"El sistema intentará:\n"
+                f"1. Actualizar nombres con apellido de casada\n"
+                f"2. Regenerar documentos faltantes\n"
+                f"3. Eliminar registros sin datos de persona",
+                icon='question'
+            )
+            
+            if not respuesta:
+                return
+            
+            # Crear ventana de progreso
+            ventana_progreso = ctk.CTkToplevel(self.ventana)
+            ventana_progreso.title("Procesando Huérfanos")
+            ventana_progreso.grab_set()
+            ventana_progreso.resizable(False, False)
+            
+            # Flag para cancelar
+            proceso_cancelado = {"cancelado": False}
+            
+            def cancelar_proceso():
+                if proceso_cancelado["cancelado"]:
+                    try:
+                        cancelar_callbacks_widget(ventana_progreso)
+                        ventana_progreso.destroy()
+                    except:  # noqa: E722
+                        pass
+                    return
+                
+                resp = messagebox.askyesno(
+                    "Cancelar proceso",
+                    "¿Está seguro de que desea cancelar el proceso?",
+                    parent=ventana_progreso
+                )
+                
+                if resp:
+                    proceso_cancelado["cancelado"] = True
+                    try:
+                        cancelar_callbacks_widget(ventana_progreso)
+                        ventana_progreso.destroy()
+                    except:  # noqa: E722
+                        pass
+            
+            ventana_progreso.protocol("WM_DELETE_WINDOW", cancelar_proceso)
+            
+            # Frame principal
+            main_frame = ctk.CTkFrame(ventana_progreso)
+            main_frame.pack(fill="both", expand=True, padx=20, pady=20)
+            
+            # Título
+            ctk.CTkLabel(
+                main_frame,
+                text="🔧 Procesando documentos huérfanos...",
+                font=ctk.CTkFont(size=18, weight="bold")
+            ).pack(pady=(0, 10))
+            
+            # Label de progreso
+            label_progreso = ctk.CTkLabel(
+                main_frame,
+                text="Preparando...",
+                font=ctk.CTkFont(size=12)
+            )
+            label_progreso.pack(pady=5)
+            
+            # Barra de progreso
+            barra_progreso = ctk.CTkProgressBar(main_frame, width=500)
+            barra_progreso.pack(pady=10)
+            barra_progreso.set(0)
+            
+            # Porcentaje
+            percent_label = ctk.CTkLabel(
+                main_frame,
+                text="0%",
+                font=ctk.CTkFont(size=14, weight="bold")
+            )
+            percent_label.pack(pady=5)
+            
+            # Log de actividad
+            ctk.CTkLabel(
+                main_frame,
+                text="📋 Registro de actividad:",
+                font=ctk.CTkFont(size=12, weight="bold"),
+                anchor="w"
+            ).pack(pady=(10, 5), fill="x")
+            
+            log_text = ctk.CTkTextbox(main_frame, width=550, height=280)
+            log_text.pack(pady=5)
+            
+            # Botón cancelar
+            btn_cancelar = ctk.CTkButton(
+                main_frame,
+                text="❌ Cancelar",
+                command=cancelar_proceso,
+                height=35,
+                width=150,
+                font=ctk.CTkFont(size=13, weight="bold"),
+                fg_color="#e74c3c",
+                hover_color="#c0392b"
+            )
+            btn_cancelar.pack(pady=10)
+            
+            # Centrar ventana
+            self.center_toplevel(ventana_progreso, 600, 550)
             ventana_progreso.update()
-        
-        # Resumen
-        log_text.insert("end", f"\n{'='*50}\n", "info")
-        log_text.insert("end", f"✅ Registrados: {registrados}\n", "success")
-        log_text.insert("end", f"❌ Errores: {errores}\n", "error")
-        log_text.insert("end", f"Total procesados: {total}\n", "info")
-        
-        btn_cerrar.configure(state="normal")
-        
-        messagebox.showinfo(
-            "Proceso completado",
-            f"✅ Registrados: {registrados}\n"
-            f"❌ Errores: {errores}\n\n"
-            f"Total: {total}"
-        )
-        
-        # Cerrar ventana automáticamente
-        cerrar_ventana_progreso()
-        
-        # Recargar lista
-        self.cargar_documentos_existentes_optimizado()
-        if self.callback_actualizar:
-            self.callback_actualizar()
+            
+            # Contadores
+            actualizados = 0
+            regenerados = 0
+            eliminados = 0
+            errores = []
+            
+            log_text.insert("end", f"{'='*60}\n")
+            log_text.insert("end", f"Total de huérfanos a procesar: {total_huerfanos}\n")
+            log_text.insert("end", f"{'='*60}\n\n")
+            ventana_progreso.update()
+            
+            # Procesar cada huérfano
+            for i, doc in enumerate(documentos_huerfanos, 1):
+                if proceso_cancelado["cancelado"]:
+                    raise Exception("Proceso cancelado por el usuario")
+                
+                # Actualizar progreso
+                if ventana_progreso.winfo_exists():
+                    progreso_actual = i / total_huerfanos
+                    barra_progreso.set(progreso_actual)
+                    percent_label.configure(text=f"{int(progreso_actual * 100)}%")
+                    
+                    doc_id = doc[0]
+                    persona_id = doc[1]
+                    nombre_archivo_viejo = doc[2]
+                    
+                    label_progreso.configure(
+                        text=f"Procesando {i}/{total_huerfanos}: {nombre_archivo_viejo}"
+                    )
+                    
+                    log_text.insert("end", f"[{i}/{total_huerfanos}] {nombre_archivo_viejo}\n")
+                    log_text.see("end")
+                    ventana_progreso.update()
+                
+                try:
+                    # Obtener datos de la persona
+                    persona = self.db.obtener_persona_por_id(persona_id)
+                    
+                    if not persona:
+                        # Sin datos de persona, eliminar registro
+                        self.db.eliminar_documento_por_id(doc_id)
+                        eliminados += 1
+                        log_text.insert("end", "   🗑️ Eliminado (sin persona asociada)\n\n")
+                        log_text.see("end")
+                        ventana_progreso.update()
+                        continue
+                    
+                    # Extraer datos de la persona
+                    # Formato: (id, nombre_completo, dpi, edad, estado_civil, 
+                    #           nacionalidad, domicilio, nivel_academico, 
+                    #           apellido_casada, fecha_registro, sexo, fecha_nacimiento)
+                    nombre = persona[1] or ""
+                    dpi = persona[2] or ""
+                    edad = persona[3]
+                    estado_civil = persona[4] or ""
+                    nacionalidad = persona[5] or ""
+                    domicilio = persona[6] or ""
+                    nivel_academico = persona[7] or ""
+                    apellido_casada = persona[8] or ""
+                    sexo = persona[10] if len(persona) > 10 else "masculino"
+                    fecha_nacimiento = persona[11] if len(persona) > 11 else ""
+                    
+                    # Generar nombre correcto con apellido de casada
+                    dpi_limpio = dpi.replace(' ', '').replace('_', '') if dpi else 'sin_dpi'
+                    nombre_limpio = nombre.replace(' ', '_') if nombre else 'sin_nombre'
+                    
+                    # ✅ INCLUIR APELLIDO DE CASADA EN EL NOMBRE DEL ARCHIVO
+                    if apellido_casada:
+                        apellido_casada_limpio = apellido_casada.replace(' ', '_')
+                        nombre_archivo_nuevo = f"{dpi_limpio}_acta_{nombre_limpio}_{apellido_casada_limpio}.docx"
+                    else:
+                        nombre_archivo_nuevo = f"{dpi_limpio}_acta_{nombre_limpio}.docx"
+                    
+                    ruta_archivo_nuevo = os.path.join(DOCUMENTOS_DIR, nombre_archivo_nuevo)
+                    
+                    # Verificar si el archivo con el nuevo nombre existe
+                    if os.path.exists(ruta_archivo_nuevo):
+                        # El archivo existe con el nuevo nombre, actualizar BD
+                        self.db.actualizar_ruta_documento(doc_id, nombre_archivo_nuevo, ruta_archivo_nuevo)
+                        actualizados += 1
+                        log_text.insert("end", f"   ✅ Actualizado: {nombre_archivo_nuevo}\n\n")
+                        log_text.see("end")
+                        ventana_progreso.update()
+                    else:
+                        # El archivo no existe, regenerar
+                        datos_persona = {
+                            'nombre': nombre,
+                            'sexo': sexo,
+                            'fecha_nacimiento': fecha_nacimiento,
+                            'edad': edad,
+                            'estado_civil': estado_civil,
+                            'apellido_casada': apellido_casada,
+                            'nacionalidad': nacionalidad,
+                            'nivel_academico': nivel_academico,
+                            'domicilio': domicilio,
+                            'dpi': dpi,
+                            'hora': '17',
+                            'minutos': '20',
+                            'dia': '28',
+                            'mes': 'noviembre',
+                            'anio': '2025',
+                        }
+                        
+                        # Asegurar carpeta
+                        if not os.path.exists(DOCUMENTOS_DIR):
+                            os.makedirs(DOCUMENTOS_DIR, exist_ok=True)
+                        
+                        # Generar documento
+                        VentanaCrearDocumento.generar_documento_para_persona(
+                            self.db,
+                            datos_persona,
+                            ruta_archivo_nuevo
+                        )
+                        
+                        # Actualizar BD
+                        self.db.actualizar_ruta_documento(doc_id, nombre_archivo_nuevo, ruta_archivo_nuevo)
+                        regenerados += 1
+                        log_text.insert("end", f"   🔄 Regenerado: {nombre_archivo_nuevo}\n\n")
+                        log_text.see("end")
+                        ventana_progreso.update()
+                        
+                except Exception as e:
+                    errores.append(f"{nombre_archivo_viejo} - Error: {str(e)}")
+                    log_text.insert("end", f"   ❌ Error: {str(e)}\n\n")
+                    log_text.see("end")
+                    ventana_progreso.update()
+            
+            # Finalización
+            if ventana_progreso.winfo_exists():
+                barra_progreso.set(1.0)
+                percent_label.configure(text="100%")
+                label_progreso.configure(text="✅ Proceso completado")
+                
+                # Log final
+                log_text.insert("end", f"\n{'='*60}\n")
+                log_text.insert("end", "📊 RESUMEN\n")
+                log_text.insert("end", f"{'='*60}\n")
+                log_text.insert("end", f"📝 Registros actualizados: {actualizados}\n")
+                log_text.insert("end", f"🔄 Documentos regenerados: {regenerados}\n")
+                log_text.insert("end", f"🗑️ Registros eliminados: {eliminados}\n")
+                log_text.insert("end", f"❌ Errores: {len(errores)}\n")
+                log_text.insert("end", f"📄 Total procesados: {total_huerfanos}\n")
+                log_text.insert("end", f"{'='*60}\n")
+                log_text.see("end")
+                
+                # Cambiar botón a "Cerrar"
+                btn_cancelar.configure(
+                    text="✓ Cerrar",
+                    fg_color=COLOR_PRIMARY,
+                    hover_color="#2980b9",
+                    command=lambda: ventana_progreso.destroy()
+                )
+                
+                ventana_progreso.update()
+            
+            # Mostrar resultados
+            mensaje_resultado = (
+                f"✅ Procesamiento completado\n\n"
+                f"📝 Registros actualizados: {actualizados}\n"
+                f"🔄 Documentos regenerados: {regenerados}\n"
+                f"🗑️ Registros eliminados: {eliminados}\n"
+                f"❌ Errores: {len(errores)}\n"
+                f"📄 Total procesados: {total_huerfanos}"
+            )
+            
+            if errores:
+                mensaje_resultado += f"\n\n⚠️ Errores encontrados: {len(errores)}"
+                if len(errores) <= 10:
+                    mensaje_resultado += "\n\n" + "\n".join(errores[:10])
+                else:
+                    mensaje_resultado += f"\n\nMostrando primeros 10 de {len(errores)} errores:\n"
+                    mensaje_resultado += "\n".join(errores[:10])
+            
+            messagebox.showinfo("Procesamiento Completado", mensaje_resultado)
+            
+            # Recargar documentos
+            self.cargar_documentos_existentes_optimizado()
+            if self.callback_actualizar:
+                self.callback_actualizar()
+            
+        except Exception as e:
+            if 'ventana_progreso' in locals() and ventana_progreso.winfo_exists():
+                ventana_progreso.destroy()
+            
+            if "cancelado" in str(e).lower():
+                messagebox.showinfo(
+                    "Proceso Cancelado",
+                    f"El procesamiento fue cancelado.\n\n"
+                    f"Registros procesados: {actualizados + regenerados + eliminados}"
+                )
+            else:
+                messagebox.showerror(
+                    "Error en Procesamiento",
+                    f"Error durante el procesamiento:\n{str(e)}\n\n{traceback.format_exc()}"
+                )
     
     def generar_documentos_faltantes(self, personas_sin_doc):
         """
@@ -2141,154 +2367,592 @@ class VentanaCargarDocumentos:
         # 2. Verificar consistencia personas-documentos
         self.verificar_consistencia_personas_documentos()
 
+    def regenerar_todos_los_documentos_desde_bd(self):
+        """
+        Regenera TODOS los documentos desde la base de datos usando apellido_casada.
+        VERSIÓN ADAPTADA A CUSTOMTKINTER.
+        """
+        import traceback
+        
+        # Confirmar acción
+        respuesta = messagebox.askyesno(
+            "Confirmar Regeneración",
+            "⚠️ ADVERTENCIA ⚠️\n\n"
+            "Esta acción:\n"
+            "• Eliminará TODOS los archivos PDF/DOCX existentes\n"
+            "• Regenerará todos los documentos desde la base de datos\n"
+            "• Puede tardar varios minutos\n\n"
+            "¿Desea continuar?",
+            icon='warning'
+        )
+        
+        if not respuesta:
+            return
+        
+        # Crear ventana de progreso con CustomTkinter
+        ventana_progreso = ctk.CTkToplevel(self.ventana)
+        ventana_progreso.title("Regenerando Documentos")
+        ventana_progreso.grab_set()
+        ventana_progreso.resizable(False, False)
+        
+        # Flag para cancelar
+        proceso_cancelado = {"cancelado": False}
+        
+        def cancelar_proceso():
+            if proceso_cancelado["cancelado"]:
+                try:
+                    cancelar_callbacks_widget(ventana_progreso)
+                    ventana_progreso.destroy()
+                except:  # noqa: E722
+                    pass
+                return
+            
+            resp = messagebox.askyesno(
+                "Cancelar proceso",
+                "¿Está seguro de que desea cancelar el proceso?\n\n"
+                "Los documentos ya generados se mantendrán.",
+                parent=ventana_progreso
+            )
+            
+            if resp:
+                proceso_cancelado["cancelado"] = True
+                try:
+                    cancelar_callbacks_widget(ventana_progreso)
+                    ventana_progreso.destroy()
+                except:  # noqa: E722
+                    pass
+        
+        # Configurar protocolo de cierre
+        ventana_progreso.protocol("WM_DELETE_WINDOW", cancelar_proceso)
+        
+        # Frame principal
+        main_frame = ctk.CTkFrame(ventana_progreso)
+        main_frame.pack(fill="both", expand=True, padx=20, pady=20)
+        
+        # Título
+        ctk.CTkLabel(
+            main_frame,
+            text="♻️ Regenerando documentos desde la base de datos...",
+            font=ctk.CTkFont(size=18, weight="bold")
+        ).pack(pady=(0, 10))
+        
+        # Label de progreso
+        label_progreso = ctk.CTkLabel(
+            main_frame,
+            text="Preparando...",
+            font=ctk.CTkFont(size=12)
+        )
+        label_progreso.pack(pady=5)
+        
+        # Barra de progreso
+        barra_progreso = ctk.CTkProgressBar(main_frame, width=500)
+        barra_progreso.pack(pady=10)
+        barra_progreso.set(0)
+        
+        # Porcentaje
+        percent_label = ctk.CTkLabel(
+            main_frame,
+            text="0%",
+            font=ctk.CTkFont(size=14, weight="bold")
+        )
+        percent_label.pack(pady=5)
+        
+        # Log de actividad
+        ctk.CTkLabel(
+            main_frame,
+            text="📋 Registro de actividad:",
+            font=ctk.CTkFont(size=12, weight="bold"),
+            anchor="w"
+        ).pack(pady=(10, 5), fill="x")
+        
+        log_text = ctk.CTkTextbox(main_frame, width=550, height=280)
+        log_text.pack(pady=5)
+        
+        # Botón cancelar
+        btn_cancelar = ctk.CTkButton(
+            main_frame,
+            text="❌ Cancelar",
+            command=cancelar_proceso,
+            height=35,
+            width=150,
+            font=ctk.CTkFont(size=13, weight="bold"),
+            fg_color="#e74c3c",
+            hover_color="#c0392b"
+        )
+        btn_cancelar.pack(pady=10)
+        
+        # Centrar ventana
+        self.center_toplevel(ventana_progreso, 600, 550)
+        
+        try:
+            ventana_progreso.update()
+        except:  # noqa: E722
+            return
+        
+        try:
+            # 1. ELIMINAR TODOS LOS ARCHIVOS EXISTENTES
+            if ventana_progreso.winfo_exists():
+                label_progreso.configure(text="Eliminando archivos existentes...")
+                ventana_progreso.update()
+            
+            archivos_eliminados = 0
+            if os.path.exists(DOCUMENTOS_DIR):
+                for archivo in os.listdir(DOCUMENTOS_DIR):
+                    if proceso_cancelado["cancelado"]:
+                        raise Exception("Proceso cancelado por el usuario")
+                        
+                    if archivo.lower().endswith(('.pdf', '.doc', '.docx')):
+                        ruta_archivo = os.path.join(DOCUMENTOS_DIR, archivo)
+                        try:
+                            os.remove(ruta_archivo)
+                            archivos_eliminados += 1
+                        except Exception as e:
+                            print(f"Error al eliminar {archivo}: {e}")
+            
+            # 2. OBTENER TODAS LAS PERSONAS DE LA BD
+            if ventana_progreso.winfo_exists():
+                label_progreso.configure(text="Obteniendo datos de la base de datos...")
+                ventana_progreso.update()
+            
+            personas = self.db.obtener_todas_personas()
+            total_personas = len(personas)
+            
+            if total_personas == 0:
+                messagebox.showwarning(
+                    "Sin Datos",
+                    "No hay personas en la base de datos para regenerar documentos."
+                )
+                ventana_progreso.destroy()
+                return
+            
+            # Log inicial
+            log_text.insert("end", f"{'='*60}\n")
+            log_text.insert("end", f"Archivos eliminados: {archivos_eliminados}\n")
+            log_text.insert("end", f"Personas a procesar: {total_personas}\n")
+            log_text.insert("end", f"{'='*60}\n\n")
+            ventana_progreso.update()
+            
+            # 3. REGENERAR DOCUMENTOS
+            documentos_generados = 0
+            documentos_fallidos = 0
+            errores = []
+            
+            for i, persona in enumerate(personas, 1):
+                if proceso_cancelado["cancelado"]:
+                    raise Exception("Proceso cancelado por el usuario")
+                
+                # Actualizar progreso visual
+                if ventana_progreso.winfo_exists():
+                    progreso_actual = i / total_personas
+                    barra_progreso.set(progreso_actual)
+                    percent_label.configure(text=f"{int(progreso_actual * 100)}%")
+                    
+                    persona_id = persona[0]
+                    nombre = persona[1] or ""
+                    dpi = persona[2] or ""
+                    edad = persona[3]
+                    estado_civil = persona[4] or ""
+                    nacionalidad = persona[5] or ""
+                    domicilio = persona[6] or ""
+                    nivel_academico = persona[7] or ""
+                    apellido_casada = persona[8] or ""
+                    sexo = persona[10] if len(persona) > 10 else "masculino"
+                    fecha_nacimiento = persona[11] if len(persona) > 11 else ""
+                    
+                    label_progreso.configure(
+                        text=f"Generando documento {i}/{total_personas}: {nombre}"
+                    )
+                    
+                    log_text.insert("end", f"[{i}/{total_personas}] {nombre} | DPI: {dpi}\n")
+                    log_text.see("end")
+                    ventana_progreso.update()
+                
+                try:
+                    # Construir datos de la persona
+                    datos_persona = {
+                        'nombre': nombre,
+                        'sexo': sexo,
+                        'fecha_nacimiento': fecha_nacimiento,
+                        'edad': edad,
+                        'estado_civil': estado_civil,
+                        'apellido_casada': apellido_casada,
+                        'nacionalidad': nacionalidad,
+                        'nivel_academico': nivel_academico,
+                        'domicilio': domicilio,
+                        'dpi': dpi,
+                        'hora': '17',
+                        'minutos': '20',
+                        'dia': '28',
+                        'mes': 'noviembre',
+                        'anio': '2025',
+                    }
+                    
+                    # GENERAR NOMBRE DE ARCHIVO CON APELLIDO DE CASADA
+                    dpi_limpio = dpi.replace(' ', '').replace('_', '') if dpi else 'sin_dpi'
+                    nombre_limpio = nombre.replace(' ', '_') if nombre else 'sin_nombre'
+                    
+                    # ✅ INCLUIR APELLIDO DE CASADA EN EL NOMBRE DEL ARCHIVO
+                    if apellido_casada:
+                        apellido_casada_limpio = apellido_casada.replace(' ', '_')
+                        nombre_archivo = f"{dpi_limpio}_acta_{nombre_limpio}_{apellido_casada_limpio}.docx"
+                    else:
+                        nombre_archivo = f"{dpi_limpio}_acta_{nombre_limpio}.docx"
+                    
+                    ruta_destino = os.path.join(DOCUMENTOS_DIR, nombre_archivo)
+                    
+                    # Asegurar carpeta
+                    if not os.path.exists(DOCUMENTOS_DIR):
+                        os.makedirs(DOCUMENTOS_DIR, exist_ok=True)
+                    
+                    # Generar documento desde plantilla
+                    VentanaCrearDocumento.generar_documento_para_persona(
+                        self.db,
+                        datos_persona,
+                        ruta_destino
+                    )
+                    
+                    # Registrar en BD
+                    self.db.guardar_documento(
+                        persona_id=persona_id,
+                        nombre_archivo=nombre_archivo,
+                        ruta_archivo=ruta_destino,
+                        tipo_documento="acta"
+                    )
+                    
+                    documentos_generados += 1
+                    log_text.insert("end", f"   ✅ Generado: {nombre_archivo}\n\n")
+                    log_text.see("end")
+                    ventana_progreso.update()
+                        
+                except Exception as e:
+                    documentos_fallidos += 1
+                    errores.append(f"{nombre} (DPI: {dpi}) - Error: {str(e)}")
+                    log_text.insert("end", f"   ❌ Error: {str(e)}\n\n")
+                    log_text.see("end")
+                    ventana_progreso.update()
+            
+            # 4. FINALIZACIÓN
+            if ventana_progreso.winfo_exists():
+                barra_progreso.set(1.0)
+                percent_label.configure(text="100%")
+                label_progreso.configure(text="✅ Proceso completado")
+                
+                # Log final
+                log_text.insert("end", f"\n{'='*60}\n")
+                log_text.insert("end", "📊 RESUMEN\n")
+                log_text.insert("end", f"{'='*60}\n")
+                log_text.insert("end", f"📄 Archivos eliminados: {archivos_eliminados}\n")
+                log_text.insert("end", f"✅ Documentos generados: {documentos_generados}\n")
+                log_text.insert("end", f"❌ Documentos fallidos: {documentos_fallidos}\n")
+                log_text.insert("end", f"👥 Total personas: {total_personas}\n")
+                log_text.insert("end", f"{'='*60}\n")
+                log_text.see("end")
+                
+                # Cambiar botón a "Cerrar"
+                btn_cancelar.configure(
+                    text="✓ Cerrar",
+                    fg_color=COLOR_PRIMARY,
+                    hover_color="#2980b9",
+                    command=lambda: ventana_progreso.destroy()
+                )
+                
+                ventana_progreso.update()
+            
+            # 5. MOSTRAR RESULTADOS
+            mensaje_resultado = (
+                f"✅ Regeneración completada\n\n"
+                f"📄 Archivos eliminados: {archivos_eliminados}\n"
+                f"✅ Documentos generados: {documentos_generados}\n"
+                f"❌ Documentos fallidos: {documentos_fallidos}\n"
+                f"👥 Total personas: {total_personas}"
+            )
+            
+            if errores:
+                mensaje_resultado += f"\n\n⚠️ Errores encontrados: {len(errores)}"
+                if len(errores) <= 10:
+                    mensaje_resultado += "\n\n" + "\n".join(errores[:10])
+                else:
+                    mensaje_resultado += f"\n\nMostrando primeros 10 de {len(errores)} errores:\n"
+                    mensaje_resultado += "\n".join(errores[:10])
+            
+            messagebox.showinfo("Regeneración Completada", mensaje_resultado)
+            
+            # 6. RECARGAR DOCUMENTOS
+            self.cargar_documentos_existentes_optimizado()
+            if self.callback_actualizar:
+                self.callback_actualizar()
+            
+        except Exception as e:
+            if ventana_progreso.winfo_exists():
+                ventana_progreso.destroy()
+            
+            if "cancelado" in str(e).lower():
+                messagebox.showinfo(
+                    "Proceso Cancelado",
+                    f"La regeneración fue cancelada.\n\n"
+                    f"Documentos generados antes de cancelar: {documentos_generados}"
+                )
+            else:
+                messagebox.showerror(
+                    "Error en Regeneración",
+                    f"Error durante la regeneración:\n{str(e)}\n\n{traceback.format_exc()}"
+                )
+
     def verificar_consistencia_personas_documentos(self):
         """
-        Verifica que cada persona tenga exactamente un documento y viceversa.
+        Verifica la consistencia entre personas y documentos (relación 1:1).
+        NO maneja duplicados - solo verifica cantidades.
         """
         try:
-            # Obtener todas las personas
-            personas = self.db.obtener_todas_personas()
+            # Obtener totales
+            total_personas = self.db.contar_personas()
             
-            # Obtener archivos físicos válidos
-            archivos_fisicos = set()
+            # Contar archivos físicos (no registros de BD)
+            total_documentos_fisicos = 0
             if os.path.exists(DOCUMENTOS_DIR):
-                archivos_fisicos = {
-                    f for f in os.listdir(DOCUMENTOS_DIR)
-                    if f.lower().endswith(('.doc', '.docx'))
-                }
+                archivos = [f for f in os.listdir(DOCUMENTOS_DIR) 
+                        if f.lower().endswith(('.pdf', '.doc', '.docx'))]
+                total_documentos_fisicos = len(archivos)
             
-            # Obtener documentos en BD
-            documentos_bd = self.db.obtener_todos_documentos()
-            
-            # Crear mapas de relación
-            personas_con_doc = set()
-            docs_por_persona = {}
-            
-            for doc in documentos_bd:
-                nombre_archivo = doc[1]
-                persona_id = doc[6] if len(doc) > 6 else None
-                
-                # Solo contar si el archivo existe físicamente
-                if nombre_archivo in archivos_fisicos and persona_id:
-                    personas_con_doc.add(persona_id)
-                    if persona_id not in docs_por_persona:
-                        docs_por_persona[persona_id] = []
-                    docs_por_persona[persona_id].append(nombre_archivo)
-            
-            # Identificar problemas
-            personas_sin_doc = []
-            personas_con_multiples_docs = []
-            
-            for persona in personas:
-                persona_id = persona[0]
-                
-                if persona_id not in personas_con_doc:
-                    personas_sin_doc.append(persona)
-                elif len(docs_por_persona[persona_id]) > 1:
-                    personas_con_multiples_docs.append((persona, docs_por_persona[persona_id]))
-            
-            # Documentos huérfanos (sin persona asociada o con persona inexistente)
-            personas_ids_validos = {p[0] for p in personas}
-            docs_huerfanos = []
-            
-            for doc in documentos_bd:
-                nombre_archivo = doc[1]
-                persona_id = doc[6] if len(doc) > 6 else None
-                
-                if nombre_archivo in archivos_fisicos:
-                    if not persona_id or persona_id not in personas_ids_validos:
-                        docs_huerfanos.append((nombre_archivo, os.path.join(DOCUMENTOS_DIR, nombre_archivo)))
-            
-            # Construir reporte
-            problemas = []
-            
-            if personas_sin_doc:
-                problemas.append(f"❌ {len(personas_sin_doc)} persona(s) sin documento")
-            
-            if personas_con_multiples_docs:
-                problemas.append(f"⚠️ {len(personas_con_multiples_docs)} persona(s) con múltiples documentos")
-            
-            if docs_huerfanos:
-                problemas.append(f"📄 {len(docs_huerfanos)} documento(s) sin persona asociada")
-            
-            # Mostrar reporte si hay problemas
-            if problemas:
-                mensaje = (
-                    "⚠️ PROBLEMAS DE SINCRONIZACIÓN DETECTADOS:\n\n" +
-                    "\n".join(problemas) +
-                    "\n\n¿Desea corregir estos problemas automáticamente?"
+            # Verificar consistencia
+            if total_personas == total_documentos_fisicos:
+                messagebox.showinfo(
+                    "✅ Consistencia Verificada",
+                    f"La base de datos está consistente:\n\n"
+                    f"👥 Personas: {total_personas}\n"
+                    f"📄 Documentos: {total_documentos_fisicos}\n\n"
+                    f"✓ Relación 1:1 correcta"
                 )
+            else:
+                diferencia = abs(total_personas - total_documentos_fisicos)
                 
-                respuesta = messagebox.askyesno("Problemas de sincronización", mensaje)
+                if total_documentos_fisicos > total_personas:
+                    tipo_problema = "documentos de más"
+                    icono = "⚠️"
+                else:
+                    tipo_problema = "documentos faltantes"
+                    icono = "❌"
+                
+                respuesta = messagebox.askyesno(
+                    f"{icono} Inconsistencia Detectada",
+                    f"Se detectó una inconsistencia:\n\n"
+                    f"👥 Personas en BD: {total_personas}\n"
+                    f"📄 Documentos físicos: {total_documentos_fisicos}\n"
+                    f"⚠️ Diferencia: {diferencia} {tipo_problema}\n\n"
+                    f"¿Desea corregir los problemas de sincronización?",
+                    icon='warning'
+                )
                 
                 if respuesta:
-                    self.corregir_problemas_sincronizacion(
-                        personas_sin_doc,
-                        personas_con_multiples_docs,
-                        docs_huerfanos
-                    )
-            else:
-                messagebox.showinfo(
-                    "Sincronización correcta",
-                    "✅ Todos los datos están sincronizados correctamente.\n\n"
-                    f"📊 Total personas: {len(personas)}\n"
-                    f"📄 Total documentos: {len([d for d in documentos_bd if d[1] in archivos_fisicos])}"
-                )
+                    self.corregir_problemas_sincronizacion()
         
         except Exception as e:
-            messagebox.showerror("Error", f"Error al verificar consistencia:\n{str(e)}")
+            messagebox.showerror(
+                "Error",
+                f"Error al verificar consistencia:\n{str(e)}"
+            )
+    
+    def corregir_problemas_sincronizacion(self):
+        """
+        Corrige problemas de sincronización entre BD y archivos físicos.
+        """
+        try:
+            # Obtener documentos huérfanos (registros sin archivo físico)
+            documentos_huerfanos = self.db.obtener_documentos_huerfanos()
+            
+            # Obtener archivos sin registro en BD
+            archivos_sin_registro = []
+            if os.path.exists(DOCUMENTOS_DIR):
+                archivos_fisicos = set(f for f in os.listdir(DOCUMENTOS_DIR) 
+                                    if f.lower().endswith(('.pdf', '.doc', '.docx')))
+                
+                # Obtener todos los nombres de archivo registrados en BD
+                documentos_bd = self.db.obtener_todos_documentos()
+                nombres_bd = set(doc[2] for doc in documentos_bd)  # doc[2] es nombre_archivo
+                
+                # Archivos que existen físicamente pero no en BD
+                archivos_sin_registro = list(archivos_fisicos - nombres_bd)
+            
+            total_huerfanos = len(documentos_huerfanos)
+            total_sin_registro = len(archivos_sin_registro)
+            
+            if total_huerfanos == 0 and total_sin_registro == 0:
+                messagebox.showinfo(
+                    "✅ Sin Problemas",
+                    "No se encontraron problemas de sincronización."
+                )
+                return
+            
+            # Mostrar resumen de problemas
+            mensaje = "Se encontraron los siguientes problemas:\n\n"
+            
+            if total_huerfanos > 0:
+                mensaje += f"📝 {total_huerfanos} registros en BD sin archivo físico\n"
+            
+            if total_sin_registro > 0:
+                mensaje += f"📄 {total_sin_registro} archivos sin registro en BD\n"
+            
+            mensaje += "\n¿Qué desea hacer?"
+            
+            # Crear ventana de opciones
+            ventana_opciones = ctk.CTkToplevel(self.ventana)
+            ventana_opciones.title("Corregir Sincronización")
+            ventana_opciones.grab_set()
+            ventana_opciones.resizable(False, False)
+            
+            frame = ctk.CTkFrame(ventana_opciones)
+            frame.pack(fill="both", expand=True, padx=20, pady=20)
+            
+            # Título
+            ctk.CTkLabel(
+                frame,
+                text="🔧 Problemas de Sincronización",
+                font=ctk.CTkFont(size=18, weight="bold")
+            ).pack(pady=(0, 10))
+            
+            # Mensaje
+            ctk.CTkLabel(
+                frame,
+                text=mensaje,
+                font=ctk.CTkFont(size=12),
+                justify="left"
+            ).pack(pady=10)
+            
+            # Botones de acción
+            if total_huerfanos > 0:
+                ctk.CTkButton(
+                    frame,
+                    text=f"🔄 Procesar {total_huerfanos} registros huérfanos",
+                    command=lambda: [ventana_opciones.destroy(), self.procesar_documentos_huerfanos()],
+                    height=40,
+                    font=ctk.CTkFont(size=13)
+                ).pack(pady=5, fill="x")
+            
+            if total_sin_registro > 0:
+                ctk.CTkButton(
+                    frame,
+                    text=f"📝 Registrar {total_sin_registro} archivos en BD",
+                    command=lambda: [ventana_opciones.destroy(), self.registrar_archivos_sin_bd(archivos_sin_registro)],
+                    height=40,
+                    font=ctk.CTkFont(size=13)
+                ).pack(pady=5, fill="x")
+            
+            # Botón para procesar todo
+            if total_huerfanos > 0 or total_sin_registro > 0:
+                ctk.CTkButton(
+                    frame,
+                    text="⚡ Procesar todo automáticamente",
+                    command=lambda: [
+                        ventana_opciones.destroy(),
+                        self.procesar_documentos_huerfanos() if total_huerfanos > 0 else None,
+                        self.registrar_archivos_sin_bd(archivos_sin_registro) if total_sin_registro > 0 else None
+                    ],
+                    height=40,
+                    font=ctk.CTkFont(size=13, weight="bold"),
+                    fg_color=COLOR_PRIMARY
+                ).pack(pady=5, fill="x")
+            
+            # Botón cancelar
+            ctk.CTkButton(
+                frame,
+                text="❌ Cancelar",
+                command=ventana_opciones.destroy,
+                height=40,
+                font=ctk.CTkFont(size=13),
+                fg_color="#e74c3c",
+                hover_color="#c0392b"
+            ).pack(pady=(10, 0), fill="x")
+            
+            # Centrar ventana
+            self.center_toplevel(ventana_opciones, 500, 400)
+        
+        except Exception as e:
+            messagebox.showerror(
+                "Error",
+                f"Error al corregir sincronización:\n{str(e)}"
+            )
 
-    def corregir_problemas_sincronizacion(self, personas_sin_doc, personas_con_multiples, docs_huerfanos):
+
+    def registrar_archivos_sin_bd(self, archivos):
         """
-        Corrige problemas de sincronización detectados.
+        Registra archivos físicos que no tienen registro en la BD.
         """
-        # 1. Generar documentos para personas sin documento
-        if personas_sin_doc:
-            respuesta = messagebox.askyesno(
-                "Generar documentos faltantes",
-                f"¿Generar documentos para {len(personas_sin_doc)} persona(s) sin documento?"
-            )
-            if respuesta:
-                self.generar_documentos_faltantes(personas_sin_doc)
+        if not archivos:
+            messagebox.showinfo("Sin Archivos", "No hay archivos para registrar.")
+            return
         
-        # 2. Manejar personas con múltiples documentos - ELIMINACIÓN AUTOMÁTICA
-        if personas_con_multiples:
+        try:
+            registrados = 0
+            no_registrados = 0
+            errores = []
+            
+            for nombre_archivo in archivos:
+                try:
+                    ruta_archivo = os.path.join(DOCUMENTOS_DIR, nombre_archivo)
+                    
+                    # Extraer DPI del nombre del archivo
+                    # Formato esperado: DPI_acta_NOMBRE.docx
+                    partes = nombre_archivo.split('_')
+                    if len(partes) >= 2:
+                        dpi = partes[0]
+                        
+                        # Buscar persona por DPI
+                        persona = self.db.obtener_persona_por_dpi(dpi)
+                        
+                        if persona:
+                            persona_id = persona[0]
+                            
+                            # Verificar si ya existe un registro para esta persona
+                            docs_persona = self.db.obtener_documentos_por_persona(persona_id)
+                            
+                            if not docs_persona:
+                                # Registrar documento
+                                self.db.guardar_documento(
+                                    persona_id=persona_id,
+                                    nombre_archivo=nombre_archivo,
+                                    ruta_archivo=ruta_archivo,
+                                    tipo_documento="acta"
+                                )
+                                registrados += 1
+                            else:
+                                no_registrados += 1
+                                errores.append(f"{nombre_archivo} - Ya existe registro para esta persona")
+                        else:
+                            no_registrados += 1
+                            errores.append(f"{nombre_archivo} - No se encontró persona con DPI {dpi}")
+                    else:
+                        no_registrados += 1
+                        errores.append(f"{nombre_archivo} - Formato de nombre inválido")
+                
+                except Exception as e:
+                    no_registrados += 1
+                    errores.append(f"{nombre_archivo} - Error: {str(e)}")
+            
+            # Mostrar resultados
             mensaje = (
-                f"⚠️ Se encontraron {len(personas_con_multiples)} persona(s) con múltiples documentos.\n\n"
-                "Se conservará únicamente el documento más reciente y se eliminarán los demás.\n\n"
-                "Personas afectadas:\n"
+                f"✅ Archivos registrados: {registrados}\n"
+                f"❌ No registrados: {no_registrados}\n"
+                f"📄 Total procesados: {len(archivos)}"
             )
             
-            for persona, docs in personas_con_multiples[:5]:
-                mensaje += f"• {persona[1]} (DPI: {persona[2]}): {len(docs)} documentos → se conservará 1\n"
+            if errores and len(errores) <= 10:
+                mensaje += "\n\nErrores:\n" + "\n".join(errores)
+            elif errores:
+                mensaje += f"\n\n⚠️ {len(errores)} errores (mostrando primeros 10):\n"
+                mensaje += "\n".join(errores[:10])
             
-            if len(personas_con_multiples) > 5:
-                mensaje += f"... y {len(personas_con_multiples) - 5} más\n"
+            messagebox.showinfo("Registro Completado", mensaje)
             
-            mensaje += "\n¿Desea continuar con la limpieza automática?"
-            
-            respuesta = messagebox.askyesno(
-                "Limpieza de documentos duplicados",
-                mensaje,
-                icon='warning'
-            )
-            
-            if respuesta:
-                self.limpiar_documentos_duplicados(personas_con_multiples)
+            # Recargar documentos
+            self.cargar_documentos_existentes_optimizado()
+            if self.callback_actualizar:
+                self.callback_actualizar()
         
-        # 3. Procesar documentos huérfanos
-        if docs_huerfanos:
-            respuesta = messagebox.askyesno(
-                "Documentos sin persona",
-                f"¿Procesar {len(docs_huerfanos)} documento(s) sin persona asociada?"
+        except Exception as e:
+            messagebox.showerror(
+                "Error",
+                f"Error al registrar archivos:\n{str(e)}"
             )
-            if respuesta:
-                self.procesar_documentos_huerfanos(docs_huerfanos)
-        
-        # Recargar todo
-        self.cargar_documentos_existentes_optimizado()
-        if self.callback_actualizar:
-            self.callback_actualizar()
     
     def limpiar_documentos_duplicados(self, personas_con_multiples):
         """
@@ -2592,3 +3256,4 @@ class VentanaCargarDocumentos:
         self.lbl_visor_estado.pack(pady=200)
         
         messagebox.showinfo("Limpieza completada", "Se eliminaron todos los documentos del listado.")
+    
