@@ -184,7 +184,8 @@ class VentanaCargarDocumentos:
             
             # Manejar cierre de ventana
             self.ventana.protocol("WM_DELETE_WINDOW", self.cerrar_ventana)
-
+        # Cargar iconos
+        self.cargar_iconos()
         # Crear UI
         self.crear_interfaz()
         self.cargar_documentos_existentes_optimizado()
@@ -198,6 +199,124 @@ class VentanaCargarDocumentos:
             self.center_window()
             # Recentrar una vez que todo terminó de dibujarse
             self.ventana.after(50, self.center_window)
+    
+    def cargar_iconos(self):
+        """Carga los iconos PNG para los botones"""
+        try:
+            # Ruta absoluta a la carpeta de iconos
+            ruta_base = os.path.dirname(os.path.abspath(__file__))  # declaraciones_app/ui
+            ruta_proyecto = os.path.dirname(ruta_base)  # declaraciones_app
+            ruta_iconos = os.path.join(ruta_proyecto, "utils", "iconos")
+            
+            print(f"🔍 Buscando iconos en: {ruta_iconos}")
+            
+            # Verificar que la carpeta existe
+            if not os.path.exists(ruta_iconos):
+                print(f"⚠️ La carpeta de iconos no existe: {ruta_iconos}")
+                raise FileNotFoundError(f"No existe la carpeta: {ruta_iconos}")
+            
+            # ===== ICONOS PARA BOTONES PRINCIPALES =====
+            self.icono_seleccionar = ctk.CTkImage(
+                light_image=Image.open(os.path.join(ruta_iconos, "seleccionar.png")),
+                dark_image=Image.open(os.path.join(ruta_iconos, "seleccionar.png")),
+                size=(28, 28)
+            )
+            
+            self.icono_limpiar = ctk.CTkImage(
+                light_image=Image.open(os.path.join(ruta_iconos, "limpiar.png")),
+                dark_image=Image.open(os.path.join(ruta_iconos, "limpiar.png")),
+                size=(28, 28)
+            )
+            
+            self.icono_procesar = ctk.CTkImage(
+                light_image=Image.open(os.path.join(ruta_iconos, "procesar.png")),
+                dark_image=Image.open(os.path.join(ruta_iconos, "procesar.png")),
+                size=(28, 28)
+            )
+            
+            self.icono_huerfanos = ctk.CTkImage(
+                light_image=Image.open(os.path.join(ruta_iconos, "huerfanos.png")),
+                dark_image=Image.open(os.path.join(ruta_iconos, "huerfanos.png")),
+                size=(28, 28)
+            )
+            
+            self.icono_generar = ctk.CTkImage(
+                light_image=Image.open(os.path.join(ruta_iconos, "generar.png")),
+                dark_image=Image.open(os.path.join(ruta_iconos, "generar.png")),
+                size=(28, 28)
+            )
+            
+            self.icono_regenerar = ctk.CTkImage(
+                light_image=Image.open(os.path.join(ruta_iconos, "regenerar.png")),
+                dark_image=Image.open(os.path.join(ruta_iconos, "regenerar.png")),
+                size=(28, 28)
+            )
+            
+            self.icono_sincronizar = ctk.CTkImage(
+                light_image=Image.open(os.path.join(ruta_iconos, "sincronizar.png")),
+                dark_image=Image.open(os.path.join(ruta_iconos, "sincronizar.png")),
+                size=(28, 28)
+            )
+            
+            self.icono_corregir = ctk.CTkImage(
+                light_image=Image.open(os.path.join(ruta_iconos, "corregir.png")),
+                dark_image=Image.open(os.path.join(ruta_iconos, "corregir.png")),
+                size=(28, 28)
+            )
+            
+            # ===== ICONOS PARA BOTONES DE TABLA =====
+            self.icono_buscar = ctk.CTkImage(
+                light_image=Image.open(os.path.join(ruta_iconos, "buscar.png")),
+                dark_image=Image.open(os.path.join(ruta_iconos, "buscar.png")),
+                size=(20, 20)
+            )
+            
+            self.icono_eliminar = ctk.CTkImage(
+                light_image=Image.open(os.path.join(ruta_iconos, "eliminar.png")),
+                dark_image=Image.open(os.path.join(ruta_iconos, "eliminar.png")),
+                size=(20, 20)
+            )
+            
+            self.icono_ver = ctk.CTkImage(
+                light_image=Image.open(os.path.join(ruta_iconos, "ver.png")),
+                dark_image=Image.open(os.path.join(ruta_iconos, "ver.png")),
+                size=(20, 20)
+            )
+            
+            # ===== ICONOS PARA VIÑETAS DE ESTADO =====
+            self.icono_nuevo = ctk.CTkImage(
+                light_image=Image.open(os.path.join(ruta_iconos, "nuevo.png")),
+                dark_image=Image.open(os.path.join(ruta_iconos, "nuevo.png")),
+                size=(16, 16)
+            )
+            
+            self.icono_cargado = ctk.CTkImage(
+                light_image=Image.open(os.path.join(ruta_iconos, "cargado.png")),
+                dark_image=Image.open(os.path.join(ruta_iconos, "cargado.png")),
+                size=(16, 16)
+            )
+            
+            print("✅ Iconos cargados correctamente en cargar_documento")
+            
+        except Exception as e:
+            print(f"⚠️ Error al cargar iconos: {e}")
+            import traceback
+            traceback.print_exc()
+            
+            # Si falla, los iconos serán None
+            self.icono_seleccionar = None
+            self.icono_limpiar = None
+            self.icono_procesar = None
+            self.icono_huerfanos = None
+            self.icono_generar = None
+            self.icono_regenerar = None
+            self.icono_sincronizar = None
+            self.icono_corregir = None
+            self.icono_buscar = None
+            self.icono_eliminar = None
+            self.icono_ver = None
+            self.icono_nuevo = None
+            self.icono_cargado = None
     
     def verificar_e_inicializar_sugerencias(self):
         """Verifica si la tabla de sugerencias está vacía y la alimenta si es necesario"""
@@ -259,15 +378,19 @@ class VentanaCargarDocumentos:
             self.ventana.geometry(f"{width}x{height}+{x}+{y}")
     
     def center_toplevel(self, win, w=400, h=200):
-        """Centra una ventana CTkToplevel en la pantalla."""
+        """Centra una ventana CTkToplevel en la pantalla con tamaño ajustado."""
+        # Actualizar la ventana para obtener dimensiones reales
         win.update_idletasks()
 
+        # Obtener dimensiones de la pantalla
         screen_width = win.winfo_screenwidth()
         screen_height = win.winfo_screenheight()
 
+        # Calcular posición centrada
         x = (screen_width // 2) - (w // 2)
         y = (screen_height // 2) - (h // 2)
 
+        # Aplicar geometría
         win.geometry(f"{w}x{h}+{x}+{y}")
     
     def crear_interfaz(self):
@@ -292,63 +415,95 @@ class VentanaCargarDocumentos:
             font=ctk.CTkFont(size=24, weight="bold")
         ).pack(pady=20)
         
-        # Botones de acción
+        # ✅ Frame de botones con GRID (2 columnas x 3 filas)
         frame_botones = ctk.CTkFrame(panel_izquierdo)
         frame_botones.pack(pady=10, padx=20, fill="x")
         
+        # Configurar grid: 2 columnas con mismo peso
+        frame_botones.grid_columnconfigure(0, weight=1)
+        frame_botones.grid_columnconfigure(1, weight=1)
+        
+        # Fila 0
         btn_seleccionar = ctk.CTkButton(
             frame_botones,
-            text="📁 Seleccionar Documentos",
+            text="Seleccionar\nDocumentos",
+            image=self.icono_seleccionar,
+            compound="left",
             command=self.seleccionar_documentos,
-            height=40,
-            font=ctk.CTkFont(size=14, weight="bold")
+            height=70,
+            font=ctk.CTkFont(size=11, weight="bold"),
+            fg_color="#1E88E5",  # ✅ Azul fuerte
+            hover_color="#1565C0"  # ✅ Azul más oscuro
         )
-        btn_seleccionar.pack(pady=5, fill="x")
-        
+        btn_seleccionar.grid(row=0, column=0, padx=5, pady=5, sticky="ew")
+
         btn_limpiar_listado = ctk.CTkButton(
             frame_botones,
-            text="🗑️ Limpiar Listado",
+            text="Limpiar\nListado",
+            image=self.icono_limpiar,
+            compound="left",
             command=self.limpiar_listado_completo,
-            height=40,
-            font=ctk.CTkFont(size=14, weight="bold"),
-            fg_color="#e74c3c",
-            hover_color="#c0392b"
+            height=70,
+            font=ctk.CTkFont(size=11, weight="bold"),
+            fg_color="#1E88E5",  # ✅ Azul fuerte
+            hover_color="#1565C0"
         )
-        btn_limpiar_listado.pack(pady=5, fill="x")
-        
+        btn_limpiar_listado.grid(row=0, column=1, padx=5, pady=5, sticky="ew")
+
+        # Fila 1
         btn_procesar = ctk.CTkButton(
             frame_botones,
-            text="⚙️ Procesar y Cargar Todos",
+            text="Procesar y\nCargar Todos",
+            image=self.icono_procesar,
+            compound="left",
             command=self.procesar_todos_documentos,
-            height=40,
-            font=ctk.CTkFont(size=14, weight="bold"),
-            fg_color=COLOR_SUCCESS,
-            hover_color="#27ae60"
+            height=70,
+            font=ctk.CTkFont(size=11, weight="bold"),
+            fg_color="#1E88E5",  # ✅ Azul fuerte
+            hover_color="#1565C0"
         )
-        btn_procesar.pack(pady=5, fill="x")
-        
+        btn_procesar.grid(row=1, column=0, padx=5, pady=5, sticky="ew")
+
         btn_sincronizar = ctk.CTkButton(
             frame_botones,
-            text="🔄 Sincronizar BD con Archivos",
+            text="Sincronizar BD\ncon Archivos",
+            image=self.icono_sincronizar,
+            compound="left",
             command=self.sincronizar_bd_con_archivos,
-            height=40,
-            font=ctk.CTkFont(size=14, weight="bold"),
-            fg_color="#9b59b6",
-            hover_color="#8e44ad"
+            height=70,
+            font=ctk.CTkFont(size=11, weight="bold"),
+            fg_color="#1E88E5",  # ✅ Azul fuerte
+            hover_color="#1565C0"
         )
-        btn_sincronizar.pack(pady=5, fill="x")
-        
+        btn_sincronizar.grid(row=1, column=1, padx=5, pady=5, sticky="ew")
+
+        # Fila 2
         btn_regenerar_docs = ctk.CTkButton(
             frame_botones,
-            text="♻ Regenerar todos desde BD",
+            text="Regenerar todos\ndesde BD",
+            image=self.icono_regenerar,
+            compound="left",
             command=self.regenerar_todos_los_documentos_desde_bd,
-            height=40,
-            font=ctk.CTkFont(size=14, weight="bold"),
-            fg_color="#e67e22",
-            hover_color="#d35400"
+            height=70,
+            font=ctk.CTkFont(size=11, weight="bold"),
+            fg_color="#1E88E5",  # ✅ Azul fuerte
+            hover_color="#1565C0"
         )
-        btn_regenerar_docs.pack(pady=5, fill="x")
-        
+        btn_regenerar_docs.grid(row=2, column=0, padx=5, pady=5, sticky="ew")
+
+        btn_corregir_sync = ctk.CTkButton(
+            frame_botones,
+            text="Corregir Problemas\nde Sincronización",
+            image=self.icono_corregir,
+            compound="left",
+            command=self.corregir_problemas_sincronizacion,
+            height=70,
+            font=ctk.CTkFont(size=11, weight="bold"),
+            fg_color="#1E88E5",  # ✅ Azul fuerte
+            hover_color="#1565C0"
+        )
+        btn_corregir_sync.grid(row=2, column=1, padx=5, pady=5, sticky="ew")
+                
         # Pestañas para documentos nuevos y existentes
         self.tabview = ctk.CTkTabview(panel_izquierdo)
         self.tabview.pack(pady=10, padx=20, fill="both", expand=True)
@@ -411,13 +566,7 @@ class VentanaCargarDocumentos:
         # Barra de búsqueda
         frame_busqueda = ctk.CTkFrame(tab_existentes)
         frame_busqueda.pack(pady=10, padx=10, fill="x")
-        
-        ctk.CTkLabel(
-            frame_busqueda,
-            text="🔍 Buscar:",
-            font=ctk.CTkFont(size=14)
-        ).pack(side="left", padx=5)
-        
+
         self.entry_buscar = ctk.CTkEntry(
             frame_busqueda,
             placeholder_text="Buscar por nombre o DPI...",
@@ -425,12 +574,15 @@ class VentanaCargarDocumentos:
         )
         self.entry_buscar.pack(side="left", padx=5, expand=True, fill="x")
         self.entry_buscar.bind("<KeyRelease>", lambda e: self.filtrar_documentos_existentes())
-        
+
         btn_refrescar = ctk.CTkButton(
             frame_busqueda,
-            text="🔄",
+            text="",
+            image=self.icono_buscar if hasattr(self, 'icono_buscar') and self.icono_buscar else None,
             command=self.cargar_documentos_existentes_optimizado,
-            width=40
+            width=40,
+            fg_color="#1E88E5",
+            hover_color="#1565C0"
         )
         btn_refrescar.pack(side="left", padx=5)
         
@@ -679,7 +831,7 @@ class VentanaCargarDocumentos:
             return
 
         for doc in documentos:
-            # doc: (id, nombre_archivo, ruta_archivo, fecha_carga, nombre_persona, dpi, persona_id, mtime)
+            # doc: (id, nombre_archivo, ruta_archivo, fecha_carga, nombre_persona, dpi, persona_id, mtime, año)
             doc_id = doc[0]
             nombre_archivo = doc[1]
             ruta_archivo = doc[2]
@@ -704,7 +856,7 @@ class VentanaCargarDocumentos:
                 f"👤 {nombre_persona}\n"
                 f"📋 DPI: {dpi_persona}\n"
                 f"📅 Año: {año_doc if año_doc else 'N/A'}\n"
-                f"📥 Cargado: {fecha_carga_bd}\n"  # ✅ Mostrar fecha de carga
+                f"📥 Cargado: {fecha_carga_bd}\n"
                 f"🕒 Última modificación: {fecha_mod_str}"
             )
 
@@ -716,23 +868,27 @@ class VentanaCargarDocumentos:
                 font=ctk.CTkFont(size=11)
             ).pack(side="left", padx=10, pady=10, expand=True, fill="x")
 
+            # ✅ Botón Ver con icono
             btn_ver = ctk.CTkButton(
                 frame_doc,
-                text="👁️ Ver",
+                text="",
+                image=self.icono_ver,
                 command=lambda r=ruta_archivo: self.ver_documento_existente(r),
-                width=80,
-                fg_color=COLOR_PRIMARY,
-                hover_color="#2980b9"
+                width=40,
+                fg_color="#1E88E5",  # ✅ Azul fuerte             
+                hover_color="#1565C0"
             )
             btn_ver.pack(side="right", padx=5)
 
+            # ✅ Botón Eliminar con icono
             btn_eliminar = ctk.CTkButton(
                 frame_doc,
-                text="🗑 Eliminar",
+                text="",
+                image=self.icono_eliminar,
                 command=lambda i=doc_id, r=ruta_archivo, n=nombre_archivo: self.eliminar_documento_existente(i, r, n),
-                width=90,
-                fg_color="#e74c3c",
-                hover_color="#c0392b"
+                width=40,
+                fg_color="#1E88E5",  # ✅ Azul fuerte             
+                hover_color="#1565C0"
             )
             btn_eliminar.pack(side="right", padx=5)
         
@@ -868,35 +1024,42 @@ class VentanaCargarDocumentos:
             if i == self.documento_actual_index:
                 frame_item.configure(fg_color=COLOR_SUCCESS)
 
-            # Label con número y nombre
-            ctk.CTkLabel(
+            # ✅ Label con viñeta de estado "Nuevo" usando el icono
+            lbl_numero = ctk.CTkLabel(
                 frame_item,
-                text=f"{i + 1}. {nombre_corto}",
+                text=f" {i + 1}. {nombre_corto}",
+                image=self.icono_nuevo if hasattr(self, 'icono_nuevo') and self.icono_nuevo else None,
+                compound="left" if hasattr(self, 'icono_nuevo') and self.icono_nuevo else "none",
                 anchor="w",
                 justify="left",
                 font=ctk.CTkFont(size=12)
-            ).pack(side="left", padx=10, pady=5, fill="x", expand=True)
+            )
+            lbl_numero.pack(side="left", padx=10, pady=5, fill="x", expand=True)
 
-            # Botón Ver
+            # ✅ Botón Ver con icono
             btn_ver = ctk.CTkButton(
                 frame_item,
-                text="👁️",
+                text="",
+                image=self.icono_ver if hasattr(self, 'icono_ver') and self.icono_ver else None,
                 command=lambda idx=i: self.ver_documento(idx),
-                width=40
+                width=40,
+                fg_color="#43A047",
+                hover_color="#2E7D32"
             )
             btn_ver.pack(side="right", padx=2)
             
-            # ✅ NUEVO: Botón Eliminar del listado
+            # ✅ Botón Eliminar con icono
             btn_eliminar = ctk.CTkButton(
                 frame_item,
-                text="🗑️",
+                text="",
+                image=self.icono_eliminar if hasattr(self, 'icono_eliminar') and self.icono_eliminar else None,
                 command=lambda idx=i: self.eliminar_del_listado(idx),
                 width=40,
-                fg_color="#e74c3c",
-                hover_color="#c0392b"
+                fg_color="#E53935",
+                hover_color="#C62828"
             )
             btn_eliminar.pack(side="right", padx=2)
-    
+        
     def actualizar_navegacion(self):
         """Actualiza los controles de navegación"""
         total = len(self.documentos_seleccionados)
@@ -1213,7 +1376,7 @@ class VentanaCargarDocumentos:
         btn_cerrar.pack(pady=10)
 
         # Centrar ventana DESPUÉS de crear contenido
-        self.center_toplevel(ventana_progreso, 700, 750)
+        self.center_toplevel(ventana_progreso, 750, 820)
         
         # Forzar actualización de la ventana
         ventana_progreso.update_idletasks()
@@ -1628,8 +1791,24 @@ class VentanaCargarDocumentos:
         import traceback
         
         try:
-            # Obtener documentos huérfanos
-            documentos_huerfanos = self.db.obtener_documentos_huerfanos()
+            # ✅ CORRECCIÓN: Obtener archivos físicos primero
+            archivos_fisicos = set()
+            if os.path.exists(DOCUMENTOS_DIR):
+                archivos_fisicos = {
+                    f for f in os.listdir(DOCUMENTOS_DIR)
+                    if f.lower().endswith(('.doc', '.docx'))
+                }
+            
+            # ✅ CORRECCIÓN: Obtener documentos de BD y verificar contra archivos físicos
+            documentos_bd = self.db.obtener_todos_documentos()
+            
+            documentos_huerfanos = []
+            for doc in documentos_bd:
+                # doc: (id, nombre_archivo, ruta_archivo, fecha_carga, nombre_persona, dpi, persona_id, ...)
+                nombre_archivo = doc[1]  # ✅ USAR NOMBRE_ARCHIVO, NO RUTA
+                
+                if nombre_archivo not in archivos_fisicos:
+                    documentos_huerfanos.append(doc)
             
             if not documentos_huerfanos:
                 messagebox.showinfo(
@@ -1748,7 +1927,7 @@ class VentanaCargarDocumentos:
             btn_cancelar.pack(pady=10)
             
             # Centrar ventana
-            self.center_toplevel(ventana_progreso, 600, 550)
+            self.center_toplevel(ventana_progreso, 650, 620)
             ventana_progreso.update()
             
             # Contadores
@@ -1774,8 +1953,8 @@ class VentanaCargarDocumentos:
                     percent_label.configure(text=f"{int(progreso_actual * 100)}%")
                     
                     doc_id = doc[0]
-                    persona_id = doc[1]
-                    nombre_archivo_viejo = doc[2]
+                    persona_id = doc[6] if len(doc) > 6 else None
+                    nombre_archivo_viejo = doc[1]
                     
                     label_progreso.configure(
                         text=f"Procesando {i}/{total_huerfanos}: {nombre_archivo_viejo}"
@@ -1786,6 +1965,15 @@ class VentanaCargarDocumentos:
                     ventana_progreso.update()
                 
                 try:
+                    if not persona_id:
+                        # Sin datos de persona, eliminar registro
+                        self.db.eliminar_documento_por_id(doc_id)
+                        eliminados += 1
+                        log_text.insert("end", "   🗑️ Eliminado (sin persona asociada)\n\n")
+                        log_text.see("end")
+                        ventana_progreso.update()
+                        continue
+                    
                     # Obtener datos de la persona
                     persona = self.db.obtener_persona_por_id(persona_id)
                     
@@ -1799,9 +1987,6 @@ class VentanaCargarDocumentos:
                         continue
                     
                     # Extraer datos de la persona
-                    # Formato: (id, nombre_completo, dpi, edad, estado_civil, 
-                    #           nacionalidad, domicilio, nivel_academico, 
-                    #           apellido_casada, fecha_registro, sexo, fecha_nacimiento)
                     nombre = persona[1] or ""
                     dpi = persona[2] or ""
                     edad = persona[3]
@@ -2019,7 +2204,7 @@ class VentanaCargarDocumentos:
         btn_cerrar.pack(pady=10)
 
         # Centrar ventana
-        self.center_toplevel(ventana_progreso, 700, 550)
+        self.center_toplevel(ventana_progreso, 750, 620)
         ventana_progreso.update_idletasks()
         ventana_progreso.update()
 
@@ -2324,7 +2509,7 @@ class VentanaCargarDocumentos:
         - Identifica personas sin documentos
         - Identifica documentos sin registro en BD
         """
-        # Obtener archivos físicos
+        # ✅ CORRECCIÓN: Obtener archivos físicos
         archivos_fisicos = set()
         if os.path.exists(DOCUMENTOS_DIR):
             archivos_fisicos = {
@@ -2335,10 +2520,12 @@ class VentanaCargarDocumentos:
         # Obtener documentos en BD
         documentos_bd = self.db.obtener_todos_documentos()
         
-        # 1. Limpiar registros huérfanos en BD (documentos que no existen físicamente)
+        # ✅ CORRECCIÓN: Limpiar registros huérfanos en BD (documentos que no existen físicamente)
         registros_huerfanos = []
         for doc in documentos_bd:
-            nombre_archivo = doc[1]
+            # doc: (id, nombre_archivo, ruta_archivo, fecha_carga, nombre_persona, dpi, persona_id, ...)
+            nombre_archivo = doc[1]  # ✅ USAR NOMBRE_ARCHIVO, NO RUTA
+            
             if nombre_archivo not in archivos_fisicos:
                 registros_huerfanos.append(doc)
         
@@ -2482,7 +2669,7 @@ class VentanaCargarDocumentos:
         btn_cancelar.pack(pady=10)
         
         # Centrar ventana
-        self.center_toplevel(ventana_progreso, 600, 550)
+        self.center_toplevel(ventana_progreso, 650, 620)
         
         try:
             ventana_progreso.update()
@@ -2757,21 +2944,27 @@ class VentanaCargarDocumentos:
         Corrige problemas de sincronización entre BD y archivos físicos.
         """
         try:
-            # Obtener documentos huérfanos (registros sin archivo físico)
-            documentos_huerfanos = self.db.obtener_documentos_huerfanos()
-            
-            # Obtener archivos sin registro en BD
-            archivos_sin_registro = []
+            # ✅ CORRECCIÓN: Obtener archivos físicos
+            archivos_fisicos = set()
             if os.path.exists(DOCUMENTOS_DIR):
-                archivos_fisicos = set(f for f in os.listdir(DOCUMENTOS_DIR) 
-                                    if f.lower().endswith(('.pdf', '.doc', '.docx')))
-                
-                # Obtener todos los nombres de archivo registrados en BD
-                documentos_bd = self.db.obtener_todos_documentos()
-                nombres_bd = set(doc[2] for doc in documentos_bd)  # doc[2] es nombre_archivo
-                
-                # Archivos que existen físicamente pero no en BD
-                archivos_sin_registro = list(archivos_fisicos - nombres_bd)
+                archivos_fisicos = {
+                    f for f in os.listdir(DOCUMENTOS_DIR)
+                    if f.lower().endswith(('.doc', '.docx'))
+                }
+            
+            # Obtener documentos de BD
+            documentos_bd = self.db.obtener_todos_documentos()
+            
+            # ✅ CORRECCIÓN: Identificar huérfanos usando nombre_archivo
+            documentos_huerfanos = []
+            for doc in documentos_bd:
+                nombre_archivo = doc[1]  # ✅ USAR NOMBRE_ARCHIVO
+                if nombre_archivo not in archivos_fisicos:
+                    documentos_huerfanos.append(doc)
+            
+            # ✅ CORRECCIÓN: Obtener archivos sin registro en BD
+            nombres_bd = {doc[1] for doc in documentos_bd}  # ✅ USAR NOMBRE_ARCHIVO
+            archivos_sin_registro = list(archivos_fisicos - nombres_bd)
             
             total_huerfanos = len(documentos_huerfanos)
             total_sin_registro = len(archivos_sin_registro)
@@ -2794,84 +2987,106 @@ class VentanaCargarDocumentos:
             
             mensaje += "\n¿Qué desea hacer?"
             
-            # Crear ventana de opciones
+            # Crear ventana de opciones - ✅ CORRECCIÓN: usar self.ventana
             ventana_opciones = ctk.CTkToplevel(self.ventana)
-            ventana_opciones.title("Corregir Sincronización")
+            ventana_opciones.title("Corregir Problemas de Sincronización")
+            ventana_opciones.transient(self.ventana)
             ventana_opciones.grab_set()
-            ventana_opciones.resizable(False, False)
             
-            frame = ctk.CTkFrame(ventana_opciones)
-            frame.pack(fill="both", expand=True, padx=20, pady=20)
+            self.center_toplevel(ventana_opciones, 700, 450)
+            
+            # Frame principal con padding
+            frame_principal = ctk.CTkFrame(ventana_opciones, fg_color="transparent")
+            frame_principal.pack(fill="both", expand=True, padx=30, pady=30)
             
             # Título
-            ctk.CTkLabel(
-                frame,
-                text="🔧 Problemas de Sincronización",
-                font=ctk.CTkFont(size=18, weight="bold")
-            ).pack(pady=(0, 10))
+            lbl_titulo = ctk.CTkLabel(
+                frame_principal,
+                text="Seleccione una opción para corregir problemas:",
+                font=("Segoe UI", 16, "bold")
+            )
+            lbl_titulo.pack(pady=(0, 25))
             
-            # Mensaje
-            ctk.CTkLabel(
-                frame,
-                text=mensaje,
-                font=ctk.CTkFont(size=12),
-                justify="left"
-            ).pack(pady=10)
+            # Frame para los botones con grid
+            frame_botones = ctk.CTkFrame(frame_principal, fg_color="transparent")
+            frame_botones.pack(fill="both", expand=True)
             
-            # Botones de acción
-            if total_huerfanos > 0:
-                ctk.CTkButton(
-                    frame,
-                    text=f"🔄 Procesar {total_huerfanos} registros huérfanos",
-                    command=lambda: [ventana_opciones.destroy(), self.procesar_documentos_huerfanos()],
-                    height=40,
-                    font=ctk.CTkFont(size=13)
-                ).pack(pady=5, fill="x")
+            # Configurar columnas para que tengan el mismo peso
+            frame_botones.grid_columnconfigure(0, weight=1, uniform="botones")
+            frame_botones.grid_columnconfigure(1, weight=1, uniform="botones")
             
-            if total_sin_registro > 0:
-                ctk.CTkButton(
-                    frame,
-                    text=f"📝 Registrar {total_sin_registro} archivos en BD",
-                    command=lambda: [ventana_opciones.destroy(), self.registrar_archivos_sin_bd(archivos_sin_registro)],
-                    height=40,
-                    font=ctk.CTkFont(size=13)
-                ).pack(pady=5, fill="x")
+            # Configurar filas
+            frame_botones.grid_rowconfigure(0, weight=1)
+            frame_botones.grid_rowconfigure(1, weight=1)
+            frame_botones.grid_rowconfigure(2, weight=1)
             
-            # Botón para procesar todo
-            if total_huerfanos > 0 or total_sin_registro > 0:
-                ctk.CTkButton(
-                    frame,
-                    text="⚡ Procesar todo automáticamente",
-                    command=lambda: [
-                        ventana_opciones.destroy(),
-                        self.procesar_documentos_huerfanos() if total_huerfanos > 0 else None,
-                        self.registrar_archivos_sin_bd(archivos_sin_registro) if total_sin_registro > 0 else None
-                    ],
-                    height=40,
-                    font=ctk.CTkFont(size=13, weight="bold"),
-                    fg_color=COLOR_PRIMARY
-                ).pack(pady=5, fill="x")
+            # Botón 1: Procesar documentos huérfanos (Fila 0, Columna 0)
+            btn_huerfanos = ctk.CTkButton(
+                frame_botones,
+                text="Procesar Documentos Huérfanos\n(Archivos sin registro en BD)",
+                font=("Segoe UI", 13),
+                height=70,
+                command=lambda: [ventana_opciones.destroy(), self.procesar_documentos_huerfanos()]
+            )
+            btn_huerfanos.grid(row=0, column=0, padx=10, pady=10, sticky="nsew")
             
-            # Botón cancelar
-            ctk.CTkButton(
-                frame,
-                text="❌ Cancelar",
-                command=ventana_opciones.destroy,
-                height=40,
-                font=ctk.CTkFont(size=13),
-                fg_color="#e74c3c",
-                hover_color="#c0392b"
-            ).pack(pady=(10, 0), fill="x")
+            # Botón 2: Registrar archivos sin BD (Fila 0, Columna 1)
+            btn_registrar = ctk.CTkButton(
+                frame_botones,
+                text="Registrar Archivos sin BD\n(Crear registros faltantes)",
+                font=("Segoe UI", 13),
+                height=70,
+                command=lambda: [ventana_opciones.destroy(), self.registrar_archivos_sin_bd(archivos_sin_registro)]
+            )
+            btn_registrar.grid(row=0, column=1, padx=10, pady=10, sticky="nsew")
             
-            # Centrar ventana
-            self.center_toplevel(ventana_opciones, 500, 400)
+            # Botón 3: Regenerar documentos desde BD (Fila 1, Columna 0)
+            btn_regenerar = ctk.CTkButton(
+                frame_botones,
+                text="Regenerar Todos los Documentos\n(Desde registros en BD)",
+                font=("Segoe UI", 13),
+                height=70,
+                command=lambda: [ventana_opciones.destroy(), self.regenerar_todos_los_documentos_desde_bd()]
+            )
+            btn_regenerar.grid(row=1, column=0, padx=10, pady=10, sticky="nsew")
+            
+            # Botón 4: Limpiar duplicados (Fila 1, Columna 1)
+            btn_limpiar = ctk.CTkButton(
+                frame_botones,
+                text="Limpiar Documentos Duplicados\n(Eliminar registros antiguos)",
+                font=("Segoe UI", 13),
+                height=70,
+                command=lambda: [ventana_opciones.destroy(), self.limpiar_duplicados_bd()]
+            )
+            btn_limpiar.grid(row=1, column=1, padx=10, pady=10, sticky="nsew")
+            
+            # Botón 5: Sincronización completa (Fila 2, Columna 0)
+            btn_sincronizar = ctk.CTkButton(
+                frame_botones,
+                text="Sincronización Completa\n(BD ↔ Archivos)",
+                font=("Segoe UI", 13),
+                height=70,
+                command=lambda: [ventana_opciones.destroy(), self.sincronizar_bd_con_archivos()]
+            )
+            btn_sincronizar.grid(row=2, column=0, padx=10, pady=10, sticky="nsew")
+            
+            # Botón 6: Cancelar (Fila 2, Columna 1)
+            btn_cancelar = ctk.CTkButton(
+                frame_botones,
+                text="Cancelar",
+                font=("Segoe UI", 13),
+                height=70,
+                fg_color="#666666",
+                hover_color="#555555",
+                command=ventana_opciones.destroy
+            )
+            btn_cancelar.grid(row=2, column=1, padx=10, pady=10, sticky="nsew")
         
         except Exception as e:
             messagebox.showerror(
                 "Error",
                 f"Error al corregir sincronización:\n{str(e)}"
             )
-
 
     def registrar_archivos_sin_bd(self, archivos):
         """
@@ -2909,7 +3124,7 @@ class VentanaCargarDocumentos:
                                 # Registrar documento
                                 self.db.guardar_documento(
                                     persona_id=persona_id,
-                                    nombre_archivo=nombre_archivo,
+                                    nombre_archivo=nombre_archivo,  # ✅ PASAR NOMBRE_ARCHIVO
                                     ruta_archivo=ruta_archivo,
                                     tipo_documento="acta"
                                 )
@@ -3032,7 +3247,7 @@ class VentanaCargarDocumentos:
         )
         btn_cerrar.pack(pady=10)
         
-        self.center_toplevel(ventana_progreso, 700, 600)
+        self.center_toplevel(ventana_progreso, 750, 680)
         ventana_progreso.update()
         
         # Contadores
@@ -3256,4 +3471,45 @@ class VentanaCargarDocumentos:
         self.lbl_visor_estado.pack(pady=200)
         
         messagebox.showinfo("Limpieza completada", "Se eliminaron todos los documentos del listado.")
+    
+    def limpiar_duplicados_bd(self):
+        """
+        Wrapper para limpiar duplicados desde el menú de sincronización.
+        """
+        try:
+            # Obtener personas con múltiples documentos
+            documentos_bd = self.db.obtener_todos_documentos()
+            
+            # Agrupar por persona_id
+            docs_por_persona = {}
+            for doc in documentos_bd:
+                persona_id = doc[6] if len(doc) > 6 else None
+                if persona_id:
+                    if persona_id not in docs_por_persona:
+                        docs_por_persona[persona_id] = []
+                    docs_por_persona[persona_id].append(doc[1])  # nombre_archivo
+            
+            # Filtrar personas con múltiples documentos
+            personas_con_multiples = []
+            for persona_id, nombres_docs in docs_por_persona.items():
+                if len(nombres_docs) > 1:
+                    persona = self.db.obtener_persona_por_id(persona_id)
+                    if persona:
+                        personas_con_multiples.append((persona, nombres_docs))
+            
+            if not personas_con_multiples:
+                messagebox.showinfo(
+                    "Sin Duplicados",
+                    "✅ No se encontraron documentos duplicados."
+                )
+                return
+            
+            # Llamar al método de limpieza
+            self.limpiar_documentos_duplicados(personas_con_multiples)
+            
+        except Exception as e:
+            messagebox.showerror(
+                "Error",
+                f"Error al buscar duplicados:\n{str(e)}"
+            )
     

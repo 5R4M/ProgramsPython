@@ -111,7 +111,13 @@ class VentanaBuscarDocumento:
         self.todos_documentos = []      
         self.resultados_busqueda = []   
         
+        # ✅ INICIALIZAR FLAGS DE CONTROL
+        self._carga_activa = False
+        
         self._cache_años = CacheAños()
+        
+        # ✅ CARGAR ICONOS ANTES DE CREAR INTERFAZ
+        self.cargar_iconos()
         
         if es_integrado:
             # Crear como Frame integrado
@@ -121,12 +127,69 @@ class VentanaBuscarDocumento:
             # Crear como ventana separada (Toplevel)
             self.ventana = ctk.CTkToplevel(parent)
             self.ventana.title("🔍 Buscar Documento")
+            
+            # ✅ CONFIGURAR CIERRE SEGURO
+            self.ventana.protocol("WM_DELETE_WINDOW", self.cerrar_ventana)
+            
             self.ventana.after(100, self.maximizar_ventana)
         
         self.crear_interfaz()
         
-        # ✅ AGREGAR ESTA LÍNEA:
+        # Cargar documentos iniciales
         self.cargar_todos_documentos_iniciales()
+        
+    def cargar_iconos(self):
+        """Carga los iconos PNG para los botones"""
+        try:
+            # Ruta absoluta a la carpeta de iconos
+            # __file__ apunta a: declaraciones_app/ui/buscar_documento.py
+            # Necesitamos ir a: declaraciones_app/utils/iconos
+            
+            ruta_base = os.path.dirname(os.path.abspath(__file__))  # declaraciones_app/ui
+            ruta_proyecto = os.path.dirname(ruta_base)  # declaraciones_app
+            ruta_iconos = os.path.join(ruta_proyecto, "utils", "iconos")
+            
+            print(f"🔍 Buscando iconos en: {ruta_iconos}")
+            
+            # Verificar que la carpeta existe
+            if not os.path.exists(ruta_iconos):
+                print(f"⚠️ La carpeta de iconos no existe: {ruta_iconos}")
+                raise FileNotFoundError(f"No existe la carpeta: {ruta_iconos}")
+            
+            # Cargar iconos
+            self.icono_buscar = ctk.CTkImage(
+                light_image=Image.open(os.path.join(ruta_iconos, "buscar.png")),
+                dark_image=Image.open(os.path.join(ruta_iconos, "buscar.png")),
+                size=(24, 24)
+            )
+            
+            self.icono_seleccionar = ctk.CTkImage(
+                light_image=Image.open(os.path.join(ruta_iconos, "seleccionar.png")),
+                dark_image=Image.open(os.path.join(ruta_iconos, "seleccionar.png")),
+                size=(24, 24)
+            )
+            
+            self.icono_editar = ctk.CTkImage(
+                light_image=Image.open(os.path.join(ruta_iconos, "editar.png")),
+                dark_image=Image.open(os.path.join(ruta_iconos, "editar.png")),
+                size=(24, 24)
+            )
+            
+            self.icono_ver = ctk.CTkImage(
+                light_image=Image.open(os.path.join(ruta_iconos, "ver.png")),
+                dark_image=Image.open(os.path.join(ruta_iconos, "ver.png")),
+                size=(24, 24)
+            )
+            
+            print("✅ Iconos cargados correctamente en buscar_documento")
+            
+        except Exception as e:
+            print(f"⚠️ Error al cargar iconos: {e}")
+            # Si falla, los iconos serán None
+            self.icono_buscar = None
+            self.icono_seleccionar = None
+            self.icono_editar = None
+            self.icono_ver = None
     
     def set_callback_actualizar(self, callback):
         """Permite establecer un callback para actualizar estadísticas"""
@@ -194,9 +257,13 @@ class VentanaBuscarDocumento:
         
         btn_buscar_dpi = ctk.CTkButton(
             frame_dpi,
-            text="🔍",
+            text="Buscar",
+            image=self.icono_buscar,
+            compound="left",
             command=self.buscar_por_dpi,
-            width=50
+            width=100,
+            fg_color="#1E88E5",  # ✅ Azul fuerte
+            hover_color="#1565C0"
         )
         btn_buscar_dpi.pack(side="left", padx=5)
         
@@ -228,9 +295,13 @@ class VentanaBuscarDocumento:
         
         btn_buscar_nombre = ctk.CTkButton(
             frame_nombre,
-            text="🔍",
+            text="Buscar",
+            image=self.icono_buscar,
+            compound="left",
             command=self.buscar_por_nombre,
-            width=50
+            width=100,
+            fg_color="#1E88E5",  # ✅ Azul fuerte
+            hover_color="#1565C0"
         )
         btn_buscar_nombre.pack(side="left", padx=5)
 
@@ -325,6 +396,9 @@ class VentanaBuscarDocumento:
         """
         import datetime
         
+        # ✅ FLAG DE CONTROL
+        self._carga_activa = True
+        
         # Inicializar cache si no existe
         if not hasattr(self, '_cache_años'):
             self._cache_años = CacheAños()
@@ -335,6 +409,7 @@ class VentanaBuscarDocumento:
         directorio_docs = DOCUMENTOS_DIR
         
         if not os.path.exists(directorio_docs):
+            self._carga_activa = False
             return
         
         try:
@@ -342,6 +417,7 @@ class VentanaBuscarDocumento:
             todas_personas = self.db.obtener_todas_personas()
             
             if not todas_personas:
+                self._carga_activa = False
                 return
             
             # OPTIMIZACIÓN 2: Crear mapa de búsqueda rápida (O(1) lookup)
@@ -364,62 +440,90 @@ class VentanaBuscarDocumento:
             total_archivos = len(archivos)
             
             def procesar_batch(inicio):
-                fin = min(inicio + BATCH_SIZE, total_archivos)
-                
-                for archivo in archivos[inicio:fin]:
-                    # Normalizar nombre del archivo
-                    archivo_normalizado = archivo.replace(" ", "").replace("_", "").replace("-", "").lower()
+                """Procesa un lote de documentos"""
+                try:
+                    # ✅ VERIFICAR FLAG Y EXISTENCIA
+                    if not self._carga_activa:
+                        return
                     
-                    # Buscar coincidencia de DPI
-                    persona_info = None
-                    for dpi_norm, info in personas_por_dpi.items():
-                        if dpi_norm in archivo_normalizado:
-                            persona_info = info
-                            break
+                    if not hasattr(self, 'ventana') or not self.ventana.winfo_exists():
+                        self._carga_activa = False
+                        return
                     
-                    if not persona_info:
-                        continue
+                    fin = min(inicio + BATCH_SIZE, total_archivos)
                     
-                    persona_id, nombre_completo, dpi = persona_info
-                    ruta_completa = os.path.join(directorio_docs, archivo)
+                    for archivo in archivos[inicio:fin]:
+                        if not self._carga_activa:  # ✅ VERIFICAR EN CADA ITERACIÓN
+                            return
+                        
+                        # Normalizar nombre del archivo
+                        archivo_normalizado = archivo.replace(" ", "").replace("_", "").replace("-", "").lower()
+                        
+                        # Buscar coincidencia de DPI
+                        persona_info = None
+                        for dpi_norm, info in personas_por_dpi.items():
+                            if dpi_norm in archivo_normalizado:
+                                persona_info = info
+                                break
+                        
+                        if not persona_info:
+                            continue
+                        
+                        persona_id, nombre_completo, dpi = persona_info
+                        ruta_completa = os.path.join(directorio_docs, archivo)
+                        
+                        # OPTIMIZACIÓN 5: Usar cache para años (NO extraer datos completos)
+                        año = self._cache_años.obtener_año(ruta_completa)
+                        
+                        # OPTIMIZACIÓN 6: Obtener solo mtime (sin datetime completo todavía)
+                        try:
+                            mtime = os.path.getmtime(ruta_completa)
+                            fecha_obj = datetime.datetime.fromtimestamp(mtime)
+                            fecha_str = fecha_obj.strftime("%Y-%m-%d %H:%M:%S")
+                        except OSError:
+                            fecha_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                        
+                        # Obtener extensión
+                        extension = archivo.lower().split('.')[-1].upper()
+                        
+                        # Formato: (doc_id, nombre_archivo, ruta_archivo, fecha_carga, tipo_documento, persona_id, año, nombre_persona)
+                        doc_info = (None, archivo, ruta_completa, fecha_str, extension, persona_id, año, nombre_completo)
+                        self.todos_documentos.append(doc_info)
+                        
+                        # Agrupar por año
+                        if año not in documentos_por_año_temp:
+                            documentos_por_año_temp[año] = []
+                        documentos_por_año_temp[año].append(doc_info)
                     
-                    # OPTIMIZACIÓN 5: Usar cache para años (NO extraer datos completos)
-                    año = self._cache_años.obtener_año(ruta_completa)
-                    
-                    # OPTIMIZACIÓN 6: Obtener solo mtime (sin datetime completo todavía)
-                    try:
-                        mtime = os.path.getmtime(ruta_completa)
-                        fecha_obj = datetime.datetime.fromtimestamp(mtime)
-                        fecha_str = fecha_obj.strftime("%Y-%m-%d %H:%M:%S")
-                    except OSError:
-                        fecha_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                    
-                    # Obtener extensión
-                    extension = archivo.lower().split('.')[-1].upper()
-                    
-                    # Formato: (doc_id, nombre_archivo, ruta_archivo, fecha_carga, tipo_documento, persona_id, año, nombre_persona)
-                    doc_info = (None, archivo, ruta_completa, fecha_str, extension, persona_id, año, nombre_completo)
-                    self.todos_documentos.append(doc_info)
-                    
-                    # Agrupar por año
-                    if año not in documentos_por_año_temp:
-                        documentos_por_año_temp[año] = []
-                    documentos_por_año_temp[año].append(doc_info)
-                
-                # Si hay más archivos, procesar siguiente batch (sin bloquear UI)
-                if fin < total_archivos:
-                    progreso = int((fin / total_archivos) * 100)
-                    # Actualizar indicador de progreso si existe
-                    if hasattr(self, 'lbl_progreso_carga'):
+                    # Actualizar progreso
+                    if self._carga_activa and hasattr(self, 'lbl_progreso_carga') and self.lbl_progreso_carga.winfo_exists():
+                        progreso = int((fin / total_archivos) * 100)
                         self.lbl_progreso_carga.configure(
                             text=f"⏳ Cargando documentos... {progreso}% ({fin}/{total_archivos})"
                         )
                     
-                    # Programar siguiente batch después de 50ms
-                    self.ventana.after(50, lambda: procesar_batch(fin))
-                else:
-                    # FINALIZAR: Actualizar UI
-                    self._finalizar_carga_inicial(documentos_por_año_temp)
+                    # Update UI
+                    if self._carga_activa and hasattr(self, 'ventana') and self.ventana.winfo_exists():
+                        self.ventana.update_idletasks()
+                    
+                    # Si hay más archivos, procesar siguiente batch (sin bloquear UI)
+                    if fin < total_archivos and self._carga_activa:
+                        if hasattr(self, 'ventana') and self.ventana.winfo_exists():
+                            self.ventana.after(50, lambda: procesar_batch(fin))
+                    else:
+                        # FINALIZAR: Actualizar UI
+                        if self._carga_activa:
+                            self._finalizar_carga_inicial(documentos_por_año_temp)
+                
+                except Exception as e:
+                    print(f"Error en procesar_batch: {e}")
+                    import traceback
+                    traceback.print_exc()
+                    self._carga_activa = False
+                    try:
+                        self._finalizar_carga_inicial(documentos_por_año_temp)
+                    except:  # noqa: E722
+                        pass
             
             # Mostrar indicador de carga
             if hasattr(self, 'resultados_frame'):
@@ -441,40 +545,57 @@ class VentanaBuscarDocumento:
             print(f"Error al cargar documentos iniciales: {e}")
             import traceback
             traceback.print_exc()
+            self._carga_activa = False
 
     def _finalizar_carga_inicial(self, documentos_por_año_temp):
         """Finaliza la carga y actualiza la UI"""
-        # Eliminar indicador de progreso
-        if hasattr(self, 'lbl_progreso_carga'):
-            self.lbl_progreso_carga.destroy()
-            delattr(self, 'lbl_progreso_carga')
+        try:
+            if not self._carga_activa:
+                return
+            
+            # Eliminar indicador de progreso
+            if hasattr(self, 'lbl_progreso_carga') and self.lbl_progreso_carga.winfo_exists():
+                self.lbl_progreso_carga.destroy()
+                delattr(self, 'lbl_progreso_carga')
+            
+            # Actualizar ComboBox de año
+            if documentos_por_año_temp:
+                años_disponibles = sorted(documentos_por_año_temp.keys(), reverse=True)
+                valores_combo = ["Todos"] + [str(año) for año in años_disponibles]
+                
+                if hasattr(self, 'combo_año_busqueda') and self.combo_año_busqueda.winfo_exists():
+                    self.combo_año_busqueda.configure(values=valores_combo)
+                    self.combo_año_busqueda.set("Todos")
+                
+                # Guardar referencia
+                self.documentos_por_año_busqueda = documentos_por_año_temp
+                
+                # Mostrar documentos
+                self.mostrar_documentos_iniciales(documentos_por_año_temp)
+            else:
+                # No hay documentos
+                if hasattr(self, 'resultados_frame') and self.resultados_frame.winfo_exists():
+                    for widget in self.resultados_frame.winfo_children():
+                        widget.destroy()
+                    
+                    ctk.CTkLabel(
+                        self.resultados_frame,
+                        text="No hay documentos registrados",
+                        text_color="gray",
+                        font=ctk.CTkFont(size=14)
+                    ).pack(pady=50)
+                
+                if hasattr(self, 'combo_año_busqueda') and self.combo_año_busqueda.winfo_exists():
+                    self.combo_año_busqueda.configure(values=["Todos"])
+                    self.combo_año_busqueda.set("Todos")
+            
+            self._carga_activa = False
         
-        # Actualizar ComboBox de año
-        if documentos_por_año_temp:
-            años_disponibles = sorted(documentos_por_año_temp.keys(), reverse=True)
-            valores_combo = ["Todos"] + [str(año) for año in años_disponibles]
-            self.combo_año_busqueda.configure(values=valores_combo)
-            self.combo_año_busqueda.set("Todos")
-            
-            # Guardar referencia
-            self.documentos_por_año_busqueda = documentos_por_año_temp
-            
-            # Mostrar documentos
-            self.mostrar_documentos_iniciales(documentos_por_año_temp)
-        else:
-            # No hay documentos
-            for widget in self.resultados_frame.winfo_children():
-                widget.destroy()
-            
-            ctk.CTkLabel(
-                self.resultados_frame,
-                text="No hay documentos registrados",
-                text_color="gray",
-                font=ctk.CTkFont(size=14)
-            ).pack(pady=50)
-            
-            self.combo_año_busqueda.configure(values=["Todos"])
-            self.combo_año_busqueda.set("Todos")
+        except Exception as e:
+            print(f"Error en _finalizar_carga_inicial: {e}")
+            import traceback
+            traceback.print_exc()
+            self._carga_activa = False
 
     def mostrar_documentos_iniciales(self, documentos_por_año_temp):
         """Muestra todos los documentos iniciales agrupados por año"""
@@ -521,11 +642,13 @@ class VentanaBuscarDocumento:
                 # Botón SELECCIONAR
                 btn_seleccionar = ctk.CTkButton(
                     frame_doc,
-                    text="✅ Seleccionar",
+                    text="Seleccionar",
+                    image=self.icono_seleccionar,
+                    compound="left",
                     command=lambda pid=persona_id: self.seleccionar_persona_por_id(pid),
-                    width=120,
-                    fg_color=COLOR_SUCCESS,
-                    hover_color="#27ae60"
+                    width=130,
+                    fg_color="#1E88E5",  # ✅ Azul fuerte
+                    hover_color="#1565C0"
                 )
                 btn_seleccionar.pack(side="right", padx=5)
             
@@ -732,10 +855,12 @@ class VentanaBuscarDocumento:
                     btn_seleccionar = ctk.CTkButton(
                         frame_doc,
                         text="✅ Seleccionar",
+                        image=self.icono_seleccionar,
+                        compound="left",
                         command=lambda pid=persona_id: self.seleccionar_persona_por_id(pid),
-                        width=120,
-                        fg_color=COLOR_SUCCESS,
-                        hover_color="#27ae60"
+                        width=130,
+                        fg_color="#1E88E5",  # ✅ Azul fuerte
+                        hover_color="#1565C0"
                     )
                     btn_seleccionar.pack(side="right", padx=5)
                 
@@ -787,10 +912,12 @@ class VentanaBuscarDocumento:
                     btn_seleccionar = ctk.CTkButton(
                         frame_doc,
                         text="✅ Seleccionar",
+                        image=self.icono_seleccionar,
+                        compound="left",
                         command=lambda pid=persona_id: self.seleccionar_persona_por_id(pid),
-                        width=120,
-                        fg_color=COLOR_SUCCESS,
-                        hover_color="#27ae60"
+                        width=130,
+                        fg_color="#1E88E5",  # ✅ Azul fuerte
+                        hover_color="#1565C0"
                     )
                     btn_seleccionar.pack(side="right", padx=5)
         
@@ -841,11 +968,13 @@ class VentanaBuscarDocumento:
             # Botón Seleccionar (solo carga la persona en el panel izquierdo de esta ventana)
             btn_seleccionar = ctk.CTkButton(
                 frame_resultado,
-                text="✅ Seleccionar",          # mini imagen como en "👁️ Ver"
+                text="✅ Seleccionar",  
+                image=self.icono_seleccionar,
+                compound="left",
                 command=lambda p=persona: self.seleccionar_persona(p),
-                width=120,
-                fg_color=COLOR_SUCCESS,
-                hover_color="#27ae60"
+                width=130,
+                fg_color="#1E88E5",  # ✅ Azul fuerte
+                hover_color="#1565C0"
             )
             btn_seleccionar.pack(side="right", padx=5)
     
@@ -1067,22 +1196,26 @@ class VentanaBuscarDocumento:
                 # Botón VER
                 btn_ver = ctk.CTkButton(
                     frame_doc,
-                    text="👁️ Ver",
+                    text="Ver",
+                    image=self.icono_ver,
+                    compound="left",
                     command=lambda idx=index: self.ver_documento(idx),
-                    width=90,
-                    fg_color="#4a4a4a",
-                    hover_color="#6b6b6b"
+                    width=100,
+                    fg_color="#1E88E5",  # ✅ Azul fuerte
+                    hover_color="#1565C0"
                 )
                 btn_ver.pack(side="right", padx=5)
-                
+
                 # Botón EDITAR
                 btn_editar_doc = ctk.CTkButton(
                     frame_doc,
-                    text="✏️ Editar",
+                    text="Editar",
+                    image=self.icono_editar,
+                    compound="left",
                     command=lambda idx=index: self.editar_documento(idx),
-                    width=90,
-                    fg_color=COLOR_PRIMARY,
-                    hover_color="#2980b9"
+                    width=100,
+                    fg_color="#1E88E5",  # ✅ Azul fuerte
+                    hover_color="#1565C0"
                 )
                 btn_editar_doc.pack(side="right", padx=5)
             
@@ -1340,3 +1473,17 @@ class VentanaBuscarDocumento:
             font=ctk.CTkFont(size=12)
         )
         self.lbl_sin_documentos.pack(pady=30)
+    
+    def cerrar_ventana(self):
+        """Cierra la ventana de forma segura"""
+        try:
+            # ✅ DETENER CUALQUIER CARGA EN PROGRESO
+            if hasattr(self, '_carga_activa'):
+                self._carga_activa = False
+            
+            # Destruir ventana
+            if hasattr(self, 'ventana') and self.ventana.winfo_exists():
+                self.ventana.destroy()
+        
+        except Exception as e:
+            print(f"Error al cerrar ventana: {e}")

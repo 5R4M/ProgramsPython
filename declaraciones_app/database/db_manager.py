@@ -509,33 +509,44 @@ class DatabaseManager:
     
     def obtener_todos_documentos(self):
         """
-        Devuelve todos los documentos con los datos básicos de la persona asociada.
-
-        Formato de cada fila:
-            (
-                id_documento,      # 0
-                nombre_archivo,    # 1
-                ruta_archivo,      # 2
-                fecha_carga,       # 3
-                nombre_persona,    # 4
-                dpi_persona,       # 5
-                persona_id         # 6
-            )
+        Devuelve todos los documentos ÚNICOS (un documento por persona).
+        Si una persona tiene múltiples documentos, devuelve solo el más reciente.
+        
+        VERSIÓN MEJORADA: Limpia automáticamente registros duplicados antiguos.
         """
-        self.cursor.execute("""
-            SELECT
-                d.id,
-                d.nombre_archivo,
-                d.ruta_archivo,
-                d.fecha_carga,
-                p.nombre_completo,
-                p.dpi,
-                d.persona_id
-            FROM documentos d
-            LEFT JOIN personas p ON d.persona_id = p.id
-            ORDER BY d.fecha_carga DESC, d.id DESC
-        """)
-        return self.cursor.fetchall()
+        try:
+            # Primero, limpiar registros duplicados (mantener solo el más reciente por persona)
+            self.cursor.execute("""
+                DELETE FROM documentos
+                WHERE id NOT IN (
+                    SELECT MAX(id)
+                    FROM documentos
+                    GROUP BY persona_id
+                )
+            """)
+            self.conn.commit()
+            
+            # Ahora obtener todos los documentos (ya sin duplicados)
+            self.cursor.execute("""
+                SELECT
+                    d.id,
+                    d.nombre_archivo,
+                    d.ruta_archivo,
+                    d.fecha_carga,
+                    p.nombre_completo,
+                    p.dpi,
+                    d.persona_id
+                FROM documentos d
+                LEFT JOIN personas p ON d.persona_id = p.id
+                ORDER BY d.fecha_carga DESC, d.id DESC
+            """)
+            return self.cursor.fetchall()
+        
+        except Exception as e:
+            print(f"Error al obtener documentos: {e}")
+            import traceback
+            traceback.print_exc()
+            return []
     
     def eliminar_documento_por_id(self, documento_id):
         """Elimina un documento por su ID."""
