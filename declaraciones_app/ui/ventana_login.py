@@ -2,6 +2,7 @@
 import customtkinter as ctk
 from tkinter import messagebox
 from database import DatabaseManager
+import os
 
 class VentanaLogin:
     def __init__(self, root, callback_login_exitoso):
@@ -13,7 +14,7 @@ class VentanaLogin:
         self.root.resizable(False, False)
 
         # Tamaño y centrado
-        w, h = 380, 460
+        w, h = 380, 480
         self.root.geometry(f"{w}x{h}")
         self.root.update_idletasks()
         x = (self.root.winfo_screenwidth() // 2) - (w // 2)
@@ -27,63 +28,163 @@ class VentanaLogin:
         self.loading_dots = ""
         self.loading_job = None
 
+        self.cargar_iconos()
+        
         self.crear_interfaz()
 
+    def cargar_iconos(self):
+        """Carga los iconos PNG para los botones y labels"""
+        try:
+            # Ruta absoluta a la carpeta de iconos
+            ruta_base = os.path.dirname(os.path.abspath(__file__))  # declaraciones_app/ui
+            ruta_proyecto = os.path.dirname(ruta_base)  # declaraciones_app
+            ruta_iconos = os.path.join(ruta_proyecto, "utils", "iconos")
+            
+            print(f"🔍 Buscando iconos en: {ruta_iconos}")
+            
+            # Verificar que la carpeta existe
+            if not os.path.exists(ruta_iconos):
+                print(f"⚠️ La carpeta de iconos no existe: {ruta_iconos}")
+                raise FileNotFoundError(f"No existe la carpeta: {ruta_iconos}")
+            
+            # Cargar iconos
+            from PIL import Image
+            
+            # Icono para el botón de login
+            self.icono_login = ctk.CTkImage(
+                light_image=Image.open(os.path.join(ruta_iconos, "procesar.png")),
+                dark_image=Image.open(os.path.join(ruta_iconos, "procesar.png")),
+                size=(24, 24)
+            )
+            
+            # Icono para el título (más grande)
+            self.icono_titulo = ctk.CTkImage(
+                light_image=Image.open(os.path.join(ruta_iconos, "cargado.png")),
+                dark_image=Image.open(os.path.join(ruta_iconos, "cargado.png")),
+                size=(32, 32)
+            )
+            
+            # Iconos para los labels (más pequeños y sutiles)
+            # Icono de usuario
+            self.icono_usuario = ctk.CTkImage(
+                light_image=Image.open(os.path.join(ruta_iconos, "usuario.png")),
+                dark_image=Image.open(os.path.join(ruta_iconos, "usuario.png")),
+                size=(18, 18)
+            )
+            
+            # Icono de contraseña/candado
+            self.icono_password = ctk.CTkImage(
+                light_image=Image.open(os.path.join(ruta_iconos, "candado.png")),
+                dark_image=Image.open(os.path.join(ruta_iconos, "candado.png")),
+                size=(18, 18)
+            )
+            
+            print("✅ Iconos cargados correctamente en ventana_login")
+            
+        except Exception as e:
+            print(f"⚠️ Error al cargar iconos: {e}")
+            import traceback
+            traceback.print_exc()
+            
+            # Si falla, los iconos serán None
+            self.icono_login = None
+            self.icono_titulo = None
+            self.icono_usuario = None
+            self.icono_password = None
+    
     def crear_interfaz(self):
         # Frame principal
         frame = ctk.CTkFrame(self.root)
         frame.pack(fill="both", expand=True, padx=20, pady=20)
 
-        # ===== Encabezado =====
+        # ===== Encabezado CENTRADO =====
         header = ctk.CTkFrame(frame, fg_color="transparent")
         header.pack(fill="x", pady=(5, 10))
 
+        # Frame para título con icono (CENTRADO)
+        titulo_frame = ctk.CTkFrame(header, fg_color="transparent")
+        titulo_frame.pack(anchor="center")  # ✅ Centrado
+
+        # Icono del título
+        if hasattr(self, 'icono_titulo') and self.icono_titulo:
+            ctk.CTkLabel(
+                titulo_frame,
+                image=self.icono_titulo,
+                text=""
+            ).pack(side="left", padx=(0, 10))
+
+        # Título
         titulo = ctk.CTkLabel(
-            header,
-            text="🔐 Inicio de sesión",
+            titulo_frame,
+            text="Inicio de sesión",
             font=ctk.CTkFont(size=20, weight="bold"),
         )
-        titulo.pack(anchor="w")
+        titulo.pack(side="left")
 
+        # Subtítulo centrado
         subtitulo = ctk.CTkLabel(
             header,
             text="Ingrese sus credenciales para acceder al sistema.",
             font=ctk.CTkFont(size=11),
             text_color="gray70",
         )
-        subtitulo.pack(anchor="w", pady=(2, 0))
+        subtitulo.pack(anchor="center", pady=(5, 0))  # ✅ Centrado
 
         separator = ctk.CTkFrame(frame, fg_color="gray25", height=1)
-        separator.pack(fill="x", pady=(5, 15))
+        separator.pack(fill="x", pady=(10, 15))
 
         # ===== Formulario =====
         form = ctk.CTkFrame(frame, fg_color="transparent")
         form.pack(fill="x", expand=False, pady=(0, 10))
 
-        # Usuario
+        # ===== Label Usuario con icono =====
+        usuario_label_frame = ctk.CTkFrame(form, fg_color="transparent")
+        usuario_label_frame.pack(anchor="w", pady=(0, 2))
+
+        if hasattr(self, 'icono_usuario') and self.icono_usuario:
+            ctk.CTkLabel(
+                usuario_label_frame,
+                image=self.icono_usuario,
+                text=""
+            ).pack(side="left", padx=(0, 5))
+
         ctk.CTkLabel(
-            form,
+            usuario_label_frame,
             text="Usuario",
             font=ctk.CTkFont(size=12, weight="bold"),
-        ).pack(anchor="w", pady=(0, 2))
+        ).pack(side="left")
 
+        # Entry Usuario
         self.entry_user = ctk.CTkEntry(
             form,
             placeholder_text="admin",
+            height=35
         )
-        self.entry_user.pack(fill="x", pady=(0, 12))
+        self.entry_user.pack(fill="x", pady=(0, 15))
 
-        # Contraseña
+        # ===== Label Contraseña con icono =====
+        password_label_frame = ctk.CTkFrame(form, fg_color="transparent")
+        password_label_frame.pack(anchor="w", pady=(0, 2))
+
+        if hasattr(self, 'icono_password') and self.icono_password:
+            ctk.CTkLabel(
+                password_label_frame,
+                image=self.icono_password,
+                text=""
+            ).pack(side="left", padx=(0, 5))
+
         ctk.CTkLabel(
-            form,
+            password_label_frame,
             text="Contraseña",
             font=ctk.CTkFont(size=12, weight="bold"),
-        ).pack(anchor="w", pady=(0, 2))
+        ).pack(side="left")
 
+        # Entry Contraseña
         self.entry_pass = ctk.CTkEntry(
             form,
             placeholder_text="******",
             show="*",
+            height=35
         )
         self.entry_pass.pack(fill="x", pady=(0, 8))
 
@@ -100,7 +201,7 @@ class VentanaLogin:
         # Nota
         nota = ctk.CTkLabel(
             form,
-            text="Use el usuario asignado por el administrador.",
+            text="💡 Use el usuario asignado por el administrador.",
             font=ctk.CTkFont(size=10),
             text_color="gray70",
             justify="left",
@@ -122,9 +223,14 @@ class VentanaLogin:
         # Botón ingresar
         self.btn_login = ctk.CTkButton(
             frame,
-            text="Ingresar",
+            text="  Ingresar",
+            image=self.icono_login if hasattr(self, 'icono_login') and self.icono_login else None,
+            compound="left",
             command=self.intentar_login,
             height=40,
+            fg_color="#1E88E5",
+            hover_color="#1565C0",
+            font=ctk.CTkFont(size=13, weight="bold")
         )
         self.btn_login.pack(fill="x", pady=(5, 0))
 
@@ -134,7 +240,7 @@ class VentanaLogin:
 
         lbl_footer = ctk.CTkLabel(
             footer,
-            text="Acceso restringido a personal autorizado.",
+            text="🔒 Acceso restringido a personal autorizado.",
             font=ctk.CTkFont(size=10),
             text_color="gray60",
         )
@@ -214,7 +320,7 @@ class VentanaLogin:
             return
 
         # Si es correcto, mostrar unos milisegundos de "Accediendo..."
-        self.loading_label.configure(text="Accediendo al sistema...")
+        self.loading_label.configure(text="✓ Accediendo al sistema...")
         # Breve pausa visual antes de cerrar login y abrir el MainWindow
         self.root.after(400, lambda: self._finalizar_login(info_usuario))
 

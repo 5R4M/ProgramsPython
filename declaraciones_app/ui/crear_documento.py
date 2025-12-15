@@ -9,7 +9,7 @@ from datetime import datetime
 from PIL import Image, ImageTk
 import fitz  # PyMuPDF
 from docx2pdf import convert
-from config import PLANTILLAS_DIR, COLOR_SUCCESS, COLOR_PRIMARY, COLOR_WARNING, DOCUMENTOS_DIR
+from config import PLANTILLAS_DIR, COLOR_SUCCESS, COLOR_WARNING, DOCUMENTOS_DIR
 from utils import NumeroATexto
 import subprocess
 import platform
@@ -33,6 +33,8 @@ class VentanaCrearDocumento:
         self.persona_id_original = None
 
         self.fecha_fija_var = ctk.BooleanVar(value=False)
+        
+        self.cargar_iconos()
         
         if es_integrado:
             # Como frame embebido en otra ventana
@@ -70,6 +72,80 @@ class VentanaCrearDocumento:
                 # Modo NORMAL: con visor
                 self.center_window_tamano(1400, 900)
                 self.ventana.after(100, self.maximizar_ventana)
+    
+    def cargar_iconos(self):
+        """Carga los iconos PNG para los botones"""
+        try:
+            # Ruta absoluta a la carpeta de iconos
+            ruta_base = os.path.dirname(os.path.abspath(__file__))  # declaraciones_app/ui
+            ruta_proyecto = os.path.dirname(ruta_base)  # declaraciones_app
+            ruta_iconos = os.path.join(ruta_proyecto, "utils", "iconos")
+            
+            print(f"🔍 Buscando iconos en: {ruta_iconos}")
+            
+            # Verificar que la carpeta existe
+            if not os.path.exists(ruta_iconos):
+                print(f"⚠️ La carpeta de iconos no existe: {ruta_iconos}")
+                raise FileNotFoundError(f"No existe la carpeta: {ruta_iconos}")
+            
+            # Cargar iconos para botones
+            self.icono_guardar = ctk.CTkImage(
+                light_image=Image.open(os.path.join(ruta_iconos, "guardar.png")),
+                dark_image=Image.open(os.path.join(ruta_iconos, "guardar.png")),
+                size=(24, 24)
+            )
+            
+            self.icono_preview = ctk.CTkImage(
+                light_image=Image.open(os.path.join(ruta_iconos, "preview.png")),
+                dark_image=Image.open(os.path.join(ruta_iconos, "preview.png")),
+                size=(24, 24)
+            )
+            
+            self.icono_imprimir = ctk.CTkImage(
+                light_image=Image.open(os.path.join(ruta_iconos, "imprimir.png")),
+                dark_image=Image.open(os.path.join(ruta_iconos, "imprimir.png")),
+                size=(24, 24)
+            )
+            
+            self.icono_generar = ctk.CTkImage(
+                light_image=Image.open(os.path.join(ruta_iconos, "generar.png")),
+                dark_image=Image.open(os.path.join(ruta_iconos, "generar.png")),
+                size=(24, 24)
+            )
+            
+            self.icono_buscar = ctk.CTkImage(
+                light_image=Image.open(os.path.join(ruta_iconos, "buscar.png")),
+                dark_image=Image.open(os.path.join(ruta_iconos, "buscar.png")),
+                size=(20, 20)
+            )
+            
+            self.icono_limpiar = ctk.CTkImage(
+                light_image=Image.open(os.path.join(ruta_iconos, "limpiar.png")),
+                dark_image=Image.open(os.path.join(ruta_iconos, "limpiar.png")),
+                size=(20, 20)
+            )
+            
+            self.icono_plantilla = ctk.CTkImage(
+                light_image=Image.open(os.path.join(ruta_iconos, "plantilla.png")),
+                dark_image=Image.open(os.path.join(ruta_iconos, "plantilla.png")),
+                size=(20, 20)
+            )
+            
+            print("✅ Iconos cargados correctamente en crear_documento")
+            
+        except Exception as e:
+            print(f"⚠️ Error al cargar iconos: {e}")
+            import traceback
+            traceback.print_exc()
+            
+            # Si falla, los iconos serán None
+            self.icono_guardar = None
+            self.icono_preview = None
+            self.icono_imprimir = None
+            self.icono_generar = None
+            self.icono_buscar = None
+            self.icono_limpiar = None
+            self.icono_plantilla = None
     
     def capitalizar_texto(self, texto):
         """Convierte texto a formato título (Primera Letra Mayúscula)"""
@@ -785,10 +861,14 @@ class VentanaCrearDocumento:
 
         self.btn_cambiar_plantilla = ctk.CTkButton(
             panel_izquierdo,
-            text="📋 Plantilla",
+            text="Plantilla",
+            image=self.icono_plantilla,
+            compound="left",
             command=self.cargar_plantilla,
             width=140,
-            height=26
+            height=26,
+            fg_color="#1E88E5",
+            hover_color="#1565C0"
         )
         self.btn_cambiar_plantilla.pack(pady=2)
 
@@ -828,10 +908,13 @@ class VentanaCrearDocumento:
 
         btn_buscar = ctk.CTkButton(
             frame_buscar_dpi,
-            text="🔍",
+            text="",
+            image=self.icono_buscar,
             command=self.buscar_persona,
             width=40,
-            height=26
+            height=26,
+            fg_color="#1E88E5",
+            hover_color="#1565C0"
         )
         btn_buscar.grid(row=0, column=2, padx=(2, 3))
 
@@ -852,21 +935,26 @@ class VentanaCrearDocumento:
 
         btn_buscar_nombre = ctk.CTkButton(
             frame_buscar_nombre,
-            text="🔍",
+            text="",
+            image=self.icono_buscar,
             command=self.buscar_por_nombre,
             width=40,
-            height=26
+            height=26,
+            fg_color="#1E88E5",
+            hover_color="#1565C0"
         )
         btn_buscar_nombre.grid(row=0, column=2, padx=(2, 3))
 
         btn_limpiar = ctk.CTkButton(
             self.frame_busqueda,
-            text="🔄 Limpiar",
+            text="Limpiar",
+            image=self.icono_limpiar,
+            compound="left",
             command=self.limpiar_campos,
             width=100,
             height=26,
-            fg_color=COLOR_WARNING,
-            hover_color="#e67e22"
+            fg_color="#1E88E5",
+            hover_color="#1565C0"
         )
         btn_limpiar.pack(pady=2)
 
@@ -1063,45 +1151,53 @@ class VentanaCrearDocumento:
 
         btn_guardar = ctk.CTkButton(
             frame_botones,
-            text="💾 Guardar y Generar",  # CAMBIO DE TEXTO
+            text="Guardar y Generar",
+            image=self.icono_guardar,
+            compound="left",
             command=self.guardar_persona,
             height=32,
             font=ctk.CTkFont(size=12, weight="bold"),
-            fg_color=COLOR_PRIMARY,
-            hover_color="#2980b9"
+            fg_color="#1E88E5",
+            hover_color="#1565C0"
         )
         btn_guardar.grid(row=0, column=0, padx=3, sticky="ew")
 
         btn_preview = ctk.CTkButton(
             frame_botones,
-            text="👁️ Preview",
+            text="Preview",
+            image=self.icono_preview,
+            compound="left",
             command=self.generar_preview,
             height=32,
             font=ctk.CTkFont(size=12, weight="bold"),
-            fg_color=COLOR_WARNING,
-            hover_color="#e67e22"
+            fg_color="#1E88E5",
+            hover_color="#1565C0"
         )
         btn_preview.grid(row=0, column=1, padx=3, sticky="ew")
 
         btn_imprimir = ctk.CTkButton(
             frame_botones,
-            text="🖨️ Imprimir",
+            text="Imprimir",
+            image=self.icono_imprimir,
+            compound="left",
             command=self.imprimir_documento_temporal,
             height=32,
             font=ctk.CTkFont(size=12, weight="bold"),
-            fg_color="#9b59b6",  # Color morado
-            hover_color="#8e44ad"
+            fg_color="#1E88E5",
+            hover_color="#1565C0"
         )
         btn_imprimir.grid(row=0, column=2, padx=3, sticky="ew")
 
         btn_generar = ctk.CTkButton(
             frame_botones,
-            text="📁 Generar en Otra Ubicación",  # CAMBIO DE TEXTO
-            command=self.generar_documento_otra_ubicacion,  # CAMBIO DE COMANDO
+            text="Generar en Otra Ubicación",
+            image=self.icono_generar,
+            compound="left",
+            command=self.generar_documento_otra_ubicacion,
             height=32,
             font=ctk.CTkFont(size=12, weight="bold"),
-            fg_color=COLOR_SUCCESS,
-            hover_color="#27ae60"
+            fg_color="#1E88E5",
+            hover_color="#1565C0"
         )
         btn_generar.grid(row=0, column=3, padx=3, sticky="ew")
 

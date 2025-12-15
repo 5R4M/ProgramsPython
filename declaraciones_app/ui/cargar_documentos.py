@@ -507,21 +507,32 @@ class VentanaCargarDocumentos:
         # Pestañas para documentos nuevos y existentes
         self.tabview = ctk.CTkTabview(panel_izquierdo)
         self.tabview.pack(pady=10, padx=20, fill="both", expand=True)
-        
+
         # Pestaña: Documentos a cargar
-        self.tabview.add("📤 Nuevos")
-        tab_nuevos = self.tabview.tab("📤 Nuevos")
-        
+        self.tabview.add("Nuevos")
+        tab_nuevos = self.tabview.tab("Nuevos")
+
+        # Agregar icono a la pestaña de nuevos
+        try:
+            tab_button_nuevos = self.tabview._segmented_button._buttons_dict["Nuevos"]
+            if self.icono_nuevo:
+                tab_button_nuevos.configure(
+                    image=self.icono_nuevo,
+                    compound="left"
+                )
+        except Exception as e:
+            print(f"No se pudo agregar icono a pestaña Nuevos: {e}")
+
         ctk.CTkLabel(
             tab_nuevos,
             text="Documentos seleccionados:",
             font=ctk.CTkFont(size=16, weight="bold")
         ).pack(pady=(10, 5), padx=10, anchor="w")
-        
+
         # Frame scrollable para la lista de nuevos
         self.lista_frame = ctk.CTkScrollableFrame(tab_nuevos, height=400)
         self.lista_frame.pack(pady=5, padx=10, fill="both", expand=True)
-        
+
         self.lbl_lista_vacia = ctk.CTkLabel(
             self.lista_frame,
             text="No hay documentos seleccionados",
@@ -529,11 +540,11 @@ class VentanaCargarDocumentos:
             font=ctk.CTkFont(size=14)
         )
         self.lbl_lista_vacia.pack(pady=50)
-        
+
         # Controles de navegación para nuevos
         frame_navegacion = ctk.CTkFrame(tab_nuevos)
         frame_navegacion.pack(pady=10, padx=10, fill="x")
-        
+
         self.btn_anterior = ctk.CTkButton(
             frame_navegacion,
             text="◀ Anterior",
@@ -542,14 +553,14 @@ class VentanaCargarDocumentos:
             state="disabled"
         )
         self.btn_anterior.pack(side="left", padx=5)
-        
+
         self.lbl_contador = ctk.CTkLabel(
             frame_navegacion,
             text="0 / 0",
             font=ctk.CTkFont(size=14)
         )
         self.lbl_contador.pack(side="left", expand=True)
-        
+
         self.btn_siguiente = ctk.CTkButton(
             frame_navegacion,
             text="Siguiente ▶",
@@ -558,10 +569,21 @@ class VentanaCargarDocumentos:
             state="disabled"
         )
         self.btn_siguiente.pack(side="right", padx=5)
-        
+
         # Pestaña: Documentos existentes
-        self.tabview.add("📚 Cargados")
-        tab_existentes = self.tabview.tab("📚 Cargados")
+        self.tabview.add("Cargados")
+        tab_existentes = self.tabview.tab("Cargados")
+
+        # Agregar icono a la pestaña de cargados
+        try:
+            tab_button_cargados = self.tabview._segmented_button._buttons_dict["Cargados"]
+            if self.icono_cargado:
+                tab_button_cargados.configure(
+                    image=self.icono_cargado,
+                    compound="left"
+                )
+        except Exception as e:
+            print(f"No se pudo agregar icono a pestaña Cargados: {e}")
         
         # Barra de búsqueda
         frame_busqueda = ctk.CTkFrame(tab_existentes)
