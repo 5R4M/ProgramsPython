@@ -1,8 +1,23 @@
-# ventana_usuarios.py
 import customtkinter as ctk
 from tkinter import messagebox
-from config import COLOR_PRIMARY, COLOR_SUCCESS, COLOR_WARNING
-
+from config import (
+    # Constantes de fuente
+    FONT_SIZE_TITLE,
+    FONT_SIZE_SUBTITLE,
+    FONT_SIZE_NORMAL,
+    FONT_SIZE_SMALL,
+    FONT_SIZE_BUTTON,
+    # Constantes de padding
+    PADDING_LARGE,
+    PADDING_MEDIUM,
+    PADDING_SMALL,
+    PADDING_TINY,
+    # Constantes de altura
+    BUTTON_HEIGHT_SMALL,
+    INPUT_HEIGHT,
+    # Función de escalado
+    escalar
+)
 
 class VentanaGestionUsuarios:
     def __init__(self, parent, db):
@@ -10,7 +25,7 @@ class VentanaGestionUsuarios:
         self.parent = parent
         self.usuario_seleccionado_id = None
 
-        self.frame = ctk.CTkFrame(parent)
+        self.frame = ctk.CTkFrame(parent, fg_color="#001a33")
         self.frame.pack(fill="both", expand=True)
 
         self.crear_interfaz()
@@ -23,30 +38,31 @@ class VentanaGestionUsuarios:
 
         # Encabezado
         header = ctk.CTkFrame(self.frame, fg_color="transparent")
-        header.grid(row=0, column=0, sticky="ew", padx=10, pady=(10, 5))
+        header.grid(row=0, column=0, sticky="ew", padx=PADDING_MEDIUM, pady=(PADDING_MEDIUM, PADDING_SMALL))
 
         titulo = ctk.CTkLabel(
             header,
             text="👥 Gestión de Usuarios",
-            font=ctk.CTkFont(size=20, weight="bold")
+            font=ctk.CTkFont(size=FONT_SIZE_TITLE, weight="bold"),
+            text_color="white"
         )
         titulo.pack(anchor="w")
 
         subtitulo = ctk.CTkLabel(
             header,
             text="Administre cuentas, roles y estado de acceso al sistema.",
-            font=ctk.CTkFont(size=12),
-            text_color="gray70",
+            font=ctk.CTkFont(size=FONT_SIZE_NORMAL),
+            text_color="#c4dafa",
         )
-        subtitulo.pack(anchor="w", pady=(2, 0))
+        subtitulo.pack(anchor="w", pady=(escalar(2), 0))
 
         # Línea separadora
-        linea = ctk.CTkFrame(self.frame, fg_color="gray25", height=1)
-        linea.grid(row=0, column=0, sticky="ew", padx=10, pady=(0, 5))
+        linea = ctk.CTkFrame(self.frame, fg_color="#003d66", height=escalar(1))
+        linea.grid(row=0, column=0, sticky="ew", padx=PADDING_MEDIUM, pady=(0, PADDING_SMALL))
 
         # Panel central (lista + formulario)
-        panel_central = ctk.CTkFrame(self.frame)
-        panel_central.grid(row=1, column=0, sticky="nsew", padx=10, pady=(5, 10))
+        panel_central = ctk.CTkFrame(self.frame, fg_color="#001a33")
+        panel_central.grid(row=1, column=0, sticky="nsew", padx=PADDING_MEDIUM, pady=(PADDING_SMALL, PADDING_MEDIUM))
 
         panel_central.grid_columnconfigure(0, weight=1, uniform="col")
         panel_central.grid_columnconfigure(1, weight=1, uniform="col")
@@ -54,31 +70,32 @@ class VentanaGestionUsuarios:
 
         # ==================== LADO IZQUIERDO: LISTA ====================
 
-        frame_lista = ctk.CTkFrame(panel_central)
-        frame_lista.grid(row=0, column=0, sticky="nsew", padx=(0, 5), pady=5)
+        frame_lista = ctk.CTkFrame(panel_central, fg_color="#003d66")
+        frame_lista.grid(row=0, column=0, sticky="nsew", padx=(0, PADDING_SMALL), pady=PADDING_SMALL)
 
         encabezado_lista = ctk.CTkLabel(
             frame_lista,
-            text="Usuarios registrados",
-            font=ctk.CTkFont(size=13, weight="bold"),
+            text="📋 Usuarios registrados",
+            font=ctk.CTkFont(size=FONT_SIZE_SUBTITLE, weight="bold"),
+            text_color="white"
         )
-        encabezado_lista.pack(anchor="w", padx=8, pady=(8, 0))
+        encabezado_lista.pack(anchor="w", padx=PADDING_SMALL, pady=(PADDING_SMALL, 0))
 
         descripcion_lista = ctk.CTkLabel(
             frame_lista,
             text="Seleccione un usuario para editar sus datos.",
-            font=ctk.CTkFont(size=11),
-            text_color="gray70",
+            font=ctk.CTkFont(size=FONT_SIZE_SMALL),
+            text_color="#c4dafa",
         )
-        descripcion_lista.pack(anchor="w", padx=8, pady=(0, 5))
+        descripcion_lista.pack(anchor="w", padx=PADDING_SMALL, pady=(0, PADDING_SMALL))
 
-        self.scroll_usuarios = ctk.CTkScrollableFrame(frame_lista)
-        self.scroll_usuarios.pack(fill="both", expand=True, padx=8, pady=(5, 8))
+        self.scroll_usuarios = ctk.CTkScrollableFrame(frame_lista, fg_color="#001a33")
+        self.scroll_usuarios.pack(fill="both", expand=True, padx=PADDING_SMALL, pady=(PADDING_SMALL, PADDING_SMALL))
 
         # ==================== LADO DERECHO: FORMULARIO ====================
 
-        frame_form = ctk.CTkFrame(panel_central)
-        frame_form.grid(row=0, column=1, sticky="nsew", padx=(5, 0), pady=5)
+        frame_form = ctk.CTkFrame(panel_central, fg_color="#003d66")
+        frame_form.grid(row=0, column=1, sticky="nsew", padx=(PADDING_SMALL, 0), pady=PADDING_SMALL)
 
         frame_form.grid_columnconfigure(0, weight=0)
         frame_form.grid_columnconfigure(1, weight=1)
@@ -87,108 +104,167 @@ class VentanaGestionUsuarios:
         ctk.CTkLabel(
             frame_form,
             text="✏️ Datos del usuario",
-            font=ctk.CTkFont(size=14, weight="bold")
-        ).grid(row=0, column=0, columnspan=2, pady=(10, 0), padx=10, sticky="w")
+            font=ctk.CTkFont(size=FONT_SIZE_SUBTITLE, weight="bold"),
+            text_color="white"
+        ).grid(row=0, column=0, columnspan=2, pady=(PADDING_MEDIUM, 0), padx=PADDING_MEDIUM, sticky="w")
 
         ctk.CTkLabel(
             frame_form,
             text="Complete la información y guarde para crear o actualizar.",
-            font=ctk.CTkFont(size=11),
-            text_color="gray70",
-        ).grid(row=1, column=0, columnspan=2, pady=(0, 5), padx=10, sticky="w")
+            font=ctk.CTkFont(size=FONT_SIZE_SMALL),
+            text_color="#c4dafa",
+        ).grid(row=1, column=0, columnspan=2, pady=(0, PADDING_SMALL), padx=PADDING_MEDIUM, sticky="w")
 
         # Pequeña línea separadora en el formulario
-        sep_form = ctk.CTkFrame(frame_form, fg_color="gray25", height=1)
-        sep_form.grid(row=2, column=0, columnspan=2, sticky="ew", padx=10, pady=(5, 10))
+        sep_form = ctk.CTkFrame(frame_form, fg_color="#003d66", height=escalar(1))
+        sep_form.grid(row=2, column=0, columnspan=2, sticky="ew", padx=PADDING_MEDIUM, pady=(PADDING_SMALL, PADDING_MEDIUM))
 
         row = 3
 
         # Usuario
-        ctk.CTkLabel(frame_form, text="Usuario:").grid(
-            row=row, column=0, sticky="w", padx=10, pady=4
-        )
+        ctk.CTkLabel(
+            frame_form, 
+            text="Usuario:", 
+            text_color="white",
+            font=ctk.CTkFont(size=FONT_SIZE_SMALL)
+        ).grid(row=row, column=0, sticky="w", padx=PADDING_MEDIUM, pady=PADDING_TINY)
+        
         self.entry_username = ctk.CTkEntry(
             frame_form,
             placeholder_text="usuario123",
+            fg_color="#001a33",
+            text_color="white",
+            placeholder_text_color="#84b6f4",
+            height=INPUT_HEIGHT,
+            font=ctk.CTkFont(size=FONT_SIZE_SMALL)
         )
-        self.entry_username.grid(row=row, column=1, sticky="ew", padx=10, pady=4)
+        self.entry_username.grid(row=row, column=1, sticky="ew", padx=PADDING_MEDIUM, pady=PADDING_TINY)
         row += 1
 
         # Nombre
-        ctk.CTkLabel(frame_form, text="Nombre completo:").grid(
-            row=row, column=0, sticky="w", padx=10, pady=4
-        )
+        ctk.CTkLabel(
+            frame_form, 
+            text="Nombre completo:", 
+            text_color="white",
+            font=ctk.CTkFont(size=FONT_SIZE_SMALL)
+        ).grid(row=row, column=0, sticky="w", padx=PADDING_MEDIUM, pady=PADDING_TINY)
+        
         self.entry_nombre = ctk.CTkEntry(
             frame_form,
             placeholder_text="Nombre Apellido",
+            fg_color="#001a33",
+            text_color="white",
+            placeholder_text_color="#84b6f4",
+            height=INPUT_HEIGHT,
+            font=ctk.CTkFont(size=FONT_SIZE_SMALL)
         )
-        self.entry_nombre.grid(row=row, column=1, sticky="ew", padx=10, pady=4)
+        self.entry_nombre.grid(row=row, column=1, sticky="ew", padx=PADDING_MEDIUM, pady=PADDING_TINY)
         row += 1
 
         # Rol (admin / usuario)
-        ctk.CTkLabel(frame_form, text="Rol:").grid(
-            row=row, column=0, sticky="w", padx=10, pady=4
-        )
+        ctk.CTkLabel(
+            frame_form, 
+            text="Rol:", 
+            text_color="white",
+            font=ctk.CTkFont(size=FONT_SIZE_SMALL)
+        ).grid(row=row, column=0, sticky="w", padx=PADDING_MEDIUM, pady=PADDING_TINY)
+        
         self.combo_rol = ctk.CTkComboBox(
             frame_form,
             values=["admin", "usuario"],
             state="readonly",
+            fg_color="#001a33",
+            button_color="#003d66",
+            text_color="white",
+            dropdown_fg_color="#001a33",
+            dropdown_hover_color="#2d5f8d",
+            height=INPUT_HEIGHT,
+            font=ctk.CTkFont(size=FONT_SIZE_SMALL)
         )
         self.combo_rol.set("usuario")
-        self.combo_rol.grid(row=row, column=1, sticky="ew", padx=10, pady=4)
+        self.combo_rol.grid(row=row, column=1, sticky="ew", padx=PADDING_MEDIUM, pady=PADDING_TINY)
         row += 1
 
         # Activo
-        ctk.CTkLabel(frame_form, text="Estado:").grid(
-            row=row, column=0, sticky="w", padx=10, pady=4
-        )
+        ctk.CTkLabel(
+            frame_form, 
+            text="Estado:", 
+            text_color="white",
+            font=ctk.CTkFont(size=FONT_SIZE_SMALL)
+        ).grid(row=row, column=0, sticky="w", padx=PADDING_MEDIUM, pady=PADDING_TINY)
+        
         self.switch_activo = ctk.CTkSwitch(
             frame_form,
             text="Usuario activo",
             onvalue=1,
             offvalue=0,
+            fg_color="#001a33",
+            button_color="#003d66",
+            progress_color="#005187",
+            text_color="white",
+            font=ctk.CTkFont(size=FONT_SIZE_SMALL)
         )
         self.switch_activo.select()
-        self.switch_activo.grid(row=row, column=1, sticky="w", padx=10, pady=4)
+        self.switch_activo.grid(row=row, column=1, sticky="w", padx=PADDING_MEDIUM, pady=PADDING_TINY)
         row += 1
 
         # Contraseña
-        ctk.CTkLabel(frame_form, text="Contraseña:").grid(
-            row=row, column=0, sticky="w", padx=10, pady=4
-        )
+        ctk.CTkLabel(
+            frame_form, 
+            text="Contraseña:", 
+            text_color="white",
+            font=ctk.CTkFont(size=FONT_SIZE_SMALL)
+        ).grid(row=row, column=0, sticky="w", padx=PADDING_MEDIUM, pady=PADDING_TINY)
+        
         self.entry_password = ctk.CTkEntry(
             frame_form,
             placeholder_text="Mínimo 4 caracteres",
             show="*",
+            fg_color="#001a33",
+            text_color="white",
+            placeholder_text_color="#84b6f4",
+            height=INPUT_HEIGHT,
+            font=ctk.CTkFont(size=FONT_SIZE_SMALL)
         )
-        self.entry_password.grid(row=row, column=1, sticky="ew", padx=10, pady=4)
+        self.entry_password.grid(row=row, column=1, sticky="ew", padx=PADDING_MEDIUM, pady=PADDING_TINY)
         row += 1
 
         # Confirmar contraseña
-        ctk.CTkLabel(frame_form, text="Confirmar contraseña:").grid(
-            row=row, column=0, sticky="w", padx=10, pady=4
-        )
+        ctk.CTkLabel(
+            frame_form, 
+            text="Confirmar contraseña:", 
+            text_color="white",
+            font=ctk.CTkFont(size=FONT_SIZE_SMALL)
+        ).grid(row=row, column=0, sticky="w", padx=PADDING_MEDIUM, pady=PADDING_TINY)
+        
         self.entry_password_confirm = ctk.CTkEntry(
             frame_form,
             placeholder_text="Repita la contraseña",
             show="*",
+            fg_color="#001a33",
+            text_color="white",
+            placeholder_text_color="#84b6f4",
+            height=INPUT_HEIGHT,
+            font=ctk.CTkFont(size=FONT_SIZE_SMALL)
         )
-        self.entry_password_confirm.grid(row=row, column=1, sticky="ew", padx=10, pady=4)
+        self.entry_password_confirm.grid(row=row, column=1, sticky="ew", padx=PADDING_MEDIUM, pady=PADDING_TINY)
         row += 1
 
         # Nota sobre contraseña
         ctk.CTkLabel(
             frame_form,
-            text="• Al crear: contraseña es obligatoria.\n• Al editar: deje vacío para mantener la actual.\n• Los nombres de usuario no distinguen mayúsculas/minúsculas.",
-            font=ctk.CTkFont(size=10),
-            text_color="gray70",
+            text="ℹ️ Al crear: contraseña es obligatoria.\n"
+                 "   Al editar: deje vacío para mantener la actual.\n"
+                 "   Los nombres de usuario no distinguen mayúsculas/minúsculas.",
+            font=ctk.CTkFont(size=FONT_SIZE_SMALL - 1),
+            text_color="#c4dafa",
             justify="left",
-        ).grid(row=row, column=0, columnspan=2, padx=10, pady=(0, 10), sticky="w")
+        ).grid(row=row, column=0, columnspan=2, padx=PADDING_MEDIUM, pady=(0, PADDING_MEDIUM), sticky="w")
         row += 1
 
         # Botones
         frame_botones = ctk.CTkFrame(frame_form, fg_color="transparent")
-        frame_botones.grid(row=row, column=0, columnspan=2, pady=(5, 15), padx=10, sticky="ew")
+        frame_botones.grid(row=row, column=0, columnspan=2, pady=(PADDING_SMALL, PADDING_LARGE), padx=PADDING_MEDIUM, sticky="ew")
 
         frame_botones.grid_columnconfigure(0, weight=1, uniform="btn")
         frame_botones.grid_columnconfigure(1, weight=1, uniform="btn")
@@ -197,27 +273,35 @@ class VentanaGestionUsuarios:
         btn_nuevo = ctk.CTkButton(
             frame_botones,
             text="➕ Nuevo",
-            fg_color=COLOR_PRIMARY,
+            fg_color="#005187",
+            hover_color="#2d5f8d",
             command=self.nuevo_usuario,
+            height=BUTTON_HEIGHT_SMALL,
+            font=ctk.CTkFont(size=FONT_SIZE_BUTTON, weight="bold")
         )
-        btn_nuevo.grid(row=0, column=0, padx=4, sticky="ew")
+        btn_nuevo.grid(row=0, column=0, padx=PADDING_TINY, sticky="ew")
 
         btn_guardar = ctk.CTkButton(
             frame_botones,
             text="💾 Guardar",
-            fg_color=COLOR_SUCCESS,
+            fg_color="#2d5f8d",
+            hover_color="#005187",
             command=self.guardar_usuario,
+            height=BUTTON_HEIGHT_SMALL,
+            font=ctk.CTkFont(size=FONT_SIZE_BUTTON, weight="bold")
         )
-        btn_guardar.grid(row=0, column=1, padx=4, sticky="ew")
+        btn_guardar.grid(row=0, column=1, padx=PADDING_TINY, sticky="ew")
 
         btn_eliminar = ctk.CTkButton(
             frame_botones,
             text="🗑️ Eliminar",
-            fg_color=COLOR_WARNING,
-            hover_color="#e67e22",
+            fg_color="#003d66",
+            hover_color="#2d5f8d",
             command=self.eliminar_usuario,
+            height=BUTTON_HEIGHT_SMALL,
+            font=ctk.CTkFont(size=FONT_SIZE_BUTTON, weight="bold")
         )
-        btn_eliminar.grid(row=0, column=2, padx=4, sticky="ew")
+        btn_eliminar.grid(row=0, column=2, padx=PADDING_TINY, sticky="ew")
 
     # ==================== LÓGICA ====================
 
@@ -232,16 +316,16 @@ class VentanaGestionUsuarios:
             ctk.CTkLabel(
                 self.scroll_usuarios,
                 text="No hay usuarios registrados.",
-                font=ctk.CTkFont(size=12),
-                text_color="gray70",
-            ).pack(pady=10)
+                font=ctk.CTkFont(size=FONT_SIZE_NORMAL),
+                text_color="#c4dafa",
+            ).pack(pady=PADDING_MEDIUM)
             return
 
         for user in usuarios:
             user_id, username, nombre_completo, rol, activo, creado_en, ultimo_login = user
 
             # Primera línea: usuario (rol)
-            linea_superior = f"{username}  •  {rol.upper() if rol else 'USUARIO'}"
+            linea_superior = f"{username}    {rol.upper() if rol else 'USUARIO'}"
             # Segunda línea: nombre completo (si existe)
             linea_inferior = nombre_completo if nombre_completo else ""
 
@@ -251,7 +335,7 @@ class VentanaGestionUsuarios:
                 estado_icono = "✅"
             else:
                 estado = "INACTIVO"
-                estado_icono = "🚫"
+                estado_icono = "❌"
 
             texto = f"{estado_icono} {linea_superior}\n   {linea_inferior}   [{estado}]"
 
@@ -260,12 +344,13 @@ class VentanaGestionUsuarios:
                 text=texto,
                 anchor="w",
                 command=lambda u=user: self.seleccionar_usuario(u),
-                height=52,
-                fg_color="gray23",
-                hover_color="gray30",
+                height=escalar(52),
+                fg_color="#003d66",
+                hover_color="#2d5f8d",
                 text_color="white",
+                font=ctk.CTkFont(size=FONT_SIZE_SMALL)
             )
-            btn.pack(fill="x", padx=4, pady=3)
+            btn.pack(fill="x", padx=PADDING_TINY, pady=PADDING_TINY)
 
     def seleccionar_usuario(self, user_data):
         """Rellena el formulario con los datos del usuario seleccionado."""
@@ -411,7 +496,7 @@ class VentanaGestionUsuarios:
             if self.usuario_seleccionado_id is None:
                 # === CREAR NUEVO USUARIO ===
                 user_id, resultado = self.db.crear_usuario(username, password, nombre, rol, activo)
-                messagebox.showinfo("Éxito", f"✅ Usuario '{username}' creado correctamente con contraseña encriptada.")
+                messagebox.showinfo("✅ Éxito", f"Usuario '{username}' creado correctamente con contraseña encriptada.")
             else:
                 # === ACTUALIZAR USUARIO EXISTENTE ===
                 
@@ -427,28 +512,28 @@ class VentanaGestionUsuarios:
                 # Cambiar contraseña solo si se ingresó una nueva
                 if password:
                     self.db.cambiar_password_usuario(self.usuario_seleccionado_id, password)
-                    messagebox.showinfo("Éxito", f"✅ Usuario '{username}' actualizado correctamente.\n🔐 Nueva contraseña encriptada guardada.")
+                    messagebox.showinfo("✅ Éxito", f"Usuario '{username}' actualizado correctamente.\nNueva contraseña encriptada guardada.")
                 else:
-                    messagebox.showinfo("Éxito", f"✅ Usuario '{username}' actualizado correctamente.")
+                    messagebox.showinfo("✅ Éxito", f"Usuario '{username}' actualizado correctamente.")
 
             # Recargar lista y limpiar formulario
             self.cargar_usuarios()
             self.nuevo_usuario()
 
         except Exception as e:
-            messagebox.showerror("Error", f"No se pudo guardar el usuario:\n{str(e)}")
+            messagebox.showerror("❌ Error", f"No se pudo guardar el usuario:\n{str(e)}")
 
     def eliminar_usuario(self):
         """Elimina el usuario seleccionado con validaciones."""
         if self.usuario_seleccionado_id is None:
-            messagebox.showwarning("Advertencia", "Seleccione un usuario para eliminar.")
+            messagebox.showwarning("⚠️ Advertencia", "Seleccione un usuario para eliminar.")
             return
 
         # Obtener información del usuario
         try:
             usuario = self.db.obtener_usuario_por_id(self.usuario_seleccionado_id)
             if not usuario:
-                messagebox.showerror("Error", "No se pudo obtener la información del usuario.")
+                messagebox.showerror("❌ Error", "No se pudo obtener la información del usuario.")
                 return
             
             username = usuario[1]
@@ -461,7 +546,7 @@ class VentanaGestionUsuarios:
                 
                 if total_admins <= 1:
                     messagebox.showwarning(
-                        "No se puede eliminar",
+                        "⚠️ No se puede eliminar",
                         "No se puede eliminar el último administrador activo del sistema.\n\n"
                         "Debe haber al menos un administrador activo."
                     )
@@ -469,8 +554,8 @@ class VentanaGestionUsuarios:
             
             # Confirmar eliminación
             resp = messagebox.askyesno(
-                "Confirmar eliminación",
-                f"¿Seguro que desea eliminar el usuario '{username}'?\n\n"
+                "⚠️ Confirmar eliminación",
+                f"¿Está seguro que desea eliminar el usuario '{username}'?\n\n"
                 "Esta acción no se puede deshacer.",
             )
             
@@ -478,10 +563,10 @@ class VentanaGestionUsuarios:
                 return
 
             self.db.eliminar_usuario(self.usuario_seleccionado_id)
-            messagebox.showinfo("Éxito", f"✅ Usuario '{username}' eliminado correctamente.")
+            messagebox.showinfo("✅ Éxito", f"Usuario '{username}' eliminado correctamente.")
             
             self.cargar_usuarios()
             self.nuevo_usuario()
             
         except Exception as e:
-            messagebox.showerror("Error", f"No se pudo eliminar el usuario:\n{str(e)}")
+            messagebox.showerror("❌ Error", f"No se pudo eliminar el usuario:\n{str(e)}")

@@ -5,7 +5,14 @@ import shutil
 import tempfile
 from PIL import Image, ImageTk
 import fitz  # PyMuPDF
-from config import DOCUMENTOS_DIR, COLOR_SUCCESS, COLOR_PRIMARY
+from config import (
+    DOCUMENTOS_DIR, 
+    COLOR_SUCCESS, 
+    COLOR_PRIMARY,
+    es_pantalla_pequena,
+    # ✅ AGREGAR CONSTANTES DE FUENTE:
+    escalar
+)
 from utils import convertir_doc_a_docx, DocumentExtractor
 import time
 from .crear_documento import VentanaCrearDocumento
@@ -169,12 +176,13 @@ class VentanaCargarDocumentos:
         
         if es_integrado:
             # Crear como Frame integrado
-            self.ventana = ctk.CTkFrame(parent)
+            self.ventana = ctk.CTkFrame(parent, fg_color="#001a33")
             self.ventana.pack(fill="both", expand=True)
         else:
             # Crear como ventana separada (Toplevel)
             self.ventana = ctk.CTkToplevel(parent)
             self.ventana.title("📥 Cargar Documentos a la Base de Datos")
+            self.ventana.configure(fg_color="#001a33")
 
             # Asociar al padre, traer al frente y bloquearlo
             self.ventana.transient(parent)
@@ -196,104 +204,107 @@ class VentanaCargarDocumentos:
 
         # IMPORTANTE: centrar DESPUÉS de crear la interfaz
         if not self.es_integrado:
-            self.center_window()
-            # Recentrar una vez que todo terminó de dibujarse
-            self.ventana.after(50, self.center_window)
+            # ✅ Solo maximizar en pantallas grandes
+            if not es_pantalla_pequena():
+                self.ventana.after(100, self.maximizar_ventana)
+            else:
+                self.center_window()
+                self.ventana.after(50, self.center_window)
     
     def cargar_iconos(self):
-        """Carga los iconos PNG para los botones"""
+        """Carga los iconos PNG para los botones - ✅ USANDO CONSTANTES"""
         try:
-            # Ruta absoluta a la carpeta de iconos
-            ruta_base = os.path.dirname(os.path.abspath(__file__))  # declaraciones_app/ui
-            ruta_proyecto = os.path.dirname(ruta_base)  # declaraciones_app
+            from config import ICON_SIZE_BUTTON
+            
+            ruta_base = os.path.dirname(os.path.abspath(__file__))
+            ruta_proyecto = os.path.dirname(ruta_base)
             ruta_iconos = os.path.join(ruta_proyecto, "utils", "iconos")
             
             print(f"🔍 Buscando iconos en: {ruta_iconos}")
             
-            # Verificar que la carpeta existe
             if not os.path.exists(ruta_iconos):
                 print(f"⚠️ La carpeta de iconos no existe: {ruta_iconos}")
                 raise FileNotFoundError(f"No existe la carpeta: {ruta_iconos}")
             
-            # ===== ICONOS PARA BOTONES PRINCIPALES =====
+            # ===== ICONOS PARA BOTONES PRINCIPALES - ✅ USAR ICON_SIZE_CARD =====
             self.icono_seleccionar = ctk.CTkImage(
                 light_image=Image.open(os.path.join(ruta_iconos, "seleccionar.png")),
                 dark_image=Image.open(os.path.join(ruta_iconos, "seleccionar.png")),
-                size=(28, 28)
+                size=(escalar(28), escalar(28))
             )
             
             self.icono_limpiar = ctk.CTkImage(
                 light_image=Image.open(os.path.join(ruta_iconos, "limpiar.png")),
                 dark_image=Image.open(os.path.join(ruta_iconos, "limpiar.png")),
-                size=(28, 28)
+                size=(escalar(28), escalar(28))
             )
             
             self.icono_procesar = ctk.CTkImage(
                 light_image=Image.open(os.path.join(ruta_iconos, "procesar.png")),
                 dark_image=Image.open(os.path.join(ruta_iconos, "procesar.png")),
-                size=(28, 28)
+                size=(escalar(28), escalar(28))
             )
             
             self.icono_huerfanos = ctk.CTkImage(
                 light_image=Image.open(os.path.join(ruta_iconos, "huerfanos.png")),
                 dark_image=Image.open(os.path.join(ruta_iconos, "huerfanos.png")),
-                size=(28, 28)
+                size=(escalar(28), escalar(28))
             )
             
             self.icono_generar = ctk.CTkImage(
                 light_image=Image.open(os.path.join(ruta_iconos, "generar.png")),
                 dark_image=Image.open(os.path.join(ruta_iconos, "generar.png")),
-                size=(28, 28)
+                size=(escalar(28), escalar(28))
             )
             
             self.icono_regenerar = ctk.CTkImage(
                 light_image=Image.open(os.path.join(ruta_iconos, "regenerar.png")),
                 dark_image=Image.open(os.path.join(ruta_iconos, "regenerar.png")),
-                size=(28, 28)
+                size=(escalar(28), escalar(28))
             )
             
             self.icono_sincronizar = ctk.CTkImage(
                 light_image=Image.open(os.path.join(ruta_iconos, "sincronizar.png")),
                 dark_image=Image.open(os.path.join(ruta_iconos, "sincronizar.png")),
-                size=(28, 28)
+                size=(escalar(28), escalar(28))
             )
             
             self.icono_corregir = ctk.CTkImage(
                 light_image=Image.open(os.path.join(ruta_iconos, "corregir.png")),
                 dark_image=Image.open(os.path.join(ruta_iconos, "corregir.png")),
-                size=(28, 28)
+                size=(escalar(28), escalar(28))
             )
             
-            # ===== ICONOS PARA BOTONES DE TABLA =====
+            # ===== ICONOS PARA BOTONES DE TABLA - ✅ USAR ICON_SIZE_BUTTON =====
             self.icono_buscar = ctk.CTkImage(
                 light_image=Image.open(os.path.join(ruta_iconos, "buscar.png")),
                 dark_image=Image.open(os.path.join(ruta_iconos, "buscar.png")),
-                size=(20, 20)
+                size=ICON_SIZE_BUTTON
             )
             
             self.icono_eliminar = ctk.CTkImage(
                 light_image=Image.open(os.path.join(ruta_iconos, "eliminar.png")),
                 dark_image=Image.open(os.path.join(ruta_iconos, "eliminar.png")),
-                size=(20, 20)
+                size=ICON_SIZE_BUTTON
             )
             
             self.icono_ver = ctk.CTkImage(
                 light_image=Image.open(os.path.join(ruta_iconos, "ver.png")),
                 dark_image=Image.open(os.path.join(ruta_iconos, "ver.png")),
-                size=(20, 20)
+                size=ICON_SIZE_BUTTON
             )
             
             # ===== ICONOS PARA VIÑETAS DE ESTADO =====
             self.icono_nuevo = ctk.CTkImage(
                 light_image=Image.open(os.path.join(ruta_iconos, "nuevo.png")),
                 dark_image=Image.open(os.path.join(ruta_iconos, "nuevo.png")),
-                size=(16, 16)
+                size=(escalar(16), escalar(16))
             )
             
             self.icono_cargado = ctk.CTkImage(
                 light_image=Image.open(os.path.join(ruta_iconos, "cargado.png")),
                 dark_image=Image.open(os.path.join(ruta_iconos, "cargado.png")),
-                size=(16, 16)
+                size=(escalar(16), escalar(16))
             )
             
             print("✅ Iconos cargados correctamente en cargar_documento")
@@ -303,20 +314,10 @@ class VentanaCargarDocumentos:
             import traceback
             traceback.print_exc()
             
-            # Si falla, los iconos serán None
-            self.icono_seleccionar = None
-            self.icono_limpiar = None
-            self.icono_procesar = None
-            self.icono_huerfanos = None
-            self.icono_generar = None
-            self.icono_regenerar = None
-            self.icono_sincronizar = None
-            self.icono_corregir = None
-            self.icono_buscar = None
-            self.icono_eliminar = None
-            self.icono_ver = None
-            self.icono_nuevo = None
-            self.icono_cargado = None
+            for attr in ['icono_seleccionar', 'icono_limpiar', 'icono_procesar', 'icono_huerfanos',
+                        'icono_generar', 'icono_regenerar', 'icono_sincronizar', 'icono_corregir',
+                        'icono_buscar', 'icono_eliminar', 'icono_ver', 'icono_nuevo', 'icono_cargado']:
+                setattr(self, attr, None)
     
     def verificar_e_inicializar_sugerencias(self):
         """Verifica si la tabla de sugerencias está vacía y la alimenta si es necesario"""
@@ -364,78 +365,83 @@ class VentanaCargarDocumentos:
             self.ventana.state('zoomed')
     
     def center_window(self):
-        """Centra la ventana en la pantalla"""
+        """Centra la ventana en la pantalla - ✅ USANDO ESCALAR"""
+        from config import escalar
+        
         if not self.es_integrado:
-            # Tamaño inicial razonable
-            self.ventana.geometry("1400x900")
+            width = escalar(1400)
+            height = escalar(900)
+            self.ventana.geometry(f"{width}x{height}")
             self.ventana.update_idletasks()
-
-            width = self.ventana.winfo_width()
-            height = self.ventana.winfo_height()
             x = (self.ventana.winfo_screenwidth() // 2) - (width // 2)
             y = (self.ventana.winfo_screenheight() // 2) - (height // 2)
-
             self.ventana.geometry(f"{width}x{height}+{x}+{y}")
     
     def center_toplevel(self, win, w=400, h=200):
-        """Centra una ventana CTkToplevel en la pantalla con tamaño ajustado."""
-        # Actualizar la ventana para obtener dimensiones reales
+        """Centra una ventana CTkToplevel - ✅ USANDO ESCALAR"""
+        from config import escalar
+        
         win.update_idletasks()
-
-        # Obtener dimensiones de la pantalla
+        
+        # ✅ Aplicar escala a dimensiones
+        w_scaled = escalar(w)
+        h_scaled = escalar(h)
+        
         screen_width = win.winfo_screenwidth()
         screen_height = win.winfo_screenheight()
-
-        # Calcular posición centrada
-        x = (screen_width // 2) - (w // 2)
-        y = (screen_height // 2) - (h // 2)
-
-        # Aplicar geometría
-        win.geometry(f"{w}x{h}+{x}+{y}")
+        
+        x = (screen_width // 2) - (w_scaled // 2)
+        y = (screen_height // 2) - (h_scaled // 2)
+        
+        win.geometry(f"{w_scaled}x{h_scaled}+{x}+{y}")
     
     def crear_interfaz(self):
-        """Crea la interfaz de carga de documentos"""
+        """Crea la interfaz de carga de documentos - ✅ ADAPTADA CON COLORES OSCUROS"""
+        from config import (
+            FONT_SIZE_TITLE, FONT_SIZE_SUBTITLE, FONT_SIZE_NORMAL, FONT_SIZE_SMALL,
+            FONT_SIZE_BUTTON, PADDING_LARGE, PADDING_MEDIUM, PADDING_TINY,
+            BUTTON_HEIGHT_SMALL, INPUT_HEIGHT, VISOR_WIDTH, VISOR_HEIGHT, escalar
+        )
         
-        # Frame principal con dos columnas
-        container = ctk.CTkFrame(self.ventana)
-        container.pack(fill="both", expand=True, padx=10, pady=10)
+        # Frame principal con dos columnas - ✅ COLOR OSCURO
+        container = ctk.CTkFrame(self.ventana, fg_color="#001a33")
+        container.pack(fill="both", expand=True, padx=PADDING_MEDIUM, pady=PADDING_MEDIUM)
         
         container.grid_columnconfigure(0, weight=1)
         container.grid_columnconfigure(1, weight=1)
         container.grid_rowconfigure(0, weight=1)
         
-        # ===== PANEL IZQUIERDO: Lista y controles =====
-        panel_izquierdo = ctk.CTkFrame(container)
-        panel_izquierdo.grid(row=0, column=0, sticky="nsew", padx=(0, 5))
+        # ===== PANEL IZQUIERDO - ✅ COLOR OSCURO =====
+        panel_izquierdo = ctk.CTkFrame(container, fg_color="#003d66")
+        panel_izquierdo.grid(row=0, column=0, sticky="nsew", padx=(0, PADDING_TINY))
         
-        # Título
+        # ✅ Título con FONT_SIZE_TITLE
         ctk.CTkLabel(
             panel_izquierdo,
             text="📥 Cargar Documentos",
-            font=ctk.CTkFont(size=24, weight="bold")
-        ).pack(pady=20)
+            font=ctk.CTkFont(size=FONT_SIZE_TITLE, weight="bold")
+        ).pack(pady=PADDING_LARGE)
         
-        # ✅ Frame de botones con GRID (2 columnas x 3 filas)
-        frame_botones = ctk.CTkFrame(panel_izquierdo)
-        frame_botones.pack(pady=10, padx=20, fill="x")
+        # Frame de botones con GRID - ✅ COLOR OSCURO
+        frame_botones = ctk.CTkFrame(panel_izquierdo, fg_color="#003d66")
+        frame_botones.pack(pady=PADDING_MEDIUM, padx=PADDING_LARGE, fill="x")
         
-        # Configurar grid: 2 columnas con mismo peso
         frame_botones.grid_columnconfigure(0, weight=1)
         frame_botones.grid_columnconfigure(1, weight=1)
         
-        # Fila 0
+        # ✅ Botones con colores oscuros
         btn_seleccionar = ctk.CTkButton(
             frame_botones,
             text="Seleccionar\nDocumentos",
             image=self.icono_seleccionar,
             compound="left",
             command=self.seleccionar_documentos,
-            height=70,
-            font=ctk.CTkFont(size=11, weight="bold"),
-            fg_color="#1E88E5",  # ✅ Azul fuerte
-            hover_color="#1565C0"  # ✅ Azul más oscuro
+            height=escalar(70),
+            font=ctk.CTkFont(size=FONT_SIZE_SMALL, weight="bold"),
+            fg_color="#005187",
+            hover_color="#2d5f8d"
         )
-        btn_seleccionar.grid(row=0, column=0, padx=5, pady=5, sticky="ew")
+        btn_seleccionar.grid(row=0, column=0, padx=PADDING_TINY, pady=PADDING_TINY, sticky="ew")
 
         btn_limpiar_listado = ctk.CTkButton(
             frame_botones,
@@ -443,26 +449,25 @@ class VentanaCargarDocumentos:
             image=self.icono_limpiar,
             compound="left",
             command=self.limpiar_listado_completo,
-            height=70,
-            font=ctk.CTkFont(size=11, weight="bold"),
-            fg_color="#1E88E5",  # ✅ Azul fuerte
-            hover_color="#1565C0"
+            height=escalar(70),
+            font=ctk.CTkFont(size=FONT_SIZE_SMALL, weight="bold"),
+            fg_color="#005187",
+            hover_color="#2d5f8d"
         )
-        btn_limpiar_listado.grid(row=0, column=1, padx=5, pady=5, sticky="ew")
+        btn_limpiar_listado.grid(row=0, column=1, padx=PADDING_TINY, pady=PADDING_TINY, sticky="ew")
 
-        # Fila 1
         btn_procesar = ctk.CTkButton(
             frame_botones,
             text="Procesar y\nCargar Todos",
             image=self.icono_procesar,
             compound="left",
             command=self.procesar_todos_documentos,
-            height=70,
-            font=ctk.CTkFont(size=11, weight="bold"),
-            fg_color="#1E88E5",  # ✅ Azul fuerte
-            hover_color="#1565C0"
+            height=escalar(70),
+            font=ctk.CTkFont(size=FONT_SIZE_SMALL, weight="bold"),
+            fg_color="#005187",
+            hover_color="#2d5f8d"
         )
-        btn_procesar.grid(row=1, column=0, padx=5, pady=5, sticky="ew")
+        btn_procesar.grid(row=1, column=0, padx=PADDING_TINY, pady=PADDING_TINY, sticky="ew")
 
         btn_sincronizar = ctk.CTkButton(
             frame_botones,
@@ -470,26 +475,25 @@ class VentanaCargarDocumentos:
             image=self.icono_sincronizar,
             compound="left",
             command=self.sincronizar_bd_con_archivos,
-            height=70,
-            font=ctk.CTkFont(size=11, weight="bold"),
-            fg_color="#1E88E5",  # ✅ Azul fuerte
-            hover_color="#1565C0"
+            height=escalar(70),
+            font=ctk.CTkFont(size=FONT_SIZE_SMALL, weight="bold"),
+            fg_color="#005187",
+            hover_color="#2d5f8d"
         )
-        btn_sincronizar.grid(row=1, column=1, padx=5, pady=5, sticky="ew")
+        btn_sincronizar.grid(row=1, column=1, padx=PADDING_TINY, pady=PADDING_TINY, sticky="ew")
 
-        # Fila 2
         btn_regenerar_docs = ctk.CTkButton(
             frame_botones,
             text="Regenerar todos\ndesde BD",
             image=self.icono_regenerar,
             compound="left",
             command=self.regenerar_todos_los_documentos_desde_bd,
-            height=70,
-            font=ctk.CTkFont(size=11, weight="bold"),
-            fg_color="#1E88E5",  # ✅ Azul fuerte
-            hover_color="#1565C0"
+            height=escalar(70),
+            font=ctk.CTkFont(size=FONT_SIZE_SMALL, weight="bold"),
+            fg_color="#005187",
+            hover_color="#2d5f8d"
         )
-        btn_regenerar_docs.grid(row=2, column=0, padx=5, pady=5, sticky="ew")
+        btn_regenerar_docs.grid(row=2, column=0, padx=PADDING_TINY, pady=PADDING_TINY, sticky="ew")
 
         btn_corregir_sync = ctk.CTkButton(
             frame_botones,
@@ -497,67 +501,66 @@ class VentanaCargarDocumentos:
             image=self.icono_corregir,
             compound="left",
             command=self.corregir_problemas_sincronizacion,
-            height=70,
-            font=ctk.CTkFont(size=11, weight="bold"),
-            fg_color="#1E88E5",  # ✅ Azul fuerte
-            hover_color="#1565C0"
+            height=escalar(70),
+            font=ctk.CTkFont(size=FONT_SIZE_SMALL, weight="bold"),
+            fg_color="#005187",
+            hover_color="#2d5f8d"
         )
-        btn_corregir_sync.grid(row=2, column=1, padx=5, pady=5, sticky="ew")
+        btn_corregir_sync.grid(row=2, column=1, padx=PADDING_TINY, pady=PADDING_TINY, sticky="ew")
                 
-        # Pestañas para documentos nuevos y existentes
-        self.tabview = ctk.CTkTabview(panel_izquierdo)
-        self.tabview.pack(pady=10, padx=20, fill="both", expand=True)
+        # Pestañas - ✅ COLOR OSCURO
+        self.tabview = ctk.CTkTabview(panel_izquierdo, fg_color="#003d66", segmented_button_fg_color="#005187", segmented_button_selected_color="#2d5f8d")
+        self.tabview.pack(pady=PADDING_MEDIUM, padx=PADDING_LARGE, fill="both", expand=True)
 
         # Pestaña: Documentos a cargar
         self.tabview.add("Nuevos")
         tab_nuevos = self.tabview.tab("Nuevos")
 
-        # Agregar icono a la pestaña de nuevos
         try:
             tab_button_nuevos = self.tabview._segmented_button._buttons_dict["Nuevos"]
             if self.icono_nuevo:
-                tab_button_nuevos.configure(
-                    image=self.icono_nuevo,
-                    compound="left"
-                )
+                tab_button_nuevos.configure(image=self.icono_nuevo, compound="left")
         except Exception as e:
             print(f"No se pudo agregar icono a pestaña Nuevos: {e}")
 
         ctk.CTkLabel(
             tab_nuevos,
             text="Documentos seleccionados:",
-            font=ctk.CTkFont(size=16, weight="bold")
-        ).pack(pady=(10, 5), padx=10, anchor="w")
+            font=ctk.CTkFont(size=FONT_SIZE_SUBTITLE, weight="bold")
+        ).pack(pady=(PADDING_MEDIUM, PADDING_TINY), padx=PADDING_MEDIUM, anchor="w")
 
-        # Frame scrollable para la lista de nuevos
-        self.lista_frame = ctk.CTkScrollableFrame(tab_nuevos, height=400)
-        self.lista_frame.pack(pady=5, padx=10, fill="both", expand=True)
+        self.lista_frame = ctk.CTkScrollableFrame(tab_nuevos, height=escalar(400), fg_color="#001a33")
+        self.lista_frame.pack(pady=PADDING_TINY, padx=PADDING_MEDIUM, fill="both", expand=True)
 
         self.lbl_lista_vacia = ctk.CTkLabel(
             self.lista_frame,
             text="No hay documentos seleccionados",
             text_color="gray",
-            font=ctk.CTkFont(size=14)
+            font=ctk.CTkFont(size=FONT_SIZE_NORMAL)
         )
-        self.lbl_lista_vacia.pack(pady=50)
+        self.lbl_lista_vacia.pack(pady=escalar(50))
 
-        # Controles de navegación para nuevos
-        frame_navegacion = ctk.CTkFrame(tab_nuevos)
-        frame_navegacion.pack(pady=10, padx=10, fill="x")
+        # Controles de navegación - ✅ COLOR OSCURO
+        frame_navegacion = ctk.CTkFrame(tab_nuevos, fg_color="#003d66")
+        frame_navegacion.pack(pady=PADDING_MEDIUM, padx=PADDING_MEDIUM, fill="x")
 
         self.btn_anterior = ctk.CTkButton(
             frame_navegacion,
             text="◀ Anterior",
             command=self.documento_anterior,
-            width=150,
+            width=escalar(150),
+            height=BUTTON_HEIGHT_SMALL,
+            font=ctk.CTkFont(size=FONT_SIZE_BUTTON),
+            fg_color="#005187",
+            hover_color="#2d5f8d",
             state="disabled"
         )
-        self.btn_anterior.pack(side="left", padx=5)
+        self.btn_anterior.pack(side="left", padx=PADDING_TINY)
 
         self.lbl_contador = ctk.CTkLabel(
             frame_navegacion,
             text="0 / 0",
-            font=ctk.CTkFont(size=14)
+            font=ctk.CTkFont(size=FONT_SIZE_NORMAL)
         )
         self.lbl_contador.pack(side="left", expand=True)
 
@@ -565,36 +568,39 @@ class VentanaCargarDocumentos:
             frame_navegacion,
             text="Siguiente ▶",
             command=self.documento_siguiente,
-            width=150,
+            width=escalar(150),
+            height=BUTTON_HEIGHT_SMALL,
+            font=ctk.CTkFont(size=FONT_SIZE_BUTTON),
+            fg_color="#005187",
+            hover_color="#2d5f8d",
             state="disabled"
         )
-        self.btn_siguiente.pack(side="right", padx=5)
+        self.btn_siguiente.pack(side="right", padx=PADDING_TINY)
 
         # Pestaña: Documentos existentes
         self.tabview.add("Cargados")
         tab_existentes = self.tabview.tab("Cargados")
 
-        # Agregar icono a la pestaña de cargados
         try:
             tab_button_cargados = self.tabview._segmented_button._buttons_dict["Cargados"]
             if self.icono_cargado:
-                tab_button_cargados.configure(
-                    image=self.icono_cargado,
-                    compound="left"
-                )
+                tab_button_cargados.configure(image=self.icono_cargado, compound="left")
         except Exception as e:
             print(f"No se pudo agregar icono a pestaña Cargados: {e}")
         
-        # Barra de búsqueda
-        frame_busqueda = ctk.CTkFrame(tab_existentes)
-        frame_busqueda.pack(pady=10, padx=10, fill="x")
+        # Barra de búsqueda - ✅ COLOR OSCURO
+        frame_busqueda = ctk.CTkFrame(tab_existentes, fg_color="#003d66")
+        frame_busqueda.pack(pady=PADDING_MEDIUM, padx=PADDING_MEDIUM, fill="x")
 
         self.entry_buscar = ctk.CTkEntry(
             frame_busqueda,
             placeholder_text="Buscar por nombre o DPI...",
-            font=ctk.CTkFont(size=12)
+            font=ctk.CTkFont(size=FONT_SIZE_SMALL),
+            height=INPUT_HEIGHT,
+            fg_color="#001a33",
+            border_color="#005187"
         )
-        self.entry_buscar.pack(side="left", padx=5, expand=True, fill="x")
+        self.entry_buscar.pack(side="left", padx=PADDING_TINY, expand=True, fill="x")
         self.entry_buscar.bind("<KeyRelease>", lambda e: self.filtrar_documentos_existentes())
 
         btn_refrescar = ctk.CTkButton(
@@ -602,70 +608,81 @@ class VentanaCargarDocumentos:
             text="",
             image=self.icono_buscar if hasattr(self, 'icono_buscar') and self.icono_buscar else None,
             command=self.cargar_documentos_existentes_optimizado,
-            width=40,
-            fg_color="#1E88E5",
-            hover_color="#1565C0"
+            width=escalar(40),
+            height=INPUT_HEIGHT,
+            fg_color="#005187",
+            hover_color="#2d5f8d"
         )
-        btn_refrescar.pack(side="left", padx=5)
+        btn_refrescar.pack(side="left", padx=PADDING_TINY)
         
-        # ✅ Selector de año
+        # Selector de año
         ctk.CTkLabel(
             frame_busqueda,
             text="📅 Año:",
-            font=ctk.CTkFont(size=14)
-        ).pack(side="left", padx=(10, 5))
+            font=ctk.CTkFont(size=FONT_SIZE_NORMAL)
+        ).pack(side="left", padx=(PADDING_MEDIUM, PADDING_TINY))
 
         self.combo_año_filtro = ctk.CTkComboBox(
             frame_busqueda,
             values=["Todos"],
             command=lambda año: self.filtrar_documentos_existentes(),
-            width=100,
+            width=escalar(100),
+            height=INPUT_HEIGHT,
+            font=ctk.CTkFont(size=FONT_SIZE_SMALL),
+            fg_color="#001a33",
+            border_color="#005187",
+            button_color="#005187",
+            button_hover_color="#2d5f8d",
             state="readonly"
         )
-        self.combo_año_filtro.pack(side="left", padx=5)
+        self.combo_año_filtro.pack(side="left", padx=PADDING_TINY)
         self.combo_año_filtro.set("Todos")
         
-        # Frame scrollable para documentos existentes
-        self.lista_existentes_frame = ctk.CTkScrollableFrame(tab_existentes, height=500)
-        self.lista_existentes_frame.pack(pady=5, padx=10, fill="both", expand=True)
+        # Frame scrollable para documentos existentes - ✅ COLOR OSCURO
+        self.lista_existentes_frame = ctk.CTkScrollableFrame(tab_existentes, height=escalar(500), fg_color="#001a33")
+        self.lista_existentes_frame.pack(pady=PADDING_TINY, padx=PADDING_MEDIUM, fill="both", expand=True)
         
         self.lbl_sin_existentes = ctk.CTkLabel(
             self.lista_existentes_frame,
             text="No hay documentos cargados",
             text_color="gray",
-            font=ctk.CTkFont(size=14)
+            font=ctk.CTkFont(size=FONT_SIZE_NORMAL)
         )
-        self.lbl_sin_existentes.pack(pady=50)
+        self.lbl_sin_existentes.pack(pady=escalar(50))
         
-        # ===== PANEL DERECHO: Visor de documento =====
-        panel_derecho = ctk.CTkFrame(container)
-        panel_derecho.grid(row=0, column=1, sticky="nsew", padx=(5, 0))
+        # ===== PANEL DERECHO: Visor - ✅ COLOR OSCURO =====
+        panel_derecho = ctk.CTkFrame(container, fg_color="#003d66")
+        panel_derecho.grid(row=0, column=1, sticky="nsew", padx=(PADDING_TINY, 0))
         
-        # Título del visor
         ctk.CTkLabel(
             panel_derecho,
             text="📄 Vista Previa del Documento",
-            font=ctk.CTkFont(size=20, weight="bold")
-        ).pack(pady=10)
+            font=ctk.CTkFont(size=FONT_SIZE_SUBTITLE, weight="bold")
+        ).pack(pady=PADDING_MEDIUM)
         
-        # Frame scrollable para el visor
-        self.visor_scroll = ctk.CTkScrollableFrame(panel_derecho, width=650, height=750)
-        self.visor_scroll.pack(pady=10, padx=10, fill="both", expand=True)
+        # ✅ Usar VISOR_WIDTH y VISOR_HEIGHT con color oscuro
+        self.visor_scroll = ctk.CTkScrollableFrame(
+            panel_derecho, 
+            width=VISOR_WIDTH, 
+            height=VISOR_HEIGHT,
+            fg_color="#001a33"
+        )
+        self.visor_scroll.pack(pady=PADDING_MEDIUM, padx=PADDING_MEDIUM, fill="both", expand=True)
         
         self.lbl_visor_estado = ctk.CTkLabel(
             self.visor_scroll,
             text="Seleccione un documento para visualizar",
             text_color="gray",
-            font=ctk.CTkFont(size=14)
+            font=ctk.CTkFont(size=FONT_SIZE_NORMAL)
         )
-        self.lbl_visor_estado.pack(pady=200)
+        self.lbl_visor_estado.pack(pady=escalar(200))
 
     def cargar_documentos_existentes_optimizado(self):
         """
         Versión optimizada de cargar_documentos_existentes.
         Carga inicial rápida, luego completa los años en background.
         """
-               
+            
         # Limpiar lista visual
         for widget in self.lista_existentes_frame.winfo_children():
             widget.destroy()
@@ -832,11 +849,10 @@ class VentanaCargarDocumentos:
         
         # Refrescar vista con años
         self.mostrar_documentos_existentes(self.documentos_existentes)
-            
+    
     def mostrar_documentos_existentes(self, documentos):
-        """Muestra la lista de documentos existentes (solo filas, sin limpiar el header)."""
-        # Limpiar SOLO los items existentes debajo del header,
-        # manteniendo el primer frame (header_frame) si existe.
+        """Muestra la lista de documentos existentes - ✅ CON COLORES OSCUROS"""
+        # Limpiar SOLO los items existentes debajo del header
         children = self.lista_existentes_frame.winfo_children()
         start_idx = 1 if children else 0
         for widget in children[start_idx:]:
@@ -853,7 +869,6 @@ class VentanaCargarDocumentos:
             return
 
         for doc in documentos:
-            # doc: (id, nombre_archivo, ruta_archivo, fecha_carga, nombre_persona, dpi, persona_id, mtime, año)
             doc_id = doc[0]
             nombre_archivo = doc[1]
             ruta_archivo = doc[2]
@@ -863,14 +878,14 @@ class VentanaCargarDocumentos:
             mtime = doc[7] if len(doc) > 7 else 0
             año_doc = doc[8] if len(doc) > 8 else None 
 
-            # Convertir mtime a texto amigable
             if mtime:
                 dt = datetime.datetime.fromtimestamp(mtime)
                 fecha_mod_str = dt.strftime("%Y-%m-%d %H:%M")
             else:
                 fecha_mod_str = "Desconocida"
 
-            frame_doc = ctk.CTkFrame(self.lista_existentes_frame)
+            # ✅ Frame con color oscuro
+            frame_doc = ctk.CTkFrame(self.lista_existentes_frame, fg_color="#003d66")
             frame_doc.pack(pady=5, padx=10, fill="x")
 
             info_text = (
@@ -890,27 +905,26 @@ class VentanaCargarDocumentos:
                 font=ctk.CTkFont(size=11)
             ).pack(side="left", padx=10, pady=10, expand=True, fill="x")
 
-            # ✅ Botón Ver con icono
+            # ✅ Botones con colores oscuros
             btn_ver = ctk.CTkButton(
                 frame_doc,
                 text="",
                 image=self.icono_ver,
                 command=lambda r=ruta_archivo: self.ver_documento_existente(r),
                 width=40,
-                fg_color="#1E88E5",  # ✅ Azul fuerte             
-                hover_color="#1565C0"
+                fg_color="#005187",
+                hover_color="#2d5f8d"
             )
             btn_ver.pack(side="right", padx=5)
 
-            # ✅ Botón Eliminar con icono
             btn_eliminar = ctk.CTkButton(
                 frame_doc,
                 text="",
                 image=self.icono_eliminar,
                 command=lambda i=doc_id, r=ruta_archivo, n=nombre_archivo: self.eliminar_documento_existente(i, r, n),
                 width=40,
-                fg_color="#1E88E5",  # ✅ Azul fuerte             
-                hover_color="#1565C0"
+                fg_color="#005187",
+                hover_color="#2d5f8d"
             )
             btn_eliminar.pack(side="right", padx=5)
         
@@ -1031,7 +1045,7 @@ class VentanaCargarDocumentos:
                 text_color="gray",
                 font=ctk.CTkFont(size=14)
             )
-            self.lbl_lista_vacia.pack(pady=50)
+            self.lbl_lista_vacia.pack(pady=escalar(50))
             return
         
         # Mostrar documentos
@@ -1145,7 +1159,7 @@ class VentanaCargarDocumentos:
             text_color="orange",
             font=ctk.CTkFont(size=14)
         )
-        self.lbl_visor_estado.pack(pady=20)
+        self.lbl_visor_estado.pack(pady=escalar(20))
         self.ventana.update()
         
         try:
@@ -1215,16 +1229,18 @@ class VentanaCargarDocumentos:
             for page_num in range(num_pages):
                 page = pdf_document[page_num]
                 
-                # Renderizar página a imagen
-                zoom = 1.5
+                # ✅ Ajustar zoom según tamaño de pantalla
+                from config import es_pantalla_pequena
+                zoom = 1.2 if es_pantalla_pequena() else 1.5
                 mat = fitz.Matrix(zoom, zoom)
                 pix = page.get_pixmap(matrix=mat)
                 
                 # Convertir a PIL Image
                 img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
                 
-                # Redimensionar para ajustar al visor
-                max_width = 650
+                # ✅ Usar ancho escalado del visor
+                from config import VISOR_WIDTH
+                max_width = int(VISOR_WIDTH * 0.9)
                 ratio = max_width / img.width
                 new_height = int(img.height * ratio)
                 img = img.resize((max_width, new_height), Image.Resampling.LANCZOS)
@@ -1367,7 +1383,8 @@ class VentanaCargarDocumentos:
             anchor="w"
         ).pack(pady=(5, 5), fill="x")
 
-        log_text = ctk.CTkTextbox(main_frame, width=650, height=220)
+        from config import TEXTBOX_WIDTH, TEXTBOX_HEIGHT
+        log_text = ctk.CTkTextbox(main_frame, width=TEXTBOX_WIDTH, height=TEXTBOX_HEIGHT)
         log_text.pack(pady=5)
 
         # Configurar tags para colores
@@ -1398,7 +1415,7 @@ class VentanaCargarDocumentos:
         btn_cerrar.pack(pady=10)
 
         # Centrar ventana DESPUÉS de crear contenido
-        self.center_toplevel(ventana_progreso, 750, 820)
+        self.center_toplevel(ventana_progreso, 750, 620)
         
         # Forzar actualización de la ventana
         ventana_progreso.update_idletasks()
@@ -1932,7 +1949,8 @@ class VentanaCargarDocumentos:
                 anchor="w"
             ).pack(pady=(10, 5), fill="x")
             
-            log_text = ctk.CTkTextbox(main_frame, width=550, height=280)
+            from config import TEXTBOX_WIDTH, TEXTBOX_HEIGHT
+            log_text = ctk.CTkTextbox(main_frame, width=TEXTBOX_WIDTH, height=TEXTBOX_HEIGHT)
             log_text.pack(pady=5)
             
             # Botón cancelar
@@ -2032,6 +2050,15 @@ class VentanaCargarDocumentos:
                         nombre_archivo_nuevo = f"{dpi_limpio}_acta_{nombre_limpio}.docx"
                     
                     ruta_archivo_nuevo = os.path.join(DOCUMENTOS_DIR, nombre_archivo_nuevo)
+                    
+                    # 🔥 ELIMINAR ARCHIVO ANTIGUO ANTES DE ACTUALIZAR
+                    ruta_archivo_viejo = doc[2]  # ruta del registro en BD
+                    if os.path.exists(ruta_archivo_viejo) and ruta_archivo_viejo != ruta_archivo_nuevo:
+                        try:
+                            os.remove(ruta_archivo_viejo)
+                            log_text.insert("end", f"   🗑️ Eliminado archivo antiguo: {os.path.basename(ruta_archivo_viejo)}\n")
+                        except Exception as e:
+                            log_text.insert("end", f"   ⚠️ No se pudo eliminar antiguo: {e}\n")
                     
                     # Verificar si el archivo con el nuevo nombre existe
                     if os.path.exists(ruta_archivo_nuevo):
@@ -2198,7 +2225,8 @@ class VentanaCargarDocumentos:
         )
         progreso_label.pack(pady=5)
 
-        log_text = ctk.CTkTextbox(main_frame, width=650, height=350)
+        from config import TEXTBOX_WIDTH, TEXTBOX_HEIGHT
+        log_text = ctk.CTkTextbox(main_frame, width=TEXTBOX_WIDTH, height=TEXTBOX_HEIGHT)
         log_text.pack(pady=10)
         
         log_text.tag_config("success", foreground="#2ecc71")
@@ -2674,7 +2702,8 @@ class VentanaCargarDocumentos:
             anchor="w"
         ).pack(pady=(10, 5), fill="x")
         
-        log_text = ctk.CTkTextbox(main_frame, width=550, height=280)
+        from config import TEXTBOX_WIDTH, TEXTBOX_HEIGHT
+        log_text = ctk.CTkTextbox(main_frame, width=TEXTBOX_WIDTH, height=TEXTBOX_HEIGHT)
         log_text.pack(pady=5)
         
         # Botón cancelar
@@ -3241,7 +3270,8 @@ class VentanaCargarDocumentos:
         progreso_label.pack(pady=10)
         
         # Log
-        log_text = ctk.CTkTextbox(main_frame, width=650, height=300)
+        from config import TEXTBOX_WIDTH, TEXTBOX_HEIGHT
+        log_text = ctk.CTkTextbox(main_frame, width=TEXTBOX_WIDTH, height=TEXTBOX_HEIGHT)
         log_text.pack(pady=10)
         
         log_text.tag_config("success", foreground="#2ecc71")
@@ -3269,7 +3299,7 @@ class VentanaCargarDocumentos:
         )
         btn_cerrar.pack(pady=10)
         
-        self.center_toplevel(ventana_progreso, 750, 680)
+        self.center_toplevel(ventana_progreso, 750, 620)
         ventana_progreso.update()
         
         # Contadores

@@ -2,7 +2,10 @@ import os
 import sys
 import tkinter as tk
 
-# Función para obtener el directorio base correctamente en ejecutable y desarrollo
+# ============================================================
+# SISTEMA DE CONFIGURACIÓN RESPONSIVO MEJORADO
+# ============================================================
+
 def get_base_dir():
     """
     Retorna el directorio base de la aplicación.
@@ -10,18 +13,16 @@ def get_base_dir():
     - En ejecutable: carpeta donde está el .exe
     """
     if getattr(sys, 'frozen', False):
-        # Estamos en un ejecutable de PyInstaller
-        # sys.executable apunta al .exe
         return os.path.dirname(sys.executable)
     else:
-        # Estamos en desarrollo
         return os.path.dirname(os.path.abspath(__file__))
 
-# ===== DETECCIÓN AUTOMÁTICA DE RESOLUCIÓN =====
-def obtener_escala_pantalla():
+
+# ===== DETECCIÓN MEJORADA DE RESOLUCIÓN =====
+def obtener_info_pantalla():
     """
-    Detecta el tamaño de pantalla y retorna factor de escala.
-    Optimizado para laptops de 14-15 pulgadas.
+    Detecta el tamaño de pantalla y retorna información detallada.
+    Retorna: (ancho, alto, factor_escala, tipo_pantalla)
     """
     try:
         root = tk.Tk()
@@ -30,23 +31,73 @@ def obtener_escala_pantalla():
         root.withdraw()
         root.destroy()
         
-        # Detectar pantallas pequeñas (laptops 14-15")
-        if ancho <= 1440 and alto <= 900:
-            return 0.85  # Reducir 15% para pantallas pequeñas
-        elif ancho <= 1680 and alto <= 1050:
-            return 0.90  # Reducir 10% para pantallas medianas
-        return 1.0  # Tamaño normal para pantallas grandes
-    except:  # noqa: E722
-        return 0.85  # Por defecto, asumir pantalla pequeña
+        # Determinar tipo de pantalla y factor de escala
+        if ancho <= 1366 and alto <= 768:
+            # Laptops pequeños 13-14" (1366x768, 1280x720)
+            tipo = "PEQUEÑA (13-14 pulgadas)"
+            escala = 0.75
+        elif ancho <= 1440 and alto <= 900:
+            # Laptops medianos 14-15" (1440x900)
+            tipo = "COMPACTA (14-15 pulgadas)"
+            escala = 0.82
+        elif ancho <= 1600 and alto <= 900:
+            # Monitores HD+ (1600x900)
+            tipo = "HD+ (15-16 pulgadas)"
+            escala = 0.88
+        elif ancho <= 1920 and alto <= 1080:
+            # Full HD - Más común (1920x1080)
+            tipo = "FULL HD (17+ pulgadas o 1080p)"
+            escala = 1.0
+        elif ancho <= 2560 and alto <= 1440:
+            # QHD/2K (2560x1440)
+            tipo = "2K/QHD (27+ pulgadas)"
+            escala = 1.15
+        elif ancho <= 3840 and alto <= 2160:
+            # 4K UHD (3840x2160)
+            tipo = "4K UHD (27+ pulgadas)"
+            escala = 1.35
+        else:
+            # Pantallas muy grandes o multi-monitor
+            tipo = "ULTRA GRANDE"
+            escala = 1.5
+        
+        return ancho, alto, escala, tipo
+        
+    except Exception as e:
+        print(f"⚠️ Error detectando pantalla: {e}")
+        # Valores por defecto seguros (1366x768)
+        return 1366, 768, 0.75, "DESCONOCIDA"
 
-ESCALA_PANTALLA = obtener_escala_pantalla()
 
-# Función auxiliar para aplicar escala
-def escalar(valor):
-    """Aplica el factor de escala a un valor numérico"""
-    return int(valor * ESCALA_PANTALLA)
+# Obtener información de pantalla
+ANCHO_PANTALLA, ALTO_PANTALLA, ESCALA_PANTALLA, TIPO_PANTALLA = obtener_info_pantalla()
 
-# Configuración de rutas
+# Imprimir información de detección (útil para debug)
+print("=" * 60)
+print("🖥️  DETECCIÓN AUTOMÁTICA DE PANTALLA")
+print("=" * 60)
+print(f"📐 Resolución detectada: {ANCHO_PANTALLA} x {ALTO_PANTALLA}")
+print(f"📺 Tipo de pantalla: {TIPO_PANTALLA}")
+print(f"⚖️  Factor de escala: {ESCALA_PANTALLA:.2f}x")
+print(f"🎯 Optimización: {'ACTIVADA' if ESCALA_PANTALLA != 1.0 else 'MODO ESTÁNDAR'}")
+print("=" * 60)
+
+
+# ===== FUNCIÓN DE ESCALADO =====
+def escalar(valor_base):
+    """
+    Aplica el factor de escala a un valor numérico.
+    
+    Args:
+        valor_base: Valor diseñado para 1920x1080 (escala 1.0)
+    
+    Returns:
+        Valor escalado según resolución detectada
+    """
+    return int(valor_base * ESCALA_PANTALLA)
+
+
+# ===== CONFIGURACIÓN DE RUTAS =====
 BASE_DIR = get_base_dir()
 DATA_DIR = os.path.join(BASE_DIR, 'data')
 PLANTILLAS_DIR = os.path.join(DATA_DIR, 'plantillas')
@@ -58,63 +109,205 @@ os.makedirs(DATA_DIR, exist_ok=True)
 os.makedirs(PLANTILLAS_DIR, exist_ok=True)
 os.makedirs(DOCUMENTOS_DIR, exist_ok=True)
 
+
 # ===== CONFIGURACIÓN DE LA APLICACIÓN =====
 APP_NAME = "Sistema de Actas Notariales"
-APP_VERSION = "1.0.0"
+APP_VERSION = "2.0.0 Responsivo"
 
-# Tamaño de ventana adaptado (base 1300x700, se ajusta con maximizar)
-WINDOW_SIZE = f"{escalar(1300)}x{escalar(700)}"
+# Tamaño de ventana inicial (se maximiza después)
+# Usar 90% del ancho y 85% del alto disponible
+WINDOW_WIDTH = int(ANCHO_PANTALLA * 0.90)
+WINDOW_HEIGHT = int(ALTO_PANTALLA * 0.85)
+WINDOW_SIZE = f"{WINDOW_WIDTH}x{WINDOW_HEIGHT}"
 
-# ===== CONFIGURACIÓN DE COLORES (sin cambios) =====
+
+# ===== CONFIGURACIÓN DE COLORES =====
+# Colores principales (sin cambios - compatibles con tema oscuro)
+COLOR_BG_PRINCIPAL = "#001a33"      # Fondo principal (azul muy oscuro)
+COLOR_BG_SECUNDARIO = "#003d66"     # Fondo secundario (azul oscuro)
+COLOR_BG_MENU = "#003d66"           # Fondo menú lateral
+COLOR_ACCENT = "#005187"            # Color de acento (azul medio)
+COLOR_HOVER = "#2d5f8d"             # Color hover botones
+
+# Colores de estado
 COLOR_PRIMARY = "#3498db"
 COLOR_SUCCESS = "#2ecc71"
 COLOR_WARNING = "#f39c12"
 COLOR_DANGER = "#e74c3c"
+COLOR_ERROR = "#e74c3c"
 COLOR_INFO = "#1abc9c"
 
-# ===== TAMAÑOS DE FUENTE ADAPTADOS =====
-FONT_SIZE_TITLE_MAIN = escalar(32)      # Título principal (antes 42)
-FONT_SIZE_TITLE = escalar(20)            # Títulos de sección (antes 24)
-FONT_SIZE_SUBTITLE = escalar(16)         # Subtítulos (antes 18-20)
-FONT_SIZE_NORMAL = escalar(12)           # Texto normal (antes 14)
-FONT_SIZE_SMALL = escalar(11)            # Texto pequeño (antes 12)
-FONT_SIZE_TINY = escalar(10)             # Texto muy pequeño (antes 11)
-FONT_SIZE_CARD_TITLE = escalar(15)       # Títulos de tarjetas (antes 18)
-FONT_SIZE_BUTTON = escalar(13)           # Texto de botones (antes 15)
+# Colores de texto
+COLOR_TEXT_PRIMARY = "#e0e1dd"      # Texto principal (blanco hueso)
+COLOR_TEXT_SECONDARY = "#778da9"    # Texto secundario (gris azulado)
 
-# ===== TAMAÑOS DE ICONOS ADAPTADOS =====
-ICON_SIZE_MENU = (escalar(20), escalar(20))           # Menú lateral (antes 24x24)
-ICON_SIZE_MENU_SMALL = (escalar(18), escalar(18))     # Íconos pequeños menú (antes 20x20)
-ICON_SIZE_CARD = (escalar(40), escalar(40))           # Tarjetas inicio (antes 48x48)
-ICON_SIZE_LOGO = (escalar(56), escalar(56))           # Logo principal (antes 64x64)
-ICON_SIZE_BUTTON = (escalar(20), escalar(20))         # Botones generales (antes 24x24)
 
-# ===== ESPACIADO Y DIMENSIONES ADAPTADOS =====
-PADDING_LARGE = escalar(15)              # Padding grande (antes 20-40)
-PADDING_MEDIUM = escalar(10)             # Padding medio (antes 15)
-PADDING_SMALL = escalar(8)               # Padding pequeño (antes 10)
-PADDING_TINY = escalar(5)                # Padding mínimo (antes 5-8)
+# ============================================================
+# TAMAÑOS RESPONSIVOS - BASE PARA 1920x1080 (ESCALA 1.0)
+# Se escalan automáticamente según resolución detectada
+# ============================================================
 
-MENU_WIDTH = escalar(240)                # Ancho menú lateral (antes 280)
-BUTTON_HEIGHT = escalar(40)              # Altura botones menú (antes 48)
-BUTTON_HEIGHT_SMALL = escalar(32)        # Altura botones pequeños (antes 40)
-STATUS_BAR_HEIGHT = escalar(24)          # Altura barra estado (antes 28)
-INPUT_HEIGHT = escalar(32)               # Altura inputs (antes 36-40)
+# ===== TAMAÑOS DE FUENTE =====
+# Valores base diseñados para 1920x1080
+FONT_SIZE_TITLE_MAIN = escalar(32)      # Título principal de pantallas
+FONT_SIZE_TITLE = escalar(24)           # Títulos de sección
+FONT_SIZE_SUBTITLE = escalar(18)        # Subtítulos
+FONT_SIZE_NORMAL = escalar(14)          # Texto normal/párrafos
+FONT_SIZE_SMALL = escalar(12)           # Texto pequeño
+FONT_SIZE_TINY = escalar(10)            # Texto muy pequeño (footer, etc)
+FONT_SIZE_CARD_TITLE = escalar(16)      # Títulos en tarjetas
+FONT_SIZE_BUTTON = escalar(13)          # Texto en botones
 
-CARD_CORNER_RADIUS = escalar(12)         # Radio de esquinas tarjetas (antes 15)
-CARD_PADDING = escalar(12)               # Padding interno tarjetas (antes 20)
+# ===== TAMAÑOS DE ICONOS =====
+# Tuplas (ancho, alto) escaladas
+ICON_SIZE_MENU = (escalar(24), escalar(24))         # Iconos en menú lateral
+ICON_SIZE_MENU_SMALL = (escalar(20), escalar(20))   # Iconos pequeños en menú
+ICON_SIZE_CARD = (escalar(56), escalar(56))         # Iconos en tarjetas de inicio
+ICON_SIZE_LOGO = (escalar(64), escalar(64))         # Logo principal
+ICON_SIZE_BUTTON = (escalar(22), escalar(22))       # Iconos en botones
+
+# ✅ NUEVAS CONSTANTES PARA VENTANA DE LOGIN Y OTROS COMPONENTES
+ICON_SIZE_LARGE = (escalar(32), escalar(32))        # Iconos grandes (títulos)
+ICON_SIZE_MEDIUM = (escalar(24), escalar(24))       # Iconos medianos (botones)
+ICON_SIZE_SMALL = (escalar(18), escalar(18))        # Iconos pequeños (labels)
+
+# ===== ESPACIADO Y PADDING =====
+PADDING_LARGE = escalar(20)         # Espaciado grande entre secciones
+PADDING_MEDIUM = escalar(15)        # Espaciado medio
+PADDING_SMALL = escalar(10)         # Espaciado pequeño
+PADDING_TINY = escalar(5)           # Espaciado mínimo
+
+# ===== DIMENSIONES DE COMPONENTES PRINCIPALES =====
+MENU_WIDTH = escalar(260)           # Ancho del menú lateral
+BUTTON_HEIGHT = escalar(45)         # Altura de botones principales
+BUTTON_HEIGHT_SMALL = escalar(36)   # Altura de botones secundarios
+STATUS_BAR_HEIGHT = escalar(30)     # Altura de barra de estado
+INPUT_HEIGHT = escalar(38)          # Altura de campos de entrada
+
+# ===== TARJETAS Y CONTENEDORES =====
+CARD_CORNER_RADIUS = escalar(15)    # Radio de esquinas de tarjetas
+CARD_PADDING = escalar(20)          # Padding interno de tarjetas
+CARD_MIN_WIDTH = escalar(220)       # Ancho mínimo de tarjetas
 
 # ===== DIMENSIONES DE VENTANAS SECUNDARIAS =====
-DIALOG_WIDTH = escalar(420)              # Ancho diálogos (antes 500)
-DIALOG_HEIGHT = escalar(260)             # Alto diálogos (antes 300)
-VISOR_WIDTH = escalar(550)               # Ancho visor documentos (antes 650)
-VISOR_HEIGHT = escalar(650)              # Alto visor documentos (antes 750)
+DIALOG_WIDTH = escalar(500)         # Ancho de diálogos
+DIALOG_HEIGHT = escalar(350)        # Alto de diálogos
+VISOR_WIDTH = escalar(700)          # Ancho de visor de documentos
+VISOR_HEIGHT = escalar(800)         # Alto de visor de documentos
 
-# ===== LISTA DE NOTARIOS (sin cambios) =====
+# ===== TABLAS Y LISTAS =====
+TABLE_ROW_HEIGHT = escalar(40)      # Altura de filas en tablas
+TABLE_HEADER_HEIGHT = escalar(45)   # Altura de encabezados de tabla
+SCROLLBAR_WIDTH = escalar(14)       # Ancho de scrollbars
+
+# ===== FORMULARIOS =====
+LABEL_WIDTH = escalar(180)          # Ancho de etiquetas en formularios
+TEXTAREA_HEIGHT = escalar(120)      # Altura de áreas de texto
+COMBOBOX_HEIGHT = escalar(38)       # Altura de combobox
+
+# Dimensiones de TextBox de logs
+TEXTBOX_LOG_WIDTH = escalar(650)
+TEXTBOX_LOG_HEIGHT = escalar(280)
+
+# ============================================================
+# AJUSTES ESPECÍFICOS POR RESOLUCIÓN
+# ============================================================
+
+# Para pantallas muy pequeñas (≤1366x768), hacer ajustes adicionales
+if ANCHO_PANTALLA <= 1366:
+    print("🔧 Aplicando optimizaciones para pantalla pequeña...")
+    MENU_WIDTH = int(MENU_WIDTH * 0.9)          # Menú más delgado
+    CARD_PADDING = max(8, int(CARD_PADDING * 0.7))  # Menos padding
+    PADDING_LARGE = max(10, int(PADDING_LARGE * 0.8))
+
+# Para pantallas grandes (≥2560), hacer ajustes adicionales
+elif ANCHO_PANTALLA >= 2560:
+    print("🔧 Aplicando optimizaciones para pantalla grande...")
+    CARD_MIN_WIDTH = int(CARD_MIN_WIDTH * 1.2)  # Tarjetas más anchas
+
+
+# ===== LISTA DE NOTARIOS =====
 NOMBRES_NOTARIOS = [
     "Néstor Antolín Najarro López",
     "Nestor Antolin Najarro Lopez",
     "NÉSTOR ANTOLÍN NAJARRO LÓPEZ",
     "NESTOR ANTOLIN NAJARRO LOPEZ",
-    # Agrega otros notarios aquí si los hay
 ]
+
+
+# ============================================================
+# FUNCIONES AUXILIARES PARA UI RESPONSIVO
+# ============================================================
+
+def obtener_fuente(tipo="normal", peso="normal"):
+    """
+    Retorna configuración de fuente según tipo.
+    
+    Args:
+        tipo: "titulo", "subtitulo", "normal", "small", "tiny", "button", "card"
+        peso: "normal", "bold"
+    
+    Returns:
+        Tupla (tamaño, peso)
+    """
+    tamaños = {
+        "titulo_main": FONT_SIZE_TITLE_MAIN,
+        "titulo": FONT_SIZE_TITLE,
+        "subtitulo": FONT_SIZE_SUBTITLE,
+        "normal": FONT_SIZE_NORMAL,
+        "small": FONT_SIZE_SMALL,
+        "tiny": FONT_SIZE_TINY,
+        "button": FONT_SIZE_BUTTON,
+        "card": FONT_SIZE_CARD_TITLE,
+    }
+    
+    return (tamaños.get(tipo, FONT_SIZE_NORMAL), peso)
+
+
+def es_pantalla_pequena():
+    """Retorna True si la pantalla es pequeña (≤1366x768)"""
+    return ANCHO_PANTALLA <= 1366
+
+
+def es_pantalla_grande():
+    """Retorna True si la pantalla es grande (≥1920x1080)"""
+    return ANCHO_PANTALLA >= 1920
+
+
+def ajustar_grid_columnas():
+    """
+    Retorna número óptimo de columnas para grids según resolución.
+    Útil para layouts de tarjetas.
+    """
+    if ANCHO_PANTALLA <= 1366:
+        return 2  # 2 columnas en pantallas pequeñas
+    elif ANCHO_PANTALLA <= 1600:
+        return 3  # 3 columnas en pantallas medianas
+    elif ANCHO_PANTALLA <= 1920:
+        return 4  # 4 columnas en Full HD
+    else:
+        return 5  # 5+ columnas en pantallas grandes
+
+
+# ============================================================
+# INFORMACIÓN DE CONFIGURACIÓN (DEBUG)
+# ============================================================
+
+def imprimir_configuracion():
+    """Imprime la configuración actual (útil para debugging)"""
+    print("\n" + "=" * 60)
+    print("⚙️  CONFIGURACIÓN RESPONSIVA CARGADA")
+    print("=" * 60)
+    print(f"📱 Ventana inicial: {WINDOW_SIZE}")
+    print(f"📏 Menú lateral: {MENU_WIDTH}px")
+    print(f"🔤 Fuente título: {FONT_SIZE_TITLE_MAIN}px")
+    print(f"🔤 Fuente normal: {FONT_SIZE_NORMAL}px")
+    print(f"🔲 Botones: {BUTTON_HEIGHT}px altura")
+    print(f"📊 Columnas grid: {ajustar_grid_columnas()}")
+    print(f"💾 Base de datos: {DB_PATH}")
+    print("=" * 60 + "\n")
+
+
+# Imprimir configuración al cargar (comentar en producción)
+if __name__ != "__main__":
+    imprimir_configuracion()

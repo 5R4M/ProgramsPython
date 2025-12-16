@@ -9,7 +9,22 @@ from datetime import datetime
 from PIL import Image, ImageTk
 import fitz  # PyMuPDF
 from docx2pdf import convert
-from config import PLANTILLAS_DIR, COLOR_SUCCESS, COLOR_WARNING, DOCUMENTOS_DIR
+from config import (
+    PLANTILLAS_DIR, 
+    COLOR_SUCCESS, 
+    COLOR_WARNING, 
+    DOCUMENTOS_DIR,
+    # ✅ AGREGAR CONSTANTES RESPONSIVAS:
+    FONT_SIZE_TITLE,
+    FONT_SIZE_SUBTITLE, 
+    FONT_SIZE_SMALL,
+    PADDING_MEDIUM,
+    PADDING_SMALL,
+    PADDING_TINY,
+    BUTTON_HEIGHT_SMALL,
+    INPUT_HEIGHT,
+    escalar
+)
 from utils import NumeroATexto
 import subprocess
 import platform
@@ -33,16 +48,18 @@ class VentanaCrearDocumento:
         self.persona_id_original = None
 
         self.fecha_fija_var = ctk.BooleanVar(value=False)
+        self.senorita_var = ctk.BooleanVar(value=False)  # ✅ NUEVA VARIABLE
         
         self.cargar_iconos()
         
         if es_integrado:
             # Como frame embebido en otra ventana
-            self.ventana = ctk.CTkFrame(parent)
+            self.ventana = ctk.CTkFrame(parent, fg_color="#001a33")
             self.ventana.pack(fill="both", expand=True)
         else:
             # Como ventana emergente
             self.ventana = ctk.CTkToplevel(parent)
+            self.ventana.configure(fg_color="#001a33")
 
             # Título según modo
             if self.solo_formulario or self.modo_edicion:
@@ -66,69 +83,125 @@ class VentanaCrearDocumento:
         if not self.es_integrado:
             self.ventana.update_idletasks()
             if self.solo_formulario:
-                # Modo EDICIÓN: solo formulario
-                self.center_window_tamano(740, 625)
+                # Modo EDICIÓN: solo formulario - TAMAÑO ADAPTATIVO
+                screen_width = self.ventana.winfo_screenwidth()
+                screen_height = self.ventana.winfo_screenheight()
+                
+                # Calcular tamaño de ventana (85% de la pantalla como máximo)
+                from config import escalar
+                ancho_ventana = min(escalar(620), int(screen_width * 0.85))  # ✅ REDUCIDO: de 740 a 620
+                alto_ventana = min(escalar(580), int(screen_height * 0.82))  # ✅ REDUCIDO: de 625 a 580
+                
+                self.center_window_tamano(ancho_ventana, alto_ventana)
             else:
-                # Modo NORMAL: con visor
-                self.center_window_tamano(1400, 900)
+                # Modo NORMAL: con visor - TAMAÑO ADAPTATIVO
+                screen_width = self.ventana.winfo_screenwidth()
+                screen_height = self.ventana.winfo_screenheight()
+                
+                from config import escalar
+                ancho_ventana = min(escalar(1400), int(screen_width * 0.9))
+                alto_ventana = min(escalar(900), int(screen_height * 0.85))
+                
+                self.ventana.geometry(f"{ancho_ventana}x{alto_ventana}")
                 self.ventana.after(100, self.maximizar_ventana)
     
+    def detectar_necesita_scroll(self):
+        """Detecta si la pantalla necesita scroll basándose en la resolución"""
+        from config import escalar
+        
+        # Obtener resolución de la pantalla
+        screen_width = self.ventana.winfo_screenwidth()
+        screen_height = self.ventana.winfo_screenheight()
+        
+        print(f"📐 Resolución detectada: {screen_width}x{screen_height}")
+        
+        # Calcular altura aproximada del contenido
+        altura_titulo = escalar(30)
+        altura_plantilla = escalar(65)
+        altura_busqueda = escalar(160)
+        altura_fecha = escalar(150)
+        altura_datos = escalar(380)  # ✅ AUMENTADO de 320 a 380
+        altura_botones = escalar(70)
+        altura_padding = escalar(60)
+        
+        altura_total_contenido = (altura_titulo + altura_plantilla + altura_busqueda + 
+                                altura_fecha + altura_datos + altura_botones + altura_padding)
+        
+        # Considerar espacio de ventana (título + taskbar)
+        altura_overhead = 120  # ✅ AUMENTADO de 100 a 120
+        altura_necesaria = altura_total_contenido + altura_overhead
+        
+        # ✅ AJUSTE: Si la altura de pantalla es menor O IGUAL, usar scroll
+        necesita_scroll = screen_height <= altura_necesaria
+        
+        if necesita_scroll:
+            print(f"⚠️ Pantalla pequeña detectada ({screen_height}px <= {altura_necesaria}px). Activando scroll.")
+        else:
+            print(f"✅ Pantalla suficiente ({screen_height}px > {altura_necesaria}px). Sin scroll.")
+        
+        return necesita_scroll
+    
     def cargar_iconos(self):
-        """Carga los iconos PNG para los botones"""
+        """Carga los iconos PNG para los botones - ✅ USANDO CONSTANTES"""
         try:
-            # Ruta absoluta a la carpeta de iconos
-            ruta_base = os.path.dirname(os.path.abspath(__file__))  # declaraciones_app/ui
-            ruta_proyecto = os.path.dirname(ruta_base)  # declaraciones_app
+            from config import escalar
+            
+            ruta_base = os.path.dirname(os.path.abspath(__file__))
+            ruta_proyecto = os.path.dirname(ruta_base)
             ruta_iconos = os.path.join(ruta_proyecto, "utils", "iconos")
             
             print(f"🔍 Buscando iconos en: {ruta_iconos}")
             
-            # Verificar que la carpeta existe
             if not os.path.exists(ruta_iconos):
                 print(f"⚠️ La carpeta de iconos no existe: {ruta_iconos}")
                 raise FileNotFoundError(f"No existe la carpeta: {ruta_iconos}")
             
-            # Cargar iconos para botones
+            # ===== ICONOS PARA BOTONES PRINCIPALES =====
+            icon_size_main = (escalar(18), escalar(18))
+            
             self.icono_guardar = ctk.CTkImage(
                 light_image=Image.open(os.path.join(ruta_iconos, "guardar.png")),
                 dark_image=Image.open(os.path.join(ruta_iconos, "guardar.png")),
-                size=(24, 24)
+                size=icon_size_main
             )
             
             self.icono_preview = ctk.CTkImage(
                 light_image=Image.open(os.path.join(ruta_iconos, "preview.png")),
                 dark_image=Image.open(os.path.join(ruta_iconos, "preview.png")),
-                size=(24, 24)
+                size=icon_size_main
             )
             
             self.icono_imprimir = ctk.CTkImage(
                 light_image=Image.open(os.path.join(ruta_iconos, "imprimir.png")),
                 dark_image=Image.open(os.path.join(ruta_iconos, "imprimir.png")),
-                size=(24, 24)
+                size=icon_size_main
             )
             
             self.icono_generar = ctk.CTkImage(
                 light_image=Image.open(os.path.join(ruta_iconos, "generar.png")),
                 dark_image=Image.open(os.path.join(ruta_iconos, "generar.png")),
-                size=(24, 24)
+                size=icon_size_main
             )
+            
+            # ===== ICONOS PEQUEÑOS =====
+            icon_size_small = (escalar(16), escalar(16))
             
             self.icono_buscar = ctk.CTkImage(
                 light_image=Image.open(os.path.join(ruta_iconos, "buscar.png")),
                 dark_image=Image.open(os.path.join(ruta_iconos, "buscar.png")),
-                size=(20, 20)
+                size=icon_size_small
             )
             
             self.icono_limpiar = ctk.CTkImage(
                 light_image=Image.open(os.path.join(ruta_iconos, "limpiar.png")),
                 dark_image=Image.open(os.path.join(ruta_iconos, "limpiar.png")),
-                size=(20, 20)
+                size=icon_size_small
             )
             
             self.icono_plantilla = ctk.CTkImage(
                 light_image=Image.open(os.path.join(ruta_iconos, "plantilla.png")),
                 dark_image=Image.open(os.path.join(ruta_iconos, "plantilla.png")),
-                size=(20, 20)
+                size=icon_size_small
             )
             
             print("✅ Iconos cargados correctamente en crear_documento")
@@ -138,14 +211,9 @@ class VentanaCrearDocumento:
             import traceback
             traceback.print_exc()
             
-            # Si falla, los iconos serán None
-            self.icono_guardar = None
-            self.icono_preview = None
-            self.icono_imprimir = None
-            self.icono_generar = None
-            self.icono_buscar = None
-            self.icono_limpiar = None
-            self.icono_plantilla = None
+            for attr in ['icono_guardar', 'icono_preview', 'icono_imprimir', 'icono_generar',
+                        'icono_buscar', 'icono_limpiar', 'icono_plantilla']:
+                setattr(self, attr, None)
     
     def capitalizar_texto(self, texto):
         """Convierte texto a formato título (Primera Letra Mayúscula)"""
@@ -159,25 +227,40 @@ class VentanaCrearDocumento:
             if texto_actual != texto_capitalizado:
                 entry_widget.delete(0, "end")
                 entry_widget.insert(0, texto_capitalizado)
+    
+    # ✅ NUEVA FUNCIÓN: Actualizar campos según sexo seleccionado
+    def _on_cambiar_sexo(self, event=None):
+        """Actualiza campos automáticamente al cambiar el sexo"""
+        sexo = self.combo_sexo.get().lower()
+        
+        if sexo == "femenino":
+            # Habilitar checkbox de Señorita
+            self.chk_senorita.configure(state="normal")
+            
+            # Establecer valores por defecto
+            self.combo_estado.set("soltera")
+            self.entry_nacionalidad.delete(0, "end")
+            self.entry_nacionalidad.insert(0, "Guatemalteca")
+        else:
+            # Deshabilitar y desmarcar checkbox de Señorita
+            self.chk_senorita.configure(state="disabled")
+            self.senorita_var.set(False)
+            
+            # Establecer valores por defecto
+            self.combo_estado.set("soltero")
+            self.entry_nacionalidad.delete(0, "end")
+            self.entry_nacionalidad.insert(0, "Guatemalteco")
             
     def formatear_dpi_automatico(self, event=None):
         """
         Formatea el DPI automáticamente mientras se escribe.
         Formato: 1234 12345 1234 (13 dígitos con espacios)
         """
-        # Obtener texto actual
         texto = self.entry_dpi.get()
-        
-        # Guardar posición del cursor
         cursor_pos = self.entry_dpi.index(tk.INSERT)
-        
-        # Eliminar todo excepto dígitos
         solo_digitos = ''.join(filter(str.isdigit, texto))
-        
-        # Limitar a 13 dígitos
         solo_digitos = solo_digitos[:13]
         
-        # Aplicar formato: 1234 12345 1234
         if len(solo_digitos) <= 4:
             texto_formateado = solo_digitos
         elif len(solo_digitos) <= 9:
@@ -185,20 +268,16 @@ class VentanaCrearDocumento:
         else:
             texto_formateado = f"{solo_digitos[:4]} {solo_digitos[4:9]} {solo_digitos[9:]}"
         
-        # Actualizar entry solo si cambió
         if texto != texto_formateado:
             self.entry_dpi.delete(0, tk.END)
             self.entry_dpi.insert(0, texto_formateado)
             
-            # Ajustar posición del cursor
-            # Si se agregó un espacio, mover cursor una posición extra
             espacios_antes = texto[:cursor_pos].count(' ')
             espacios_despues = texto_formateado[:cursor_pos].count(' ')
             
             if espacios_despues > espacios_antes:
                 cursor_pos += 1
             
-            # Asegurar que el cursor no se salga del texto
             cursor_pos = min(cursor_pos, len(texto_formateado))
             self.entry_dpi.icursor(cursor_pos)
 
@@ -208,15 +287,11 @@ class VentanaCrearDocumento:
         Retorna: (es_valido: bool, dpi_limpio: str, mensaje_error: str)
         """
         dpi = self.entry_dpi.get().strip()
-        
-        # Eliminar espacios
         dpi_limpio = dpi.replace(" ", "")
         
-        # Validar longitud
         if len(dpi_limpio) != 13:
             return False, dpi_limpio, f"El DPI debe tener exactamente 13 dígitos.\nActualmente tiene: {len(dpi_limpio)} dígitos"
         
-        # Validar que solo contenga números
         if not dpi_limpio.isdigit():
             return False, dpi_limpio, "El DPI solo debe contener números"
         
@@ -225,22 +300,18 @@ class VentanaCrearDocumento:
     def formatear_fecha_auto(self, event):
         """Formatea la fecha automáticamente mientras se escribe"""
         widget = event.widget
-        texto = widget.get().replace("/", "")  # Elimina barras existentes
+        texto = widget.get().replace("/", "")
         
-        # Solo permite números
         if not texto.isdigit():
             texto = ''.join(filter(str.isdigit, texto))
         
-        # Limita a 8 dígitos
         texto = texto[:8]
         
-        # Formatea con barras
         if len(texto) >= 2:
             texto = texto[:2] + '/' + texto[2:]
         if len(texto) >= 5:
             texto = texto[:5] + '/' + texto[5:]
         
-        # Actualizar entry
         widget.delete(0, "end")
         widget.insert(0, texto)
     
@@ -270,7 +341,7 @@ class VentanaCrearDocumento:
         """
         nuevo_valor = nuevo_valor.strip()
         if not nuevo_valor:
-            return True  # permitir vacío
+            return True
 
         if len(nuevo_valor) != 10:
             return False
@@ -280,7 +351,7 @@ class VentanaCrearDocumento:
             if len(dia) != 2 or len(mes) != 2 or len(anio) != 4:
                 return False
             dia, mes, anio = int(dia), int(mes), int(anio)
-            datetime(anio, mes, dia)  # levanta error si es inválida
+            datetime(anio, mes, dia)
             return True
         except Exception:
             return False
@@ -299,18 +370,17 @@ class VentanaCrearDocumento:
             self.tipo_palabra = tipo_palabra
 
             self.popup = None
-            self.frame_scroll = None  # NUEVO
-            self.botones_popup = []   # NUEVO
-            self.idx_seleccionado = -1  # NUEVO
+            self.frame_scroll = None
+            self.botones_popup = []
+            self.idx_seleccionado = -1
             self.sugerencias = []
             self.cerrando_popup = False
 
-            # Enlazar eventos
             self.entry.bind("<KeyRelease>", self._on_key_release)
             self.entry.bind("<FocusOut>", self._on_focus_out)
             self.entry.bind("<Down>", self._on_down_key)
-            self.entry.bind("<Up>", self._on_up_key)      # NUEVO
-            self.entry.bind("<Return>", self._on_return_key)  # NUEVO
+            self.entry.bind("<Up>", self._on_up_key)
+            self.entry.bind("<Return>", self._on_return_key)
             self.entry.bind("<Escape>", lambda e: self._cerrar_popup())
 
         def _obtener_palabra_actual(self):
@@ -325,33 +395,27 @@ class VentanaCrearDocumento:
                 if not texto_completo:
                     return ""
                 
-                # Para nombres, detectar palabra actual según posición del cursor
                 if self.tipo_palabra == "nombre":
                     try:
                         cursor_pos = self.entry.index(tk.INSERT)
                         
-                        # Asegurar que cursor_pos esté dentro del rango
                         if cursor_pos > len(texto_completo):
                             cursor_pos = len(texto_completo)
                         
-                        # Encontrar inicio de la palabra actual
                         inicio = cursor_pos
                         while inicio > 0 and inicio <= len(texto_completo):
-                            # Verificar que podemos acceder al índice
                             if inicio - 1 < 0:
                                 break
                             if texto_completo[inicio - 1] in (' ', '\t', '\n'):
                                 break
                             inicio -= 1
                         
-                        # Encontrar fin de la palabra actual
                         fin = cursor_pos
                         while fin < len(texto_completo):
                             if texto_completo[fin] in (' ', '\t', '\n'):
                                 break
                             fin += 1
                         
-                        # Extraer palabra con validación de índices
                         if inicio >= 0 and fin <= len(texto_completo) and inicio <= fin:
                             palabra_actual = texto_completo[inicio:fin].strip()
                             return palabra_actual if len(palabra_actual) >= 2 else ""
@@ -360,13 +424,11 @@ class VentanaCrearDocumento:
                             
                     except Exception as e:
                         print(f"⚠️ Error detectando palabra (usando fallback): {e}")
-                        # Fallback: usar última palabra
                         palabras = texto_completo.split()
                         if palabras and len(palabras[-1]) >= 2:
                             return palabras[-1]
                         return ""
                 else:
-                    # Para otros campos, usar texto completo
                     return texto_completo if len(texto_completo) >= 2 else ""
                     
             except Exception as e:
@@ -375,7 +437,6 @@ class VentanaCrearDocumento:
 
         def _on_key_release(self, event):
             """Maneja la liberación de teclas para actualizar sugerencias"""
-            # Ignorar teclas de navegación
             if event.keysym in ("Up", "Down", "Left", "Right", "Return", "Escape", "Tab", "Shift_L", "Shift_R", "Control_L", "Control_R", "Alt_L", "Alt_R"):
                 return
 
@@ -386,7 +447,6 @@ class VentanaCrearDocumento:
                     self._cerrar_popup()
                     return
 
-                # Obtener sugerencias desde la BD (case-insensitive)
                 self.sugerencias = self.parent.db.obtener_sugerencias_palabra(
                     self.tipo_palabra, 
                     palabra_buscar
@@ -405,19 +465,16 @@ class VentanaCrearDocumento:
         def _mostrar_popup(self):
             """Muestra el popup con sugerencias"""
             try:
-                # Cerrar popup anterior si existe
                 self._cerrar_popup()
                 
-                # Verificar que hay sugerencias
                 if not self.sugerencias:
                     return
 
-                # Crear nueva ventana flotante
                 self.popup = ctk.CTkToplevel(self.parent.ventana)
                 self.popup.overrideredirect(True)
                 self.popup.attributes("-topmost", True)
+                self.popup.configure(fg_color="#003d66")
 
-                # Posicionar debajo del Entry
                 try:
                     self.popup.update_idletasks()
                     x = self.entry.winfo_rootx()
@@ -425,11 +482,10 @@ class VentanaCrearDocumento:
                     
                     ancho = max(self.entry.winfo_width(), 200)
                     
-                    # CAMBIO: Calcular altura según cantidad de sugerencias
                     if len(self.sugerencias) == 1:
-                        altura = 50  # Altura fija para una sola palabra
+                        altura = 50
                     else:
-                        altura = min(len(self.sugerencias) * 38 + 15, 250)  # Más espacio por botón
+                        altura = min(len(self.sugerencias) * 38 + 15, 250)
                     
                     self.popup.geometry(f"{ancho}x{altura}+{x}+{y}")
                 except Exception as e:
@@ -437,41 +493,37 @@ class VentanaCrearDocumento:
                     self._cerrar_popup()
                     return
 
-                # Frame con scroll
                 self.frame_scroll = ctk.CTkScrollableFrame(
                     self.popup, 
                     width=ancho-20,
                     height=altura-10,
-                    fg_color=("white", "gray20")
+                    fg_color="#003d66"
                 )
                 self.frame_scroll.pack(fill="both", expand=True, padx=5, pady=5)
 
-                # Obtener palabra actual con manejo de errores
                 try:
                     palabra_actual = self._obtener_palabra_actual().lower()
                 except Exception:
                     palabra_actual = ""
 
-                # Lista para almacenar los botones
                 self.botones_popup = []
 
                 for sugerencia in self.sugerencias:
-                    # Resaltar coincidencia con color SUCCESS (verde)
                     if palabra_actual and palabra_actual in sugerencia.lower():
                         texto_mostrar = f"💡 {sugerencia}"
                         text_color = COLOR_SUCCESS
                     else:
                         texto_mostrar = f"   {sugerencia}"
-                        text_color = ("gray20", "gray90")
+                        text_color = "white"
                     
                     btn = ctk.CTkButton(
                         self.frame_scroll,
                         text=texto_mostrar,
                         anchor="w",
                         command=lambda s=sugerencia: self._usar_sugerencia(s),
-                        height=35,  # CAMBIO: Aumentar altura de botón a 35
+                        height=35,
                         fg_color="transparent",
-                        hover_color=("gray85", "gray30"),
+                        hover_color="#2d5f8d",
                         text_color=text_color,
                         corner_radius=5,
                         font=("Segoe UI", 11)
@@ -481,10 +533,8 @@ class VentanaCrearDocumento:
                     btn.bind("<Enter>", lambda e: self._cancelar_cierre())
                     btn.bind("<Leave>", lambda e: None)
                     
-                    # Guardar referencia al botón
                     self.botones_popup.append(btn)
                 
-                # Índice del botón actualmente seleccionado
                 self.idx_seleccionado = -1
                 
             except Exception as e:
@@ -494,14 +544,12 @@ class VentanaCrearDocumento:
         def _actualizar_seleccion(self):
             """Actualiza visualmente el botón seleccionado y hace scroll"""
             try:
-                # Resetear todos los botones
                 for btn in self.botones_popup:
                     btn.configure(
                         fg_color="transparent",
-                        text_color=("gray20", "gray90")
+                        text_color="white"
                     )
                 
-                # Resaltar el botón seleccionado
                 if 0 <= self.idx_seleccionado < len(self.botones_popup):
                     btn_seleccionado = self.botones_popup[self.idx_seleccionado]
                     btn_seleccionado.configure(
@@ -509,12 +557,10 @@ class VentanaCrearDocumento:
                         text_color="white"
                     )
                     
-                    # CAMBIO: Hacer scroll DESPUÉS de actualizar el widget
                     self.popup.update_idletasks()
                     self.frame_scroll.update_idletasks()
                     btn_seleccionado.update_idletasks()
                     
-                    # Pequeño delay para asegurar que el widget se actualizó
                     self.popup.after(10, lambda: self._scroll_to_button(btn_seleccionado))
                     
             except Exception as e:
@@ -523,16 +569,12 @@ class VentanaCrearDocumento:
         def _scroll_to_button(self, button):
             """Hace scroll en el frame para mostrar el botón seleccionado"""
             try:
-                # Forzar actualización de widgets
                 self.frame_scroll._parent_canvas.update_idletasks()
                 button.update_idletasks()
                 
-                # El CTkScrollableFrame tiene un método interno _parent_canvas
-                # que es el canvas real que podemos controlar
                 if hasattr(self.frame_scroll, '_parent_canvas'):
                     canvas = self.frame_scroll._parent_canvas
                 else:
-                    # Buscar el canvas manualmente si no está disponible
                     canvas = None
                     for widget in self.frame_scroll.winfo_children():
                         if isinstance(widget, tk.Canvas):
@@ -542,40 +584,27 @@ class VentanaCrearDocumento:
                 if not canvas:
                     return
                 
-                # Obtener posición del botón relativa al frame scrollable
                 button_y = button.winfo_y()
                 button_height = button.winfo_height()
-                
-                # Altura visible del canvas
                 canvas_height = canvas.winfo_height()
                 
-                # Obtener el scrollregion total
                 scrollregion = canvas.cget('scrollregion')
                 if not scrollregion:
                     return
                 
-                # Parsear scrollregion: "x1 y1 x2 y2"
                 coords = scrollregion.split()
                 if len(coords) < 4:
                     return
                 
                 total_height = float(coords[3])
                 
-                # Si todo cabe en la vista, no hacer scroll
                 if total_height <= canvas_height:
                     return
                 
-                # Calcular centro del botón
                 button_center = button_y + (button_height / 2)
-                
-                # Calcular posición de scroll para centrar el botón
-                # Queremos que el centro del botón esté en el centro de la vista
                 target_scroll = (button_center - (canvas_height / 2)) / total_height
-                
-                # Limitar entre 0 y 1
                 target_scroll = max(0.0, min(1.0, target_scroll))
                 
-                # Aplicar scroll
                 canvas.yview_moveto(target_scroll)
                 
             except Exception as e:
@@ -587,11 +616,9 @@ class VentanaCrearDocumento:
             """Navegar al popup con flecha abajo"""
             if self.popup and self.popup.winfo_exists() and self.botones_popup:
                 try:
-                    # Si no hay botón seleccionado, seleccionar el primero
                     if self.idx_seleccionado == -1:
                         self.idx_seleccionado = 0
                     else:
-                        # Avanzar al siguiente botón
                         self.idx_seleccionado = (self.idx_seleccionado + 1) % len(self.botones_popup)
                     
                     self._actualizar_seleccion()
@@ -604,11 +631,9 @@ class VentanaCrearDocumento:
             """Navegar hacia arriba en el popup"""
             if self.popup and self.popup.winfo_exists() and self.botones_popup:
                 try:
-                    # Si no hay botón seleccionado, seleccionar el último
                     if self.idx_seleccionado == -1:
                         self.idx_seleccionado = len(self.botones_popup) - 1
                     else:
-                        # Retroceder al botón anterior
                         self.idx_seleccionado = (self.idx_seleccionado - 1) % len(self.botones_popup)
                     
                     self._actualizar_seleccion()
@@ -621,7 +646,6 @@ class VentanaCrearDocumento:
             """Seleccionar sugerencia con Enter"""
             if self.popup and self.popup.winfo_exists() and self.botones_popup:
                 if 0 <= self.idx_seleccionado < len(self.botones_popup):
-                    # Usar la sugerencia correspondiente
                     sugerencia = self.sugerencias[self.idx_seleccionado]
                     self._usar_sugerencia(sugerencia)
                 return "break"
@@ -630,50 +654,40 @@ class VentanaCrearDocumento:
             """Reemplaza la palabra actual con la sugerencia seleccionada"""
             try:
                 if self.tipo_palabra == "nombre":
-                    # Para nombres, reemplazar solo la palabra actual
                     try:
                         texto_completo = self.entry.get()
                         cursor_pos = self.entry.index(tk.INSERT)
                         
-                        # Validar cursor_pos
                         if cursor_pos > len(texto_completo):
                             cursor_pos = len(texto_completo)
                         
-                        # Encontrar inicio de la palabra actual
                         inicio = cursor_pos
                         while inicio > 0:
                             if inicio - 1 < 0 or texto_completo[inicio - 1] in (' ', '\t', '\n'):
                                 break
                             inicio -= 1
                         
-                        # Encontrar fin de la palabra actual
                         fin = cursor_pos
                         while fin < len(texto_completo):
                             if texto_completo[fin] in (' ', '\t', '\n'):
                                 break
                             fin += 1
                         
-                        # Validar índices antes de usar
                         if inicio < 0:
                             inicio = 0
                         if fin > len(texto_completo):
                             fin = len(texto_completo)
                         
-                        # Construir nuevo texto
                         nuevo_texto = texto_completo[:inicio] + texto
                         
-                        # Agregar texto después de la palabra solo si existe
                         if fin < len(texto_completo):
                             nuevo_texto += texto_completo[fin:]
                         
-                        # Actualizar entry
                         self.entry.delete(0, "end")
                         self.entry.insert(0, nuevo_texto)
                         
-                        # Posicionar cursor después de la palabra insertada
                         nueva_pos = inicio + len(texto)
                         
-                        # Agregar espacio automáticamente si no hay texto después o si no es un espacio
                         if nueva_pos >= len(nuevo_texto) or nuevo_texto[nueva_pos:nueva_pos+1] != ' ':
                             self.entry.insert(nueva_pos, ' ')
                             self.entry.icursor(nueva_pos + 1)
@@ -682,12 +696,10 @@ class VentanaCrearDocumento:
                         
                     except Exception as e:
                         print(f"⚠️ Error al usar sugerencia en nombre (usando fallback): {e}")
-                        # Fallback: reemplazar todo
                         self.entry.delete(0, "end")
                         self.entry.insert(0, texto + " ")
                         self.entry.icursor("end")
                 else:
-                    # Para otros campos, reemplazar todo el contenido
                     self.entry.delete(0, "end")
                     self.entry.insert(0, texto)
                     self.entry.icursor("end")
@@ -740,7 +752,6 @@ class VentanaCrearDocumento:
         self.nombre_original = nombre_archivo
         self.persona_id_original = persona_id
 
-        # Sincronizar con la lógica ya existente
         self.ruta_documento_actual = ruta_archivo
         self.persona_actual_id = persona_id
 
@@ -760,7 +771,6 @@ class VentanaCrearDocumento:
 
     def verificar_plantilla(self):
         """Verifica la existencia/estado de la plantilla."""
-        # En modo solo_formulario no mostramos nada de plantilla.
         if self.solo_formulario:
             return
 
@@ -797,15 +807,12 @@ class VentanaCrearDocumento:
             return
 
         try:
-            # Verificar que sea un archivo válido
             _ = Document(archivo)
 
-            # Copiar archivo a carpeta de plantillas
             nombre_archivo = os.path.basename(archivo)
             ruta_destino = os.path.join(PLANTILLAS_DIR, nombre_archivo)
             shutil.copy2(archivo, ruta_destino)
 
-            # Guardar en base de datos
             self.db.guardar_plantilla(nombre_archivo, ruta_destino, activar=True)
 
             self.lbl_plantilla.configure(
@@ -825,39 +832,61 @@ class VentanaCrearDocumento:
             )
 
     def crear_interfaz(self):
-        """Crea la interfaz de creación de documentos"""
+        """Crea la interfaz de creación de documentos - ✅ CON PALETA OSCURA"""
 
         # Necesario para validatecommand
         vcmd_entero = (self.ventana.register(self._validar_entero), "%P")
         vcmd_dpi = (self.ventana.register(self._validar_dpi), "%P")
         vcmd_fecha = (self.ventana.register(self._validar_fecha_ddmmaaaa), "%P")
 
-        container = ctk.CTkFrame(self.ventana)
-        container.pack(fill="both", expand=True, padx=10, pady=10)
+        # ===== DETECTAR SI NECESITA SCROLL =====
+        necesita_scroll = self.detectar_necesita_scroll()
 
-        container.grid_columnconfigure(0, weight=0, minsize=450)
-        container.grid_columnconfigure(1, weight=1)
-        container.grid_rowconfigure(0, weight=1)
+        # ===== CONTENEDOR PRINCIPAL =====
+        contenedor_principal = ctk.CTkFrame(self.ventana, fg_color="#001a33")
+        contenedor_principal.pack(fill="both", expand=True, padx=0, pady=0)
 
-        # ==== PANEL IZQUIERDO: Formulario ====
-        panel_izquierdo = ctk.CTkFrame(container)
-        panel_izquierdo.grid(row=0, column=0, sticky="nsew", padx=(0, 5))
+        # ===== PANEL IZQUIERDO (Formulario) =====
+        if necesita_scroll:
+            # Usar CTkScrollableFrame si la pantalla es pequeña
+            panel_izquierdo = ctk.CTkScrollableFrame(
+                contenedor_principal,
+                width=escalar(650),
+                fg_color="#001a33"
+            )
+            print("🔄 Panel izquierdo: SCROLLABLE")
+        else:
+            # Usar CTkFrame normal si la pantalla es grande
+            panel_izquierdo = ctk.CTkFrame(
+                contenedor_principal,
+                width=escalar(650),
+                fg_color="#001a33"
+            )
+            print("📄 Panel izquierdo: NORMAL")
+        
+        panel_izquierdo.pack(side="left", fill="both", expand=False, padx=PADDING_MEDIUM, pady=PADDING_MEDIUM)
+        
+        # ✅ CRÍTICO: Solo desactivar pack_propagate si NO es scrollable
+        if not necesita_scroll:
+            panel_izquierdo.pack_propagate(False)
 
         # Título
         titulo_texto = "✏️ Editar Documento" if self.solo_formulario else "➕ Crear Documento"
         ctk.CTkLabel(
             panel_izquierdo,
             text=titulo_texto,
-            font=ctk.CTkFont(size=16, weight="bold")
-        ).pack(pady=5)
+            font=ctk.CTkFont(size=FONT_SIZE_TITLE, weight="bold"),
+            text_color="white"
+        ).pack(pady=escalar(3))
 
         # ======= SECCIÓN PLANTILLA =======
         self.lbl_plantilla = ctk.CTkLabel(
             panel_izquierdo,
             text="Verificando plantilla...",
-            font=ctk.CTkFont(size=11)
+            font=ctk.CTkFont(size=FONT_SIZE_SMALL),
+            text_color="white"
         )
-        self.lbl_plantilla.pack(pady=2)
+        self.lbl_plantilla.pack(pady=escalar(2))
 
         self.btn_cambiar_plantilla = ctk.CTkButton(
             panel_izquierdo,
@@ -865,45 +894,50 @@ class VentanaCrearDocumento:
             image=self.icono_plantilla,
             compound="left",
             command=self.cargar_plantilla,
-            width=140,
-            height=26,
-            fg_color="#1E88E5",
-            hover_color="#1565C0"
+            width=escalar(120),
+            height=INPUT_HEIGHT,
+            fg_color="#005187",
+            hover_color="#2d5f8d",
+           font=ctk.CTkFont(size=FONT_SIZE_SMALL)
         )
-        self.btn_cambiar_plantilla.pack(pady=2)
+        self.btn_cambiar_plantilla.pack(pady=escalar(2))
 
         # ----- Sección de Búsqueda Rápida -----
-        self.frame_busqueda = ctk.CTkFrame(panel_izquierdo)
-        self.frame_busqueda.pack(pady=3, padx=8, fill="x")
+        self.frame_busqueda = ctk.CTkFrame(panel_izquierdo, fg_color="#003d66")
+        self.frame_busqueda.pack(pady=escalar(4), padx=PADDING_MEDIUM, fill="x")
 
         ctk.CTkLabel(
             self.frame_busqueda,
             text="🔍 Búsqueda Rápida",
-            font=ctk.CTkFont(size=12, weight="bold")
-        ).pack(pady=2)
+            font=ctk.CTkFont(size=FONT_SIZE_SUBTITLE, weight="bold"),
+            text_color="white"
+        ).pack(pady=escalar(2))
 
         ctk.CTkLabel(
             self.frame_busqueda,
             text="Buscar persona existente",
-            font=ctk.CTkFont(size=9),
-            text_color="gray"
-        ).pack(pady=1)
+            font=ctk.CTkFont(size=FONT_SIZE_SMALL),
+            text_color="lightgray"
+        ).pack(pady=escalar(1))
 
         # Búsqueda por DPI
-        frame_buscar_dpi = ctk.CTkFrame(self.frame_busqueda)
-        frame_buscar_dpi.pack(pady=1, padx=8, fill="x")
+        frame_buscar_dpi = ctk.CTkFrame(self.frame_busqueda, fg_color="#003d66")
+        frame_buscar_dpi.pack(pady=escalar(2), padx=PADDING_MEDIUM, fill="x")
 
         frame_buscar_dpi.grid_columnconfigure(1, weight=1)
 
-        ctk.CTkLabel(frame_buscar_dpi, text="DPI:", width=55).grid(row=0, column=0, padx=(3, 2), sticky="w")
+        ctk.CTkLabel(frame_buscar_dpi, text="DPI:", width=escalar(50), font=ctk.CTkFont(size=FONT_SIZE_SMALL), text_color="white", fg_color="#003d66").grid(row=0, column=0, padx=(PADDING_SMALL, PADDING_TINY), sticky="w")
         self.entry_buscar_dpi = ctk.CTkEntry(
             frame_buscar_dpi,
             placeholder_text="2008 22829 0101",
-            height=26,
+            height=INPUT_HEIGHT,
             validate="key",
-            validatecommand=vcmd_dpi
+            validatecommand=vcmd_dpi,
+            font=ctk.CTkFont(size=FONT_SIZE_SMALL),
+            fg_color="#001a33",
+            border_color="#005187"
         )
-        self.entry_buscar_dpi.grid(row=0, column=1, padx=2, sticky="ew")
+        self.entry_buscar_dpi.grid(row=0, column=1, padx=PADDING_TINY, sticky="ew")
         self.entry_buscar_dpi.bind("<Return>", lambda e: self.buscar_persona())
 
         btn_buscar = ctk.CTkButton(
@@ -911,26 +945,29 @@ class VentanaCrearDocumento:
             text="",
             image=self.icono_buscar,
             command=self.buscar_persona,
-            width=40,
-            height=26,
-            fg_color="#1E88E5",
-            hover_color="#1565C0"
+            width=escalar(35),
+            height=INPUT_HEIGHT,
+            fg_color="#005187",
+            hover_color="#2d5f8d"
         )
-        btn_buscar.grid(row=0, column=2, padx=(2, 3))
+        btn_buscar.grid(row=0, column=2, padx=(PADDING_TINY, PADDING_SMALL))
 
         # Búsqueda por Nombre
-        frame_buscar_nombre = ctk.CTkFrame(self.frame_busqueda)
-        frame_buscar_nombre.pack(pady=1, padx=8, fill="x")
+        frame_buscar_nombre = ctk.CTkFrame(self.frame_busqueda, fg_color="#003d66")
+        frame_buscar_nombre.pack(pady=escalar(2), padx=PADDING_MEDIUM, fill="x")
 
         frame_buscar_nombre.grid_columnconfigure(1, weight=1)
 
-        ctk.CTkLabel(frame_buscar_nombre, text="Nombre:", width=55).grid(row=0, column=0, padx=(3, 2), sticky="w")
+        ctk.CTkLabel(frame_buscar_nombre, text="Nombre:", width=escalar(50), font=ctk.CTkFont(size=FONT_SIZE_SMALL), text_color="white", fg_color="#003d66").grid(row=0, column=0, padx=(PADDING_SMALL, PADDING_TINY), sticky="w")
         self.entry_buscar_nombre = ctk.CTkEntry(
             frame_buscar_nombre,
             placeholder_text="Juan Pérez",
-            height=26
+            height=INPUT_HEIGHT,
+            font=ctk.CTkFont(size=FONT_SIZE_SMALL),
+            fg_color="#001a33",
+            border_color="#005187"
         )
-        self.entry_buscar_nombre.grid(row=0, column=1, padx=2, sticky="ew")
+        self.entry_buscar_nombre.grid(row=0, column=1, padx=PADDING_TINY, sticky="ew")
         self.entry_buscar_nombre.bind("<Return>", lambda e: self.buscar_por_nombre())
 
         btn_buscar_nombre = ctk.CTkButton(
@@ -938,12 +975,12 @@ class VentanaCrearDocumento:
             text="",
             image=self.icono_buscar,
             command=self.buscar_por_nombre,
-            width=40,
-            height=26,
-            fg_color="#1E88E5",
-            hover_color="#1565C0"
+            width=escalar(35),
+            height=INPUT_HEIGHT,
+            fg_color="#005187",
+            hover_color="#2d5f8d"
         )
-        btn_buscar_nombre.grid(row=0, column=2, padx=(2, 3))
+        btn_buscar_nombre.grid(row=0, column=2, padx=(PADDING_TINY, PADDING_SMALL))
 
         btn_limpiar = ctk.CTkButton(
             self.frame_busqueda,
@@ -951,138 +988,194 @@ class VentanaCrearDocumento:
             image=self.icono_limpiar,
             compound="left",
             command=self.limpiar_campos,
-            width=100,
-            height=26,
-            fg_color="#1E88E5",
-            hover_color="#1565C0"
+            width=escalar(90),
+            height=INPUT_HEIGHT,
+            fg_color="#005187",
+            hover_color="#2d5f8d",
+            font=ctk.CTkFont(size=FONT_SIZE_SMALL)
         )
-        btn_limpiar.pack(pady=2)
+        btn_limpiar.pack(pady=escalar(2))
 
         # ----- Fecha y Hora -----
-        frame_fecha = ctk.CTkFrame(panel_izquierdo)
-        frame_fecha.pack(pady=2, padx=8, fill="x")
+        frame_fecha = ctk.CTkFrame(panel_izquierdo, fg_color="#003d66")
+        frame_fecha.pack(pady=escalar(2), padx=PADDING_MEDIUM, fill="x")
 
         ctk.CTkLabel(
             frame_fecha,
             text="🕐 Fecha y Hora",
-            font=ctk.CTkFont(size=12, weight="bold")
-        ).pack(pady=(2, 0))
+            font=ctk.CTkFont(size=FONT_SIZE_SUBTITLE, weight="bold"),
+            text_color="white"
+        ).pack(pady=(escalar(2), 0))
 
         # Check: fijar fecha manualmente
         self.chk_fecha_fija = ctk.CTkCheckBox(
             frame_fecha,
             text="Fijar fecha manualmente",
             variable=self.fecha_fija_var,
-            command=self._on_cambiar_modo_fecha
+            command=self._on_cambiar_modo_fecha,
+            font=ctk.CTkFont(size=FONT_SIZE_SMALL),
+            text_color="white",
+            fg_color="#005187",
+            hover_color="#2d5f8d"
         )
-        self.chk_fecha_fija.pack(pady=(0, 4), padx=8, anchor="w")
+        self.chk_fecha_fija.pack(pady=(0, escalar(3)), padx=PADDING_MEDIUM, anchor="w")
 
         # Hora y Minutos
-        frame_hora = ctk.CTkFrame(frame_fecha)
-        frame_hora.pack(pady=1, fill="x", padx=8)
+        frame_hora = ctk.CTkFrame(frame_fecha, fg_color="#003d66")
+        frame_hora.pack(pady=escalar(2), fill="x", padx=PADDING_MEDIUM)
 
         frame_hora.grid_columnconfigure(1, weight=1)
         frame_hora.grid_columnconfigure(3, weight=1)
 
-        ctk.CTkLabel(frame_hora, text="Hora:", width=55).grid(row=0, column=0, padx=(3, 2), sticky="w")
+        ctk.CTkLabel(frame_hora, text="Hora:", width=escalar(50), font=ctk.CTkFont(size=FONT_SIZE_SMALL), text_color="white", fg_color="#003d66").grid(row=0, column=0, padx=(PADDING_SMALL, PADDING_TINY), sticky="w")
         self.entry_hora = ctk.CTkEntry(
             frame_hora,
             placeholder_text="17",
-            height=26,
+            height=INPUT_HEIGHT,
             validate="key",
-            validatecommand=vcmd_entero
+            validatecommand=vcmd_entero,
+            font=ctk.CTkFont(size=FONT_SIZE_SMALL),
+            fg_color="#001a33",
+            border_color="#005187"
         )
-        self.entry_hora.grid(row=0, column=1, padx=2, sticky="ew")
+        self.entry_hora.grid(row=0, column=1, padx=PADDING_TINY, sticky="ew")
 
-        ctk.CTkLabel(frame_hora, text="Min:", width=40).grid(row=0, column=2, padx=(8, 2), sticky="w")
+        ctk.CTkLabel(frame_hora, text="Min:", width=escalar(35), font=ctk.CTkFont(size=FONT_SIZE_SMALL), text_color="white", fg_color="#003d66").grid(row=0, column=2, padx=(PADDING_MEDIUM, PADDING_TINY), sticky="w")
         self.entry_minutos = ctk.CTkEntry(
             frame_hora,
             placeholder_text="20",
-            height=26,
+            height=INPUT_HEIGHT,
             validate="key",
-            validatecommand=vcmd_entero
+            validatecommand=vcmd_entero,
+            font=ctk.CTkFont(size=FONT_SIZE_SMALL),
+            fg_color="#001a33",
+            border_color="#005187"
         )
-        self.entry_minutos.grid(row=0, column=3, padx=(2, 3), sticky="ew")
+        self.entry_minutos.grid(row=0, column=3, padx=(PADDING_TINY, PADDING_SMALL), sticky="ew")
 
         # Día, Mes, Año
-        frame_fecha_dia = ctk.CTkFrame(frame_fecha)
-        frame_fecha_dia.pack(pady=1, fill="x", padx=8)
+        frame_fecha_dia = ctk.CTkFrame(frame_fecha, fg_color="#003d66")
+        frame_fecha_dia.pack(pady=escalar(2), fill="x", padx=PADDING_MEDIUM)
 
         frame_fecha_dia.grid_columnconfigure(1, weight=1)
         frame_fecha_dia.grid_columnconfigure(3, weight=2)
         frame_fecha_dia.grid_columnconfigure(5, weight=1)
 
-        ctk.CTkLabel(frame_fecha_dia, text="Día:", width=55).grid(row=0, column=0, padx=(3, 2), sticky="w")
+        ctk.CTkLabel(frame_fecha_dia, text="Día:", width=escalar(50), font=ctk.CTkFont(size=FONT_SIZE_SMALL), text_color="white", fg_color="#003d66").grid(row=0, column=0, padx=(PADDING_SMALL, PADDING_TINY), sticky="w")
         self.entry_dia = ctk.CTkEntry(
             frame_fecha_dia,
             placeholder_text="28",
-            height=26,
+            height=INPUT_HEIGHT,
             validate="key",
-            validatecommand=vcmd_entero
+            validatecommand=vcmd_entero,
+            font=ctk.CTkFont(size=FONT_SIZE_SMALL),
+            fg_color="#001a33",
+            border_color="#005187"
         )
-        self.entry_dia.grid(row=0, column=1, padx=2, sticky="ew")
+        self.entry_dia.grid(row=0, column=1, padx=PADDING_TINY, sticky="ew")
 
-        ctk.CTkLabel(frame_fecha_dia, text="Mes:", width=40).grid(row=0, column=2, padx=(8, 2), sticky="w")
+        ctk.CTkLabel(frame_fecha_dia, text="Mes:", width=escalar(35),font=ctk.CTkFont(size=FONT_SIZE_SMALL), text_color="white", fg_color="#003d66").grid(row=0, column=2, padx=(PADDING_MEDIUM, PADDING_TINY), sticky="w")
         self.combo_mes = ctk.CTkComboBox(
             frame_fecha_dia,
             values=["enero", "febrero", "marzo", "abril", "mayo", "junio",
                     "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"],
-            height=26
+            height=INPUT_HEIGHT,
+            font=ctk.CTkFont(size=FONT_SIZE_SMALL),
+            fg_color="#001a33",
+            border_color="#005187",
+            button_color="#005187",
+            button_hover_color="#2d5f8d"
         )
-        self.combo_mes.grid(row=0, column=3, padx=2, sticky="ew")
+        self.combo_mes.grid(row=0, column=3, padx=PADDING_TINY, sticky="ew")
 
-        ctk.CTkLabel(frame_fecha_dia, text="Año:", width=40).grid(row=0, column=4, padx=(8, 2), sticky="w")
+        ctk.CTkLabel(frame_fecha_dia, text="Año:", width=escalar(35), font=ctk.CTkFont(size=FONT_SIZE_SMALL), text_color="white", fg_color="#003d66").grid(row=0, column=4, padx=(PADDING_MEDIUM, PADDING_TINY), sticky="w")
         self.entry_anio = ctk.CTkEntry(
             frame_fecha_dia,
             placeholder_text="2025",
-            height=26,
+            height=INPUT_HEIGHT,
             validate="key",
-            validatecommand=vcmd_entero
+            validatecommand=vcmd_entero,
+            font=ctk.CTkFont(size=FONT_SIZE_SMALL),
+            fg_color="#001a33",
+            border_color="#005187"
         )
-        self.entry_anio.grid(row=0, column=5, padx=(2, 3), sticky="ew")
+        self.entry_anio.grid(row=0, column=5, padx=(PADDING_TINY, PADDING_SMALL), sticky="ew")
 
         # Inicializar campos de fecha/hora con la fecha actual y deshabilitados (modo automático)
         self._establecer_fecha_hora_actual()
         self._actualizar_estado_campos_fecha()
 
         # ----- Datos personales -----
-        frame_datos = ctk.CTkFrame(panel_izquierdo)
-        frame_datos.pack(pady=2, padx=8, fill="x")
+        frame_datos = ctk.CTkFrame(panel_izquierdo, fg_color="#003d66")
+        frame_datos.pack(pady=escalar(2), padx=PADDING_MEDIUM, fill="x")
 
         ctk.CTkLabel(
             frame_datos,
             text="👤 Datos Personales",
-            font=ctk.CTkFont(size=13, weight="bold")
-        ).pack(pady=2)
+            font=ctk.CTkFont(size=FONT_SIZE_SUBTITLE, weight="bold"),
+            text_color="white"
+        ).pack(pady=escalar(2))
 
         # FUNCIÓN AUXILIAR para crear campos uniformes
         def crear_campo(parent, label_text, placeholder="", es_combo=False, valores_combo=None,
                         validar=None):
-            frame = ctk.CTkFrame(parent)
-            frame.pack(pady=1, fill="x", padx=8)
+            frame = ctk.CTkFrame(parent, fg_color="#003d66")
+            frame.pack(pady=escalar(2), fill="x", padx=PADDING_MEDIUM)
             frame.grid_columnconfigure(1, weight=1)
 
-            ctk.CTkLabel(frame, text=label_text, width=100).grid(row=0, column=0, padx=(3, 2), sticky="w")
+            ctk.CTkLabel(frame, text=label_text, width=escalar(90), font=ctk.CTkFont(size=FONT_SIZE_SMALL), text_color="white", fg_color="#003d66").grid(row=0, column=0, padx=(PADDING_SMALL, PADDING_TINY), sticky="w")
 
-            kwargs = {"height": 26}
+            kwargs = {"height": INPUT_HEIGHT, "font": ctk.CTkFont(size=FONT_SIZE_SMALL), "fg_color": "#001a33", "border_color": "#005187"}
             if validar is not None:
                 kwargs.update({"validate": "focusout", "validatecommand": validar})
 
             if es_combo:
-                widget = ctk.CTkComboBox(frame, values=valores_combo or [], height=26)
-                widget.grid(row=0, column=1, padx=(2, 3), sticky="ew")
+                kwargs.update({"button_color": "#005187", "button_hover_color": "#2d5f8d"})
+                widget = ctk.CTkComboBox(frame, values=valores_combo or [], **kwargs)
+                widget.grid(row=0, column=1, padx=(PADDING_TINY, PADDING_SMALL), sticky="ew")
             else:
                 widget = ctk.CTkEntry(frame, placeholder_text=placeholder, **kwargs)
-                widget.grid(row=0, column=1, padx=(2, 3), sticky="ew")
+                widget.grid(row=0, column=1, padx=(PADDING_TINY, PADDING_SMALL), sticky="ew")
 
             return widget
 
         # Crear todos los campos con la función auxiliar
         self.entry_nombre = crear_campo(frame_datos, "Nombre:", "Juan Carlos Pérez López")
         self.entry_nombre.bind("<FocusOut>", lambda e: self._capitalizar_entry(self.entry_nombre))
-        self.combo_sexo = crear_campo(frame_datos, "Sexo:", es_combo=True,
-                                      valores_combo=["masculino", "femenino"])
+        
+        # ✅ SEXO CON CHECKBOX DE SEÑORITA
+        frame_sexo = ctk.CTkFrame(frame_datos, fg_color="#003d66")
+        frame_sexo.pack(pady=escalar(2), fill="x", padx=PADDING_MEDIUM)
+        frame_sexo.grid_columnconfigure(1, weight=1)
+        
+        ctk.CTkLabel(frame_sexo, text="Sexo:", width=escalar(90), font=ctk.CTkFont(size=FONT_SIZE_SMALL), text_color="white", fg_color="#003d66").grid(row=0, column=0, padx=(PADDING_SMALL, PADDING_TINY), sticky="w")
+        
+        self.combo_sexo = ctk.CTkComboBox(
+            frame_sexo,
+            values=["masculino", "femenino"],
+            height=INPUT_HEIGHT,
+            font=ctk.CTkFont(size=FONT_SIZE_SMALL),
+            command=self._on_cambiar_sexo,
+            fg_color="#001a33",
+            border_color="#005187",
+            button_color="#005187",
+            button_hover_color="#2d5f8d"
+        )
+        self.combo_sexo.grid(row=0, column=1, padx=(PADDING_TINY, PADDING_SMALL), sticky="ew")
         self.combo_sexo.set("masculino")
+        
+        # ✅ CHECKBOX SEÑORITA (inicialmente deshabilitado)
+        self.chk_senorita = ctk.CTkCheckBox(
+            frame_sexo,
+            text="Señorita",
+            variable=self.senorita_var,
+            font=ctk.CTkFont(size=FONT_SIZE_SMALL),
+            state="disabled",
+            text_color="white",
+            fg_color="#005187",
+            hover_color="#2d5f8d"
+        )
+        self.chk_senorita.grid(row=0, column=2, padx=(PADDING_SMALL, PADDING_SMALL))
 
         self.entry_fecha_nac = crear_campo(
             frame_datos,
@@ -1090,7 +1183,6 @@ class VentanaCrearDocumento:
             "DD/MM/AAAA",
             validar=vcmd_fecha
         )
-        # REEMPLAZAR las líneas existentes de bind por estas:
         self.entry_fecha_nac.bind("<KeyRelease>", self.formatear_fecha_auto)
         self.entry_fecha_nac.bind("<FocusOut>", self.calcular_edad)
         self.entry_fecha_nac.bind("<Return>", self.calcular_edad)
@@ -1129,11 +1221,9 @@ class VentanaCrearDocumento:
             "2008 22829 0101",
             validar=vcmd_dpi
         )
-        # Configurar formato automático de DPI (solo números, máximo 13 dígitos)
         self.entry_dpi.bind('<KeyRelease>', self.formatear_dpi_automatico)
 
         # === AUTOCOMPLETADO desde BD de sugerencias ===
-        # Usamos la clase interna AutoCompleter
         self.autocomplete_nombre = self.AutoCompleter(self, self.entry_nombre, "nombre")
         self.autocomplete_casada = self.AutoCompleter(self, self.entry_casada, "apellido")
         self.autocomplete_nacionalidad = self.AutoCompleter(self, self.entry_nacionalidad, "nacionalidad")
@@ -1141,8 +1231,11 @@ class VentanaCrearDocumento:
         self.autocomplete_nivel = self.AutoCompleter(self, self.entry_nivel, "nivel_academico")
         
         # ----- Botones -----
-        frame_botones = ctk.CTkFrame(panel_izquierdo)
-        frame_botones.pack(pady=5, padx=8)
+        frame_botones = ctk.CTkFrame(panel_izquierdo, fg_color="#003d66")
+        frame_botones.pack(pady=(escalar(4), escalar(2)), padx=PADDING_MEDIUM, fill="x")
+
+        frame_botones.configure(height=escalar(55))
+        frame_botones.pack_propagate(False)
 
         frame_botones.grid_columnconfigure(0, weight=1, uniform="button")
         frame_botones.grid_columnconfigure(1, weight=1, uniform="button")
@@ -1151,16 +1244,16 @@ class VentanaCrearDocumento:
 
         btn_guardar = ctk.CTkButton(
             frame_botones,
-            text="Guardar y Generar",
+            text="Guardar y \n Generar",
             image=self.icono_guardar,
             compound="left",
             command=self.guardar_persona,
-            height=32,
-            font=ctk.CTkFont(size=12, weight="bold"),
-            fg_color="#1E88E5",
-            hover_color="#1565C0"
+            height=BUTTON_HEIGHT_SMALL,
+            font=ctk.CTkFont(size=FONT_SIZE_SMALL, weight="bold"),
+            fg_color="#005187",
+            hover_color="#2d5f8d"
         )
-        btn_guardar.grid(row=0, column=0, padx=3, sticky="ew")
+        btn_guardar.grid(row=0, column=0, padx=(PADDING_SMALL, PADDING_TINY), pady=escalar(4), sticky="ew")
 
         btn_preview = ctk.CTkButton(
             frame_botones,
@@ -1168,12 +1261,12 @@ class VentanaCrearDocumento:
             image=self.icono_preview,
             compound="left",
             command=self.generar_preview,
-            height=32,
-            font=ctk.CTkFont(size=12, weight="bold"),
-            fg_color="#1E88E5",
-            hover_color="#1565C0"
+            height=BUTTON_HEIGHT_SMALL,
+            font=ctk.CTkFont(size=FONT_SIZE_SMALL, weight="bold"),
+            fg_color="#005187",
+            hover_color="#2d5f8d"
         )
-        btn_preview.grid(row=0, column=1, padx=3, sticky="ew")
+        btn_preview.grid(row=0, column=1, padx=PADDING_TINY, pady=escalar(4), sticky="ew")
 
         btn_imprimir = ctk.CTkButton(
             frame_botones,
@@ -1181,50 +1274,52 @@ class VentanaCrearDocumento:
             image=self.icono_imprimir,
             compound="left",
             command=self.imprimir_documento_temporal,
-            height=32,
-            font=ctk.CTkFont(size=12, weight="bold"),
-            fg_color="#1E88E5",
-            hover_color="#1565C0"
+            height=BUTTON_HEIGHT_SMALL,
+            font=ctk.CTkFont(size=FONT_SIZE_SMALL, weight="bold"),
+            fg_color="#005187",
+            hover_color="#2d5f8d"
         )
-        btn_imprimir.grid(row=0, column=2, padx=3, sticky="ew")
+        btn_imprimir.grid(row=0, column=2, padx=PADDING_TINY, pady=escalar(4), sticky="ew")
 
         btn_generar = ctk.CTkButton(
             frame_botones,
-            text="Generar en Otra Ubicación",
+            text="Generar en Otra \n Ubicación",
             image=self.icono_generar,
             compound="left",
             command=self.generar_documento_otra_ubicacion,
-            height=32,
-            font=ctk.CTkFont(size=12, weight="bold"),
-            fg_color="#1E88E5",
-            hover_color="#1565C0"
+            height=BUTTON_HEIGHT_SMALL,
+            font=ctk.CTkFont(size=FONT_SIZE_SMALL, weight="bold"),
+            fg_color="#005187",
+            hover_color="#2d5f8d"
         )
-        btn_generar.grid(row=0, column=3, padx=3, sticky="ew")
+        btn_generar.grid(row=0, column=3, padx=(PADDING_TINY, PADDING_SMALL), pady=escalar(4), sticky="ew")
 
         # ==== PANEL DERECHO: Visor de documento ====
         if not self.solo_formulario:
-            panel_derecho = ctk.CTkFrame(container)
-            panel_derecho.grid(row=0, column=1, sticky="nsew", padx=(5, 0))
+            from config import VISOR_WIDTH, VISOR_HEIGHT
+            
+            panel_derecho = ctk.CTkFrame(contenedor_principal, fg_color="#003d66")
+            panel_derecho.pack(side="right", fill="both", expand=True, padx=(PADDING_SMALL, PADDING_MEDIUM), pady=PADDING_MEDIUM)
 
             ctk.CTkLabel(
                 panel_derecho,
                 text="📄 Vista Previa del Documento",
-                font=ctk.CTkFont(size=18, weight="bold")
-            ).pack(pady=8)
+                font=ctk.CTkFont(size=FONT_SIZE_TITLE, weight="bold"),
+                text_color="white"
+            ).pack(pady=escalar(8))
 
-            self.visor_scroll = ctk.CTkScrollableFrame(panel_derecho, width=650, height=750)
-            self.visor_scroll.pack(pady=10, padx=10, fill="both", expand=True)
+            self.visor_scroll = ctk.CTkScrollableFrame(panel_derecho, width=VISOR_WIDTH, height=VISOR_HEIGHT, fg_color="#001a33")
+            self.visor_scroll.pack(pady=escalar(10), padx=escalar(10), fill="both", expand=True)
 
             self.lbl_visor_estado = ctk.CTkLabel(
                 self.visor_scroll,
                 text="Haga clic en 'Vista Previa' para visualizar el documento",
                 text_color="gray",
-                font=ctk.CTkFont(size=14)
+                font=ctk.CTkFont(size=FONT_SIZE_SUBTITLE)
             )
-            self.lbl_visor_estado.pack(pady=200)
+            self.lbl_visor_estado.pack(pady=escalar(200))
         else:
-            self.visor_scroll = ctk.CTkFrame(container)
-            self.visor_scroll.grid_forget()
+            self.visor_scroll = None
             self.lbl_visor_estado = None
 
         # === AL FINAL: si estamos en modo solo_formulario, ocultar partes ===
@@ -1525,6 +1620,7 @@ class VentanaCrearDocumento:
 
     def mostrar_ventana_seleccion(self, resultados):
         """Muestra una ventana para seleccionar entre múltiples personas"""
+        
         ventana = ctk.CTkToplevel(self.ventana)
         ventana.title("Seleccionar Persona")
         
@@ -1536,8 +1632,8 @@ class VentanaCrearDocumento:
         ventana.update_idletasks()
         
         # Dimensiones
-        width = 600
-        height = 500
+        width = escalar(600)
+        height = escalar(500)
         
         # Calcular posición centrada
         screen_width = ventana.winfo_screenwidth()
@@ -1948,6 +2044,7 @@ class VentanaCrearDocumento:
             )
     
     def mostrar_pdf_en_visor(self, pdf_path):
+        from config import es_pantalla_pequena, VISOR_WIDTH
         """Muestra el PDF renderizado como imágenes en el visor"""
         # Limpiar visor
         for widget in self.visor_scroll.winfo_children():
@@ -1959,8 +2056,8 @@ class VentanaCrearDocumento:
             for page_num in range(len(pdf_document)):
                 page = pdf_document[page_num]
                 
-                # Renderizar página a imagen
-                zoom = 1.5
+                # ✅ Ajustar zoom según pantalla
+                zoom = 1.2 if es_pantalla_pequena() else 1.5
                 mat = fitz.Matrix(zoom, zoom)
                 pix = page.get_pixmap(matrix=mat)
                 
@@ -1968,7 +2065,8 @@ class VentanaCrearDocumento:
                 img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
                 
                 # Redimensionar para ajustar al visor
-                max_width = 650
+                # ✅ Usar ancho del visor
+                max_width = int(VISOR_WIDTH * 0.9)
                 ratio = max_width / img.width
                 new_height = int(img.height * ratio)
                 img = img.resize((max_width, new_height), Image.Resampling.LANCZOS)
@@ -2091,27 +2189,22 @@ class VentanaCrearDocumento:
         domicilio = self.capitalizar_texto(self.entry_domicilio.get().strip())
         dpi = self.entry_dpi.get().strip()
         
+        # ✅ OBTENER ESTADO DEL CHECKBOX SEÑORITA
+        es_senorita = self.senorita_var.get()
+        
         # Construir nombre completo con apellido de casada
         nombre_completo = nombre
 
         apellido_casada_limpio = apellido_casada.strip() if apellido_casada else ""
 
-        # Solo aplicar apellido de casada si:
-        # - hay valor
-        # - sexo femenino
-        # - estado civil corresponde
         if (
             apellido_casada_limpio
             and sexo.lower() == "femenino"
             and estado_civil.lower() in ["casada", "divorciada", "viuda"]
         ):
-            # Caso especial: si el nombre YA contiene la frase de apellido de casada
-            # (por ejemplo: "Juana Garcia de la Mata de Gonzalez"), no duplicamos.
             nombre_lower = nombre.lower()
             ap_lower = apellido_casada_limpio.lower()
             if ap_lower not in nombre_lower:
-                # Regla general: apellido de casada va al final del nombre completo
-                # Ej: "Juana Garcia Lopez Guevara" + "de Sosos"
                 nombre_completo = f"{nombre} {apellido_casada_limpio}"
         
         # Convertir año a texto
@@ -2127,36 +2220,28 @@ class VentanaCrearDocumento:
             else:
                 anio_texto = str(anio)
         
-        # PRIMERO: Hacer reemplazos de género en todo el documento
-        # IMPORTANTE: Hacer los reemplazos más específicos primero
-        if sexo == "femenino":
-            # Frases completas primero
-            self.reemplazar_genero_documento(doc, "al requirente", "a la requirente")
-            self.reemplazar_genero_documento(doc, "el requirente", "la requirente")
-            self.reemplazar_genero_documento(doc, "El requirente", "La requirente")
-            self.reemplazar_genero_documento(doc, "el señor", "la señora")
-            self.reemplazar_genero_documento(doc, "El señor", "La señora")
+        # ✅ REEMPLAZOS DE GÉNERO: "el señor" → "la señora" o "la señorita"
+        # La plantilla usa "el señor" como base (masculino)
+        
+        if sexo.lower() == "femenino":
+            if es_senorita:
+                # Reemplazar "el señor" → "la señorita"
+                self.reemplazar_genero_documento(doc, "el señor", "la señorita")
+                self.reemplazar_genero_documento(doc, "El señor", "La señorita")
+            else:
+                # Reemplazar "el señor" → "la señora"
+                self.reemplazar_genero_documento(doc, "el señor", "la señora")
+                self.reemplazar_genero_documento(doc, "El señor", "La señora")
             
-            # Palabras individuales - IMPORTANTE: usar palabras completas con espacios
+            # Otros reemplazos de género femenino
+            self.reemplazar_genero_documento(doc, "al requirente", "a la requirente")
             self.reemplazar_genero_documento(doc, " advertido ", " advertida ")
             self.reemplazar_genero_documento(doc, " enterado ", " enterada ")
             self.reemplazar_genero_documento(doc, " deudor ", " deudora ")
             self.reemplazar_genero_documento(doc, " moroso ", " morosa ")
             self.reemplazar_genero_documento(doc, " incluido ", " incluida ")
-        else:
-            # Frases completas primero
-            self.reemplazar_genero_documento(doc, "a la requirente", "al requirente")
-            self.reemplazar_genero_documento(doc, "la requirente", "el requirente")
-            self.reemplazar_genero_documento(doc, "La requirente", "El requirente")
-            self.reemplazar_genero_documento(doc, "la señora", "el señor")
-            self.reemplazar_genero_documento(doc, "La señora", "El señor")
-            
-            # Palabras individuales - con espacios
-            self.reemplazar_genero_documento(doc, " advertida ", " advertido ")
-            self.reemplazar_genero_documento(doc, " enterada ", " enterado ")
-            self.reemplazar_genero_documento(doc, " deudora ", " deudor ")
-            self.reemplazar_genero_documento(doc, " morosa ", " moroso ")
-            self.reemplazar_genero_documento(doc, " incluida ", " incluido ")
+        
+        # Si es masculino, no hacer nada (la plantilla ya está en masculino)
         
         # SEGUNDO: Preparar otros reemplazos
         reemplazos = []
@@ -2168,13 +2253,11 @@ class VentanaCrearDocumento:
             hora_t = NumeroATexto.convertir(hora_num)
             min_t = NumeroATexto.convertir(min_num)
 
-            # Normalizar "uno" -> "un" en hora
             if hora_t.endswith(" y uno"):
                 hora_t = hora_t[:-3] + " un"
             elif hora_t == "uno":
                 hora_t = "un"
 
-            # Normalizar "uno" -> "un" en minutos (por si lo necesitas)
             if min_t.endswith(" y uno"):
                 min_t = min_t[:-3] + " un"
             elif min_t == "uno":
@@ -2189,7 +2272,6 @@ class VentanaCrearDocumento:
             dia_num = int(dia)
             dia_t = NumeroATexto.convertir(dia_num)
 
-            # Normalizar "uno" -> "un" en día
             if dia_t.endswith(" y uno"):
                 dia_t = dia_t[:-3] + " un"
             elif dia_t == "uno":
@@ -2230,7 +2312,6 @@ class VentanaCrearDocumento:
             reemplazos.append(("Bachiller en Ciencias y Letras con Orientación en Computación", nivel_academico))
         
         if domicilio:
-            # Agregar "departamento de" si no lo tiene
             domicilio_completo = domicilio
             if not domicilio.lower().startswith("departamento de "):
                 domicilio_completo = f"departamento de {domicilio}"
@@ -2250,7 +2331,6 @@ class VentanaCrearDocumento:
         # Aplicar otros reemplazos
         for paragraph in doc.paragraphs:
             for buscar, reemplazar in reemplazos:
-                # Usamos reemplazar_texto_completo que ya preserva formato
                 self.reemplazar_texto_completo(paragraph, buscar, reemplazar)
         
         for table in doc.tables:

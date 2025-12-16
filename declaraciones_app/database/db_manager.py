@@ -330,30 +330,61 @@ class DatabaseManager:
     # ===== MÉTODOS PARA DOCUMENTOS =====
     
     def guardar_documento(self, persona_id, nombre_archivo, ruta_archivo, tipo_documento="acta"):
-        """Guarda un documento en la base de datos"""
+        """
+        Guarda un documento en la base de datos.
+        Si ya existe un documento para esta persona, lo ACTUALIZA en lugar de crear uno nuevo.
+        """
         fecha_actual = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        self.cursor.execute('''
-            INSERT INTO documentos (persona_id, nombre_archivo, ruta_archivo, fecha_carga, tipo_documento)
-            VALUES (?, ?, ?, ?, ?)
-        ''', (persona_id, nombre_archivo, ruta_archivo, fecha_actual, tipo_documento))
-        self.conn.commit()
-        return self.cursor.lastrowid
-    
-    def obtener_documentos_persona(self, persona_id):
-        """Obtiene todos los documentos de una persona"""
-        try:
-            self.cursor.execute('''
-                SELECT id, nombre_archivo, ruta_archivo, fecha_carga, tipo_documento
-                FROM documentos
-                WHERE persona_id = ?
-                ORDER BY fecha_carga DESC
-            ''', (persona_id,))
-            
-            return self.cursor.fetchall()
         
-        except Exception:
-            return []
-    
+        try:
+            # 1️⃣ VERIFICAR si ya existe un documento para esta persona
+            self.cursor.execute('''
+                SELECT id FROM documentos
+                WHERE persona_id = ? AND (tipo_documento IS NULL OR tipo_documento = ?)
+                ORDER BY fecha_carga DESC
+                LIMIT 1
+            ''', (persona_id, tipo_documento))
+            
+            documento_existente = self.cursor.fetchone()
+            
+            if documento_existente:
+                # 2️⃣ ACTUALIZAR el registro existente
+                doc_id = documento_existente[0]
+                self.cursor.execute('''
+                    UPDATE documentos
+                    SET nombre_archivo = ?, ruta_archivo = ?, fecha_carga = ?
+                    WHERE id = ?
+                ''', (nombre_archivo, ruta_archivo, fecha_actual, doc_id))
+                self.conn.commit()
+                return doc_id
+            else:
+                # 3️⃣ CREAR nuevo registro solo si no existe
+                self.cursor.execute('''
+                    INSERT INTO documentos (persona_id, nombre_archivo, ruta_archivo, fecha_carga, tipo_documento)
+                    VALUES (?, ?, ?, ?, ?)
+                ''', (persona_id, nombre_archivo, ruta_archivo, fecha_actual, tipo_documento))
+                self.conn.commit()
+                return self.cursor.lastrowid
+        
+        except Exception as e:
+            print(f"Error al guardar documento: {e}")
+            raise
+        
+        def obtener_documentos_persona(self, persona_id):
+            """Obtiene todos los documentos de una persona"""
+            try:
+                self.cursor.execute('''
+                    SELECT id, nombre_archivo, ruta_archivo, fecha_carga, tipo_documento
+                    FROM documentos
+                    WHERE persona_id = ?
+                    ORDER BY fecha_carga DESC
+                ''', (persona_id,))
+                
+                return self.cursor.fetchall()
+            
+            except Exception:
+                return []
+        
     def obtener_ultimo_documento_acta(self, persona_id):
         """Devuelve la ruta del último documento tipo 'acta' de una persona, o None si no hay."""
         try:
