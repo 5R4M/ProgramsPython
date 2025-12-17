@@ -112,7 +112,7 @@ os.makedirs(DOCUMENTOS_DIR, exist_ok=True)
 
 # ===== CONFIGURACIÓN DE LA APLICACIÓN =====
 APP_NAME = "Sistema de Actas Notariales"
-APP_VERSION = "2.0.0 Responsivo"
+APP_VERSION = "1.0.0"
 
 # Tamaño de ventana inicial (se maximiza después)
 # Usar 90% del ancho y 85% del alto disponible

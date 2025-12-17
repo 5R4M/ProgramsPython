@@ -30,6 +30,8 @@ class VentanaLogin:
         self.db = DatabaseManager()
         self.callback_login_exitoso = callback_login_exitoso
         
+        self._configurar_icono_ventana() 
+        
         self.root.title("Inicio de sesión")
         self.root.resizable(False, False)
         # ✅ Color de fondo oscuro
@@ -37,7 +39,12 @@ class VentanaLogin:
 
         # Tamaño y centrado - ✅ RESPONSIVO
         w = escalar(380)
-        h = escalar(480)
+        # ✅ Aumentar altura en pantallas pequeñas
+        if self._es_pantalla_pequena():
+            h = escalar(520)  # Más altura para pantallas pequeñas
+        else:
+            h = escalar(480)  # Altura normal
+            
         self.root.geometry(f"{w}x{h}")
         self.root.update_idletasks()
         x = (self.root.winfo_screenwidth() // 2) - (w // 2)
@@ -55,6 +62,27 @@ class VentanaLogin:
         
         self.crear_interfaz()
 
+    def _es_pantalla_pequena(self):
+        """Detecta si la pantalla es pequeña (menos de 800px de alto)"""
+        altura_pantalla = self.root.winfo_screenheight()
+        return altura_pantalla < 800
+    
+    def _configurar_icono_ventana(self):
+        """Configura el icono .ico de la ventana"""
+        try:
+            ruta_base = os.path.dirname(os.path.abspath(__file__))
+            ruta_proyecto = os.path.dirname(ruta_base)
+            icon_path = os.path.join(ruta_proyecto, "utils", "app_icono.ico")
+            
+            if os.path.exists(icon_path):
+                self.root.iconbitmap(icon_path)
+                print(f"✅ Icono de ventana establecido: {icon_path}")
+            else:
+                print(f"⚠️ Icono no encontrado: {icon_path}")
+                
+        except Exception as e:
+            print(f"⚠️ No se pudo establecer el icono: {e}")
+    
     def cargar_iconos(self):
         """Carga los iconos PNG para los botones y labels - ✅ USANDO CONSTANTES"""
         try:
@@ -250,8 +278,14 @@ class VentanaLogin:
         nota.pack(anchor="w", pady=(0, PADDING_LARGE))
 
         # Zona de carga / mensajes bajo el formulario
-        self.loading_frame = ctk.CTkFrame(frame, fg_color="#001a33")
-        self.loading_frame.pack(fill="x", pady=(0, PADDING_SMALL))
+        # ✅ Ajuste condicional para pantallas pequeñas
+        if self._es_pantalla_pequena():
+            self.loading_frame = ctk.CTkFrame(frame, fg_color="#001a33", height=escalar(35))
+            self.loading_frame.pack(fill="x", pady=(PADDING_TINY, PADDING_TINY))
+            self.loading_frame.pack_propagate(False)
+        else:
+            self.loading_frame = ctk.CTkFrame(frame, fg_color="#001a33")
+            self.loading_frame.pack(fill="x", pady=(0, PADDING_SMALL))
 
         self.loading_label = ctk.CTkLabel(
             self.loading_frame,
@@ -364,7 +398,7 @@ class VentanaLogin:
         self.loading_label.configure(text="✅ Accediendo al sistema...")
         # Breve pausa visual antes de cerrar login y abrir el MainWindow
         self.root.after(400, lambda: self._finalizar_login(info_usuario))
-
+    
     def _finalizar_login(self, info_usuario):
         # Detener animación por si sigue
         self.detener_animacion_carga()

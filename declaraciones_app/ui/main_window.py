@@ -98,8 +98,11 @@ class MainWindow(ctk.CTk):
         # Centrar ventana
         self.center_window()
         
-        # Solo maximizar si no es pantalla pequeña
-        if not es_pantalla_pequena():
+        # Maximizar especialmente en pantallas pequeñas para aprovechar el espacio
+        if es_pantalla_pequena():
+            self.after(100, self.maximizar_ventana)
+            self.after(150, lambda: self.state("zoomed"))  # Forzar maximizado
+        else:
             self.after(100, self.maximizar_ventana)
 
         # Ajustar visibilidad del botón usuarios según rol

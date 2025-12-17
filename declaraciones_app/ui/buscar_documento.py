@@ -223,42 +223,45 @@ class VentanaBuscarDocumento:
             self.ventana.geometry(f'{width}x{height}+{x}+{y}')
   
     def crear_interfaz(self):
-        """Crea la interfaz de búsqueda - ✅ COMPLETAMENTE RESPONSIVA"""
-      
+        """Versión FINAL con altura limitada en resultados"""
+        
         # Frame principal con dos columnas
         container = ctk.CTkFrame(self.ventana, fg_color="#001a33")
         container.pack(fill="both", expand=True, padx=PADDING_MEDIUM, pady=PADDING_MEDIUM)
-      
+        
         container.grid_columnconfigure(0, weight=3) 
         container.grid_columnconfigure(1, weight=2)
         container.grid_rowconfigure(0, weight=1)
-      
-        # ===== PANEL IZQUIERDO =====
-        panel_izquierdo = ctk.CTkFrame(container, fg_color="#003d66")
+        
+        # ===== PANEL IZQUIERDO - SCROLLABLE =====
+        panel_izquierdo = ctk.CTkScrollableFrame(
+            container, 
+            fg_color="#003d66",
+            width=escalar(750)
+        )
         panel_izquierdo.grid(row=0, column=0, sticky="nsew", padx=(0, PADDING_TINY))
-      
-        # Título (fuente escalada)
+        
+        # Título
         ctk.CTkLabel(
             panel_izquierdo,
             text="🔍 Buscar Documento",
             font=ctk.CTkFont(size=FONT_SIZE_TITLE, weight="bold")
-        ).pack(pady=PADDING_LARGE)
-      
-        # Frame de búsqueda
+        ).pack(pady=PADDING_MEDIUM)
+        
+        # ===== FRAME DE BÚSQUEDA (COMPACTO) =====
         frame_busqueda = ctk.CTkFrame(panel_izquierdo, fg_color="#003d66")
-        frame_busqueda.pack(pady=PADDING_MEDIUM, padx=PADDING_LARGE, fill="x")
-      
+        frame_busqueda.pack(pady=PADDING_SMALL, padx=PADDING_MEDIUM, fill="x")
+        
         # Búsqueda por DPI
         ctk.CTkLabel(
             frame_busqueda,
             text="Buscar por DPI:",
             font=ctk.CTkFont(size=FONT_SIZE_NORMAL, weight="bold")
-        ).pack(pady=(PADDING_MEDIUM, PADDING_TINY), anchor="w", padx=PADDING_MEDIUM)
-      
+        ).pack(pady=(PADDING_SMALL, PADDING_TINY), anchor="w", padx=PADDING_SMALL)
+        
         frame_dpi = ctk.CTkFrame(frame_busqueda, fg_color="#003d66")
-        frame_dpi.pack(pady=PADDING_TINY, padx=PADDING_MEDIUM, fill="x")
-      
-        # Entry con altura escalada
+        frame_dpi.pack(pady=PADDING_TINY, padx=PADDING_SMALL, fill="x")
+        
         self.entry_dpi = ctk.CTkEntry(
             frame_dpi,
             placeholder_text="Ej: 2008 22829 0101",
@@ -269,8 +272,7 @@ class VentanaBuscarDocumento:
         )
         self.entry_dpi.pack(side="left", padx=PADDING_TINY, expand=True, fill="x")
         self.entry_dpi.bind("<Return>", lambda e: self.buscar_por_dpi())
-      
-        # Botón con tamaño escalado
+        
         btn_buscar_dpi = ctk.CTkButton(
             frame_dpi,
             text="Buscar",
@@ -284,25 +286,25 @@ class VentanaBuscarDocumento:
             hover_color="#2d5f8d"
         )
         btn_buscar_dpi.pack(side="left", padx=PADDING_TINY)
-      
+        
         # Separador
         ctk.CTkLabel(
             frame_busqueda,
             text="O",
             font=ctk.CTkFont(size=FONT_SIZE_SMALL),
             text_color="gray"
-        ).pack(pady=PADDING_MEDIUM)
-      
+        ).pack(pady=PADDING_SMALL)
+        
         # Búsqueda por nombre
         ctk.CTkLabel(
             frame_busqueda,
             text="Buscar por Nombre:",
             font=ctk.CTkFont(size=FONT_SIZE_NORMAL, weight="bold")
-        ).pack(pady=(PADDING_MEDIUM, PADDING_TINY), anchor="w", padx=PADDING_MEDIUM)
-      
+        ).pack(pady=(PADDING_SMALL, PADDING_TINY), anchor="w", padx=PADDING_SMALL)
+        
         frame_nombre = ctk.CTkFrame(frame_busqueda, fg_color="#003d66")
-        frame_nombre.pack(pady=PADDING_TINY, padx=PADDING_MEDIUM, fill="x")
-      
+        frame_nombre.pack(pady=PADDING_TINY, padx=PADDING_SMALL, fill="x")
+        
         self.entry_nombre = ctk.CTkEntry(
             frame_nombre,
             placeholder_text="Ej: Juan Pérez",
@@ -313,7 +315,7 @@ class VentanaBuscarDocumento:
         )
         self.entry_nombre.pack(side="left", padx=PADDING_TINY, expand=True, fill="x")
         self.entry_nombre.bind("<Return>", lambda e: self.buscar_por_nombre())
-      
+        
         btn_buscar_nombre = ctk.CTkButton(
             frame_nombre,
             text="Buscar",
@@ -330,20 +332,20 @@ class VentanaBuscarDocumento:
 
         # Selector de año
         frame_filtro_año = ctk.CTkFrame(frame_busqueda, fg_color="transparent")
-        frame_filtro_año.pack(pady=(PADDING_MEDIUM, PADDING_TINY), padx=PADDING_MEDIUM, fill="x")
+        frame_filtro_año.pack(pady=(PADDING_SMALL, PADDING_TINY), padx=PADDING_SMALL, fill="x")
 
         ctk.CTkLabel(
             frame_filtro_año,
-            text="Filtrar por año:",
+            text="📅 Año:",
             font=ctk.CTkFont(size=FONT_SIZE_SMALL, weight="bold")
-        ).pack(side="left", padx=(0, PADDING_MEDIUM))
+        ).pack(side="left", padx=(0, PADDING_SMALL))
 
         self.combo_año_busqueda = ctk.CTkComboBox(
             frame_filtro_año,
             values=["Todos"],
             command=self.filtrar_busqueda_por_año,
-            width=escalar(120),
-            height=INPUT_HEIGHT,
+            width=escalar(100),
+            height=INPUT_HEIGHT - escalar(5),
             font=ctk.CTkFont(size=FONT_SIZE_SMALL),
             fg_color="#001a33",
             border_color="#005187",
@@ -354,16 +356,26 @@ class VentanaBuscarDocumento:
         self.combo_año_busqueda.pack(side="left")
         self.combo_año_busqueda.set("Todos")
 
-        # Frame de resultados
+        # ===== RESULTADOS (CON ALTURA LIMITADA Y SCROLL) =====
         ctk.CTkLabel(
             panel_izquierdo,
             text="Resultados de búsqueda:",
             font=ctk.CTkFont(size=FONT_SIZE_SUBTITLE, weight="bold")
-        ).pack(pady=(PADDING_LARGE, PADDING_MEDIUM), padx=PADDING_LARGE, anchor="w")
-      
-        self.resultados_frame = ctk.CTkScrollableFrame(panel_izquierdo, fg_color="#001a33")
-        self.resultados_frame.pack(pady=PADDING_MEDIUM, padx=PADDING_LARGE, fill="both", expand=True)
-      
+        ).pack(pady=(PADDING_SMALL, PADDING_TINY), padx=PADDING_MEDIUM, anchor="w")
+        
+        # ✅ CLAVE: ScrollableFrame con altura fija (5-6 resultados visibles)
+        if es_pantalla_pequena():
+            altura_resultados = escalar(250)  # ~4-5 resultados
+        else:
+            altura_resultados = escalar(320)  # ~5-6 resultados
+        
+        self.resultados_frame = ctk.CTkScrollableFrame(
+            panel_izquierdo, 
+            fg_color="#001a33",
+            height=altura_resultados  # ✅ ALTURA FIJA
+        )
+        self.resultados_frame.pack(pady=PADDING_TINY, padx=PADDING_MEDIUM, fill="x", expand=False)
+
         self.lbl_sin_resultados = ctk.CTkLabel(
             self.resultados_frame,
             text="Realice una búsqueda para ver resultados",
@@ -371,22 +383,38 @@ class VentanaBuscarDocumento:
             font=ctk.CTkFont(size=FONT_SIZE_NORMAL)
         )
         self.lbl_sin_resultados.pack(pady=escalar(50))
-      
-        # Frame de información de persona
-        self.info_frame = ctk.CTkFrame(panel_izquierdo, fg_color="#003d66")
-        self.info_frame.pack(pady=PADDING_MEDIUM, padx=PADDING_LARGE, fill="x")
-        self.info_frame.pack_forget()
-      
-        # Frame de documentos
+
+        # ===== INFO DE PERSONA (VISIBLE CON PLACEHOLDER) =====
+        self.info_frame = ctk.CTkFrame(
+            panel_izquierdo, 
+            fg_color="#003d66",
+            corner_radius=8
+        )
+        self.info_frame.pack(pady=PADDING_SMALL, padx=PADDING_MEDIUM, fill="x")
+        
+        # Placeholder inicial
+        self.lbl_info_placeholder = ctk.CTkLabel(
+            self.info_frame,
+            text="Seleccione una persona para ver su información",
+            text_color="gray",
+            font=ctk.CTkFont(size=FONT_SIZE_SMALL)
+        )
+        self.lbl_info_placeholder.pack(pady=PADDING_SMALL)
+
+        # ===== DOCUMENTOS (SIN ALTURA FIJA - SE ADAPTA) =====
         ctk.CTkLabel(
             panel_izquierdo,
             text="Documentos de la persona:",
             font=ctk.CTkFont(size=FONT_SIZE_SUBTITLE, weight="bold")
-        ).pack(pady=(PADDING_MEDIUM, PADDING_TINY), padx=PADDING_LARGE, anchor="w")
+        ).pack(pady=(PADDING_SMALL, PADDING_TINY), padx=PADDING_MEDIUM, anchor="w")
 
-        self.documentos_frame = ctk.CTkScrollableFrame(panel_izquierdo, fg_color="#001a33")
-        self.documentos_frame.pack(pady=PADDING_MEDIUM, padx=PADDING_LARGE, fill="both", expand=True)
-      
+        # ✅ Frame normal sin altura fija (usa el scroll del panel)
+        self.documentos_frame = ctk.CTkFrame(
+            panel_izquierdo, 
+            fg_color="#001a33"
+        )
+        self.documentos_frame.pack(pady=PADDING_TINY, padx=PADDING_MEDIUM, fill="x")
+
         self.lbl_sin_documentos = ctk.CTkLabel(
             self.documentos_frame,
             text="Seleccione una persona para ver sus documentos",
@@ -394,18 +422,17 @@ class VentanaBuscarDocumento:
             font=ctk.CTkFont(size=FONT_SIZE_SMALL)
         )
         self.lbl_sin_documentos.pack(pady=escalar(30))
-      
+        
         # ===== PANEL DERECHO: Visor =====
         panel_derecho = ctk.CTkFrame(container, fg_color="#003d66")
         panel_derecho.grid(row=0, column=1, sticky="nsew", padx=(PADDING_TINY, 0))
-      
+        
         ctk.CTkLabel(
             panel_derecho,
             text="📄 Vista Previa del Documento",
             font=ctk.CTkFont(size=FONT_SIZE_SUBTITLE, weight="bold")
         ).pack(pady=PADDING_MEDIUM)
-      
-        # ✅ Visor con dimensiones escaladas
+        
         self.visor_scroll = ctk.CTkScrollableFrame(
             panel_derecho, 
             width=VISOR_WIDTH, 
@@ -413,7 +440,7 @@ class VentanaBuscarDocumento:
             fg_color="#001a33"
         )
         self.visor_scroll.pack(pady=PADDING_MEDIUM, padx=PADDING_MEDIUM, fill="both", expand=True)
-      
+        
         self.lbl_visor_estado = ctk.CTkLabel(
             self.visor_scroll,
             text="Seleccione un documento para visualizar",
@@ -910,51 +937,115 @@ class VentanaBuscarDocumento:
         )
         self.lbl_sin_resultados.pack(pady=escalar(50))
         
-        self.info_frame.pack_forget()
+        # ✅ REEMPLAZAR CON:
+        for widget in self.info_frame.winfo_children():
+            widget.destroy()
+
+        self.lbl_info_placeholder = ctk.CTkLabel(
+            self.info_frame,
+            text="Seleccione una persona para ver su información",
+            text_color="gray",
+            font=ctk.CTkFont(size=FONT_SIZE_SMALL)
+        )
+        self.lbl_info_placeholder.pack(pady=PADDING_SMALL)
+        
         self.persona_seleccionada = None
         self.limpiar_documentos()
     
     def mostrar_resultados(self, resultados):
-        """Muestra los resultados de la búsqueda"""
+        """Muestra los resultados de la búsqueda - ✅ VERSIÓN MEJORADA PARA PANTALLAS PEQUEÑAS"""
+        from config import es_pantalla_pequena
+        
         for widget in self.resultados_frame.winfo_children():
             widget.destroy()
+        
+        # ✅ Detectar si es pantalla pequeña
+        pantalla_pequena = es_pantalla_pequena()
         
         for resultado in resultados:
             persona = Persona.from_tuple(resultado)
             
-            frame_resultado = ctk.CTkFrame(self.resultados_frame, fg_color="#003d66", corner_radius=CARD_CORNER_RADIUS)
-            frame_resultado.pack(pady=PADDING_TINY, padx=PADDING_SMALL, fill="x")
-            
-            info_text = f"👤 {persona.nombre_completo}\n📋 DPI: {persona.dpi}"
-            if persona.edad:
-                info_text += f"\n🎂 Edad: {persona.edad} años"
-            
-            ctk.CTkLabel(
-                frame_resultado,
-                text=info_text,
-                anchor="w",
-                justify="left",
-                font=ctk.CTkFont(size=FONT_SIZE_SMALL)
-            ).pack(side="left", padx=PADDING_SMALL, pady=PADDING_SMALL, expand=True, fill="x")
-            
-            btn_seleccionar = ctk.CTkButton(
-                frame_resultado,
-                text="Seleccionar",
-                image=self.icono_seleccionar,
-                compound="left",
-                command=lambda p=persona: self.seleccionar_persona(p),
-                width=escalar(130),
-                height=BUTTON_HEIGHT_SMALL,
-                font=ctk.CTkFont(size=FONT_SIZE_BUTTON),
-                fg_color="#005187",
-                hover_color="#2d5f8d"
+            frame_resultado = ctk.CTkFrame(
+                self.resultados_frame, 
+                fg_color="#003d66", 
+                corner_radius=CARD_CORNER_RADIUS
             )
-            btn_seleccionar.pack(side="right", padx=PADDING_TINY)
+            frame_resultado.pack(pady=PADDING_SMALL, padx=PADDING_SMALL, fill="x")
+            
+            if pantalla_pequena:
+                # ===== LAYOUT VERTICAL PARA PANTALLAS PEQUEÑAS =====
+                # Configurar grid
+                frame_resultado.grid_columnconfigure(0, weight=1)
+                
+                # ✅ Información más legible (fuente más grande)
+                info_text = f"👤 {persona.nombre_completo}\n📋 {persona.dpi}"
+                if persona.edad:
+                    info_text += f"\n🎂 {persona.edad} años"
+                
+                lbl_info = ctk.CTkLabel(
+                    frame_resultado,
+                    text=info_text,
+                    anchor="w",
+                    justify="left",
+                    font=ctk.CTkFont(size=FONT_SIZE_NORMAL),  # ✅ Fuente más grande
+                    wraplength=escalar(550)  # ✅ Wrap text para evitar corte
+                )
+                lbl_info.grid(row=0, column=0, sticky="ew", padx=PADDING_MEDIUM, pady=PADDING_SMALL)
+                
+                # Botón abajo
+                btn_seleccionar = ctk.CTkButton(
+                    frame_resultado,
+                    text="Seleccionar Persona",
+                    image=self.icono_seleccionar,
+                    compound="left",
+                    command=lambda p=persona: self.seleccionar_persona(p),
+                    height=BUTTON_HEIGHT_SMALL + escalar(5),
+                    font=ctk.CTkFont(size=FONT_SIZE_BUTTON),
+                    fg_color="#005187",
+                    hover_color="#2d5f8d"
+                )
+                btn_seleccionar.grid(row=1, column=0, sticky="ew", padx=PADDING_MEDIUM, pady=(0, PADDING_SMALL))
+            
+            else:
+                # ===== LAYOUT HORIZONTAL PARA PANTALLAS NORMALES =====
+                frame_resultado.grid_columnconfigure(0, weight=1)
+                frame_resultado.grid_columnconfigure(1, weight=0)
+                
+                info_text = f"👤 {persona.nombre_completo}\n📋 DPI: {persona.dpi}"
+                if persona.edad:
+                    info_text += f"\n🎂 Edad: {persona.edad} años"
+                
+                lbl_info = ctk.CTkLabel(
+                    frame_resultado,
+                    text=info_text,
+                    anchor="w",
+                    justify="left",
+                    font=ctk.CTkFont(size=FONT_SIZE_SMALL)
+                )
+                lbl_info.grid(row=0, column=0, sticky="ew", padx=PADDING_SMALL, pady=PADDING_SMALL)
+                
+                btn_seleccionar = ctk.CTkButton(
+                    frame_resultado,
+                    text="Seleccionar",
+                    image=self.icono_seleccionar,
+                    compound="left",
+                    command=lambda p=persona: self.seleccionar_persona(p),
+                    width=escalar(130),
+                    height=BUTTON_HEIGHT_SMALL,
+                    font=ctk.CTkFont(size=FONT_SIZE_BUTTON),
+                    fg_color="#005187",
+                    hover_color="#2d5f8d"
+                )
+                btn_seleccionar.grid(row=0, column=1, sticky="ns", padx=PADDING_TINY, pady=PADDING_TINY)
     
     def seleccionar_persona(self, persona):
         """Selecciona una persona y muestra su información"""
         self.persona_seleccionada = persona
-        self.mostrar_info_persona()
+        
+        # ✅ Mostrar información de la persona
+        self.mostrar_info_persona()  # ← Este método debe llamar pack()
+        
+        # Cargar documentos de la persona
         self.cargar_documentos_persona()
     
     def seleccionar_persona_por_id(self, persona_id):
@@ -995,36 +1086,49 @@ class VentanaBuscarDocumento:
             messagebox.showerror("Error", f"No se pudo abrir el editor:\n{str(e)}")
     
     def mostrar_info_persona(self):
-        """Muestra información detallada de la persona seleccionada"""
+        """Versión súper compacta para pantallas pequeñas"""
         for widget in self.info_frame.winfo_children():
             widget.destroy()
         
         self.info_frame.pack(pady=PADDING_SMALL, padx=PADDING_MEDIUM, fill="x")
         
-        ctk.CTkLabel(
-            self.info_frame,
-            text="✅ Persona Seleccionada",
-            font=ctk.CTkFont(size=FONT_SIZE_SUBTITLE, weight="bold"),
-            text_color=COLOR_SUCCESS
-        ).pack(pady=PADDING_SMALL)
+        from config import es_pantalla_pequena
         
-        info_text = f"""
-👤 Nombre: {self.persona_seleccionada.nombre_completo}
-📋 DPI: {self.persona_seleccionada.dpi}
-🎂 Edad: {self.persona_seleccionada.edad if self.persona_seleccionada.edad else 'N/A'}
-💍 Estado Civil: {self.persona_seleccionada.estado_civil if self.persona_seleccionada.estado_civil else 'N/A'}
-🌍 Nacionalidad: {self.persona_seleccionada.nacionalidad if self.persona_seleccionada.nacionalidad else 'N/A'}
-🎓 Nivel Académico: {self.persona_seleccionada.nivel_academico if self.persona_seleccionada.nivel_academico else 'N/A'}
-🏠 Domicilio: {self.persona_seleccionada.domicilio if self.persona_seleccionada.domicilio else 'N/A'}
-        """
-        
-        ctk.CTkLabel(
-            self.info_frame,
-            text=info_text.strip(),
-            anchor="w",
-            justify="left",
-            font=ctk.CTkFont(size=FONT_SIZE_SMALL)
-        ).pack(pady=PADDING_TINY, padx=PADDING_MEDIUM, fill="x")
+        if es_pantalla_pequena():
+            # ✅ Versión MINI - Una sola línea
+            info_text = f"✅ {self.persona_seleccionada.nombre_completo} | DPI: {self.persona_seleccionada.dpi}"
+            
+            ctk.CTkLabel(
+                self.info_frame,
+                text=info_text,
+                font=ctk.CTkFont(size=FONT_SIZE_NORMAL, weight="bold"),  # ✅ Más grande
+                text_color=COLOR_SUCCESS,
+                wraplength=escalar(600)
+            ).pack(pady=PADDING_SMALL, padx=PADDING_SMALL)
+        else:
+            # Versión normal (igual que antes)
+            ctk.CTkLabel(
+                self.info_frame,
+                text="✅ Persona Seleccionada",
+                font=ctk.CTkFont(size=FONT_SIZE_SUBTITLE, weight="bold"),
+                text_color=COLOR_SUCCESS
+            ).pack(pady=PADDING_SMALL)
+            
+            info_text = f"""👤 Nombre: {self.persona_seleccionada.nombre_completo}
+    📋 DPI: {self.persona_seleccionada.dpi}
+    🎂 Edad: {self.persona_seleccionada.edad if self.persona_seleccionada.edad else 'N/A'}
+    💍 Estado Civil: {self.persona_seleccionada.estado_civil if self.persona_seleccionada.estado_civil else 'N/A'}
+    🌍 Nacionalidad: {self.persona_seleccionada.nacionalidad if self.persona_seleccionada.nacionalidad else 'N/A'}
+    🎓 Nivel Académico: {self.persona_seleccionada.nivel_academico if self.persona_seleccionada.nivel_academico else 'N/A'}
+    🏠 Domicilio: {self.persona_seleccionada.domicilio if self.persona_seleccionada.domicilio else 'N/A'}"""
+            
+            ctk.CTkLabel(
+                self.info_frame,
+                text=info_text.strip(),
+                anchor="w",
+                justify="left",
+                font=ctk.CTkFont(size=FONT_SIZE_NORMAL)  # ✅ Más legible
+            ).pack(pady=PADDING_TINY, padx=PADDING_MEDIUM, fill="x")
     
     def normalizar_dpi(self, dpi):
         """Convierte DPI con espacios o guiones a formato sin separadores"""
@@ -1104,10 +1208,13 @@ class VentanaBuscarDocumento:
         self.mostrar_todos_documentos_persona()
     
     def mostrar_todos_documentos_persona(self):
-        """Muestra todos los documentos de la persona agrupados por año"""
+        """Muestra todos los documentos - ✅ VERSIÓN MEJORADA PARA PANTALLAS PEQUEÑAS"""
+        from config import es_pantalla_pequena
+        
         for widget in self.documentos_frame.winfo_children():
             widget.destroy()
         
+        pantalla_pequena = es_pantalla_pequena()
         años_ordenados = sorted(self.documentos_por_año.keys(), reverse=True)
         
         for año in años_ordenados:
@@ -1126,49 +1233,107 @@ class VentanaBuscarDocumento:
             
             for doc in documentos_año:
                 doc_id, nombre_archivo, ruta_archivo, fecha_carga, tipo_documento, persona_id, año_doc = doc
-                
                 index = next(i for i, d in enumerate(self.documentos_persona) if d[2] == ruta_archivo)
                 
-                frame_doc = ctk.CTkFrame(self.documentos_frame, fg_color="#003d66", corner_radius=CARD_CORNER_RADIUS)
-                frame_doc.pack(pady=PADDING_TINY, padx=PADDING_SMALL, fill="x")
-                
-                info_doc = f"📄 {nombre_archivo}\n📅 {fecha_carga} | {tipo_documento}"
-                
-                ctk.CTkLabel(
-                    frame_doc,
-                    text=info_doc,
-                    anchor="w",
-                    justify="left",
-                    font=ctk.CTkFont(size=FONT_SIZE_TINY)
-                ).pack(side="left", padx=PADDING_SMALL, pady=PADDING_TINY, expand=True, fill="x")
-                
-                btn_ver = ctk.CTkButton(
-                    frame_doc,
-                    text="Ver",
-                    image=self.icono_ver,
-                    compound="left",
-                    command=lambda idx=index: self.ver_documento(idx),
-                    width=escalar(100),
-                    height=BUTTON_HEIGHT_SMALL,
-                    font=ctk.CTkFont(size=FONT_SIZE_BUTTON),
-                    fg_color="#005187",
-                    hover_color="#2d5f8d"
+                frame_doc = ctk.CTkFrame(
+                    self.documentos_frame, 
+                    fg_color="#003d66", 
+                    corner_radius=CARD_CORNER_RADIUS
                 )
-                btn_ver.pack(side="right", padx=PADDING_TINY)
+                frame_doc.pack(pady=PADDING_SMALL, padx=PADDING_SMALL, fill="x")
+                
+                if pantalla_pequena:
+                    # ===== LAYOUT VERTICAL PARA PANTALLAS PEQUEÑAS =====
+                    frame_doc.grid_columnconfigure(0, weight=1)
+                    
+                    # ✅ Información más legible
+                    info_doc = f"📄 {nombre_archivo}\n📅 {fecha_carga}\n📑 {tipo_documento}"
+                    
+                    lbl_info = ctk.CTkLabel(
+                        frame_doc,
+                        text=info_doc,
+                        anchor="w",
+                        justify="left",
+                        font=ctk.CTkFont(size=FONT_SIZE_NORMAL),  # ✅ Fuente más grande
+                        wraplength=escalar(550)  # ✅ Wrap text
+                    )
+                    lbl_info.grid(row=0, column=0, sticky="ew", padx=PADDING_MEDIUM, pady=PADDING_SMALL)
+                    
+                    # Botones en fila horizontal
+                    btn_frame = ctk.CTkFrame(frame_doc, fg_color="transparent")
+                    btn_frame.grid(row=1, column=0, sticky="ew", padx=PADDING_SMALL, pady=(0, PADDING_SMALL))
+                    
+                    btn_frame.grid_columnconfigure(0, weight=1)
+                    btn_frame.grid_columnconfigure(1, weight=1)
+                    
+                    btn_ver = ctk.CTkButton(
+                        btn_frame,
+                        text="👁️ Ver",
+                        image=self.icono_ver if self.icono_ver else None,
+                        compound="left",
+                        command=lambda idx=index: self.ver_documento(idx),
+                        height=BUTTON_HEIGHT_SMALL,
+                        font=ctk.CTkFont(size=FONT_SIZE_BUTTON),
+                        fg_color="#005187",
+                        hover_color="#2d5f8d"
+                    )
+                    btn_ver.grid(row=0, column=0, sticky="ew", padx=PADDING_TINY)
 
-                btn_editar_doc = ctk.CTkButton(
-                    frame_doc,
-                    text="Editar",
-                    image=self.icono_editar,
-                    compound="left",
-                    command=lambda idx=index: self.editar_documento(idx),
-                    width=escalar(100),
-                    height=BUTTON_HEIGHT_SMALL,
-                    font=ctk.CTkFont(size=FONT_SIZE_BUTTON),
-                    fg_color="#005187",
-                    hover_color="#2d5f8d"
-                )
-                btn_editar_doc.pack(side="right", padx=PADDING_TINY)
+                    btn_editar_doc = ctk.CTkButton(
+                        btn_frame,
+                        text="✏️ Editar",
+                        image=self.icono_editar if self.icono_editar else None,
+                        compound="left",
+                        command=lambda idx=index: self.editar_documento(idx),
+                        height=BUTTON_HEIGHT_SMALL,
+                        font=ctk.CTkFont(size=FONT_SIZE_BUTTON),
+                        fg_color="#005187",
+                        hover_color="#2d5f8d"
+                    )
+                    btn_editar_doc.grid(row=0, column=1, sticky="ew", padx=PADDING_TINY)
+                
+                else:
+                    # ===== LAYOUT HORIZONTAL PARA PANTALLAS NORMALES =====
+                    frame_doc.grid_columnconfigure(0, weight=1)
+                    
+                    info_doc = f"📄 {nombre_archivo}\n📅 {fecha_carga} | {tipo_documento}"
+                    
+                    lbl_info = ctk.CTkLabel(
+                        frame_doc,
+                        text=info_doc,
+                        anchor="w",
+                        justify="left",
+                        font=ctk.CTkFont(size=FONT_SIZE_TINY)
+                    )
+                    lbl_info.grid(row=0, column=0, sticky="ew", padx=PADDING_SMALL, pady=PADDING_TINY)
+                    
+                    btn_ver = ctk.CTkButton(
+                        frame_doc,
+                        text="Ver",
+                        image=self.icono_ver,
+                        compound="left",
+                        command=lambda idx=index: self.ver_documento(idx),
+                        width=escalar(100),
+                        height=BUTTON_HEIGHT_SMALL,
+                        font=ctk.CTkFont(size=FONT_SIZE_BUTTON),
+                        fg_color="#005187",
+                        hover_color="#2d5f8d"
+                    )
+                    btn_ver.grid(row=0, column=1, sticky="ns", padx=PADDING_TINY)
+
+                    btn_editar_doc = ctk.CTkButton(
+                        frame_doc,
+                        text="Editar",
+                        image=self.icono_editar,
+                        compound="left",
+                        command=lambda idx=index: self.editar_documento(idx),
+                        width=escalar(100),
+                        height=BUTTON_HEIGHT_SMALL,
+                        font=ctk.CTkFont(size=FONT_SIZE_BUTTON),
+                        fg_color="#005187",
+                        hover_color="#2d5f8d"
+                    )
+                    btn_editar_doc.grid(row=0, column=2, sticky="ns", padx=PADDING_TINY)
             
             if año != años_ordenados[-1]:
                 ctk.CTkFrame(

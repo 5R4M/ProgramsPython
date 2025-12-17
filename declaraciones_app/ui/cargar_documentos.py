@@ -851,7 +851,14 @@ class VentanaCargarDocumentos:
         self.mostrar_documentos_existentes(self.documentos_existentes)
     
     def mostrar_documentos_existentes(self, documentos):
-        """Muestra la lista de documentos existentes - ✅ CON COLORES OSCUROS"""
+        """
+        Muestra la lista de documentos existentes - ✅ VERSIÓN RESPONSIVA MEJORADA
+        """
+        from config import (
+            FONT_SIZE_SMALL, PADDING_SMALL, PADDING_TINY,
+            escalar, es_pantalla_pequena
+        )
+        
         # Limpiar SOLO los items existentes debajo del header
         children = self.lista_existentes_frame.winfo_children()
         start_idx = 1 if children else 0
@@ -863,11 +870,14 @@ class VentanaCargarDocumentos:
                 self.lista_existentes_frame,
                 text="No se encontraron documentos",
                 text_color="orange",
-                font=ctk.CTkFont(size=14)
+                font=ctk.CTkFont(size=FONT_SIZE_SMALL)
             )
-            self.lbl_sin_existentes.pack(pady=50)
+            self.lbl_sin_existentes.pack(pady=escalar(50))
             return
 
+        # ✅ DETERMINAR LAYOUT SEGÚN TAMAÑO DE PANTALLA
+        pantalla_pequena = es_pantalla_pequena()
+        
         for doc in documentos:
             doc_id = doc[0]
             nombre_archivo = doc[1]
@@ -884,49 +894,125 @@ class VentanaCargarDocumentos:
             else:
                 fecha_mod_str = "Desconocida"
 
-            # ✅ Frame con color oscuro
-            frame_doc = ctk.CTkFrame(self.lista_existentes_frame, fg_color="#003d66")
-            frame_doc.pack(pady=5, padx=10, fill="x")
-
-            info_text = (
-                f"📄 {nombre_archivo}\n"
-                f"👤 {nombre_persona}\n"
-                f"📋 DPI: {dpi_persona}\n"
-                f"📅 Año: {año_doc if año_doc else 'N/A'}\n"
-                f"📥 Cargado: {fecha_carga_bd}\n"
-                f"🕒 Última modificación: {fecha_mod_str}"
+            # ===== FRAME PRINCIPAL DEL DOCUMENTO =====
+            frame_doc = ctk.CTkFrame(
+                self.lista_existentes_frame, 
+                fg_color="#003d66",
+                corner_radius=escalar(8)
             )
+            frame_doc.pack(pady=PADDING_TINY, padx=PADDING_SMALL, fill="x")
 
-            ctk.CTkLabel(
-                frame_doc,
-                text=info_text,
-                anchor="w",
-                justify="left",
-                font=ctk.CTkFont(size=11)
-            ).pack(side="left", padx=10, pady=10, expand=True, fill="x")
+            if pantalla_pequena:
+                # Pantalla pequeña: layout vertical compacto MÁS LEGIBLE
+                frame_doc.grid_columnconfigure(0, weight=1)
+                frame_doc.grid_rowconfigure(0, weight=0)
+                frame_doc.grid_rowconfigure(1, weight=0)
+                
+                # INFORMACIÓN (fila 0) - ✅ TEXTO MÁS GRANDE Y LEGIBLE
+                frame_info = ctk.CTkFrame(frame_doc, fg_color="transparent")
+                frame_info.grid(row=0, column=0, sticky="ew", padx=PADDING_SMALL, pady=PADDING_SMALL)
+                
+                # ✅ Texto más grande y con mejor espaciado
+                info_text = (
+                    f"📄 {nombre_archivo}\n"
+                    f"👤 {nombre_persona}\n"
+                    f"📋 {dpi_persona}\n"
+                    f"📅 {año_doc if año_doc else 'N/A'} | 🕒 {fecha_mod_str}"
+                )
+                
+                lbl_info = ctk.CTkLabel(
+                    frame_info,
+                    text=info_text,
+                    anchor="w",
+                    justify="left",
+                    font=ctk.CTkFont(size=FONT_SIZE_SMALL),  # ✅ FONT_SIZE_SMALL (más grande)
+                    wraplength=escalar(550)  # ✅ Ajuste automático de línea
+                )
+                lbl_info.pack(side="left", expand=True, fill="x")
+                
+                # BOTONES (fila 1) - ✅ MÁS GRANDES Y LEGIBLES
+                frame_botones = ctk.CTkFrame(frame_doc, fg_color="transparent")
+                frame_botones.grid(row=1, column=0, sticky="ew", padx=PADDING_SMALL, pady=(0, PADDING_SMALL))
+                
+                frame_botones.grid_columnconfigure(0, weight=1)
+                frame_botones.grid_columnconfigure(1, weight=1)
+                
+                # ✅ Botones más grandes
+                btn_ver = ctk.CTkButton(
+                    frame_botones,
+                    text="👁️ Ver",
+                    command=lambda r=ruta_archivo: self.ver_documento_existente(r),
+                    height=escalar(35),  # ✅ Más alto (antes era 28)
+                    font=ctk.CTkFont(size=FONT_SIZE_SMALL),  # ✅ Fuente más grande
+                    fg_color="#005187",
+                    hover_color="#2d5f8d"
+                )
+                btn_ver.grid(row=0, column=0, sticky="ew", padx=PADDING_TINY)
 
-            # ✅ Botones con colores oscuros
-            btn_ver = ctk.CTkButton(
-                frame_doc,
-                text="",
-                image=self.icono_ver,
-                command=lambda r=ruta_archivo: self.ver_documento_existente(r),
-                width=40,
-                fg_color="#005187",
-                hover_color="#2d5f8d"
-            )
-            btn_ver.pack(side="right", padx=5)
+                btn_eliminar = ctk.CTkButton(
+                    frame_botones,
+                    text="🗑️ Eliminar",
+                    command=lambda i=doc_id, r=ruta_archivo, n=nombre_archivo: self.eliminar_documento_existente(i, r, n),
+                    height=escalar(35),  # ✅ Más alto (antes era 28)
+                    font=ctk.CTkFont(size=FONT_SIZE_SMALL),  # ✅ Fuente más grande
+                    fg_color="#c0392b",
+                    hover_color="#e74c3c"
+                )
+                btn_eliminar.grid(row=0, column=1, sticky="ew", padx=PADDING_TINY)
+                
+            else:
+                # Pantalla normal: layout horizontal
+                frame_doc.grid_columnconfigure(0, weight=1)
+                frame_doc.grid_columnconfigure(1, weight=0)
+                frame_doc.grid_rowconfigure(0, weight=0)
+                
+                # INFORMACIÓN (columna 0)
+                info_text = (
+                    f"📄 {nombre_archivo}\n"
+                    f"👤 {nombre_persona}\n"
+                    f"📋 DPI: {dpi_persona}\n"
+                    f"📅 Año: {año_doc if año_doc else 'N/A'}\n"
+                    f"📥 Cargado: {fecha_carga_bd}\n"
+                    f"🕒 Última modificación: {fecha_mod_str}"
+                )
 
-            btn_eliminar = ctk.CTkButton(
-                frame_doc,
-                text="",
-                image=self.icono_eliminar,
-                command=lambda i=doc_id, r=ruta_archivo, n=nombre_archivo: self.eliminar_documento_existente(i, r, n),
-                width=40,
-                fg_color="#005187",
-                hover_color="#2d5f8d"
-            )
-            btn_eliminar.pack(side="right", padx=5)
+                lbl_info = ctk.CTkLabel(
+                    frame_doc,
+                    text=info_text,
+                    anchor="w",
+                    justify="left",
+                    font=ctk.CTkFont(size=FONT_SIZE_SMALL)
+                )
+                lbl_info.grid(row=0, column=0, sticky="ew", padx=PADDING_SMALL, pady=PADDING_SMALL)
+
+                # BOTONES (columna 1)
+                frame_botones = ctk.CTkFrame(frame_doc, fg_color="transparent")
+                frame_botones.grid(row=0, column=1, sticky="ns", padx=PADDING_SMALL, pady=PADDING_SMALL)
+                
+                # Botones con iconos si están disponibles
+                btn_ver = ctk.CTkButton(
+                    frame_botones,
+                    text="👁️" if not hasattr(self, 'icono_ver') or not self.icono_ver else "",
+                    image=self.icono_ver if hasattr(self, 'icono_ver') and self.icono_ver else None,
+                    command=lambda r=ruta_archivo: self.ver_documento_existente(r),
+                    width=escalar(45),
+                    height=escalar(40),
+                    fg_color="#005187",
+                    hover_color="#2d5f8d"
+                )
+                btn_ver.pack(side="top", pady=PADDING_TINY)
+
+                btn_eliminar = ctk.CTkButton(
+                    frame_botones,
+                    text="🗑️" if not hasattr(self, 'icono_eliminar') or not self.icono_eliminar else "",
+                    image=self.icono_eliminar if hasattr(self, 'icono_eliminar') and self.icono_eliminar else None,
+                    command=lambda i=doc_id, r=ruta_archivo, n=nombre_archivo: self.eliminar_documento_existente(i, r, n),
+                    width=escalar(45),
+                    height=escalar(40),
+                    fg_color="#c0392b",
+                    hover_color="#e74c3c"
+                )
+                btn_eliminar.pack(side="top", pady=PADDING_TINY)
         
     def filtrar_documentos_existentes(self):
         """Filtra los documentos existentes según el texto de búsqueda y año"""
