@@ -256,7 +256,7 @@ class MainWindow(ctk.CTk):
         """Crea la interfaz principal con constantes responsivas"""
 
         # Barra de estado inferior
-        self.status_bar = ctk.CTkFrame(self, height=STATUS_BAR_HEIGHT, fg_color="#003d66")
+        self.status_bar = ctk.CTkFrame(self, height=STATUS_BAR_HEIGHT, fg_color="#001a33")  # ✅ CORRECTO
         self.status_bar.pack(fill="x", side="bottom")
 
         self.lbl_status_personas = ctk.CTkLabel(

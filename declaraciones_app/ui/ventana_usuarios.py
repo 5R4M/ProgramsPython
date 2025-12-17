@@ -56,9 +56,9 @@ class VentanaGestionUsuarios:
         )
         subtitulo.pack(anchor="w", pady=(escalar(2), 0))
 
-        # Línea separadora
-        linea = ctk.CTkFrame(self.frame, fg_color="#003d66", height=escalar(1))
-        linea.grid(row=0, column=0, sticky="ew", padx=PADDING_MEDIUM, pady=(0, PADDING_SMALL))
+        # ✅ CORRECCIÓN: ELIMINAR COMPLETAMENTE LA LÍNEA SEPARADORA PROBLEMÁTICA
+        # La línea causaba superposición con el título/subtítulo
+        # No es necesaria ya que hay suficiente espacio visual
 
         # Panel central (lista + formulario)
         panel_central = ctk.CTkFrame(self.frame, fg_color="#001a33")
@@ -116,7 +116,7 @@ class VentanaGestionUsuarios:
         ).grid(row=1, column=0, columnspan=2, pady=(0, PADDING_SMALL), padx=PADDING_MEDIUM, sticky="w")
 
         # Pequeña línea separadora en el formulario
-        sep_form = ctk.CTkFrame(frame_form, fg_color="#003d66", height=escalar(1))
+        sep_form = ctk.CTkFrame(frame_form, fg_color="#005187", height=escalar(1))
         sep_form.grid(row=2, column=0, columnspan=2, sticky="ew", padx=PADDING_MEDIUM, pady=(PADDING_SMALL, PADDING_MEDIUM))
 
         row = 3
@@ -295,11 +295,12 @@ class VentanaGestionUsuarios:
         btn_eliminar = ctk.CTkButton(
             frame_botones,
             text="🗑️ Eliminar",
-            fg_color="#003d66",
-            hover_color="#2d5f8d",
+            fg_color="#c0392b",
+            hover_color="#e74c3c",
             command=self.eliminar_usuario,
             height=BUTTON_HEIGHT_SMALL,
-            font=ctk.CTkFont(size=FONT_SIZE_BUTTON, weight="bold")
+            font=ctk.CTkFont(size=FONT_SIZE_BUTTON, weight="bold"),
+            border_width=0
         )
         btn_eliminar.grid(row=0, column=2, padx=PADDING_TINY, sticky="ew")
 

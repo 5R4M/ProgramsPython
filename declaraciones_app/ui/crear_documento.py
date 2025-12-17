@@ -115,29 +115,29 @@ class VentanaCrearDocumento:
         
         print(f"📐 Resolución detectada: {screen_width}x{screen_height}")
         
-        # Calcular altura aproximada del contenido
-        altura_titulo = escalar(30)
-        altura_plantilla = escalar(65)
-        altura_busqueda = escalar(160)
-        altura_fecha = escalar(150)
-        altura_datos = escalar(380)  # ✅ AUMENTADO de 320 a 380
-        altura_botones = escalar(70)
-        altura_padding = escalar(60)
+        # ✅ CÁLCULO CORREGIDO con medidas más precisas
+        altura_titulo = escalar(30)           # Título principal
+        altura_plantilla = escalar(70)        # Sección plantilla
+        altura_busqueda = escalar(170)        # Búsqueda rápida
+        altura_fecha = escalar(160)           # Fecha y hora
+        altura_datos = escalar(420)           # ✅ AUMENTADO: Datos personales (más campos)
+        altura_botones = escalar(90)          # ✅ AUMENTADO: Botones (texto en 2 líneas)
+        altura_padding = escalar(80)          # ✅ AUMENTADO: Padding total entre secciones
         
         altura_total_contenido = (altura_titulo + altura_plantilla + altura_busqueda + 
                                 altura_fecha + altura_datos + altura_botones + altura_padding)
         
-        # Considerar espacio de ventana (título + taskbar)
-        altura_overhead = 120  # ✅ AUMENTADO de 100 a 120
+        # Considerar espacio de ventana (título + taskbar + márgenes)
+        altura_overhead = 140  # ✅ AUMENTADO de 120 a 140
         altura_necesaria = altura_total_contenido + altura_overhead
         
-        # ✅ AJUSTE: Si la altura de pantalla es menor O IGUAL, usar scroll
-        necesita_scroll = screen_height <= altura_necesaria
+        # ✅ CONDICIÓN CORREGIDA: Usar < en vez de <=
+        necesita_scroll = screen_height < altura_necesaria
         
         if necesita_scroll:
-            print(f"⚠️ Pantalla pequeña detectada ({screen_height}px <= {altura_necesaria}px). Activando scroll.")
+            print(f"⚠️ Pantalla pequeña detectada ({screen_height}px < {altura_necesaria}px). Activando scroll.")
         else:
-            print(f"✅ Pantalla suficiente ({screen_height}px > {altura_necesaria}px). Sin scroll.")
+            print(f"✅ Pantalla suficiente ({screen_height}px >= {altura_necesaria}px). Sin scroll.")
         
         return necesita_scroll
     
@@ -1234,8 +1234,8 @@ class VentanaCrearDocumento:
         frame_botones = ctk.CTkFrame(panel_izquierdo, fg_color="#003d66")
         frame_botones.pack(pady=(escalar(4), escalar(2)), padx=PADDING_MEDIUM, fill="x")
 
-        frame_botones.configure(height=escalar(55))
-        frame_botones.pack_propagate(False)
+        # ✅ NO HAY líneas problemáticas de altura fija
+        # ✅ El frame se ajusta automáticamente
 
         frame_botones.grid_columnconfigure(0, weight=1, uniform="button")
         frame_botones.grid_columnconfigure(1, weight=1, uniform="button")
