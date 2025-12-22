@@ -8,6 +8,122 @@ class DocumentExtractor:
     """Clase para extraer datos de documentos Word"""
     
     @staticmethod
+    def numero_a_letras(numero):
+        """
+        Convierte un número a su representación en letras (español)
+        Maneja correctamente los ceros y los miles (un mil, dos mil, etc.)
+        """
+        unidades = ['', 'uno', 'dos', 'tres', 'cuatro', 'cinco', 'seis', 'siete', 'ocho', 'nueve']
+        decenas_especiales = ['diez', 'once', 'doce', 'trece', 'catorce', 'quince', 
+                             'dieciséis', 'diecisiete', 'dieciocho', 'diecinueve']
+        decenas = ['', '', 'veinte', 'treinta', 'cuarenta', 'cincuenta', 
+                   'sesenta', 'setenta', 'ochenta', 'noventa']
+        centenas = ['', 'ciento', 'doscientos', 'trescientos', 'cuatrocientos', 
+                    'quinientos', 'seiscientos', 'setecientos', 'ochocientos', 'novecientos']
+        
+        if numero == 0:
+            return 'cero'
+        
+        if numero < 10:
+            return unidades[numero]
+        
+        if numero < 20:
+            return decenas_especiales[numero - 10]
+        
+        if numero < 100:
+            unidad = numero % 10
+            decena = numero // 10
+            if decena == 2 and unidad > 0:
+                return 'veinti' + unidades[unidad]
+            elif unidad > 0:
+                return decenas[decena] + ' y ' + unidades[unidad]
+            else:
+                return decenas[decena]
+        
+        if numero < 1000:
+            centena = numero // 100
+            resto = numero % 100
+            if numero == 100:
+                return 'cien'
+            elif resto > 0:
+                return centenas[centena] + ' ' + DocumentExtractor.numero_a_letras(resto)
+            else:
+                return centenas[centena]
+        
+        if numero < 1000000:
+            miles = numero // 1000
+            resto = numero % 1000
+            
+            # CORRECCIÓN IMPORTANTE: Siempre usar "un mil" para 1000-1999
+            if miles == 1:
+                texto_miles = 'un mil'
+            else:
+                texto_miles = DocumentExtractor.numero_a_letras(miles) + ' mil'
+            
+            if resto > 0:
+                return texto_miles + ' ' + DocumentExtractor.numero_a_letras(resto)
+            else:
+                return texto_miles
+        
+        return str(numero)
+    
+    @staticmethod
+    def dpi_a_letras(dpi_str):
+        """
+        Convierte un DPI a su representación en letras
+        Lee ceros iniciales individualmente, luego el resto como número completo.
+        Usa la palabra "espacio" como separador entre partes.
+        Ejemplo: "1916 02426 0101" -> "un mil novecientos dieciséis espacio cero dos mil cuatrocientos veintiséis espacio cero ciento uno"
+        """
+        if not dpi_str:
+            return None
+        
+        # Limpiar el DPI (quitar espacios)
+        dpi_limpio = dpi_str.replace(' ', '').strip()
+        
+        # Validar que tenga 13 dígitos
+        if len(dpi_limpio) != 13 or not dpi_limpio.isdigit():
+            return None
+        
+        # Separar en tres partes: XXXX XXXXX XXXX
+        parte1 = dpi_limpio[0:4]    # Primeros 4 dígitos
+        parte2 = dpi_limpio[4:9]    # Siguientes 5 dígitos
+        parte3 = dpi_limpio[9:13]   # Últimos 4 dígitos
+        
+        resultado = []
+        
+        # Convertir cada parte
+        for parte in [parte1, parte2, parte3]:
+            parte_letras = []
+            
+            # Contar cuántos ceros hay al inicio
+            ceros_iniciales = 0
+            for digit in parte:
+                if digit == '0':
+                    ceros_iniciales += 1
+                else:
+                    break
+            
+            # Si toda la parte son ceros
+            if ceros_iniciales == len(parte):
+                parte_letras = ['cero'] * len(parte)
+            else:
+                # Agregar los ceros iniciales
+                for _ in range(ceros_iniciales):
+                    parte_letras.append('cero')
+                
+                # Convertir el resto como número completo
+                resto = parte[ceros_iniciales:]
+                if resto:  # Si hay algo después de los ceros
+                    numero = int(resto)
+                    if numero > 0:
+                        parte_letras.append(DocumentExtractor.numero_a_letras(numero))
+            
+            resultado.append(' '.join(parte_letras))
+        
+        return ' espacio '.join(resultado)
+    
+    @staticmethod
     def extraer_datos(archivo_docx):
         """Extrae datos de un documento Word"""
         try:
@@ -39,6 +155,12 @@ class DocumentExtractor:
                 if dpi_match:
                     dpi_str = dpi_match.group(1)
                     datos['dpi'] = f"{dpi_str[:4]} {dpi_str[4:9]} {dpi_str[9:13]}"
+            
+            # ===== CONVERTIR DPI A LETRAS =====
+            if 'dpi' in datos:
+                dpi_letras = DocumentExtractor.dpi_a_letras(datos['dpi'])
+                if dpi_letras:
+                    datos['dpi_letras'] = dpi_letras
             
             # ===== EXTRAER NOMBRE COMPLETO (MEJORADO) =====
             nombre_encontrado = DocumentExtractor._extraer_nombre_persona(texto, datos.get('dpi'))

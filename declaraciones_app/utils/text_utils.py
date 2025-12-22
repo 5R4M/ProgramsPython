@@ -4,7 +4,9 @@ class NumeroATexto:
     @staticmethod
     def convertir(num: int) -> str:
         """Convierte un número a texto"""
-        if num < 100:
+        if num == 0:
+            return "cero"
+        elif num < 100:
             return NumeroATexto._numero_a_texto(num)
         elif num < 1000:
             return NumeroATexto._numero_a_texto_centenas(num)
@@ -14,6 +16,9 @@ class NumeroATexto:
     @staticmethod
     def _numero_a_texto(num: int) -> str:
         """Convierte números de 0 a 99 a texto"""
+        if num == 0:
+            return "cero"
+            
         unidades = ["", "uno", "dos", "tres", "cuatro", "cinco",
                     "seis", "siete", "ocho", "nueve"]
         decenas = ["", "diez", "veinte", "treinta", "cuarenta",
@@ -40,12 +45,11 @@ class NumeroATexto:
     @staticmethod
     def _numero_a_texto_centenas(num: int) -> str:
         """Convierte números de 100 a 999 a texto"""
-        # CORRECCIÓN: Si el número es >= 1000, usar el método de miles
-        if num >= 1000:
-            return NumeroATexto._convertir_numero_miles(num)
-        
         if num < 100:
             return NumeroATexto._numero_a_texto(num)
+        
+        if num >= 1000:
+            return NumeroATexto._convertir_numero_miles(num)
         
         centenas_texto = ["", "ciento", "doscientos", "trescientos", "cuatrocientos",
                           "quinientos", "seiscientos", "setecientos", "ochocientos", "novecientos"]
@@ -56,7 +60,6 @@ class NumeroATexto:
         if num == 100:
             return "cien"
         
-        # CORRECCIÓN: Validar que c esté en el rango válido
         if c > 9:
             return NumeroATexto._convertir_numero_miles(num)
         
@@ -76,16 +79,16 @@ class NumeroATexto:
         resto = num % 1000
         
         texto_partes = []
+        
+        # CORRECCIÓN CRÍTICA: Usar "un mil" para 1000-1999
         if miles == 1:
-            texto_partes.append("mil")
+            texto_partes.append("un mil")
         else:
-            # CORRECCIÓN: Usar el método correcto según el tamaño de 'miles'
             if miles < 100:
                 texto_partes.append(NumeroATexto._numero_a_texto(miles) + " mil")
             elif miles < 1000:
                 texto_partes.append(NumeroATexto._numero_a_texto_centenas(miles) + " mil")
             else:
-                # Para números muy grandes (millones)
                 texto_partes.append(str(miles) + " mil")
         
         if resto > 0:
@@ -95,7 +98,11 @@ class NumeroATexto:
     
     @staticmethod
     def convertir_dpi(dpi: str) -> str:
-        """Convierte un DPI a texto"""
+        """
+        Convierte un DPI a texto con la palabra "espacio" como separador.
+        Lee ceros iniciales individualmente, luego el resto como número completo.
+        Ejemplo: "1916 02426 0101" -> "un mil novecientos dieciséis espacio cero dos mil cuatrocientos veintiséis espacio cero ciento uno"
+        """
         # Limpiar el DPI
         dpi_limpio = dpi.replace(" ", "").strip()
         
@@ -106,62 +113,126 @@ class NumeroATexto:
         if len(dpi_limpio) != 13:
             return dpi
         
-        # Separar en partes: AAAA MMMMM CCCC
-        partes = [dpi_limpio[:4], dpi_limpio[4:9], dpi_limpio[9:13]]
+        # Separar en tres partes: XXXX XXXXX XXXX
+        parte1 = dpi_limpio[0:4]    # Primeros 4 dígitos
+        parte2 = dpi_limpio[4:9]    # Siguientes 5 dígitos
+        parte3 = dpi_limpio[9:13]   # Últimos 4 dígitos
         
         resultado = []
         
-        for i, parte in enumerate(partes):
-            if not parte.isdigit():
-                resultado.append(parte)
-                continue
+        # ===== PROCESAR CADA PARTE =====
+        for parte in [parte1, parte2, parte3]:
+            parte_resultado = []
             
-            num = int(parte)
-            
-            if i == 0:  # Primera parte (año) - 4 dígitos
-                # CORRECCIÓN: Manejar años de 4 dígitos correctamente
-                if num >= 3000:
-                    # Ejemplo: 3445 = tres mil cuatrocientos cuarenta y cinco
-                    resultado.append(NumeroATexto._convertir_numero_miles(num))
-                elif num >= 2000:
-                    resto = num - 2000
-                    if resto == 0:
-                        resultado.append("dos mil")
-                    else:
-                        # CORRECCIÓN: Usar el método correcto según el tamaño
-                        if resto >= 1000:
-                            resultado.append("dos mil " + NumeroATexto._convertir_numero_miles(resto))
-                        elif resto >= 100:
-                            resultado.append("dos mil " + NumeroATexto._numero_a_texto_centenas(resto))
-                        else:
-                            resultado.append("dos mil " + NumeroATexto._numero_a_texto(resto))
-                elif num >= 1000:
-                    resultado.append(NumeroATexto._convertir_numero_miles(num))
+            # Contar cuántos ceros hay al inicio
+            ceros_iniciales = 0
+            for digit in parte:
+                if digit == '0':
+                    ceros_iniciales += 1
                 else:
-                    resultado.append(NumeroATexto._numero_a_texto_centenas(num))
+                    break
             
-            elif i == 1:  # Segunda parte (código municipal) - 5 dígitos
-                if parte.startswith("0") and len(parte) == 5:
-                    resto_num = int(parte[1:])
-                    if resto_num == 0:
-                        resultado.append("cero cero")
-                    else:
-                        resultado.append("cero " + NumeroATexto._convertir_numero_miles(resto_num))
-                else:
-                    resultado.append(NumeroATexto._convertir_numero_miles(num))
+            # Si toda la parte son ceros
+            if ceros_iniciales == len(parte):
+                parte_resultado = ['cero'] * len(parte)
+            else:
+                # Agregar los ceros iniciales uno por uno
+                for _ in range(ceros_iniciales):
+                    parte_resultado.append('cero')
+                
+                # Convertir el resto como número completo
+                resto = parte[ceros_iniciales:]
+                if resto:  # Si hay algo después de los ceros
+                    numero = int(resto)
+                    if numero > 0:
+                        parte_resultado.append(NumeroATexto.convertir(numero))
             
-            elif i == 2:  # Tercera parte (correlativo) - 4 dígitos
-                if parte.startswith("0") and len(parte) == 4:
-                    resto_num = int(parte[1:])
-                    if resto_num == 0:
-                        resultado.append("cero cero")
-                    else:
-                        # CORRECCIÓN: Usar convertir() general que maneja todos los tamaños
-                        resultado.append("cero " + NumeroATexto.convertir(resto_num))
-                else:
-                    if num == 0:
-                        resultado.append("cero")
-                    else:
-                        resultado.append(NumeroATexto._convertir_numero_miles(num))
+            # Unir los elementos de esta parte
+            resultado.append(' '.join(parte_resultado))
         
-        return " espacio ".join(resultado)
+        # Unir las tres partes con la palabra "espacio"
+        return ' espacio '.join(resultado)
+    
+    @staticmethod
+    def convertir_dpi_con_separador_espacio(dpi: str) -> str:
+        """
+        Igual que convertir_dpi pero usa " espacio " como separador entre partes
+        Lee ceros iniciales individualmente, luego el resto como número completo.
+        """
+        dpi_limpio = dpi.replace(" ", "").strip()
+        
+        if not dpi_limpio.isdigit() or len(dpi_limpio) != 13:
+            return dpi
+        
+        parte1 = dpi_limpio[0:4]
+        parte2 = dpi_limpio[4:9]
+        parte3 = dpi_limpio[9:13]
+        
+        resultado = []
+        
+        for parte in [parte1, parte2, parte3]:
+            parte_resultado = []
+            
+            # Contar cuántos ceros hay al inicio
+            ceros_iniciales = 0
+            for digit in parte:
+                if digit == '0':
+                    ceros_iniciales += 1
+                else:
+                    break
+            
+            # Si toda la parte son ceros
+            if ceros_iniciales == len(parte):
+                parte_resultado = ['cero'] * len(parte)
+            else:
+                # Agregar los ceros iniciales
+                for _ in range(ceros_iniciales):
+                    parte_resultado.append('cero')
+                
+                # Convertir el resto como número completo
+                resto = parte[ceros_iniciales:]
+                if resto:
+                    numero = int(resto)
+                    if numero > 0:
+                        parte_resultado.append(NumeroATexto.convertir(numero))
+            
+            resultado.append(' '.join(parte_resultado))
+        
+        return ' espacio '.join(resultado)
+
+
+# ===== PRUEBAS =====
+if __name__ == "__main__":
+    print("=" * 80)
+    print("PRUEBAS DE CONVERSIÓN DE DPI A TEXTO")
+    print("=" * 80)
+    print()
+    
+    # Casos de prueba
+    casos_prueba = [
+        "1916 02426 0101",  # Nuevo caso específico
+        "1916 00640 0101",
+        "1916 00024 2658",
+        "2345 12000 3456",
+        "1000 00001 0001",
+    ]
+    
+    for dpi in casos_prueba:
+        print(f"DPI: {dpi}")
+        print(f"Texto: {NumeroATexto.convertir_dpi(dpi)}")
+        print("-" * 80)
+        print()
+    
+    # Pruebas de números individuales
+    print("=" * 80)
+    print("PRUEBAS DE NÚMEROS INDIVIDUALES")
+    print("=" * 80)
+    print()
+    
+    numeros_prueba = [0, 24, 100, 1000, 1916, 2000, 2658]
+    
+    for num in numeros_prueba:
+        print(f"{num:>6} = {NumeroATexto.convertir(num)}")
+    
+    print()
+    print("=" * 80)
