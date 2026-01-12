@@ -19,14 +19,14 @@ center_alignment = Alignment(horizontal="center", vertical="center")
 border = Border(left=Side(style="thin"), right=Side(style="thin"),
                 top=Side(style="thin"), bottom=Side(style="thin"))
 
-# Definir los días festivos de Guatemala 2025
+# Definir los días festivos de Guatemala 2026
 festivos_guatemala = {
     (1, 1): ('A', 'AÑO NUEVO'),
-    (4, 13): ('A', 'DOMINGO DE RAMOS'),
-    (4, 17): ('A', 'JUEVES SANTO'),
-    (4, 18): ('A', 'VIERNES SANTO'),
-    (4, 19): ('A', 'SÁBADO SANTO'),
-    (4, 20): ('A', 'DOMINGO DE RESURRECCIÓN'),
+    (3, 29): ('A', 'DOMINGO DE RAMOS'),
+    (4, 2): ('A', 'JUEVES SANTO'),
+    (4, 3): ('A', 'VIERNES SANTO'),
+    (4, 4): ('A', 'SÁBADO SANTO'),
+    (4, 5): ('A', 'DOMINGO DE RESURRECCIÓN'),
     (5, 1): ('A', 'DÍA DEL TRABAJO'),
     (6, 30): ('A', 'DÍA DEL EJÉRCITO'),
     (8, 15): ('A', 'DÍA DE LA ASUNCIÓN'),
@@ -42,7 +42,7 @@ festivos_guatemala = {
 titulos_encabezado = [
     "DIRECCIÓN DEPARTAMENTAL DE REDES INTEGRADAS DE SERVICIOS DE SALUD DE GUATEMALA, AREA NOR ORIENTE",
     "DEPARTAMENTO DE BODEGA",
-    "CONTROL DE TEMPERATURA MENSUAL AÑO 2025"
+    "CONTROL DE TEMPERATURA MENSUAL AÑO 2026"
 ]
 
 # Agregar y formatear los títulos del encabezado
@@ -86,13 +86,14 @@ for month_idx, month in enumerate(months, 1):
         cell.border = border
 
     # Calcular días para el mes actual
-    current_date = datetime(2025, month_idx, 1)
-    days_in_month = (datetime(2025, month_idx % 12 + 1, 1) -
-                    timedelta(days=1)).day if month_idx < 12 else 31
+    if month_idx == 12:
+        days_in_month = 31
+    else:
+        days_in_month = (datetime(2026, month_idx + 1, 1) - timedelta(days=1)).day
 
     # Agregar días y marcar fines de semana y festivos
     for day in range(1, days_in_month + 1):
-        current_date = datetime(2025, month_idx, day)
+        current_date = datetime(2026, month_idx, day)
         col = day + 2
 
         # Aplicar borde a todas las celdas
@@ -138,11 +139,16 @@ for col in range(1, ws.max_column + 1):
             try:
                 if len(str(cell.value)) > max_length:
                     max_length = len(str(cell.value))
-            except:
+            except:  # noqa: E722
                 pass
     adjusted_width = (max_length + 2)
     ws.column_dimensions[get_column_letter(col)].width = adjusted_width
 
 # Guardar el archivo
-wb.save("Calendario_Guatemala_2025_Completo.xlsx")
-print("Archivo creado: Calendario_Guatemala_2025_Completo.xlsx")
+wb.save("Calendario_Guatemala_2026.xlsx")
+print("✅ Archivo creado: Calendario_Guatemala_2026.xlsx")
+print("\n📅 Días festivos incluidos:")
+for (mes, dia), (tipo, nombre) in sorted(festivos_guatemala.items()):
+    fecha = datetime(2026, mes, dia)
+    dia_semana = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"][fecha.weekday()]
+    print(f"   {dia:2d}/{mes:2d}/2026 ({dia_semana:10s}) - {nombre}")
