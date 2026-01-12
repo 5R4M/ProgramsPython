@@ -1,6 +1,6 @@
 """
-GENERADOR DE QR PARA REPORTES DE INSUMOS POR COLOR
-Genera 3 QR especiales: Rojo (Crítico), Amarillo (Alerta), Verde (Óptimo)
+GENERADOR DE QR PARA REPORTES - VERSIÓN CONSOLA
+Genera los 3 QR especiales (Rojo, Amarillo, Verde) desde consola
 """
 
 import qrcode
@@ -8,9 +8,6 @@ from pathlib import Path
 from reportlab.lib.pagesizes import letter
 from reportlab.pdfgen import canvas
 from reportlab.lib.units import inch
-from tkinter import Tk, messagebox
-import sys
-import time
 import json
 import os
 
@@ -18,85 +15,57 @@ import os
 # CONFIGURACIÓN
 # =====================================================
 
-# Archivo para guardar el usuario
-ARCHIVO_USUARIO = "config_usuario_pythonanywhere.json"
+ARCHIVO_CONFIG = "config_generador_qr.json"
 
-# Variable global para manejar la ventana raíz
-root = None
-
-def inicializar_tkinter():
-    """Inicializa la ventana principal de Tkinter"""
-    global root
-    if root is None:
-        root = Tk()
-        root.withdraw()
-
-def cerrar_tkinter():
-    """Cierra completamente Tkinter"""
-    global root
-    if root is not None:
-        try:
-            root.quit()
-            root.destroy()
-            root = None
-        except:  # noqa: E722
-            pass
-
-def cargar_usuario():
-    """Carga el usuario guardado desde el archivo JSON"""
+def cargar_configuracion():
+    """Carga la configuración guardada"""
     try:
-        if os.path.exists(ARCHIVO_USUARIO):
-            with open(ARCHIVO_USUARIO, 'r', encoding='utf-8') as f:
+        if os.path.exists(ARCHIVO_CONFIG):
+            with open(ARCHIVO_CONFIG, 'r', encoding='utf-8') as f:
                 config = json.load(f)
-                usuario = config.get('usuario', '')
-                if usuario:
-                    print(f"\n✅ Usuario encontrado: {usuario}")
-                    return usuario
+                print("\n✅ Configuración encontrada")
+                print(f"   Usuario: {config.get('usuario', 'No guardado')}")
+                return config
         return None
     except Exception as e:
-        print(f"⚠️ Error al cargar usuario: {e}")
+        print(f"⚠️ Error al cargar configuración: {e}")
         return None
 
-def obtener_usuario():
-    """Obtiene el usuario de PythonAnywhere"""
+def solicitar_usuario():
+    """Solicita el usuario si no hay configuración"""
+    print("\n📝 Ingresa tu usuario de PythonAnywhere:")
+    usuario = input("   Usuario: ").strip()
     
-    print("="*60)
-    print("📊 GENERADOR DE QR PARA REPORTES")
-    print("="*60)
+    if not usuario:
+        print("❌ Usuario requerido")
+        return None
     
-    # Intentar cargar usuario guardado
-    usuario_guardado = cargar_usuario()
+    print(f"✅ Usuario: {usuario}")
     
-    if usuario_guardado:
-        usar_guardado = messagebox.askyesno(
-            "Usuario encontrado",
-            f"Se encontró el usuario guardado:\n\n"
-            f"Usuario: {usuario_guardado}\n"
-            f"URL: https://{usuario_guardado}.pythonanywhere.com\n\n"
-            "¿Deseas usar este usuario?"
-        )
-        
-        if usar_guardado:
-            print(f"   ✅ Usando usuario guardado: {usuario_guardado}")
-            return usuario_guardado
+    # Guardar
+    config = {
+        'usuario': usuario,
+        'url_base': f'https://{usuario}.pythonanywhere.com/medicamento?codigo='
+    }
     
-    # Si no hay usuario o no quiere usarlo
-    messagebox.showinfo(
-        "Usuario no encontrado",
-        "Por favor, primero genera los códigos QR normales\n"
-        "con el generador principal para guardar tu usuario."
-    )
-    return None
+    try:
+        with open(ARCHIVO_CONFIG, 'w', encoding='utf-8') as f:
+            json.dump(config, f, indent=4, ensure_ascii=False)
+        print("💾 Usuario guardado")
+    except:  # noqa: E722
+        pass
+    
+    return usuario
 
 def generar_qr_reportes(usuario):
     """Genera los 3 QR especiales para reportes"""
     
-    print("\n" + "="*60)
+    print("\n" + "="*70)
     print("🎯 GENERANDO CÓDIGOS QR DE REPORTES")
-    print("="*60)
-    print(f"\n   Usuario: {usuario}")
-    print(f"   URL Base: https://{usuario}.pythonanywhere.com")
-    print("\n" + "="*60)
+    print("="*70)
+    print(f"\n📝 Usuario: {usuario}")
+    print(f"🌐 URL Base: https://{usuario}.pythonanywhere.com")
+    print("="*70)
     
     # URLs de los reportes
     reportes = [
@@ -128,7 +97,7 @@ def generar_qr_reportes(usuario):
     Path(carpeta_salida).mkdir(exist_ok=True)
     
     print("\n🎯 Generando 3 códigos QR de reportes...")
-    print("="*60)
+    print("="*70)
     
     codigos_generados = []
     
@@ -157,56 +126,37 @@ def generar_qr_reportes(usuario):
             'ruta': str(ruta_completa),
             'tipo': reporte['tipo'],
             'descripcion': reporte['descripcion'],
-            'color': reporte['color']
+            'color': reporte['color'],
+            'url': reporte['url']
         })
         
         print(f"   ✅ Guardado: {reporte['nombre_archivo']}")
     
-    print("\n" + "="*60)
+    print("\n" + "="*70)
     print("✅ COMPLETADO: 3 códigos QR de reportes generados")
     print(f"📁 Ubicación: {Path(carpeta_salida).absolute()}")
     
     # Preguntar si generar PDF
-    respuesta = messagebox.askyesno(
-        "Generar PDF",
-        f"✅ 3 códigos QR de reportes generados exitosamente\n\n"
-        f"📁 Carpeta: {carpeta_salida}\n\n"
-        "¿Deseas generar un PDF con los 3 QR?"
-    )
+    print("\n¿Deseas generar un PDF con los 3 QR? (s/n): ", end='')
+    respuesta = input().strip().lower()
     
-    if respuesta:
+    if respuesta == 's':
         generar_pdf(codigos_generados, usuario)
     
-    # Mostrar información final
-    print("\n" + "="*60)
+    # Información final
+    print("\n" + "="*70)
     print("📊 INFORMACIÓN DE LOS REPORTES")
-    print("="*60)
-    print("\n✅ QR ROJO - Insumos Críticos:")
-    print(f"   URL: https://{usuario}.pythonanywhere.com/reporte/rojo")
-    print("   Muestra: Medicamentos con 1-12 meses de existencia")
+    print("="*70)
     
-    print("\n✅ QR AMARILLO - Insumos en Alerta:")
-    print(f"   URL: https://{usuario}.pythonanywhere.com/reporte/amarillo")
-    print("   Muestra: Medicamentos con 13-17 meses de existencia")
-    
-    print("\n✅ QR VERDE - Insumos Óptimos:")
-    print(f"   URL: https://{usuario}.pythonanywhere.com/reporte/verde")
-    print("   Muestra: Medicamentos con 18+ meses de existencia")
+    for reporte in reportes:
+        icono = '🔴' if reporte['tipo'] == 'ROJO' else '🟡' if reporte['tipo'] == 'AMARILLO' else '🟢'
+        print(f"\n{icono} QR {reporte['tipo']} - {reporte['descripcion']}")
+        print(f"   URL: {reporte['url']}")
     
     print("\n💡 IMPORTANTE:")
     print("   Los reportes se generan automáticamente desde tu Excel")
     print("   Actualiza tu Excel y sincroniza para ver cambios")
-    print("="*60 + "\n")
-    
-    messagebox.showinfo(
-        "¡Completado!",
-        f"✅ 3 códigos QR de reportes generados\n\n"
-        f"📁 Ubicación: {carpeta_salida}\n\n"
-        f"🔴 ROJO: Insumos críticos (1-12 meses)\n"
-        f"🟡 AMARILLO: Insumos en alerta (13-17 meses)\n"
-        f"🟢 VERDE: Insumos óptimos (18+ meses)\n\n"
-        "💡 Escanea cada QR para ver el reporte correspondiente"
-    )
+    print("="*70 + "\n")
     
     return True
 
@@ -306,8 +256,8 @@ def generar_pdf(codigos_generados, usuario):
             
             c.setFont("Courier", 9)
             c.setFillColorRGB(0.2, 0.2, 0.2)
-            url = f"{usuario}.pythonanywhere.com/reporte/{qr_data['tipo'].lower()}"
-            c.drawString(x_text, y_text - 12, url)
+            url_corta = qr_data['url'].replace('https://', '')
+            c.drawString(x_text, y_text - 12, url_corta)
             
             # Instrucción de escaneo
             y_text -= 30
@@ -336,14 +286,10 @@ def generar_pdf(codigos_generados, usuario):
         print(f"✅ PDF generado: {pdf_path}")
         
         # Preguntar si abrir
-        respuesta = messagebox.askyesno(
-            "PDF Generado",
-            f"✅ PDF generado exitosamente\n\n"
-            f"📄 Archivo: {pdf_path}\n\n"
-            "¿Deseas abrirlo ahora?"
-        )
+        print("\n¿Deseas abrir el PDF? (s/n): ", end='')
+        respuesta = input().strip().lower()
         
-        if respuesta:
+        if respuesta == 's':
             import platform
             import subprocess
             
@@ -355,42 +301,35 @@ def generar_pdf(codigos_generados, usuario):
                     subprocess.run(["open", pdf_path])
                 else:
                     subprocess.run(["xdg-open", pdf_path])
+                print("✅ PDF abierto")
             except Exception as e:
-                print(f"No se pudo abrir el PDF automáticamente: {e}")
+                print(f"⚠️  No se pudo abrir automáticamente: {e}")
         
     except Exception as e:
         print(f"❌ Error generando PDF: {e}")
-        messagebox.showerror("Error", f"Error al generar PDF:\n\n{str(e)}")
 
 def main():
     """Función principal"""
+    print("="*70)
+    print("📊 GENERADOR DE QR PARA REPORTES")
+    print("="*70)
+    
     try:
-        inicializar_tkinter()
+        # Cargar configuración o solicitar usuario
+        config = cargar_configuracion()
         
-        # Mostrar información
-        messagebox.showinfo(
-            "Generador de QR de Reportes",
-            "📊 GENERADOR DE QR PARA REPORTES\n\n"
-            "Este programa genera 3 códigos QR especiales:\n\n"
-            "🔴 ROJO: Insumos críticos (1-12 meses)\n"
-            "🟡 AMARILLO: Insumos en alerta (13-17 meses)\n"
-            "🟢 VERDE: Insumos óptimos (18+ meses)\n\n"
-            "Cada QR mostrará un listado filtrado\n"
-            "con todos los medicamentos de esa categoría."
-        )
-        
-        # Obtener usuario
-        usuario = obtener_usuario()
-        
-        if not usuario:
-            print("\n❌ No se pudo obtener el usuario")
-            messagebox.showerror(
-                "Error",
-                "No se encontró usuario guardado.\n\n"
-                "Por favor, ejecuta primero el generador\n"
-                "de QR normal para configurar tu usuario."
-            )
-            return
+        if config and config.get('usuario'):
+            usuario = config['usuario']
+            print(f"\n✅ Usuario encontrado: {usuario}")
+            print(f"🌐 URL: https://{usuario}.pythonanywhere.com")
+        else:
+            print("\n⚙️  No hay configuración guardada")
+            usuario = solicitar_usuario()
+            
+            if not usuario:
+                print("\n❌ Usuario requerido")
+                input("\nPresiona Enter para salir...")
+                return
         
         # Generar QR
         exito = generar_qr_reportes(usuario)
@@ -400,21 +339,16 @@ def main():
         else:
             print("\n❌ El proceso no se completó correctamente")
     
+    except KeyboardInterrupt:
+        print("\n\n🛑 Proceso interrumpido por el usuario")
     except Exception as e:
         print(f"\n❌ ERROR INESPERADO: {e}")
         import traceback
         traceback.print_exc()
-        messagebox.showerror(
-            "Error",
-            f"Ocurrió un error inesperado:\n\n{str(e)}"
-        )
     
     finally:
-        print("\n🔄 Cerrando aplicación...")
-        cerrar_tkinter()
-        time.sleep(0.3)
+        print("\n👋 Programa finalizado")
+        input("\nPresiona Enter para cerrar...")
 
 if __name__ == "__main__":
     main()
-    print("👋 Programa finalizado")
-    sys.exit(0)
