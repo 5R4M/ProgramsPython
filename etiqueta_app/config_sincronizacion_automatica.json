@@ -1,8 +1,0 @@
-{
-    "usuario": "salonso",
-    "api_token": "b87ab7db392a14f215df04bf630d53eb2968a00a",
-    "ruta_excel": "C:\\Users\\SELSO\\OneDrive\\REPORTES MENSUALES\\FORMATO INSUMOS ENERO 2026.xlsx",
-    "intervalo_minutos": 60,
-    "url_servidor": "https://salonso.pythonanywhere.com",
-    "ruta_destino": "/home/salonso/mysite/inventario.xlsx"
-}
