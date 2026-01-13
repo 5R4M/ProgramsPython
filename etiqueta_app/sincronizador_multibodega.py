@@ -10,6 +10,8 @@ import os
 from datetime import datetime
 from pathlib import Path
 import schedule
+import tkinter as tk
+from tkinter import filedialog
 
 # =====================================================
 # CONFIGURACIÓN
@@ -47,6 +49,215 @@ def guardar_configuracion(config):
     except Exception as e:
         print(f"❌ Error guardando configuración: {e}")
         return False
+
+def seleccionar_archivos_multiples():
+    """Abre diálogo para seleccionar múltiples archivos Excel"""
+    try:
+        # Crear ventana raíz oculta
+        root = tk.Tk()
+        root.withdraw()
+        root.attributes('-topmost', True)
+        
+        print("\n📂 Abriendo selector de archivos...")
+        print("   💡 Mantén presionado Ctrl para seleccionar múltiples archivos")
+        
+        # Abrir diálogo de selección
+        archivos = filedialog.askopenfilenames(
+            title="Selecciona los archivos Excel de las bodegas",
+            filetypes=[
+                ("Archivos Excel", "*.xlsx *.xls"),
+                ("Todos los archivos", "*.*")
+            ],
+            multiple=True
+        )
+        
+        root.destroy()
+        
+        if archivos:
+            print(f"\n✅ {len(archivos)} archivo(s) seleccionado(s):")
+            for archivo in archivos:
+                print(f"   • {Path(archivo).name}")
+            return list(archivos)
+        else:
+            print("\n⚠️  No se seleccionaron archivos")
+            return []
+            
+    except Exception as e:
+        print(f"\n❌ Error al abrir selector: {e}")
+        print("   Usa el método manual (arrastrar archivos)")
+        return None
+
+def asignar_archivos_a_bodegas(config, archivos_seleccionados):
+    """Asigna archivos seleccionados a las bodegas correspondientes"""
+    print("\n" + "="*70)
+    print("🔗 ASIGNAR ARCHIVOS A BODEGAS")
+    print("="*70)
+    
+    archivos_disponibles = archivos_seleccionados.copy()
+    archivos_asignados = {}
+    
+    for codigo, info in config['bodegas'].items():
+        print(f"\n📁 Bodega: {info['nombre']}")
+        print(f"   Archivo actual: {Path(info['ruta_excel']).name}")
+        
+        if not archivos_disponibles:
+            print("   ⚠️  No quedan archivos por asignar")
+            print("   ℹ️  Manteniendo archivo actual")
+            continue
+        
+        print("\n   Archivos disponibles:")
+        for i, archivo in enumerate(archivos_disponibles, 1):
+            print(f"   {i}. {Path(archivo).name}")
+        print("   0. Mantener archivo actual")
+        
+        opcion = input("\n   Selecciona archivo (0-{}): ".format(len(archivos_disponibles))).strip()
+        
+        try:
+            opcion_num = int(opcion)
+            if opcion_num == 0:
+                print(f"   ℹ️  Manteniendo: {Path(info['ruta_excel']).name}")
+            elif 1 <= opcion_num <= len(archivos_disponibles):
+                archivo_seleccionado = archivos_disponibles[opcion_num - 1]
+                archivos_asignados[codigo] = archivo_seleccionado
+                archivos_disponibles.remove(archivo_seleccionado)
+                print(f"   ✅ Asignado: {Path(archivo_seleccionado).name}")
+            else:
+                print("   ❌ Opción inválida, manteniendo actual")
+        except ValueError:
+            print("   ❌ Entrada inválida, manteniendo actual")
+    
+    # Actualizar configuración
+    if archivos_asignados:
+        for codigo, archivo in archivos_asignados.items():
+            config['bodegas'][codigo]['ruta_excel'] = archivo
+        
+        print(f"\n✅ {len(archivos_asignados)} bodega(s) actualizada(s)")
+        return True
+    else:
+        print("\n⚠️  No se actualizó ninguna bodega")
+        return False
+
+def reconfigurar_completa(config_actual):
+    """Permite modificar toda la configuración (usuario, token, intervalo, bodegas)"""
+    print("\n" + "="*70)
+    print("⚙️  RECONFIGURACIÓN COMPLETA")
+    print("="*70)
+    print("\nPresiona Enter (vacío) para mantener el valor actual.")
+    
+    # Usuario
+    print("\n1. Usuario de PythonAnywhere")
+    print(f"   Actual: {config_actual.get('usuario', 'No configurado')}")
+    usuario = input("   Nuevo usuario (Enter para mantener): ").strip()
+    if not usuario:
+        usuario = config_actual.get('usuario')
+    
+    # API Token
+    print("\n2. API Token")
+    token_actual = config_actual.get('api_token', '')
+    token_oculto = token_actual[:8] + "..." if len(token_actual) > 8 else "No configurado"
+    print(f"   Actual: {token_oculto}")
+    api_token = input("   Nuevo token (Enter para mantener): ").strip()
+    if not api_token:
+        api_token = config_actual.get('api_token')
+    
+    # Intervalo
+    print("\n3. Intervalo de sincronización")
+    print(f"   Actual: Cada {config_actual.get('intervalo_minutos', 60)} minutos")
+    print("   a) Cada hora (60 min)")
+    print("   b) Cada 30 minutos")
+    print("   c) Cada 2 horas (120 min)")
+    print("   d) Mantener actual")
+    opcion = input("   Opción (a/b/c/d): ").strip().lower()
+    
+    intervalos = {'a': 60, 'b': 30, 'c': 120, 'd': config_actual.get('intervalo_minutos', 60)}
+    intervalo_minutos = intervalos.get(opcion, config_actual.get('intervalo_minutos', 60))
+    
+    # Bodegas
+    print("\n4. Configuración de bodegas")
+    print(f"   Actual: {len(config_actual.get('bodegas', {}))} bodega(s) configurada(s)")
+    print("\n¿Deseas reconfigurar las bodegas? (s/n): ", end='')
+    reconfig_bodegas = input().strip().lower()
+    
+    if reconfig_bodegas == 's':
+        print("\n" + "="*70)
+        print("📦 RECONFIGURACIÓN DE BODEGAS")
+        print("="*70)
+        print("\nPresiona Enter (vacío) para mantener la bodega actual.")
+        print("Escribe 'eliminar' para quitar una bodega de la configuración.")
+        
+        bodegas_config = {}
+        bodegas_actuales = config_actual.get('bodegas', {})
+        
+        for codigo, nombre in BODEGAS.items():
+            print(f"\n📁 Bodega: {nombre}")
+            
+            if codigo in bodegas_actuales:
+                print(f"   Actual: {bodegas_actuales[codigo]['ruta_excel']}")
+                ruta = input("   Nueva ruta (Enter=mantener, 'eliminar'=quitar): ").strip().strip('"').strip("'")
+                
+                if ruta.lower() == 'eliminar':
+                    print("   ❌ Bodega eliminada de la configuración")
+                    continue
+                elif not ruta:
+                    # Mantener actual
+                    bodegas_config[codigo] = bodegas_actuales[codigo]
+                    print(f"   ℹ️  Mantenida: {Path(bodegas_actuales[codigo]['ruta_excel']).name}")
+                    continue
+            else:
+                ruta = input("   Ruta del Excel (Enter para saltar): ").strip().strip('"').strip("'")
+            
+            if ruta and os.path.exists(ruta):
+                bodegas_config[codigo] = {
+                    'nombre': nombre,
+                    'ruta_excel': ruta,
+                    'ruta_destino': f'/home/{usuario}/mysite/inventario_{codigo}.xlsx'
+                }
+                print(f"   ✅ Configurada: {Path(ruta).name}")
+            elif ruta:
+                print("   ⚠️  Archivo no encontrado, saltando...")
+            else:
+                if codigo in bodegas_actuales:
+                    print("   ℹ️  Mantenida")
+                else:
+                    print("   ℹ️  Saltada")
+    else:
+        # Mantener bodegas actuales pero actualizar rutas de destino por si cambió el usuario
+        bodegas_config = config_actual.get('bodegas', {})
+        for codigo in bodegas_config:
+            bodegas_config[codigo]['ruta_destino'] = f'/home/{usuario}/mysite/inventario_{codigo}.xlsx'
+    
+    # Crear nueva configuración
+    nueva_config = {
+        'usuario': usuario,
+        'api_token': api_token,
+        'intervalo_minutos': intervalo_minutos,
+        'url_servidor': f'https://{usuario}.pythonanywhere.com',
+        'bodegas': bodegas_config
+    }
+    
+    # Mostrar resumen
+    print("\n" + "="*70)
+    print("📋 RESUMEN DE NUEVA CONFIGURACIÓN")
+    print("="*70)
+    print(f"   Usuario: {usuario}")
+    print(f"   Intervalo: Cada {intervalo_minutos} minutos")
+    print(f"   Bodegas: {len(bodegas_config)}")
+    for codigo, info in bodegas_config.items():
+        print(f"      • {info['nombre']}: {Path(info['ruta_excel']).name}")
+    
+    print("\n¿Deseas guardar esta configuración? (s/n): ", end='')
+    confirmar = input().strip().lower()
+    
+    if confirmar == 's':
+        if guardar_configuracion(nueva_config):
+            print("\n✅ Configuración actualizada y guardada")
+            return nueva_config
+        else:
+            print("\n❌ Error al guardar configuración")
+            return None
+    else:
+        print("\n⚠️  Configuración no guardada, manteniendo anterior")
+        return config_actual
 
 def configurar_primera_vez():
     """Configuración inicial interactiva"""
@@ -225,6 +436,86 @@ def main():
         print(f"   Bodegas: {len(config['bodegas'])}")
         for codigo, info in config['bodegas'].items():
             print(f"      • {info['nombre']}: {Path(info['ruta_excel']).name}")
+        
+        # Menú de opciones
+        print("\n" + "="*70)
+        print("⚙️  ¿QUÉ DESEAS HACER?")
+        print("="*70)
+        print("\n   1. Solo actualizar rutas de archivos Excel")
+        print("   2. Reconfigurar TODO (usuario, token, intervalo, bodegas)")
+        print("   3. Continuar sin cambios")
+        
+        opcion = input("\nOpción (1/2/3): ").strip()
+        
+        if opcion == '1':
+            # Solo actualizar archivos
+            print("\n¿Deseas actualizar las rutas de los archivos Excel? (s/n): ", end='')
+            reconfigurar = input().strip().lower()
+            
+            if reconfigurar == 's':
+                print("\n" + "="*70)
+                print("📂 MÉTODO DE ACTUALIZACIÓN")
+                print("="*70)
+                print("\n¿Cómo deseas seleccionar los archivos?")
+                print("   1. Selector múltiple (GUI) - Selecciona varios archivos a la vez")
+                print("   2. Uno por uno (Manual) - Arrastra cada archivo individualmente")
+                
+                metodo = input("\nMétodo (1/2): ").strip()
+                
+                if metodo == '1':
+                    # Método GUI - Selección múltiple
+                    archivos = seleccionar_archivos_multiples()
+                    
+                    if archivos:
+                        if asignar_archivos_a_bodegas(config, archivos):
+                            if guardar_configuracion(config):
+                                print("\n✅ Configuración actualizada y guardada")
+                            else:
+                                print("\n⚠️  Error al guardar, pero continuando con cambios en memoria")
+                        else:
+                            print("\n⚠️  No se realizaron cambios")
+                    elif archivos is None:
+                        print("\n⚠️  Selector no disponible, usando método manual...")
+                        metodo = '2'
+                
+                if metodo == '2':
+                    # Método manual - Uno por uno
+                    print("\n" + "="*70)
+                    print("📂 ACTUALIZAR RUTAS DE ARCHIVOS")
+                    print("="*70)
+                    print("\nPresiona Enter (vacío) para mantener el archivo actual.")
+                    
+                    for codigo, info in config['bodegas'].items():
+                        print(f"\n📁 Bodega: {info['nombre']}")
+                        print(f"   Archivo actual: {info['ruta_excel']}")
+                        nueva_ruta = input("   Nueva ruta (Enter para mantener): ").strip().strip('"').strip("'")
+                        
+                        if nueva_ruta:
+                            if os.path.exists(nueva_ruta):
+                                config['bodegas'][codigo]['ruta_excel'] = nueva_ruta
+                                print(f"   ✅ Actualizada: {Path(nueva_ruta).name}")
+                            else:
+                                print("   ❌ Archivo no encontrado, manteniendo actual")
+                        else:
+                            print(f"   ℹ️  Manteniendo: {Path(info['ruta_excel']).name}")
+                    
+                    # Guardar configuración actualizada
+                    if guardar_configuracion(config):
+                        print("\n✅ Configuración actualizada y guardada")
+                    else:
+                        print("\n⚠️  Error al guardar, pero continuando con cambios en memoria")
+        
+        elif opcion == '2':
+            # Reconfigurar todo
+            config_nueva = reconfigurar_completa(config)
+            if config_nueva:
+                config = config_nueva
+        
+        elif opcion == '3':
+            # Continuar sin cambios
+            print("\n✅ Manteniendo configuración actual")
+        else:
+            print("\n⚠️  Opción inválida, manteniendo configuración actual")
     
     # Preguntar si hacer sincronización inicial
     print("\n¿Deseas hacer una sincronización inicial ahora? (s/n): ", end='')
