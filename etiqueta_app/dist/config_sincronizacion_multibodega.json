@@ -18,6 +18,11 @@
             "nombre": "Varios",
             "ruta_excel": "C:\\Users\\SELSO\\OneDrive - DIRECCION DE AREA DE SALUD GUATEMALA NOR ORIENTE\\Escritorio\\Etiquetas Bodegas\\FORMATO INVENTARIO VARIOS.xlsx",
             "ruta_destino": "/home/salonso/mysite/inventario_varios.xlsx"
+        },
+        "limpieza": {
+            "nombre": "Limpieza",
+            "ruta_excel": "C:\\Users\\SELSO\\OneDrive - DIRECCION DE AREA DE SALUD GUATEMALA NOR ORIENTE\\Escritorio\\Etiquetas Bodegas\\FORMATO INVENTARIO LIMPIEZA.xlsx",
+            "ruta_destino": "/home/salonso/mysite/inventario_limpieza.xlsx"
         }
     }
 }
