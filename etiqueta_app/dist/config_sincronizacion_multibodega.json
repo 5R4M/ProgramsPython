@@ -6,8 +6,18 @@
     "bodegas": {
         "medico": {
             "nombre": "Material Médico Quirúrgico e Insumos de Laboratorio",
-            "ruta_excel": "C:\\Users\\SELSO\\OneDrive - DIRECCION DE AREA DE SALUD GUATEMALA NOR ORIENTE\\Escritorio\\Etiquetas Bodegas\\FORMATO INVENTARIO MQ Y LABORATORIO.xlsx",
+            "ruta_excel": "C:\\Users\\SELSO\\OneDrive\\REPORTES MENSUALES\\FORMATO INSUMOS ENERO 2026.xlsx",
             "ruta_destino": "/home/salonso/mysite/inventario_medico.xlsx"
+        },
+        "oficina": {
+            "nombre": "Oficina",
+            "ruta_excel": "C:\\Users\\SELSO\\OneDrive - DIRECCION DE AREA DE SALUD GUATEMALA NOR ORIENTE\\Escritorio\\Etiquetas Bodegas\\FORMATO INVENTARIO LIBRERIA.xlsx",
+            "ruta_destino": "/home/salonso/mysite/inventario_oficina.xlsx"
+        },
+        "varios": {
+            "nombre": "Varios",
+            "ruta_excel": "C:\\Users\\SELSO\\OneDrive - DIRECCION DE AREA DE SALUD GUATEMALA NOR ORIENTE\\Escritorio\\Etiquetas Bodegas\\FORMATO INVENTARIO VARIOS.xlsx",
+            "ruta_destino": "/home/salonso/mysite/inventario_varios.xlsx"
         }
     }
 }

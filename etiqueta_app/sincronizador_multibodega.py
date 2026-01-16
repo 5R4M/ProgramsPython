@@ -484,24 +484,48 @@ def main():
                     print("📂 ACTUALIZAR RUTAS DE ARCHIVOS")
                     print("="*70)
                     print("\nPresiona Enter (vacío) para mantener el archivo actual.")
+                    print("Si la bodega no está configurada, ingresa la ruta para agregarla.")
                     
-                    for codigo, info in config['bodegas'].items():
-                        print(f"\n📁 Bodega: {info['nombre']}")
-                        print(f"   Archivo actual: {info['ruta_excel']}")
-                        nueva_ruta = input("   Nueva ruta (Enter para mantener): ").strip().strip('"').strip("'")
+                    # Iterar sobre TODAS las bodegas disponibles en BODEGAS
+                    for codigo, nombre in BODEGAS.items():
+                        print(f"\n📁 Bodega: {nombre}")
                         
-                        if nueva_ruta:
-                            if os.path.exists(nueva_ruta):
-                                config['bodegas'][codigo]['ruta_excel'] = nueva_ruta
-                                print(f"   ✅ Actualizada: {Path(nueva_ruta).name}")
+                        # Verificar si ya está configurada
+                        if codigo in config['bodegas']:
+                            print(f"   Archivo actual: {config['bodegas'][codigo]['ruta_excel']}")
+                            nueva_ruta = input("   Nueva ruta (Enter para mantener): ").strip().strip('"').strip("'")
+                            
+                            if nueva_ruta:
+                                if os.path.exists(nueva_ruta):
+                                    config['bodegas'][codigo]['ruta_excel'] = nueva_ruta
+                                    config['bodegas'][codigo]['ruta_destino'] = f"/home/{config['usuario']}/mysite/inventario_{codigo}.xlsx"
+                                    print(f"   ✅ Actualizada: {Path(nueva_ruta).name}")
+                                else:
+                                    print("   ❌ Archivo no encontrado, manteniendo actual")
                             else:
-                                print("   ❌ Archivo no encontrado, manteniendo actual")
+                                print(f"   ℹ️  Manteniendo: {Path(config['bodegas'][codigo]['ruta_excel']).name}")
                         else:
-                            print(f"   ℹ️  Manteniendo: {Path(info['ruta_excel']).name}")
+                            # Bodega no configurada
+                            print("   ⚠️  Esta bodega NO está configurada")
+                            nueva_ruta = input("   Ruta del Excel (Enter para saltar): ").strip().strip('"').strip("'")
+                            
+                            if nueva_ruta:
+                                if os.path.exists(nueva_ruta):
+                                    config['bodegas'][codigo] = {
+                                        'nombre': nombre,
+                                        'ruta_excel': nueva_ruta,
+                                        'ruta_destino': f"/home/{config['usuario']}/mysite/inventario_{codigo}.xlsx"
+                                    }
+                                    print(f"   ✅ Configurada: {Path(nueva_ruta).name}")
+                                else:
+                                    print("   ❌ Archivo no encontrado, saltando")
+                            else:
+                                print("   ℹ️  Saltada")
                     
                     # Guardar configuración actualizada
                     if guardar_configuracion(config):
                         print("\n✅ Configuración actualizada y guardada")
+                        print(f"\n📦 Total de bodegas configuradas: {len(config['bodegas'])}")
                     else:
                         print("\n⚠️  Error al guardar, pero continuando con cambios en memoria")
         
