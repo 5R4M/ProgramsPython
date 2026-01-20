@@ -11,7 +11,7 @@
         },
         "oficina": {
             "nombre": "Oficina",
-            "ruta_excel": "C:\\Users\\SELSO\\OneDrive - DIRECCION DE AREA DE SALUD GUATEMALA NOR ORIENTE\\Escritorio\\Etiquetas Bodegas\\FORMATO INVENTARIO LIBRERIA.xlsx",
+            "ruta_excel": "C:\\Users\\SELSO\\OneDrive - DIRECCION DE AREA DE SALUD GUATEMALA NOR ORIENTE\\Escritorio\\Etiquetas Bodegas\\FORMATO INVENTARIO OFICINA.xlsx",
             "ruta_destino": "/home/salonso/mysite/inventario_oficina.xlsx"
         },
         "varios": {
@@ -23,6 +23,11 @@
             "nombre": "Limpieza",
             "ruta_excel": "C:\\Users\\SELSO\\OneDrive - DIRECCION DE AREA DE SALUD GUATEMALA NOR ORIENTE\\Escritorio\\Etiquetas Bodegas\\FORMATO INVENTARIO LIMPIEZA.xlsx",
             "ruta_destino": "/home/salonso/mysite/inventario_limpieza.xlsx"
+        },
+        "medicamentos": {
+            "nombre": "Medicamentos",
+            "ruta_excel": "C:\\Users\\SELSO\\OneDrive - DIRECCION DE AREA DE SALUD GUATEMALA NOR ORIENTE\\Escritorio\\Etiquetas Bodegas\\FORMATO INVENTARIO MEDICAMENTOS.xlsx",
+            "ruta_destino": "/home/salonso/mysite/inventario_medicamentos.xlsx"
         }
     }
 }
