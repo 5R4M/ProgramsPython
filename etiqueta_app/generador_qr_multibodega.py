@@ -23,37 +23,37 @@ BODEGAS = {
     '1': {
         'nombre': 'Material Médico Quirúrgico e Insumos de Laboratorio',
         'codigo': 'medico',
-        'hoja_excel': 'Inventario General Enero',
+        'hoja_excel': 'Inventario General',
         'header_row': 4
     },
     '2': {
         'nombre': 'Medicamentos',
         'codigo': 'medicamentos',
-        'hoja_excel': 'Inventario General Enero',
+        'hoja_excel': 'Inventario General',
         'header_row': 4
     },
     '3': {
         'nombre': 'Limpieza',
         'codigo': 'limpieza',
-        'hoja_excel': 'Inventario General Enero',
+        'hoja_excel': 'Inventario General',
         'header_row': 4
     },
     '4': {
         'nombre': 'Oficina',
         'codigo': 'oficina',
-        'hoja_excel': 'Inventario General Enero',
+        'hoja_excel': 'Inventario General',
         'header_row': 4
     },
     '5': {
         'nombre': 'Varios',
         'codigo': 'varios',
-        'hoja_excel': 'Inventario General Enero',
+        'hoja_excel': 'Inventario General',
         'header_row': 4
     },
     '6': {
         'nombre': 'Programas',
         'codigo': 'programas',
-        'hoja_excel': 'Inventario General Enero',
+        'hoja_excel': 'Inventario General',
         'header_row': 4
     }
 }

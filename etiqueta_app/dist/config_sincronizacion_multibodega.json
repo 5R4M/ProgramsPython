@@ -6,7 +6,7 @@
     "bodegas": {
         "medico": {
             "nombre": "Material Médico Quirúrgico e Insumos de Laboratorio",
-            "ruta_excel": "C:\\Users\\SELSO\\OneDrive\\REPORTES MENSUALES\\FORMATO INSUMOS ENERO 2026.xlsx",
+            "ruta_excel": "C:\\Users\\SELSO\\OneDrive\\REPORTES MENSUALES\\FORMATO INSUMOS FEBRERO 2026.xlsx",
             "ruta_destino": "/home/salonso/mysite/inventario_medico.xlsx"
         },
         "oficina": {

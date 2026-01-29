@@ -17,32 +17,121 @@ def obtener_hora_actual():
 BODEGAS = {
     'medico': {
         'nombre': 'Material Médico Quirúrgico e Insumos de Laboratorio',
-        'archivo': '/home/salonso/mysite/inventario_medico.xlsx'
+        'archivo': '/home/salonso/mysite/inventario_medico.xlsx',
+        'tiene_tipos': True
     },
     'medicamentos': {
         'nombre': 'Medicamentos',
-        'archivo': '/home/salonso/mysite/inventario_medicamentos.xlsx'
+        'archivo': '/home/salonso/mysite/inventario_medicamentos.xlsx',
+        'tiene_tipos': False
     },
     'limpieza': {
         'nombre': 'Limpieza',
-        'archivo': '/home/salonso/mysite/inventario_limpieza.xlsx'
+        'archivo': '/home/salonso/mysite/inventario_limpieza.xlsx',
+        'tiene_tipos': False
     },
     'oficina': {
         'nombre': 'Oficina',
-        'archivo': '/home/salonso/mysite/inventario_oficina.xlsx'
+        'archivo': '/home/salonso/mysite/inventario_oficina.xlsx',
+        'tiene_tipos': False
     },
     'varios': {
         'nombre': 'Varios',
-        'archivo': '/home/salonso/mysite/inventario_varios.xlsx'
+        'archivo': '/home/salonso/mysite/inventario_varios.xlsx',
+        'tiene_tipos': True
     },
     'programas': {
         'nombre': 'Programas',
-        'archivo': '/home/salonso/mysite/inventario_programas.xlsx'
+        'archivo': '/home/salonso/mysite/inventario_programas.xlsx',
+        'tiene_tipos': True  # Tiene tipos: Vacuna, VIH, T/B, S/R, etc.
+    }
+}
+
+# Definición de tipos de insumo con sus nombres completos e iconos
+TIPOS_INSUMO = {
+    # Bodega Médico
+    'MQ': {
+        'nombre': 'Médico Quirúrgico',
+        'icono': '🏥',
+        'color': '#3498db'
+    },
+    'LAB': {
+        'nombre': 'Laboratorio',
+        'icono': '🔬',
+        'color': '#9b59b6'
+    },
+    # Bodega Varios
+    'VR': {
+        'nombre': 'Varios',
+        'icono': '📦',
+        'color': '#95a5a6'
+    },
+    'VR/ALIM': {
+        'nombre': 'Varios - Alimentos',
+        'icono': '🍽️',
+        'color': '#e67e22'
+    },
+    'VR/DON': {
+        'nombre': 'Varios - Donaciones',
+        'icono': '🎁',
+        'color': '#e74c3c'
+    },
+    'VR/EQU': {
+        'nombre': 'Varios - Equipos',
+        'icono': '⚙️',
+        'color': '#34495e'
+    },
+    'VR/GAS': {
+        'nombre': 'Varios - Gases',
+        'icono': '⛽',
+        'color': '#16a085'
+    },
+    'VR/LLANT': {
+        'nombre': 'Varios - Llantas',
+        'icono': '🚗',
+        'color': '#2c3e50'
+    },
+    'VR/VECT': {
+        'nombre': 'Varios - Vectores',
+        'icono': '🦟',
+        'color': '#8e44ad'
+    },
+    # Bodega Programas
+    'Vacuna': {
+        'nombre': 'Vacunas',
+        'icono': '💉',
+        'color': '#3498db'
+    },
+    'VIH': {
+        'nombre': 'Programa VIH',
+        'icono': '🩺',
+        'color': '#e74c3c'
+    },
+    'T/B': {
+        'nombre': 'Tuberculosis',
+        'icono': '🫁',
+        'color': '#95a5a6'
+    },
+    'S/R': {
+        'nombre': 'Salud Reproductiva',
+        'icono': '👶',
+        'color': '#e91e63'
+    },
+    'MX': {
+        'nombre': 'Mixto',
+        'icono': '📋',
+        'color': '#607d8b'
+    },
+    'Lab.': {
+        'nombre': 'Laboratorio',
+        'icono': '🔬',
+        'color': '#9c27b0'
     }
 }
 
 # Variable global para almacenar datos de todas las bodegas
 datos_inventario = {}
+tipos_por_bodega = {}  # Nueva estructura para almacenar tipos disponibles por bodega
 
 def cargar_datos_bodega(codigo_bodega, archivo_excel):
     """Carga datos desde Excel para una bodega específica"""
@@ -50,11 +139,11 @@ def cargar_datos_bodega(codigo_bodega, archivo_excel):
         # Si el archivo no existe, retornar diccionario vacío
         if not os.path.exists(archivo_excel):
             print(f"⚠️  Archivo no encontrado: {archivo_excel}")
-            return {}
+            return {}, set()
         
         df = pd.read_excel(
             archivo_excel,
-            sheet_name="Inventario General Enero",
+            sheet_name="Inventario General",
             header=4
         )
         df = df.dropna(how='all')
@@ -62,6 +151,7 @@ def cargar_datos_bodega(codigo_bodega, archivo_excel):
         df = df[df['Saldo'] > 0]
         
         inventario_bodega = {}
+        tipos_encontrados = set()
         
         for idx, row in df.iterrows():
             codigo = str(row.get('Código', ''))
@@ -93,11 +183,11 @@ def cargar_datos_bodega(codigo_bodega, archivo_excel):
                                     med_valor = 'S/D'
                                 else:
                                     med_valor = med_float
-                            except:  # noqa: E722
+                            except:
                                 med_valor = 'S/D'
                         else:
                             med_valor = 'S/D'
-                    except:  # noqa: E722
+                    except:
                         med_valor = 'S/D'
                     
                     if pd.notna(saldo) and saldo > 0:
@@ -108,14 +198,21 @@ def cargar_datos_bodega(codigo_bodega, archivo_excel):
                             'saldo': int(saldo) if saldo == int(saldo) else saldo,
                             'med': med_valor
                         })
-                except Exception:
+                except Exception as e:
                     continue
             
             if lotes:
+                # Obtener tipo de insumo si la bodega lo tiene
+                tipo_insumo = ''
+                if BODEGAS[codigo_bodega].get('tiene_tipos', False):
+                    tipo_insumo = str(row.get('Tipo de Insumo', '')) if pd.notna(row.get('Tipo de Insumo')) else ''
+                    if tipo_insumo and tipo_insumo != 'nan':
+                        tipos_encontrados.add(tipo_insumo)
+                
                 inventario_bodega[codigo] = {
                     'codigo': codigo,
                     'medicamento': str(row.get('Medicamento', '')),
-                    'tipo': str(row.get('Tipo de Insumo', '')) if pd.notna(row.get('Tipo de Insumo')) else '',
+                    'tipo': tipo_insumo,
                     'presentacion': str(row.get('Presentación Primaria', '')) if pd.notna(row.get('Presentación Primaria')) else '',
                     'lotes': lotes,
                     'saldo_total': row.get('Saldo', 0),
@@ -123,30 +220,37 @@ def cargar_datos_bodega(codigo_bodega, archivo_excel):
                 }
         
         print(f"✅ Bodega '{codigo_bodega}': {len(inventario_bodega)} productos con {sum(len(d['lotes']) for d in inventario_bodega.values())} lotes")
-        return inventario_bodega
+        if tipos_encontrados:
+            print(f"   Tipos encontrados: {', '.join(sorted(tipos_encontrados))}")
+        
+        return inventario_bodega, tipos_encontrados
         
     except Exception as e:
         print(f"❌ Error cargando bodega '{codigo_bodega}': {e}")
         import traceback
         traceback.print_exc()
-        return {}
+        return {}, set()
 
 def cargar_datos():
     """Carga datos de todas las bodegas"""
-    global datos_inventario
+    global datos_inventario, tipos_por_bodega
     datos_inventario = {}
+    tipos_por_bodega = {}
     
     print("\n🔄 Cargando datos de todas las bodegas...")
     
     for codigo_bodega, info_bodega in BODEGAS.items():
-        inventario = cargar_datos_bodega(codigo_bodega, info_bodega['archivo'])
+        inventario, tipos = cargar_datos_bodega(codigo_bodega, info_bodega['archivo'])
         if inventario:
             datos_inventario[codigo_bodega] = inventario
+            if tipos:
+                tipos_por_bodega[codigo_bodega] = tipos
     
     total_productos = sum(len(inv) for inv in datos_inventario.values())
     total_lotes = sum(sum(len(d['lotes']) for d in inv.values()) for inv in datos_inventario.values())
     
     print(f"\n✅ Total cargado: {len(datos_inventario)} bodegas, {total_productos} productos, {total_lotes} lotes")
+    print(f"📊 Bodegas con tipos: {list(tipos_por_bodega.keys())}")
     return True
 
 def obtener_color_med(med_valor):
@@ -164,7 +268,7 @@ def obtener_color_med(med_valor):
             return 'green', f'{int(med)} meses'
         else:
             return 'green', 'S/D'
-    except:  # noqa: E722
+    except:
         return 'green', 'S/D'
 
 # Cargar datos al iniciar
@@ -184,6 +288,12 @@ def inicio():
         num_productos = len(inventario)
         num_lotes = sum(len(d['lotes']) for d in inventario.values())
         
+        # Mostrar si tiene tipos
+        tipos_info = ""
+        if codigo_bodega in tipos_por_bodega and tipos_por_bodega[codigo_bodega]:
+            num_tipos = len(tipos_por_bodega[codigo_bodega])
+            tipos_info = f" • {num_tipos} tipos"
+        
         lista_bodegas += f"""
         <div class="bodega-card">
             <div class="bodega-icon">📦</div>
@@ -193,6 +303,7 @@ def inicio():
                     <span>{num_productos} productos</span>
                     <span>•</span>
                     <span>{num_lotes} lotes</span>
+                    {tipos_info}
                 </div>
             </div>
         </div>
@@ -413,6 +524,17 @@ def medicamento():
 </html>
 """, 404
     
+    # Mostrar tipo de insumo si aplica
+    tipo_insumo_html = ""
+    if datos.get('tipo') and str(datos.get('tipo')) != 'nan' and datos.get('tipo'):
+        tipo_info = TIPOS_INSUMO.get(datos['tipo'], {'nombre': datos['tipo'], 'icono': '📋'})
+        tipo_insumo_html = f"""
+            <div class="field">
+                <div class="field-label">{tipo_info['icono']} Tipo de Insumo</div>
+                <div class="field-value">{tipo_info['nombre']}</div>
+            </div>
+"""
+    
     # HTML optimizado para móvil
     html = f"""
 <!DOCTYPE html>
@@ -620,14 +742,8 @@ def medicamento():
                 <div class="field-label">💊 Medicamento/Producto</div>
                 <div class="field-value">{datos['medicamento']}</div>
             </div>
-"""
-    
-    if datos.get('tipo') and str(datos.get('tipo')) != 'nan' and datos.get('tipo'):
-        html += f"""
-            <div class="field">
-                <div class="field-label">🏥 Tipo</div>
-                <div class="field-value">{datos['tipo']}</div>
-            </div>
+            
+            {tipo_insumo_html}
 """
     
     if datos.get('presentacion') and str(datos.get('presentacion')) != 'nan' and datos.get('presentacion'):
@@ -658,7 +774,7 @@ def medicamento():
             else:
                 try:
                     valor_circulo = int(float(lote.get('med', 0)))
-                except:  # noqa: E722
+                except:
                     valor_circulo = 'S/D'
             
             html += f"""
@@ -724,10 +840,17 @@ def test():
     
     for codigo_bodega, inventario in datos_inventario.items():
         nombre_bodega = BODEGAS[codigo_bodega]['nombre']
-        html += f"<h2>📦 {nombre_bodega}</h2><ul>"
+        html += f"<h2>📦 {nombre_bodega}</h2>"
         
+        # Mostrar tipos si los tiene
+        if codigo_bodega in tipos_por_bodega and tipos_por_bodega[codigo_bodega]:
+            html += f"<p><strong>Tipos:</strong> {', '.join(sorted(tipos_por_bodega[codigo_bodega]))}</p>"
+        
+        html += "<ul>"
         for i, (codigo, datos) in enumerate(list(inventario.items())[:3]):
             html += f"<li><strong>{codigo}</strong>: {datos['medicamento']} - {len(datos['lotes'])} lotes"
+            if datos.get('tipo'):
+                html += f" - Tipo: {datos['tipo']}"
             for lote in datos['lotes']:
                 med = lote.get('med')
                 color, texto = obtener_color_med(med)
@@ -740,8 +863,9 @@ def test():
 
 @app.route('/reporte/<color>')
 def reporte_por_color(color):
-    """Muestra reporte de medicamentos filtrados por color"""
+    """Muestra reporte de medicamentos filtrados por color con opción de seleccionar tipo"""
     bodega_param = request.args.get('bodega', '')
+    tipo_param = request.args.get('tipo', '')
     
     # Validar color
     colores_validos = ['rojo', 'amarillo', 'verde']
@@ -763,17 +887,33 @@ def reporte_por_color(color):
     if bodega_param and bodega_param in datos_inventario:
         bodegas_a_filtrar[bodega_param] = datos_inventario[bodega_param]
         nombre_filtro = f" - {BODEGAS[bodega_param]['nombre']}"
+        codigo_bodega_actual = bodega_param
     else:
         bodegas_a_filtrar = datos_inventario
         nombre_filtro = " - Todas las Bodegas"
+        codigo_bodega_actual = None
     
-    # Filtrar medicamentos por color
+    # Verificar si la bodega actual tiene tipos Y no se ha seleccionado tipo
+    bodega_tiene_tipos = False
+    if codigo_bodega_actual and codigo_bodega_actual in tipos_por_bodega:
+        if tipos_por_bodega[codigo_bodega_actual]:
+            bodega_tiene_tipos = True
+    
+    # Si la bodega tiene tipos Y no se ha seleccionado, mostrar selector
+    if bodega_tiene_tipos and not tipo_param:
+        return mostrar_selector_tipo(color, bodega_param, codigo_bodega_actual)
+    
+    # Filtrar medicamentos por color y tipo si aplica
     medicamentos_filtrados = []
     
     for codigo_bodega, inventario in bodegas_a_filtrar.items():
         nombre_bodega = BODEGAS[codigo_bodega]['nombre']
         
         for codigo, datos in inventario.items():
+            # Filtrar por tipo si está especificado y no es "TODOS"
+            if tipo_param and tipo_param != 'TODOS' and datos.get('tipo') != tipo_param:
+                continue
+            
             for lote in datos['lotes']:
                 med_color, texto_med = obtener_color_med(lote.get('med'))
                 
@@ -782,6 +922,7 @@ def reporte_por_color(color):
                         'codigo': codigo,
                         'medicamento': datos['medicamento'],
                         'bodega': nombre_bodega,
+                        'tipo': datos.get('tipo', ''),
                         'lote_numero': lote['numero'],
                         'fv': lote['fv'],
                         'lote': lote['lote'],
@@ -816,7 +957,15 @@ def reporte_por_color(color):
         descripcion = 'Estos insumos tienen stock suficiente'
         bg_gradient = 'linear-gradient(135deg, #51cf66 0%, #37b24d 100%)'
     
-    # HTML del reporte
+    # Añadir info de tipo si está filtrado
+    if tipo_param and tipo_param != 'TODOS' and tipo_param in TIPOS_INSUMO:
+        tipo_info = TIPOS_INSUMO[tipo_param]
+        titulo += f" - {tipo_info['nombre']}"
+        nombre_filtro += f" ({tipo_info['icono']} {tipo_info['nombre']})"
+    elif tipo_param == 'TODOS':
+        nombre_filtro += " (Todos los tipos)"
+    
+    # HTML del reporte (mismo código que antes, manteniendo el diseño)
     html = f"""
 <!DOCTYPE html>
 <html>
@@ -843,19 +992,31 @@ def reporte_por_color(color):
         .header {{
             background: {bg_gradient};
             color: white;
-            padding: 25px;
+            padding: 30px;
             border-radius: 12px;
             text-align: center;
             margin-bottom: 20px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
         }}
         .header h1 {{
-            font-size: 24px;
-            margin-bottom: 5px;
+            font-size: 26px;
+            margin-bottom: 8px;
+            font-weight: bold;
         }}
         .header .subtitulo {{
-            font-size: 14px;
+            font-size: 15px;
             opacity: 0.95;
-            margin-top: 5px;
+            margin-top: 8px;
+        }}
+        .header .bodega-filtro {{
+            background: rgba(255,255,255,0.25);
+            padding: 10px 20px;
+            border-radius: 25px;
+            margin-top: 15px;
+            display: inline-block;
+            font-size: 14px;
+            font-weight: bold;
+            backdrop-filter: blur(10px);
         }}
         .stats {{
             display: flex;
@@ -890,40 +1051,75 @@ def reporte_por_color(color):
         .medicamento-card {{
             background: #f8f9fa;
             border-radius: 10px;
-            padding: 15px;
-            margin-bottom: 15px;
-            border-left: 4px solid {color_hex};
+            padding: 18px;
+            margin-bottom: 18px;
+            border-left: 5px solid {color_hex};
+            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+            transition: transform 0.2s, box-shadow 0.2s;
+        }}
+        .medicamento-card:hover {{
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.12);
         }}
         .med-header {{
             display: flex;
+            flex-direction: column;
+            gap: 10px;
+            margin-bottom: 12px;
+            padding-bottom: 12px;
+            border-bottom: 2px solid #e0e0e0;
+        }}
+        .med-top-row {{
+            display: flex;
             align-items: center;
-            margin-bottom: 10px;
+            gap: 10px;
+            flex-wrap: wrap;
         }}
         .med-icono {{
-            font-size: 24px;
-            margin-right: 10px;
-        }}
-        .med-nombre {{
-            font-weight: bold;
-            color: #333;
-            font-size: 15px;
-            flex: 1;
+            font-size: 28px;
         }}
         .med-codigo {{
             background: {color_hex};
             color: white;
-            padding: 4px 10px;
-            border-radius: 15px;
-            font-size: 11px;
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-size: 13px;
             font-weight: bold;
+            letter-spacing: 0.5px;
         }}
         .bodega-tag {{
-            background: #ff9800;
+            background: linear-gradient(135deg, #ff9800 0%, #f57c00 100%);
             color: white;
-            padding: 3px 8px;
-            border-radius: 10px;
-            font-size: 10px;
-            margin-left: 8px;
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-size: 13px;
+            font-weight: bold;
+            box-shadow: 0 2px 6px rgba(255, 152, 0, 0.3);
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }}
+        .tipo-tag {{
+            background: linear-gradient(135deg, #9b59b6 0%, #8e44ad 100%);
+            color: white;
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-size: 13px;
+            font-weight: bold;
+            box-shadow: 0 2px 6px rgba(155, 89, 182, 0.3);
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }}
+        .bodega-icon {{
+            font-size: 16px;
+        }}
+        .med-nombre {{
+            font-weight: bold;
+            color: #2c3e50;
+            font-size: 17px;
+            line-height: 1.4;
+            margin-bottom: 12px;
         }}
         .med-detalle {{
             display: grid;
@@ -969,14 +1165,25 @@ def reporte_por_color(color):
             margin-top: 20px;
             font-weight: bold;
         }}
+        
+        @media (max-width: 768px) {{
+            .header h1 {{ font-size: 22px; }}
+            .bodega-filtro {{ font-size: 13px; padding: 8px 16px; }}
+            .medicamento-card {{ padding: 15px; }}
+            .med-top-row {{ flex-wrap: wrap; }}
+            .bodega-tag, .tipo-tag {{ width: 100%; justify-content: center; }}
+            .med-nombre {{ font-size: 15px; }}
+            .med-detalle {{ grid-template-columns: 1fr; gap: 12px; }}
+        }}
     </style>
 </head>
 <body>
     <div class="container">
         <div class="header">
             <div class="med-icono">{icono}</div>
-            <h1>{titulo}{nombre_filtro}</h1>
+            <h1>{titulo}</h1>
             <div class="subtitulo">{subtitulo}</div>
+            <div class="bodega-filtro">📦 {nombre_filtro.replace(' - ', '')}</div>
         </div>
         
         <div class="stats">
@@ -1000,14 +1207,31 @@ def reporte_por_color(color):
         <h3 style="color: #333; margin-bottom: 15px;">📋 Listado de Insumos</h3>
 """
         for med in medicamentos_filtrados:
+            tipo_html = ""
+            if med['tipo'] and med['tipo'] in TIPOS_INSUMO:
+                tipo_info = TIPOS_INSUMO[med['tipo']]
+                tipo_html = f"""
+                <div class="tipo-tag">
+                    <span class="bodega-icon">{tipo_info['icono']}</span>
+                    <span><strong>{tipo_info['nombre']}</strong></span>
+                </div>
+"""
+            
             html += f"""
         <div class="medicamento-card">
             <div class="med-header">
-                <span class="med-icono">💊</span>
-                <span class="med-nombre">{med['medicamento']}</span>
-                <span class="bodega-tag">📦 {med['bodega'][:20]}</span>
-                <span class="med-codigo">{med['codigo']}</span>
+                <div class="med-top-row">
+                    <span class="med-icono">💊</span>
+                    <span class="med-codigo">📋 {med['codigo']}</span>
+                </div>
+                <div class="bodega-tag">
+                    <span class="bodega-icon">🏥</span>
+                    <span><strong>BODEGA:</strong> {med['bodega']}</span>
+                </div>
+                {tipo_html}
             </div>
+            
+            <div class="med-nombre">{med['medicamento']}</div>
             
             <div class="med-detalle">
                 <div class="detalle-item">
@@ -1045,6 +1269,239 @@ def reporte_por_color(color):
         
         <div class="actualizado">
             🕐 Actualizado: {obtener_hora_actual().strftime("%d/%m/%Y %H:%M:%S")}
+        </div>
+    </div>
+</body>
+</html>
+"""
+    return html
+
+def mostrar_selector_tipo(color, bodega_param, codigo_bodega):
+    """Muestra una página de selección de tipo de insumo dinámica según la bodega"""
+    
+    # Configuración según el color
+    if color == 'rojo':
+        color_hex = '#ff6b6b'
+        titulo = 'INSUMOS CRÍTICOS'
+        icono = '🔴'
+        bg_gradient = 'linear-gradient(135deg, #ff6b6b 0%, #ee5a6f 100%)'
+    elif color == 'amarillo':
+        color_hex = '#ffd93d'
+        titulo = 'INSUMOS EN ALERTA'
+        icono = '🟡'
+        bg_gradient = 'linear-gradient(135deg, #ffd93d 0%, #f6b93b 100%)'
+    else:
+        color_hex = '#51cf66'
+        titulo = 'INSUMOS ÓPTIMOS'
+        icono = '🟢'
+        bg_gradient = 'linear-gradient(135deg, #51cf66 0%, #37b24d 100%)'
+    
+    # Obtener tipos de la bodega actual
+    tipos_bodega = sorted(tipos_por_bodega.get(codigo_bodega, set()))
+    
+    # Construir opciones dinámicamente
+    opciones_html = ""
+    for tipo_codigo in tipos_bodega:
+        tipo_info = TIPOS_INSUMO.get(tipo_codigo, {
+            'nombre': tipo_codigo,
+            'icono': '📋',
+            'color': '#95a5a6'
+        })
+        
+        opciones_html += f"""
+            <a href="/reporte/{color}?tipo={tipo_codigo}&bodega={bodega_param}" class="option-card">
+                <div class="option-icon">{tipo_info['icono']}</div>
+                <div class="option-content">
+                    <div class="option-title">{tipo_info['nombre']}</div>
+                    <div class="option-description">Código: {tipo_codigo}</div>
+                </div>
+                <div class="option-arrow">→</div>
+            </a>
+"""
+    
+    html = f"""
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Seleccionar Tipo de Insumo - {titulo}</title>
+    <style>
+        * {{ margin: 0; padding: 0; box-sizing: border-box; }}
+        body {{
+            font-family: -apple-system, BlinkMacSystemFont, Arial, sans-serif;
+            background: {bg_gradient};
+            min-height: 100vh;
+            padding: 15px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }}
+        .container {{
+            background: white;
+            border-radius: 15px;
+            padding: 30px;
+            max-width: 500px;
+            width: 100%;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+            max-height: 90vh;
+            overflow-y: auto;
+        }}
+        .header {{
+            text-align: center;
+            margin-bottom: 30px;
+        }}
+        .header-icon {{
+            font-size: 60px;
+            margin-bottom: 15px;
+        }}
+        .header h1 {{
+            color: #2c3e50;
+            font-size: 24px;
+            margin-bottom: 10px;
+        }}
+        .header p {{
+            color: #666;
+            font-size: 14px;
+        }}
+        .selector-options {{
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            margin-bottom: 20px;
+        }}
+        .option-card {{
+            background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+            border: 3px solid transparent;
+            border-radius: 12px;
+            padding: 15px;
+            text-decoration: none;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            transition: all 0.3s ease;
+            cursor: pointer;
+        }}
+        .option-card:hover {{
+            transform: translateY(-3px);
+            box-shadow: 0 5px 15px rgba(0,0,0,0.15);
+            border-color: {color_hex};
+        }}
+        .option-card:active {{
+            transform: translateY(-1px);
+        }}
+        .option-icon {{
+            font-size: 32px;
+            min-width: 40px;
+            text-align: center;
+        }}
+        .option-content {{
+            flex: 1;
+        }}
+        .option-title {{
+            font-size: 16px;
+            font-weight: bold;
+            color: #2c3e50;
+            margin-bottom: 3px;
+        }}
+        .option-description {{
+            font-size: 12px;
+            color: #666;
+        }}
+        .option-arrow {{
+            font-size: 20px;
+            color: #999;
+        }}
+        .divider {{
+            text-align: center;
+            margin: 20px 0;
+            position: relative;
+        }}
+        .divider::before {{
+            content: '';
+            position: absolute;
+            top: 50%;
+            left: 0;
+            right: 0;
+            height: 1px;
+            background: #e0e0e0;
+        }}
+        .divider span {{
+            background: white;
+            padding: 0 15px;
+            position: relative;
+            color: #999;
+            font-size: 12px;
+            font-weight: bold;
+        }}
+        .btn-todos {{
+            background: {bg_gradient};
+            color: white;
+            border: none;
+            border-radius: 12px;
+            padding: 15px;
+            font-size: 16px;
+            font-weight: bold;
+            text-decoration: none;
+            display: block;
+            text-align: center;
+            transition: all 0.3s ease;
+            cursor: pointer;
+        }}
+        .btn-todos:hover {{
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(0,0,0,0.2);
+        }}
+        .btn-todos:active {{
+            transform: translateY(0);
+        }}
+        .footer {{
+            text-align: center;
+            margin-top: 20px;
+            padding-top: 20px;
+            border-top: 1px solid #e0e0e0;
+            font-size: 11px;
+            color: #999;
+        }}
+        
+        @media (max-width: 480px) {{
+            .container {{
+                padding: 20px;
+            }}
+            .header h1 {{
+                font-size: 20px;
+            }}
+            .option-title {{
+                font-size: 14px;
+            }}
+        }}
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <div class="header-icon">{icono}</div>
+            <h1>Selecciona el Tipo de Insumo</h1>
+            <p>Reporte: {titulo}</p>
+            <p style="font-size: 12px; margin-top: 5px; color: #999;">
+                {BODEGAS[codigo_bodega]['nombre']}
+            </p>
+        </div>
+        
+        <div class="selector-options">
+            {opciones_html}
+        </div>
+        
+        <div class="divider">
+            <span>O VER TODOS</span>
+        </div>
+        
+        <a href="/reporte/{color}?tipo=TODOS&bodega={bodega_param}" class="btn-todos">
+            📋 Ver Todos los Insumos
+        </a>
+        
+        <div class="footer">
+            🕐 {obtener_hora_actual().strftime("%d/%m/%Y %H:%M:%S")}
         </div>
     </div>
 </body>
