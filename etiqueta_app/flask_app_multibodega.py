@@ -1,8 +1,11 @@
-from flask import Flask, request
+from flask import Flask, request, jsonify
 import pandas as pd
+from functools import wraps
 from datetime import datetime
 import pytz
 import os
+import shutil
+import traceback
 
 app = Flask(__name__)
 
@@ -12,6 +15,33 @@ TIMEZONE = pytz.timezone('America/Guatemala')
 def obtener_hora_actual():
     """Obtiene la hora actual en zona horaria de Guatemala"""
     return datetime.now(TIMEZONE)
+
+def convertir_valor_celda(valor):
+    """
+    Convierte valores de celdas de Excel a tipos serializables JSON
+    Maneja ArrayFormula, fórmulas, y otros tipos especiales
+    """
+    if valor is None:
+        return None
+
+    # Manejar ArrayFormula (causa del error)
+    if hasattr(valor, '__class__') and 'ArrayFormula' in valor.__class__.__name__:
+        return None  # O convertir a string si necesitas el valor
+
+    # Manejar objetos de fórmula
+    if hasattr(valor, 'value'):
+        return convertir_valor_celda(valor.value)
+
+    # Convertir tipos básicos
+    if isinstance(valor, (int, float, str, bool)):
+        return valor
+
+    # Convertir datetime
+    if isinstance(valor, datetime):
+        return valor.strftime('%d/%m/%Y')
+
+    # Para cualquier otro tipo, convertir a string
+    return str(valor)
 
 # Definición de bodegas
 BODEGAS = {
@@ -134,99 +164,118 @@ datos_inventario = {}
 tipos_por_bodega = {}  # Nueva estructura para almacenar tipos disponibles por bodega
 
 def cargar_datos_bodega(codigo_bodega, archivo_excel):
-    """Carga datos desde Excel para una bodega específica"""
+    """
+    ✅ Lee datos directamente del Excel (sin SQLite)
+    """
     try:
-        # Si el archivo no existe, retornar diccionario vacío
         if not os.path.exists(archivo_excel):
             print(f"⚠️  Archivo no encontrado: {archivo_excel}")
             return {}, set()
-        
-        df = pd.read_excel(
-            archivo_excel,
-            sheet_name="Inventario General",
-            header=4
-        )
+
+        df = pd.read_excel(archivo_excel, sheet_name="Inventario General", header=4)
         df = df.dropna(how='all')
         df = df[df['Código'].notna()]
-        df = df[df['Saldo'] > 0]
-        
+
+        if len(df.columns) > 29:
+            df = df[df.iloc[:, 29] > 0]
+
         inventario_bodega = {}
         tipos_encontrados = set()
-        
+
         for idx, row in df.iterrows():
             codigo = str(row.get('Código', ''))
             if not codigo or codigo == 'nan':
                 continue
-            
+
+            # ✅ Precio desde Excel (columna AB = índice 27)
+            precio_unitario_producto = None
+            try:
+                precio_val = row.iloc[27]
+                if pd.notna(precio_val):
+                    precio_unitario_producto = float(precio_val)
+            except:
+                precio_unitario_producto = None
+
             lotes = []
-            columnas_inicio = [6, 9, 12, 15, 18]
+            # Columnas por lote: (F/V, Lote, Saldo)
+            columnas_lotes = [
+                (6, 7, 8),      # Lote 1: G, H, I
+                (9, 10, 11),    # Lote 2: J, K, L
+                (12, 13, 14),   # Lote 3: M, N, O
+                (15, 16, 17),   # Lote 4: P, Q, R
+                (18, 19, 20)    # Lote 5: S, T, U
+            ]
+
             columnas_med = [22, 23, 24, 25, 26]
-            
-            for i, col_inicio in enumerate(columnas_inicio, start=1):
+
+            for i, (col_fv, col_lote, col_saldo) in enumerate(columnas_lotes, start=1):
                 try:
-                    fv = row.iloc[col_inicio]
-                    lote = row.iloc[col_inicio + 1]
-                    saldo = row.iloc[col_inicio + 2]
-                    
+                    # ✅ Leer DIRECTAMENTE del Excel
+                    fv = row.iloc[col_fv]
+                    lote = row.iloc[col_lote]
+                    saldo = row.iloc[col_saldo]
+
+                    # Convertir a string o 'S/D' si está vacío
                     fv_str = str(fv) if pd.notna(fv) and str(fv) != 'nan' else 'S/D'
                     lote_str = str(lote) if pd.notna(lote) and str(lote) != 'nan' else 'S/D'
-                    
+
+                    # Formatear fecha si viene como datetime
+                    if isinstance(fv, pd.Timestamp):
+                        fv_str = fv.strftime('%d/%m/%Y')
+
+                    # MED (Meses de Existencia)
                     med_valor = 'S/D'
-                    
                     try:
                         med_excel = row.iloc[columnas_med[i-1]]
-                        
                         if pd.notna(med_excel):
                             try:
                                 med_float = float(med_excel)
-                                if med_float >= 1000:
-                                    med_valor = 'S/D'
-                                else:
-                                    med_valor = med_float
+                                med_valor = 'S/D' if med_float >= 1000 else med_float
                             except:
                                 med_valor = 'S/D'
-                        else:
-                            med_valor = 'S/D'
                     except:
                         med_valor = 'S/D'
-                    
+
+                    # Solo agregar lotes con saldo > 0
                     if pd.notna(saldo) and saldo > 0:
                         lotes.append({
                             'numero': i,
                             'fv': fv_str,
                             'lote': lote_str,
                             'saldo': int(saldo) if saldo == int(saldo) else saldo,
-                            'med': med_valor
+                            'med': med_valor,
+                            'precio_unitario': precio_unitario_producto
                         })
                 except Exception as e:
+                    print(f"⚠️ Error procesando lote {i} del código {codigo}: {e}")
                     continue
-            
+
+            # Solo agregar productos que tengan al menos un lote
             if lotes:
-                # Obtener tipo de insumo si la bodega lo tiene
                 tipo_insumo = ''
                 if BODEGAS[codigo_bodega].get('tiene_tipos', False):
                     tipo_insumo = str(row.get('Tipo de Insumo', '')) if pd.notna(row.get('Tipo de Insumo')) else ''
                     if tipo_insumo and tipo_insumo != 'nan':
                         tipos_encontrados.add(tipo_insumo)
-                
+
+                # Saldo total (columna AD = índice 29)
+                saldo_total = row.iloc[29] if len(row) > 29 and pd.notna(row.iloc[29]) else 0
+
                 inventario_bodega[codigo] = {
                     'codigo': codigo,
                     'medicamento': str(row.get('Medicamento', '')),
                     'tipo': tipo_insumo,
                     'presentacion': str(row.get('Presentación Primaria', '')) if pd.notna(row.get('Presentación Primaria')) else '',
                     'lotes': lotes,
-                    'saldo_total': row.get('Saldo', 0),
+                    'saldo_total': saldo_total,
                     'bodega': codigo_bodega
                 }
-        
-        print(f"✅ Bodega '{codigo_bodega}': {len(inventario_bodega)} productos con {sum(len(d['lotes']) for d in inventario_bodega.values())} lotes")
-        if tipos_encontrados:
-            print(f"   Tipos encontrados: {', '.join(sorted(tipos_encontrados))}")
-        
+
+        print(f"✅ Bodega '{codigo_bodega}': {len(inventario_bodega)} productos cargados")
         return inventario_bodega, tipos_encontrados
-        
+
     except Exception as e:
-        print(f"❌ Error cargando bodega '{codigo_bodega}': {e}")
+        print(f"❌ Error cargando bodega {codigo_bodega}: {e}")
         import traceback
         traceback.print_exc()
         return {}, set()
@@ -236,19 +285,19 @@ def cargar_datos():
     global datos_inventario, tipos_por_bodega
     datos_inventario = {}
     tipos_por_bodega = {}
-    
+
     print("\n🔄 Cargando datos de todas las bodegas...")
-    
+
     for codigo_bodega, info_bodega in BODEGAS.items():
         inventario, tipos = cargar_datos_bodega(codigo_bodega, info_bodega['archivo'])
         if inventario:
             datos_inventario[codigo_bodega] = inventario
             if tipos:
                 tipos_por_bodega[codigo_bodega] = tipos
-    
+
     total_productos = sum(len(inv) for inv in datos_inventario.values())
     total_lotes = sum(sum(len(d['lotes']) for d in inv.values()) for inv in datos_inventario.values())
-    
+
     print(f"\n✅ Total cargado: {len(datos_inventario)} bodegas, {total_productos} productos, {total_lotes} lotes")
     print(f"📊 Bodegas con tipos: {list(tipos_por_bodega.keys())}")
     return True
@@ -257,7 +306,7 @@ def obtener_color_med(med_valor):
     """Determina el color según el valor de MED"""
     if med_valor == 'S/D' or med_valor is None:
         return 'green', 'S/D'
-    
+
     try:
         med = float(med_valor)
         if 1 <= med <= 12:
@@ -274,26 +323,300 @@ def obtener_color_med(med_valor):
 # Cargar datos al iniciar
 cargar_datos()
 
+# Token de autenticación simple (mejora con JWT en producción)
+API_KEY = "b87ab7db392a14f215df04bf630d53eb2968a00a"
+
+def require_api_key(f):
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        api_key = request.headers.get('X-API-Key')
+        if api_key != API_KEY:
+            return jsonify({'error': 'No autorizado'}), 401
+        return f(*args, **kwargs)
+    return decorated_function
+
+@app.route('/api/medicamento')
+def api_medicamento():
+    """Endpoint JSON para la aplicación móvil"""
+    codigo = request.args.get('codigo', '')
+    bodega_param = request.args.get('bodega', '')
+
+    if not codigo:
+        return jsonify({'error': 'Código requerido'}), 400
+
+    # Buscar el medicamento
+    datos = None
+    bodega_encontrada = None
+
+    if bodega_param and bodega_param in datos_inventario:
+        if codigo in datos_inventario[bodega_param]:
+            datos = datos_inventario[bodega_param][codigo]
+            bodega_encontrada = bodega_param
+    else:
+        for codigo_bodega, inventario in datos_inventario.items():
+            if codigo in inventario:
+                datos = inventario[codigo]
+                bodega_encontrada = codigo_bodega
+                break
+
+    if not datos:
+        return jsonify({'error': 'Producto no encontrado'}), 404
+
+    # Retornar JSON en lugar de HTML
+    return jsonify({
+        'codigo': datos['codigo'],
+        'medicamento': datos['medicamento'],
+        'tipo': datos.get('tipo', ''),
+        'presentacion': datos.get('presentacion', ''),
+        'saldo_total': datos.get('saldo_total', 0),
+        'bodega': bodega_encontrada,
+        'bodega_nombre': BODEGAS[bodega_encontrada]['nombre'],
+        'lotes': datos['lotes']
+    })
+
+@app.route('/api/actualizar_lote', methods=['POST'])
+@require_api_key
+def api_actualizar_lote():
+    """
+    ✅ Modifica SOLO valores en Excel (G-U: lotes, AB: precio)
+    ✅ NO toca las fórmulas
+    ✅ Funciona con las 6 bodegas
+    """
+    try:
+        datos = request.get_json()
+
+        if not datos:
+            return jsonify({'success': False, 'error': 'No se recibieron datos'}), 400
+
+        codigo = datos.get('codigo')
+        bodega = datos.get('bodega')
+        lote_numero = int(datos.get('lote_numero', 0))
+
+        nuevo_saldo = datos.get('saldo')
+        nueva_fecha_vencimiento = datos.get('fecha_vencimiento')
+        nuevo_numero_lote = datos.get('numero_lote')
+        nuevo_precio = datos.get('precio_unitario')
+
+        # Validaciones
+        if not codigo or not bodega:
+            return jsonify({'success': False, 'error': 'Código y bodega son requeridos'}), 400
+
+        if bodega not in BODEGAS:
+            return jsonify({'success': False, 'error': f'Bodega no válida: {bodega}'}), 400
+
+        if all(v is None for v in [nuevo_saldo, nueva_fecha_vencimiento, nuevo_numero_lote, nuevo_precio]):
+            return jsonify({'success': False, 'error': 'Debe actualizar al menos un campo'}), 400
+
+        # ✅ OBTENER RUTA DEL ARCHIVO SEGÚN LA BODEGA
+        EXCEL_PATH = BODEGAS[bodega]['archivo']
+
+        if not os.path.exists(EXCEL_PATH):
+            return jsonify({'success': False, 'error': f'Archivo de bodega no encontrado: {EXCEL_PATH}'}), 404
+
+        # ✅ MODIFICAR EXCEL
+        import openpyxl
+        from datetime import datetime
+
+        # Crear backup antes de modificar
+        archivo_backup = EXCEL_PATH + '.backup'
+        try:
+            shutil.copy2(EXCEL_PATH, archivo_backup)
+        except Exception as backup_error:
+            return jsonify({'success': False, 'error': f'Error creando backup: {str(backup_error)}'}), 500
+
+        try:
+            # Abrir Excel manteniendo fórmulas
+            wb = openpyxl.load_workbook(EXCEL_PATH, data_only=False)
+
+            # Verificar que existe la hoja "Inventario General"
+            if "Inventario General" not in wb.sheetnames:
+                wb.close()
+                return jsonify({'success': False, 'error': 'Hoja "Inventario General" no encontrada'}), 404
+
+            ws = wb["Inventario General"]
+
+            # Buscar fila del producto por código (columna A, comenzando desde fila 6)
+            fila_producto = None
+            for idx, row in enumerate(ws.iter_rows(min_row=6, values_only=False), start=6):
+                if convertir_valor_celda(row[0].value) == codigo:
+                    fila_producto = idx
+                    break
+
+            if not fila_producto:
+                wb.close()
+                if os.path.exists(archivo_backup):
+                    os.remove(archivo_backup)
+                return jsonify({'success': False, 'error': f'Producto {codigo} no encontrado en {BODEGAS[bodega]["nombre"]}'}), 404
+
+            # 📊 MAPEO DE COLUMNAS POR LOTE
+            columnas_por_lote = {
+                1: {'fv': 7, 'lote': 8, 'saldo': 9},      # G, H, I
+                2: {'fv': 10, 'lote': 11, 'saldo': 12},   # J, K, L
+                3: {'fv': 13, 'lote': 14, 'saldo': 15},   # M, N, O
+                4: {'fv': 16, 'lote': 17, 'saldo': 18},   # P, Q, R
+                5: {'fv': 19, 'lote': 20, 'saldo': 21}    # S, T, U
+            }
+
+            if lote_numero not in columnas_por_lote:
+                wb.close()
+                if os.path.exists(archivo_backup):
+                    os.remove(archivo_backup)
+                return jsonify({'success': False, 'error': f'Lote inválido: {lote_numero}. Debe ser entre 1 y 5'}), 400
+
+            cols = columnas_por_lote[lote_numero]
+            cambios_realizados = []
+
+            # ✅ ACTUALIZAR FECHA DE VENCIMIENTO
+            if nueva_fecha_vencimiento is not None:
+                celda = ws.cell(row=fila_producto, column=cols['fv'])
+
+                # Verificar si la celda tiene fórmula
+                if celda.data_type == 'f':  # Es una fórmula
+                    wb.close()
+                    if os.path.exists(archivo_backup):
+                        os.remove(archivo_backup)
+                    return jsonify({'success': False, 'error': 'No se puede modificar F/V: celda con fórmula'}), 400
+
+                try:
+                    fecha_obj = datetime.strptime(nueva_fecha_vencimiento, '%d/%m/%Y')
+                    celda.value = fecha_obj
+                    celda.number_format = 'DD/MM/YYYY'
+                    cambios_realizados.append(f"F/V: {nueva_fecha_vencimiento}")
+                except ValueError:
+                    wb.close()
+                    if os.path.exists(archivo_backup):
+                        os.remove(archivo_backup)
+                    return jsonify({'success': False, 'error': 'Formato de fecha inválido. Use DD/MM/YYYY'}), 400
+
+            # ✅ ACTUALIZAR NÚMERO DE LOTE
+            if nuevo_numero_lote is not None:
+                celda = ws.cell(row=fila_producto, column=cols['lote'])
+
+                if celda.data_type == 'f':
+                    wb.close()
+                    if os.path.exists(archivo_backup):
+                        os.remove(archivo_backup)
+                    return jsonify({'success': False, 'error': 'No se puede modificar número de lote: celda con fórmula'}), 400
+
+                celda.value = str(nuevo_numero_lote)
+                cambios_realizados.append(f"Lote: {nuevo_numero_lote}")
+
+            # ✅ ACTUALIZAR SALDO
+            if nuevo_saldo is not None:
+                if nuevo_saldo < 0:
+                    wb.close()
+                    if os.path.exists(archivo_backup):
+                        os.remove(archivo_backup)
+                    return jsonify({'success': False, 'error': 'Saldo no puede ser negativo'}), 400
+
+                celda = ws.cell(row=fila_producto, column=cols['saldo'])
+
+                if celda.data_type == 'f':
+                    wb.close()
+                    if os.path.exists(archivo_backup):
+                        os.remove(archivo_backup)
+                    return jsonify({'success': False, 'error': 'No se puede modificar saldo: celda con fórmula'}), 400
+
+                celda.value = float(nuevo_saldo)
+                cambios_realizados.append(f"Saldo: {nuevo_saldo}")
+
+            # ✅ ACTUALIZAR PRECIO UNITARIO (Columna AB = 28)
+            if nuevo_precio is not None:
+                if nuevo_precio < 0:
+                    wb.close()
+                    if os.path.exists(archivo_backup):
+                        os.remove(archivo_backup)
+                    return jsonify({'success': False, 'error': 'Precio no puede ser negativo'}), 400
+
+                celda = ws.cell(row=fila_producto, column=28)  # AB
+
+                if celda.data_type == 'f':
+                    wb.close()
+                    if os.path.exists(archivo_backup):
+                        os.remove(archivo_backup)
+                    return jsonify({'success': False, 'error': 'No se puede modificar precio: celda con fórmula'}), 400
+
+                celda.value = float(nuevo_precio)
+                celda.number_format = '#,##0.00'
+                cambios_realizados.append(f"Precio: Q{nuevo_precio:.2f}")
+
+            # ✅ GUARDAR CAMBIOS
+            wb.save(EXCEL_PATH)
+            wb.close()
+
+            # Eliminar backup después de guardar exitosamente
+            if os.path.exists(archivo_backup):
+                os.remove(archivo_backup)
+
+            # Recargar datos en memoria
+            cargar_datos()
+
+            # Obtener hora actual
+            hora_operacion = obtener_hora_actual().strftime('%d/%m/%Y %H:%M:%S')
+
+            return jsonify({
+                'success': True,
+                'mensaje': 'Excel actualizado exitosamente',
+                'cambios': cambios_realizados,
+                'codigo': codigo,
+                'bodega': bodega,
+                'bodega_nombre': BODEGAS[bodega]['nombre'],
+                'lote': lote_numero,
+                'fecha_actualizacion': hora_operacion
+            }), 200
+
+        except PermissionError:
+            # Restaurar desde backup
+            if os.path.exists(archivo_backup):
+                try:
+                    shutil.copy2(archivo_backup, EXCEL_PATH)
+                    os.remove(archivo_backup)
+                except:
+                    pass
+            return jsonify({'success': False, 'error': 'Excel está abierto. Ciérrelo e intente de nuevo'}), 500
+
+        except Exception as e:
+            # Restaurar desde backup en caso de error
+            if os.path.exists(archivo_backup):
+                try:
+                    shutil.copy2(archivo_backup, EXCEL_PATH)
+                    os.remove(archivo_backup)
+                    print(f"✅ Archivo restaurado desde backup")
+                except Exception as restore_error:
+                    print(f"❌ Error crítico al restaurar: {str(restore_error)}")
+
+            print(f"❌ Error durante actualización: {str(e)}")
+            traceback.print_exc()
+            return jsonify({'success': False, 'error': f'Error: {str(e)}'}), 500
+
+    except Exception as e:
+        print(f"❌ Error general: {str(e)}")
+        traceback.print_exc()
+        return jsonify({'success': False, 'error': f'Error general: {str(e)}'}), 500
+
 @app.route('/')
 def inicio():
     """Página de inicio con selector de bodegas"""
     total_bodegas = len(datos_inventario)
     total_productos = sum(len(inv) for inv in datos_inventario.values())
     total_lotes = sum(sum(len(d['lotes']) for d in inv.values()) for inv in datos_inventario.values())
-    
+
+    # Obtener la hora actual
+    hora_actual = obtener_hora_actual().strftime('%d/%m/%Y %H:%M:%S')
+
     # Generar lista de bodegas
     lista_bodegas = ""
     for codigo_bodega, inventario in datos_inventario.items():
         nombre_bodega = BODEGAS[codigo_bodega]['nombre']
         num_productos = len(inventario)
         num_lotes = sum(len(d['lotes']) for d in inventario.values())
-        
+
         # Mostrar si tiene tipos
         tipos_info = ""
         if codigo_bodega in tipos_por_bodega and tipos_por_bodega[codigo_bodega]:
             num_tipos = len(tipos_por_bodega[codigo_bodega])
             tipos_info = f" • {num_tipos} tipos"
-        
+
         lista_bodegas += f"""
         <div class="bodega-card">
             <div class="bodega-icon">📦</div>
@@ -308,7 +631,7 @@ def inicio():
             </div>
         </div>
 """
-    
+
     html = f"""
 <!DOCTYPE html>
 <html>
@@ -424,7 +747,7 @@ def inicio():
         <div class="header">
             <h1>🏥 Sistema de Inventario Multi-Bodega</h1>
             <div class="badge">✅ EN LÍNEA</div>
-            
+
             <div class="stats">
                 <div class="stat-card">
                     <div class="stat-number">{total_bodegas}</div>
@@ -440,14 +763,14 @@ def inicio():
                 </div>
             </div>
         </div>
-        
+
         <div class="bodegas-section">
             <div class="section-title">📦 Bodegas Activas</div>
             {lista_bodegas}
         </div>
-        
+
         <div class="actualizado">
-            🕐 Actualizado: {obtener_hora_actual().strftime("%d/%m/%Y %H:%M:%S")}
+            🕐 Actualizado: {hora_actual}
         </div>
     </div>
 </body>
@@ -460,14 +783,17 @@ def medicamento():
     """Muestra información del medicamento"""
     codigo = request.args.get('codigo', '')
     bodega_param = request.args.get('bodega', '')
-    
+
+    # Obtener la hora actual
+    hora_actual = obtener_hora_actual().strftime('%d/%m/%Y %H:%M:%S')
+
     if not codigo:
         return "Error: Código requerido", 400
-    
+
     # Buscar el medicamento en la bodega especificada o en todas
     datos = None
     bodega_encontrada = None
-    
+
     if bodega_param and bodega_param in datos_inventario:
         # Buscar solo en la bodega especificada
         if codigo in datos_inventario[bodega_param]:
@@ -480,7 +806,7 @@ def medicamento():
                 datos = inventario[codigo]
                 bodega_encontrada = BODEGAS[codigo_bodega]['nombre']
                 break
-    
+
     if not datos:
         return f"""
 <!DOCTYPE html>
@@ -517,13 +843,13 @@ def medicamento():
         <h1>Código no encontrado</h1>
         <p>El código <strong>{codigo}</strong> no existe en el inventario o no tiene saldo disponible.</p>
         <p style="margin-top: 20px; color: #666; font-size: 14px;">
-            🕐 {obtener_hora_actual().strftime("%d/%m/%Y %H:%M:%S")}
+            🕐 {hora_actual}
         </p>
     </div>
 </body>
 </html>
 """, 404
-    
+
     # Mostrar tipo de insumo si aplica
     tipo_insumo_html = ""
     if datos.get('tipo') and str(datos.get('tipo')) != 'nan' and datos.get('tipo'):
@@ -534,7 +860,7 @@ def medicamento():
                 <div class="field-value">{tipo_info['nombre']}</div>
             </div>
 """
-    
+
     # HTML optimizado para móvil
     html = f"""
 <!DOCTYPE html>
@@ -731,21 +1057,21 @@ def medicamento():
             <div class="badge">✅ EN LÍNEA</div>
             <div class="bodega-tag">📦 {bodega_encontrada}</div>
         </div>
-        
+
         <div class="info-section">
             <div class="field">
                 <div class="field-label">📋 Código</div>
                 <div class="field-value">{datos['codigo']}</div>
             </div>
-            
+
             <div class="field">
                 <div class="field-label">💊 Medicamento/Producto</div>
                 <div class="field-value">{datos['medicamento']}</div>
             </div>
-            
+
             {tipo_insumo_html}
 """
-    
+
     if datos.get('presentacion') and str(datos.get('presentacion')) != 'nan' and datos.get('presentacion'):
         html += f"""
             <div class="field">
@@ -753,22 +1079,23 @@ def medicamento():
                 <div class="field-value">{datos['presentacion']}</div>
             </div>
 """
-    
-    html += """
+
+    saldo_total = datos.get('saldo_total', 0)
+    html += f"""
         </div>
-        
+
         <div class="saldo-total">
             📊 Saldo Total: {saldo_total} unidades
         </div>
-""".format(saldo_total=datos.get('saldo_total', 0))
-    
+"""
+
     if datos.get('lotes'):
         html += """
         <h3>📦 Lotes Disponibles</h3>
 """
         for lote in datos['lotes']:
             color, texto_med = obtener_color_med(lote.get('med'))
-            
+
             if lote.get('med') == 'S/D' or texto_med == 'S/D':
                 valor_circulo = 'S/D'
             else:
@@ -776,7 +1103,7 @@ def medicamento():
                     valor_circulo = int(float(lote.get('med', 0)))
                 except:
                     valor_circulo = 'S/D'
-            
+
             html += f"""
         <div class="lote-section">
             <div class="med-indicator {color}">
@@ -791,8 +1118,8 @@ def medicamento():
             </div>
         </div>
 """
-    
-    html += """
+
+    html += f"""
         <div class="leyenda">
             <div class="leyenda-title">📊 Leyenda - Meses de Existencia Disponible</div>
             <div class="leyenda-item">
@@ -808,13 +1135,13 @@ def medicamento():
                 <span><strong>Verde:</strong> 18+ meses (Óptimo - Stock suficiente)</span>
             </div>
         </div>
-        
+
         <div class="warning">
             ⚠️ <strong>Importante:</strong> Verificar fecha de vencimiento antes de usar
         </div>
-        
+
         <div class="actualizado">
-            🕐 Actualizado: {obtener_hora_actual().strftime("%d/%m/%Y %H:%M:%S")}
+            🕐 Actualizado: {hora_actual}
         </div>
     </div>
 </body>
@@ -837,15 +1164,15 @@ def recargar():
 def test():
     """Endpoint de prueba"""
     html = "<h1>Test - Inventario Multi-Bodega</h1>"
-    
+
     for codigo_bodega, inventario in datos_inventario.items():
         nombre_bodega = BODEGAS[codigo_bodega]['nombre']
         html += f"<h2>📦 {nombre_bodega}</h2>"
-        
+
         # Mostrar tipos si los tiene
         if codigo_bodega in tipos_por_bodega and tipos_por_bodega[codigo_bodega]:
             html += f"<p><strong>Tipos:</strong> {', '.join(sorted(tipos_por_bodega[codigo_bodega]))}</p>"
-        
+
         html += "<ul>"
         for i, (codigo, datos) in enumerate(list(inventario.items())[:3]):
             html += f"<li><strong>{codigo}</strong>: {datos['medicamento']} - {len(datos['lotes'])} lotes"
@@ -856,9 +1183,9 @@ def test():
                 color, texto = obtener_color_med(med)
                 html += f"<br>&nbsp;&nbsp;Lote {lote['numero']}: {texto} ({color})"
             html += "</li>"
-        
+
         html += "</ul>"
-    
+
     return html
 
 @app.route('/reporte/<color>')
@@ -866,14 +1193,17 @@ def reporte_por_color(color):
     """Muestra reporte de medicamentos filtrados por color con opción de seleccionar tipo"""
     bodega_param = request.args.get('bodega', '')
     tipo_param = request.args.get('tipo', '')
-    
+
+    # Obtener la hora actual
+    hora_actual = obtener_hora_actual().strftime('%d/%m/%Y %H:%M:%S')
+
     # Validar color
     colores_validos = ['rojo', 'amarillo', 'verde']
     if color.lower() not in colores_validos:
         return "Color no válido. Usa: rojo, amarillo o verde", 400
-    
+
     color = color.lower()
-    
+
     # Convertir español a inglés
     color_map = {
         'rojo': 'red',
@@ -881,7 +1211,7 @@ def reporte_por_color(color):
         'verde': 'green'
     }
     color_ingles = color_map.get(color, 'green')
-    
+
     # Determinar qué bodegas filtrar
     bodegas_a_filtrar = {}
     if bodega_param and bodega_param in datos_inventario:
@@ -892,31 +1222,31 @@ def reporte_por_color(color):
         bodegas_a_filtrar = datos_inventario
         nombre_filtro = " - Todas las Bodegas"
         codigo_bodega_actual = None
-    
+
     # Verificar si la bodega actual tiene tipos Y no se ha seleccionado tipo
     bodega_tiene_tipos = False
     if codigo_bodega_actual and codigo_bodega_actual in tipos_por_bodega:
         if tipos_por_bodega[codigo_bodega_actual]:
             bodega_tiene_tipos = True
-    
+
     # Si la bodega tiene tipos Y no se ha seleccionado, mostrar selector
     if bodega_tiene_tipos and not tipo_param:
         return mostrar_selector_tipo(color, bodega_param, codigo_bodega_actual)
-    
+
     # Filtrar medicamentos por color y tipo si aplica
     medicamentos_filtrados = []
-    
+
     for codigo_bodega, inventario in bodegas_a_filtrar.items():
         nombre_bodega = BODEGAS[codigo_bodega]['nombre']
-        
+
         for codigo, datos in inventario.items():
             # Filtrar por tipo si está especificado y no es "TODOS"
             if tipo_param and tipo_param != 'TODOS' and datos.get('tipo') != tipo_param:
                 continue
-            
+
             for lote in datos['lotes']:
                 med_color, texto_med = obtener_color_med(lote.get('med'))
-                
+
                 if med_color == color_ingles:
                     medicamentos_filtrados.append({
                         'codigo': codigo,
@@ -930,10 +1260,10 @@ def reporte_por_color(color):
                         'med': lote.get('med'),
                         'med_texto': texto_med
                     })
-    
+
     # Ordenar por bodega y medicamento
     medicamentos_filtrados.sort(key=lambda x: (x['bodega'], x['medicamento']))
-    
+
     # Configuración según el color
     if color == 'rojo':
         color_hex = '#ff6b6b'
@@ -956,7 +1286,7 @@ def reporte_por_color(color):
         icono = '🟢'
         descripcion = 'Estos insumos tienen stock suficiente'
         bg_gradient = 'linear-gradient(135deg, #51cf66 0%, #37b24d 100%)'
-    
+
     # Añadir info de tipo si está filtrado
     if tipo_param and tipo_param != 'TODOS' and tipo_param in TIPOS_INSUMO:
         tipo_info = TIPOS_INSUMO[tipo_param]
@@ -964,8 +1294,8 @@ def reporte_por_color(color):
         nombre_filtro += f" ({tipo_info['icono']} {tipo_info['nombre']})"
     elif tipo_param == 'TODOS':
         nombre_filtro += " (Todos los tipos)"
-    
-    # HTML del reporte (mismo código que antes, manteniendo el diseño)
+
+    # HTML del reporte
     html = f"""
 <!DOCTYPE html>
 <html>
@@ -1165,7 +1495,7 @@ def reporte_por_color(color):
             margin-top: 20px;
             font-weight: bold;
         }}
-        
+
         @media (max-width: 768px) {{
             .header h1 {{ font-size: 22px; }}
             .bodega-filtro {{ font-size: 13px; padding: 8px 16px; }}
@@ -1185,7 +1515,7 @@ def reporte_por_color(color):
             <div class="subtitulo">{subtitulo}</div>
             <div class="bodega-filtro">📦 {nombre_filtro.replace(' - ', '')}</div>
         </div>
-        
+
         <div class="stats">
             <div class="stat-item">
                 <div class="stat-number">{len(medicamentos_filtrados)}</div>
@@ -1196,12 +1526,12 @@ def reporte_por_color(color):
                 <div class="stat-label">Productos</div>
             </div>
         </div>
-        
+
         <div class="descripcion">
             ⚠️ <strong>Estado:</strong> {descripcion}
         </div>
 """
-    
+
     if medicamentos_filtrados:
         html += """
         <h3 style="color: #333; margin-bottom: 15px;">📋 Listado de Insumos</h3>
@@ -1216,7 +1546,7 @@ def reporte_por_color(color):
                     <span><strong>{tipo_info['nombre']}</strong></span>
                 </div>
 """
-            
+
             html += f"""
         <div class="medicamento-card">
             <div class="med-header">
@@ -1230,9 +1560,9 @@ def reporte_por_color(color):
                 </div>
                 {tipo_html}
             </div>
-            
+
             <div class="med-nombre">{med['medicamento']}</div>
-            
+
             <div class="med-detalle">
                 <div class="detalle-item">
                     <span class="detalle-label">📦 Lote</span>
@@ -1263,12 +1593,12 @@ def reporte_por_color(color):
             </p>
         </div>
 """
-    
+
     html += f"""
         <a href="/" class="btn-volver">🏠 Volver al Inicio</a>
-        
+
         <div class="actualizado">
-            🕐 Actualizado: {obtener_hora_actual().strftime("%d/%m/%Y %H:%M:%S")}
+            🕐 Actualizado: {hora_actual}
         </div>
     </div>
 </body>
@@ -1278,7 +1608,10 @@ def reporte_por_color(color):
 
 def mostrar_selector_tipo(color, bodega_param, codigo_bodega):
     """Muestra una página de selección de tipo de insumo dinámica según la bodega"""
-    
+
+    # Obtener la hora actual
+    hora_actual = obtener_hora_actual().strftime('%d/%m/%Y %H:%M:%S')
+
     # Configuración según el color
     if color == 'rojo':
         color_hex = '#ff6b6b'
@@ -1295,10 +1628,10 @@ def mostrar_selector_tipo(color, bodega_param, codigo_bodega):
         titulo = 'INSUMOS ÓPTIMOS'
         icono = '🟢'
         bg_gradient = 'linear-gradient(135deg, #51cf66 0%, #37b24d 100%)'
-    
+
     # Obtener tipos de la bodega actual
     tipos_bodega = sorted(tipos_por_bodega.get(codigo_bodega, set()))
-    
+
     # Construir opciones dinámicamente
     opciones_html = ""
     for tipo_codigo in tipos_bodega:
@@ -1307,7 +1640,7 @@ def mostrar_selector_tipo(color, bodega_param, codigo_bodega):
             'icono': '📋',
             'color': '#95a5a6'
         })
-        
+
         opciones_html += f"""
             <a href="/reporte/{color}?tipo={tipo_codigo}&bodega={bodega_param}" class="option-card">
                 <div class="option-icon">{tipo_info['icono']}</div>
@@ -1318,7 +1651,7 @@ def mostrar_selector_tipo(color, bodega_param, codigo_bodega):
                 <div class="option-arrow">→</div>
             </a>
 """
-    
+
     html = f"""
 <!DOCTYPE html>
 <html>
@@ -1463,7 +1796,7 @@ def mostrar_selector_tipo(color, bodega_param, codigo_bodega):
             font-size: 11px;
             color: #999;
         }}
-        
+
         @media (max-width: 480px) {{
             .container {{
                 padding: 20px;
@@ -1487,21 +1820,21 @@ def mostrar_selector_tipo(color, bodega_param, codigo_bodega):
                 {BODEGAS[codigo_bodega]['nombre']}
             </p>
         </div>
-        
+
         <div class="selector-options">
             {opciones_html}
         </div>
-        
+
         <div class="divider">
             <span>O VER TODOS</span>
         </div>
-        
+
         <a href="/reporte/{color}?tipo=TODOS&bodega={bodega_param}" class="btn-todos">
             📋 Ver Todos los Insumos
         </a>
-        
+
         <div class="footer">
-            🕐 {obtener_hora_actual().strftime("%d/%m/%Y %H:%M:%S")}
+            🕐 {hora_actual}
         </div>
     </div>
 </body>
