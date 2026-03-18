@@ -50,6 +50,8 @@ def generar_ejecutable(script, nombre_exe):
         "--hidden-import", "requests",
         "--hidden-import", "psutil",
         "--hidden-import", "schedule",
+        "--hidden-import", "logging",
+        "--hidden-import", "pathlib",
         script
     ]
     
@@ -118,7 +120,12 @@ def main():
         {
             "script": "sincronizador_multibodega.py",
             "nombre": "Sincronizador_MultiBodega",
-            "descripcion": "Sincronizador automático multi-bodega"
+            "descripcion": "Sincronizador interactivo multi-bodega (configuración)"
+        },
+        {
+            "script": "sync_automatico.py",
+            "nombre": "Sync_Automatico",
+            "descripcion": "Sincronizador silencioso para Programador de Tareas de Windows"
         }
     ]
     
@@ -137,7 +144,7 @@ def main():
         input("\nPresiona Enter para salir...")
         return
     
-    print("\n¿Deseas compilar estos 3 programas? (s/n): ", end='')
+    print("\n¿Deseas compilar estos 4 programas? (s/n): ", end='')
     respuesta = input().strip().lower()
     
     if respuesta != 's':
@@ -149,7 +156,7 @@ def main():
     print(f"\n{'='*70}")
     print("🔨 INICIANDO COMPILACIÓN MULTI-BODEGA")
     print(f"{'='*70}")
-    print("\n⏱️  Esto puede tomar 3-5 minutos...")
+    print("\n⏱️  Esto puede tomar 5-8 minutos...")
     
     exitosos = []
     fallidos = []
@@ -202,20 +209,28 @@ def main():
         print("      → Menú interactivo con múltiples opciones")
         
         print("\n   3. Sincronizador_MultiBodega.exe")
-        print("      → Sincroniza múltiples archivos Excel")
-        print("      → Sincronización automática cada hora")
-        print("      → Configura solo las bodegas que necesites")
+        print("      → Sincronizador INTERACTIVO con menú completo")
+        print("      → Para configurar usuario, token y rutas de archivos")
+        print("      → Genera config_sincronizacion_multibodega.json")
+        print("      → Ejecutar PRIMERO para dejar la config lista")
+
+        print("\n   4. Sync_Automatico.exe")
+        print("      → Sincronizador SILENCIOSO sin input del usuario")
+        print("      → Lee el .json generado por Sincronizador_MultiBodega.exe")
+        print("      → Diseñado para el Programador de Tareas de Windows")
+        print("      → Guarda registro en carpeta logs/sync_log.txt")
+        print("      → Código de salida: 0=éxito | 1=parcial | 2=todo falló")
         
         print("\n💡 IMPORTANTE:")
         print("   • Los .exe NO necesitan Python instalado")
         print("   • Puedes copiarlos a cualquier PC Windows")
         print("   • Los archivos .json se crean automáticamente")
         
-        print("\n🚀 PRÓXIMOS PASOS:")
-        print("   1. Ve a la carpeta: dist/")
-        print("   2. Copia los 2 archivos .exe donde los necesites")
-        print("   3. Sube flask_app_multibodega.py a PythonAnywhere")
-        print("   4. Ejecuta los .exe para configurar el sistema")
+        print("\n🚀 FLUJO DE USO RECOMENDADO:")
+        print("   1. Ejecuta Sincronizador_MultiBodega.exe  → configura el sistema")
+        print("   2. Verifica que se creó el archivo .json de configuración")
+        print("   3. Programa Sync_Automatico.exe en el Programador de Tareas")
+        print("   4. Revisa logs/sync_log.txt para monitorear las sincronizaciones")
         
         print("\n¿Deseas abrir la carpeta 'dist/'? (s/n): ", end='')
         abrir = input().strip().lower()

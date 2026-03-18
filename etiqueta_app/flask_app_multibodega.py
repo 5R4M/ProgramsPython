@@ -5,7 +5,19 @@ from datetime import datetime
 import pytz
 import os
 
+import jwt
+import hashlib
+import sqlite3
+from datetime import timedelta
+
+from flask_cors import CORS
+
 app = Flask(__name__)
+
+CORS(app,
+     origins=['http://localhost:5173'],
+     allow_headers=['Content-Type', 'X-API-Key', 'Authorization'],
+     methods=['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'])
 
 # Configuración de zona horaria
 TIMEZONE = pytz.timezone('America/Guatemala')
@@ -146,7 +158,7 @@ TIPOS_INSUMO = {
         'color': '#e91e63'
     },
     'MX': {
-        'nombre': 'Mixto',
+        'nombre': 'Medicamento',
         'icono': '📋',
         'color': '#607d8b'
     },
@@ -171,14 +183,21 @@ def cargar_datos_bodega(codigo_bodega, archivo_excel):
             return {}, set()
 
         df = pd.read_excel(archivo_excel, sheet_name="Inventario General", header=4)
+        filas_iniciales = len(df)
+
         df = df.dropna(how='all')
         df = df[df['Código'].notna()]
 
-        if len(df.columns) > 29:
-            df = df[df.iloc[:, 29] > 0]
+        print(f"📊 Bodega '{codigo_bodega}': {len(df)} productos leídos del Excel")
+
+        # ⚠️ REMOVIDO: No filtrar por saldo_total aquí
+        # El filtro se aplica a nivel de LOTE, no de producto completo
+        # if len(df.columns) > 29:
+        #     df = df[df.iloc[:, 29] > 0]
 
         inventario_bodega = {}
         tipos_encontrados = set()
+        productos_sin_lotes = 0  # Contador de productos sin lotes válidos
 
         for idx, row in df.iterrows():
             codigo = str(row.get('Código', ''))
@@ -248,17 +267,19 @@ def cargar_datos_bodega(codigo_bodega, archivo_excel):
                     print(f"⚠️ Error procesando lote {i} del código {codigo}: {e}")
                     continue
 
-            # Solo agregar productos que tengan al menos un lote
+            # ✅ CAMBIO CRÍTICO: Agregar productos INCLUSO SIN LOTES
+            # para diagnóstico, pero marcarlo
+            tipo_insumo = ''
+            if BODEGAS[codigo_bodega].get('tiene_tipos', False):
+                tipo_insumo = str(row.get('Tipo de Insumo', '')) if pd.notna(row.get('Tipo de Insumo')) else ''
+                if tipo_insumo and tipo_insumo != 'nan':
+                    tipos_encontrados.add(tipo_insumo)
+
+            # Saldo total (columna AD = índice 29)
+            saldo_total = row.iloc[29] if len(row) > 29 and pd.notna(row.iloc[29]) else 0
+
             if lotes:
-                tipo_insumo = ''
-                if BODEGAS[codigo_bodega].get('tiene_tipos', False):
-                    tipo_insumo = str(row.get('Tipo de Insumo', '')) if pd.notna(row.get('Tipo de Insumo')) else ''
-                    if tipo_insumo and tipo_insumo != 'nan':
-                        tipos_encontrados.add(tipo_insumo)
-
-                # Saldo total (columna AD = índice 29)
-                saldo_total = row.iloc[29] if len(row) > 29 and pd.notna(row.iloc[29]) else 0
-
+                # Producto con lotes válidos
                 inventario_bodega[codigo] = {
                     'codigo': codigo,
                     'medicamento': str(row.get('Medicamento', '')),
@@ -268,8 +289,17 @@ def cargar_datos_bodega(codigo_bodega, archivo_excel):
                     'saldo_total': saldo_total,
                     'bodega': codigo_bodega
                 }
+            else:
+                # Producto sin lotes válidos (para diagnóstico)
+                productos_sin_lotes += 1
 
-        print(f"✅ Bodega '{codigo_bodega}': {len(inventario_bodega)} productos cargados")
+        print(f"✅ Bodega '{codigo_bodega}': {len(inventario_bodega)} productos con lotes, {productos_sin_lotes} sin lotes")
+
+        if len(inventario_bodega) == 0:
+            print(f"⚠️⚠️⚠️ ADVERTENCIA: Bodega '{codigo_bodega}' NO tiene productos con saldo > 0")
+            print(f"   Archivo: {archivo_excel}")
+            print(f"   Total filas: {filas_iniciales}, Productos sin lotes: {productos_sin_lotes}")
+
         return inventario_bodega, tipos_encontrados
 
     except Exception as e:
@@ -324,6 +354,10 @@ cargar_datos()
 # Token de autenticación simple (mejora con JWT en producción)
 API_KEY = "b87ab7db392a14f215df04bf630d53eb2968a00a"
 
+# Configuración de autenticación
+SECRET_KEY = 'Selso@1'
+DATABASE_PATH = '/home/salonso/mysite/inventario_usuarios.db'
+
 def require_api_key(f):
     @wraps(f)
     def decorated_function(*args, **kwargs):
@@ -332,6 +366,177 @@ def require_api_key(f):
             return jsonify({'error': 'No autorizado'}), 401
         return f(*args, **kwargs)
     return decorated_function
+
+# Funciones base de datos
+def get_db_connection():
+    """Crea una conexión a la base de datos SQLite"""
+    conn = sqlite3.connect(DATABASE_PATH)
+    conn.row_factory = sqlite3.Row
+    return conn
+
+def init_db():
+    """
+    ✅ CORREGIDO: Inicializa la base de datos de usuarios con mejor manejo de errores
+    """
+    try:
+        print("\n" + "="*70)
+        print("🔄 INICIANDO BASE DE DATOS DE USUARIOS")
+        print("="*70)
+        print(f"📂 Ruta: {DATABASE_PATH}")
+
+        # Verificar que el directorio existe
+        import os
+        directorio = os.path.dirname(DATABASE_PATH)
+        if directorio and not os.path.exists(directorio):
+            print(f"⚠️ Creando directorio: {directorio}")
+            os.makedirs(directorio, exist_ok=True)
+
+        conn = get_db_connection()
+        cursor = conn.cursor()
+
+        # Crear tabla
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS usuarios (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                username TEXT UNIQUE NOT NULL,
+                password TEXT NOT NULL,
+                nombre_completo TEXT NOT NULL,
+                email TEXT UNIQUE NOT NULL,
+                rol TEXT NOT NULL CHECK(rol IN ('Admin', 'User')),
+                bodega_asignada TEXT,
+                activo BOOLEAN NOT NULL DEFAULT 1,
+                fecha_creacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                fecha_ultimo_acceso TIMESTAMP
+            )
+        ''')
+        print("✅ Tabla 'usuarios' creada/verificada")
+
+        # Verificar si admin existe
+        cursor.execute("SELECT COUNT(*) FROM usuarios WHERE username = 'admin'")
+        admin_exists = cursor.fetchone()[0] > 0
+
+        if not admin_exists:
+            print("\n👤 Creando usuarios predeterminados...")
+
+            # Crear admin
+            admin_password = hashlib.sha256('admin123'.encode()).hexdigest()
+            cursor.execute('''
+                INSERT INTO usuarios (username, password, nombre_completo, email, rol, activo)
+                VALUES (?, ?, ?, ?, ?, ?)
+            ''', ('admin', admin_password, 'Administrador del Sistema', 'admin@bodega.com', 'Admin', True))
+            print("   ✅ Usuario 'admin' creado (password: admin123)")
+
+            # Crear user1
+            user1_password = hashlib.sha256('user123'.encode()).hexdigest()
+            cursor.execute('''
+                INSERT INTO usuarios (username, password, nombre_completo, email, rol, bodega_asignada, activo)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+            ''', ('user1', user1_password, 'Usuario de Prueba', 'user@bodega.com', 'User', 'BODEGA_MEDICAMENTOS', True))
+            print("   ✅ Usuario 'user1' creado (password: user123)")
+        else:
+            print("\nℹ️ Usuarios ya existen, no se crean duplicados")
+
+        conn.commit()
+
+        # Mostrar usuarios existentes
+        cursor.execute("SELECT id, username, rol, activo FROM usuarios ORDER BY id")
+        usuarios = cursor.fetchall()
+
+        print(f"\n{'='*70}")
+        print(f"👥 USUARIOS REGISTRADOS:")
+        print(f"{'='*70}")
+        for user in usuarios:
+            user_id, username, rol, activo = user
+            estado = "✅" if activo else "❌"
+            print(f"   {estado} ID:{user_id} | {username:<15} | Rol: {rol}")
+        print(f"{'='*70}")
+        print(f"Total: {len(usuarios)} usuario(s)\n")
+
+        conn.close()
+
+        # Verificar que el archivo existe
+        import os
+        if os.path.exists(DATABASE_PATH):
+            file_size = os.path.getsize(DATABASE_PATH)
+            print(f"✅ Base de datos inicializada correctamente")
+            print(f"   Tamaño: {file_size} bytes")
+            print("="*70 + "\n")
+            return True
+        else:
+            print(f"❌ ERROR: Archivo de base de datos no encontrado después de crear")
+            return False
+
+    except Exception as e:
+        print(f"\n❌ ERROR CRÍTICO en init_db(): {e}")
+        import traceback
+        traceback.print_exc()
+        print("="*70 + "\n")
+        return False
+
+def usuario_dict_from_row(row):
+    """Convierte una fila de la base de datos en un diccionario"""
+    return {
+        'id': row['id'],
+        'username': row['username'],
+        'nombre_completo': row['nombre_completo'],
+        'email': row['email'],
+        'rol': row['rol'],
+        'bodega_asignada': row['bodega_asignada'],
+        'activo': bool(row['activo']),
+        'fecha_creacion': row['fecha_creacion'],
+        'fecha_ultimo_acceso': row['fecha_ultimo_acceso']
+    }
+
+def verificar_token(token):
+    """Verifica y decodifica el token JWT"""
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=['HS256'])
+        return payload
+    except:
+        return None
+
+def verificar_admin(f):
+    """
+    ✅ CORREGIDO: Decorator para verificar que el usuario sea administrador
+    Ahora con mejor logging
+    """
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        auth_header = request.headers.get('Authorization', '')
+
+        print(f"🔐 verificar_admin - Header: {auth_header[:50]}..." if auth_header else "🔐 verificar_admin - Sin header")
+
+        if not auth_header.startswith('Bearer '):
+            print("❌ Token no proporcionado o formato incorrecto")
+            return jsonify({'success': False, 'message': 'Token no proporcionado'}), 401
+
+        token = auth_header.replace('Bearer ', '')
+        payload = verificar_token(token)
+
+        if not payload:
+            print("❌ Token inválido o expirado")
+            return jsonify({'success': False, 'message': 'Token inválido o expirado'}), 401
+
+        conn = get_db_connection()
+        usuario = conn.execute('SELECT * FROM usuarios WHERE id = ?', (payload['user_id'],)).fetchone()
+        conn.close()
+
+        if not usuario:
+            print(f"❌ Usuario ID {payload['user_id']} no encontrado")
+            return jsonify({'success': False, 'message': 'Usuario no encontrado'}), 403
+
+        if usuario['rol'] != 'Admin':
+            print(f"❌ Usuario {usuario['username']} no es Admin (rol: {usuario['rol']})")
+            return jsonify({'success': False, 'message': 'Acceso denegado - Se requiere rol Admin'}), 403
+
+        print(f"✅ Usuario {usuario['username']} autenticado como Admin")
+        kwargs['usuario_actual_id'] = usuario['id']
+        return f(*args, **kwargs)
+
+    return decorated_function
+
+# Inicializar base de datos de usuarios
+init_db()
 
 @app.route('/api/medicamento')
 def api_medicamento():
@@ -360,7 +565,10 @@ def api_medicamento():
     if not datos:
         return jsonify({'error': 'Producto no encontrado'}), 404
 
-    # Retornar JSON en lugar de HTML
+    # ✅ Agregar timestamp para evitar cache
+    import time
+
+    # Retornar JSON con timestamp
     return jsonify({
         'codigo': datos['codigo'],
         'medicamento': datos['medicamento'],
@@ -369,7 +577,9 @@ def api_medicamento():
         'saldo_total': datos.get('saldo_total', 0),
         'bodega': bodega_encontrada,
         'bodega_nombre': BODEGAS[bodega_encontrada]['nombre'],
-        'lotes': datos['lotes']
+        'lotes': datos['lotes'],
+        'timestamp': int(time.time()),  # ✅ Evita cache
+        'actualizado': obtener_hora_actual().strftime('%Y-%m-%d %H:%M:%S')
     })
 
 @app.route('/')
@@ -965,6 +1175,287 @@ def test():
         html += "</ul>"
 
     return html
+
+# ============================================
+# ENDPOINT PARA ACTUALIZAR DATOS DE PRODUCTO
+# ============================================
+
+@app.route('/api/actualizar_datos_producto', methods=['POST'])
+@require_api_key
+def api_actualizar_datos_producto():
+    """
+    ✅ Endpoint para actualizar datos de un producto en el Excel
+    Actualiza: Fecha Vencimiento (G-U), Número de Lote (G-U), Saldo (G-U), Precio Unitario (AB)
+    """
+    try:
+        datos = request.get_json()
+
+        # Validar datos requeridos
+        if not all(k in datos for k in ['codigo', 'bodega', 'lote_numero']):
+            return jsonify({
+                'success': False,
+                'error': 'Faltan datos requeridos: codigo, bodega, lote_numero'
+            }), 400
+
+        codigo = str(datos['codigo'])
+        bodega = datos['bodega']
+        lote_numero = int(datos['lote_numero'])
+
+        # Validar bodega
+        if bodega not in BODEGAS:
+            return jsonify({
+                'success': False,
+                'error': f'Bodega no válida: {bodega}'
+            }), 400
+
+        # Validar número de lote (1-5)
+        if lote_numero < 1 or lote_numero > 5:
+            return jsonify({
+                'success': False,
+                'error': 'Número de lote debe estar entre 1 y 5'
+            }), 400
+
+        archivo_excel = BODEGAS[bodega]['archivo']
+
+        if not os.path.exists(archivo_excel):
+            return jsonify({
+                'success': False,
+                'error': f'Archivo no encontrado: {archivo_excel}'
+            }), 404
+
+        # Leer el Excel con openpyxl para mantener formato
+        from openpyxl import load_workbook
+
+        wb = load_workbook(archivo_excel)
+        ws = wb["Inventario General"]
+
+        # Buscar la fila del producto (empezando desde fila 6 porque header está en fila 5)
+        fila_producto = None
+        for row_idx, row in enumerate(ws.iter_rows(min_row=6, max_row=ws.max_row), start=6):
+            if str(row[0].value) == codigo:  # Columna A = Código
+                fila_producto = row_idx
+                break
+
+        if fila_producto is None:
+            wb.close()
+            return jsonify({
+                'success': False,
+                'error': f'Producto con código {codigo} no encontrado'
+            }), 404
+
+        # Mapeo de columnas por número de lote
+        # Lote 1: G(7), H(8), I(9)
+        # Lote 2: J(10), K(11), L(12)
+        # Lote 3: M(13), N(14), O(15)
+        # Lote 4: P(16), Q(17), R(18)
+        # Lote 5: S(19), T(20), U(21)
+        columnas_lotes = {
+            1: {'fv': 7, 'lote': 8, 'saldo': 9},
+            2: {'fv': 10, 'lote': 11, 'saldo': 12},
+            3: {'fv': 13, 'lote': 14, 'saldo': 15},
+            4: {'fv': 16, 'lote': 17, 'saldo': 18},
+            5: {'fv': 19, 'lote': 20, 'saldo': 21}
+        }
+
+        cols = columnas_lotes[lote_numero]
+        cambios_realizados = []
+
+        # Actualizar campos según lo que se envió
+        if 'saldo' in datos:
+            nuevo_saldo = float(datos['saldo'])
+            ws.cell(row=fila_producto, column=cols['saldo']).value = nuevo_saldo
+            cambios_realizados.append(f"Saldo: {nuevo_saldo}")
+
+        if 'fecha_vencimiento' in datos:
+            nueva_fv = datos['fecha_vencimiento']
+            ws.cell(row=fila_producto, column=cols['fv']).value = nueva_fv
+            cambios_realizados.append(f"F/V: {nueva_fv}")
+
+        if 'numero_lote' in datos:
+            nuevo_num_lote = datos['numero_lote']
+            ws.cell(row=fila_producto, column=cols['lote']).value = nuevo_num_lote
+            cambios_realizados.append(f"Número Lote: {nuevo_num_lote}")
+
+        if 'precio_unitario' in datos:
+            nuevo_precio = float(datos['precio_unitario'])
+            # Columna AB = 28
+            ws.cell(row=fila_producto, column=28).value = nuevo_precio
+            cambios_realizados.append(f"Precio Unitario: Q{nuevo_precio:.2f}")
+
+        # Guardar cambios en el Excel
+        wb.save(archivo_excel)
+        wb.close()
+
+        # ✅ CRÍTICO: Recargar datos en memoria INMEDIATAMENTE
+        print(f"🔄 Recargando datos de bodega {bodega}...")
+        inventario_actualizado, tipos = cargar_datos_bodega(bodega, archivo_excel)
+
+        if inventario_actualizado:
+            datos_inventario[bodega] = inventario_actualizado
+            print(f"✅ Datos actualizados en memoria: {len(inventario_actualizado)} productos")
+
+            if tipos:
+                tipos_por_bodega[bodega] = tipos
+                print(f"✅ Tipos actualizados: {len(tipos)} tipos")
+        else:
+            print(f"⚠️ ERROR: No se pudo recargar la bodega {bodega}")
+            return jsonify({
+                'success': False,
+                'error': 'Error al recargar datos después de guardar'
+            }), 500
+
+        print(f"✅ Producto {codigo} actualizado en bodega {bodega}, lote {lote_numero}")
+        print(f"   Cambios: {', '.join(cambios_realizados)}")
+
+        return jsonify({
+            'success': True,
+            'mensaje': f'Datos del producto actualizados correctamente',
+            'cambios': cambios_realizados,
+            'lote_numero': lote_numero
+        }), 200
+
+    except Exception as e:
+        print(f"❌ Error en actualizar_datos_producto: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+@app.route('/api/actualizar_datos_multiples', methods=['POST'])
+@require_api_key
+def api_actualizar_datos_multiples():
+    """
+    ✅ Endpoint para actualizar múltiples lotes de un producto en una sola llamada
+    """
+    try:
+        datos = request.get_json()
+
+        if not all(k in datos for k in ['codigo', 'bodega', 'lotes']):
+            return jsonify({
+                'success': False,
+                'error': 'Faltan datos requeridos: codigo, bodega, lotes'
+            }), 400
+
+        codigo = str(datos['codigo'])
+        bodega = datos['bodega']
+        lotes_modificados = datos['lotes']  # Lista de lotes con cambios
+
+        if bodega not in BODEGAS:
+            return jsonify({
+                'success': False,
+                'error': f'Bodega no válida: {bodega}'
+            }), 400
+
+        archivo_excel = BODEGAS[bodega]['archivo']
+
+        if not os.path.exists(archivo_excel):
+            return jsonify({
+                'success': False,
+                'error': f'Archivo no encontrado: {archivo_excel}'
+            }), 404
+
+        from openpyxl import load_workbook
+
+        wb = load_workbook(archivo_excel)
+        ws = wb["Inventario General"]
+
+        # Buscar la fila del producto
+        fila_producto = None
+        for row_idx, row in enumerate(ws.iter_rows(min_row=6, max_row=ws.max_row), start=6):
+            if str(row[0].value) == codigo:
+                fila_producto = row_idx
+                break
+
+        if fila_producto is None:
+            wb.close()
+            return jsonify({
+                'success': False,
+                'error': f'Producto con código {codigo} no encontrado'
+            }), 404
+
+        columnas_lotes = {
+            1: {'fv': 7, 'lote': 8, 'saldo': 9},
+            2: {'fv': 10, 'lote': 11, 'saldo': 12},
+            3: {'fv': 13, 'lote': 14, 'saldo': 15},
+            4: {'fv': 16, 'lote': 17, 'saldo': 18},
+            5: {'fv': 19, 'lote': 20, 'saldo': 21}
+        }
+
+        todos_cambios = []
+        precio_actualizado = False
+
+        # Procesar cada lote modificado
+        for lote_data in lotes_modificados:
+            lote_numero = int(lote_data['lote_numero'])
+
+            if lote_numero < 1 or lote_numero > 5:
+                continue
+
+            cols = columnas_lotes[lote_numero]
+            cambios_lote = []
+
+            if 'saldo' in lote_data:
+                ws.cell(row=fila_producto, column=cols['saldo']).value = float(lote_data['saldo'])
+                cambios_lote.append(f"Saldo: {lote_data['saldo']}")
+
+            if 'fecha_vencimiento' in lote_data:
+                ws.cell(row=fila_producto, column=cols['fv']).value = lote_data['fecha_vencimiento']
+                cambios_lote.append(f"F/V: {lote_data['fecha_vencimiento']}")
+
+            if 'numero_lote' in lote_data:
+                ws.cell(row=fila_producto, column=cols['lote']).value = lote_data['numero_lote']
+                cambios_lote.append(f"Lote: {lote_data['numero_lote']}")
+
+            if cambios_lote:
+                todos_cambios.append(f"Lote {lote_numero}: {', '.join(cambios_lote)}")
+
+            # Precio unitario (solo se actualiza una vez por producto)
+            if 'precio_unitario' in lote_data and not precio_actualizado:
+                ws.cell(row=fila_producto, column=28).value = float(lote_data['precio_unitario'])
+                todos_cambios.append(f"Precio Unitario: Q{lote_data['precio_unitario']:.2f}")
+                precio_actualizado = True
+
+        # Guardar cambios
+        wb.save(archivo_excel)
+        wb.close()
+
+        # ✅ CRÍTICO: Recargar datos en memoria INMEDIATAMENTE
+        print(f"🔄 Recargando datos de bodega {bodega}...")
+        inventario_actualizado, tipos = cargar_datos_bodega(bodega, archivo_excel)
+
+        if inventario_actualizado:
+            datos_inventario[bodega] = inventario_actualizado
+            print(f"✅ Datos actualizados en memoria: {len(inventario_actualizado)} productos")
+
+            if tipos:
+                tipos_por_bodega[bodega] = tipos
+                print(f"✅ Tipos actualizados: {len(tipos)} tipos")
+        else:
+            print(f"⚠️ ERROR: No se pudo recargar la bodega {bodega}")
+            return jsonify({
+                'success': False,
+                'error': 'Error al recargar datos después de guardar'
+            }), 500
+
+        print(f"✅ Múltiples lotes actualizados para producto {codigo} en bodega {bodega}")
+        print(f"   Cambios totales: {len(todos_cambios)}")
+
+        return jsonify({
+            'success': True,
+            'mensaje': f'{len(todos_cambios)} cambios realizados correctamente',
+            'cambios': todos_cambios
+        }), 200
+
+    except Exception as e:
+        print(f"❌ Error en actualizar_datos_multiples: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
 
 @app.route('/reporte/<color>')
 def reporte_por_color(color):
@@ -1619,6 +2110,884 @@ def mostrar_selector_tipo(color, bodega_param, codigo_bodega):
 </html>
 """
     return html
+
+@app.route('/api/debug/verificar_datos')
+def debug_verificar_datos():
+    """Endpoint para verificar qué datos tiene el servidor en memoria"""
+    codigo = request.args.get('codigo', '')
+    bodega = request.args.get('bodega', '')
+
+    if not codigo or not bodega:
+        return jsonify({'error': 'Código y bodega requeridos'}), 400
+
+    # Verificar en memoria
+    datos_memoria = None
+    if bodega in datos_inventario and codigo in datos_inventario[bodega]:
+        datos_memoria = datos_inventario[bodega][codigo]
+
+    # Leer directamente del Excel
+    datos_excel = None
+    try:
+        archivo = BODEGAS[bodega]['archivo']
+        if os.path.exists(archivo):
+            df = pd.read_excel(archivo, sheet_name="Inventario General", header=4)
+            df = df.dropna(how='all')
+            fila = df[df['Código'] == codigo]
+
+            if not fila.empty:
+                lotes_excel = []
+                columnas_lotes = [(6,7,8), (9,10,11), (12,13,14), (15,16,17), (18,19,20)]
+
+                for i, (col_fv, col_lote, col_saldo) in enumerate(columnas_lotes, 1):
+                    saldo = fila.iloc[0, col_saldo]
+                    if pd.notna(saldo) and saldo > 0:
+                        lotes_excel.append({
+                            'lote': i,
+                            'fv': str(fila.iloc[0, col_fv]),
+                            'numero_lote': str(fila.iloc[0, col_lote]),
+                            'saldo': float(saldo)
+                        })
+
+                datos_excel = {
+                    'codigo': codigo,
+                    'lotes': lotes_excel
+                }
+    except Exception as e:
+        datos_excel = {'error': str(e)}
+
+    return jsonify({
+        'codigo': codigo,
+        'bodega': bodega,
+        'datos_en_memoria': datos_memoria if datos_memoria else 'NO ENCONTRADO',
+        'datos_en_excel': datos_excel if datos_excel else 'ERROR AL LEER',
+        'coinciden': datos_memoria is not None and datos_excel is not None
+    })
+
+#ENDPOINTS Autenticacion
+@app.route('/api/auth/login', methods=['POST'])
+@require_api_key
+def login():
+    """Endpoint para autenticación de usuarios"""
+    try:
+        data = request.get_json()
+        username = data.get('username', '').strip()
+        password = data.get('password', '')
+
+        if not username or not password:
+            return jsonify({'success': False, 'message': 'Usuario y contraseña son requeridos'}), 400
+
+        conn = get_db_connection()
+        usuario = conn.execute('SELECT * FROM usuarios WHERE username = ?', (username,)).fetchone()
+
+        if not usuario:
+            conn.close()
+            return jsonify({'success': False, 'message': 'Usuario no encontrado'}), 401
+
+        password_hash = hashlib.sha256(password.encode()).hexdigest()
+
+        if password_hash != usuario['password']:
+            conn.close()
+            return jsonify({'success': False, 'message': 'Contraseña incorrecta'}), 401
+
+        if not usuario['activo']:
+            conn.close()
+            return jsonify({'success': False, 'message': 'Usuario inactivo'}), 403
+
+        conn.execute('UPDATE usuarios SET fecha_ultimo_acceso = ? WHERE id = ?',
+                    (datetime.now(), usuario['id']))
+        conn.commit()
+        conn.close()
+
+        token_payload = {
+            'user_id': usuario['id'],
+            'username': usuario['username'],
+            'rol': usuario['rol'],
+            'exp': datetime.utcnow() + timedelta(hours=24)
+        }
+        token = jwt.encode(token_payload, SECRET_KEY, algorithm='HS256')
+
+        return jsonify({
+            'success': True,
+            'message': f'Bienvenido {usuario["nombre_completo"]}',
+            'token': token,
+            'usuario': usuario_dict_from_row(usuario)
+        }), 200
+
+    except Exception as e:
+        return jsonify({'success': False, 'message': f'Error: {str(e)}'}), 500
+
+
+@app.route('/api/auth/verify', methods=['POST'])
+@require_api_key
+def verify_token_endpoint():
+    """Verifica si un token es válido"""
+    try:
+        token = request.headers.get('Authorization', '').replace('Bearer ', '')
+
+        if not token:
+            return jsonify({'success': False, 'message': 'Token no proporcionado'}), 401
+
+        payload = verificar_token(token)
+
+        if not payload:
+            return jsonify({'success': False, 'message': 'Token inválido o expirado'}), 401
+
+        return jsonify({
+            'success': True,
+            'user_id': payload['user_id'],
+            'username': payload['username'],
+            'rol': payload['rol']
+        }), 200
+
+    except Exception as e:
+        return jsonify({'success': False, 'message': f'Error: {str(e)}'}), 500
+
+
+@app.route('/api/auth/usuarios', methods=['GET'])
+@require_api_key
+@verificar_admin
+def listar_usuarios(**kwargs):
+    """Lista todos los usuarios (Solo admins)"""
+    try:
+        conn = get_db_connection()
+        usuarios = conn.execute('SELECT * FROM usuarios ORDER BY id').fetchall()
+        conn.close()
+
+        usuarios_lista = [usuario_dict_from_row(u) for u in usuarios]
+
+        return jsonify({
+            'success': True,
+            'usuarios': usuarios_lista,
+            'total': len(usuarios_lista)
+        }), 200
+
+    except Exception as e:
+        return jsonify({'success': False, 'message': f'Error: {str(e)}'}), 500
+
+
+@app.route('/api/auth/crear-usuario', methods=['POST'])
+@require_api_key
+@verificar_admin
+def crear_usuario(**kwargs):
+    """✅ CORREGIDO: Crea un nuevo usuario (Solo admins) con mejor logging"""
+    try:
+        print("\n" + "="*70)
+        print("📝 ENDPOINT: /api/auth/crear-usuario")
+        print("="*70)
+
+        data = request.get_json()
+        print(f"📥 Datos recibidos: {data}")
+
+        username = data.get('username', '').strip()
+        nombre_completo = data.get('nombre_completo', '').strip()
+        email = data.get('email', '').strip()
+        password = data.get('password', '')
+        rol = data.get('rol', 'User')
+        bodega_asignada = data.get('bodega_asignada')
+        activo = data.get('activo', True)
+
+        # Validaciones
+        if not username or len(username) < 3:
+            print(f"❌ Validación falló: username inválido")
+            return jsonify({'success': False, 'message': 'Username debe tener al menos 3 caracteres'}), 400
+
+        if not nombre_completo:
+            print(f"❌ Validación falló: nombre_completo vacío")
+            return jsonify({'success': False, 'message': 'Nombre completo es requerido'}), 400
+
+        if not email or '@' not in email:
+            print(f"❌ Validación falló: email inválido")
+            return jsonify({'success': False, 'message': 'Email inválido'}), 400
+
+        if not password or len(password) < 6:
+            print(f"❌ Validación falló: password muy corto")
+            return jsonify({'success': False, 'message': 'Contraseña debe tener al menos 6 caracteres'}), 400
+
+        if rol not in ['Admin', 'User']:
+            print(f"❌ Validación falló: rol inválido '{rol}'")
+            return jsonify({'success': False, 'message': 'Rol inválido'}), 400
+
+        print("✅ Validaciones pasadas")
+
+        conn = get_db_connection()
+
+        # Verificar duplicados
+        existe = conn.execute('SELECT COUNT(*) FROM usuarios WHERE username = ?', (username,)).fetchone()[0]
+        if existe:
+            conn.close()
+            print(f"❌ Username '{username}' ya existe")
+            return jsonify({'success': False, 'message': f'El usuario "{username}" ya existe'}), 400
+
+        existe_email = conn.execute('SELECT COUNT(*) FROM usuarios WHERE email = ?', (email,)).fetchone()[0]
+        if existe_email:
+            conn.close()
+            print(f"❌ Email '{email}' ya registrado")
+            return jsonify({'success': False, 'message': 'El email ya está registrado'}), 400
+
+        # Crear usuario
+        password_hash = hashlib.sha256(password.encode()).hexdigest()
+        print(f"🔐 Password hasheado correctamente")
+
+        cursor = conn.execute('''
+            INSERT INTO usuarios (username, password, nombre_completo, email, rol, bodega_asignada, activo)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+        ''', (username, password_hash, nombre_completo, email, rol,
+              bodega_asignada if rol == 'User' else None, activo))
+
+        nuevo_id = cursor.lastrowid
+        conn.commit()
+        print(f"✅ Usuario insertado con ID: {nuevo_id}")
+
+        # Obtener usuario creado
+        nuevo_usuario = conn.execute('SELECT * FROM usuarios WHERE id = ?', (nuevo_id,)).fetchone()
+        conn.close()
+
+        usuario_dict = {
+            'id': nuevo_usuario['id'],
+            'username': nuevo_usuario['username'],
+            'nombre_completo': nuevo_usuario['nombre_completo'],
+            'email': nuevo_usuario['email'],
+            'rol': nuevo_usuario['rol'],
+            'bodega_asignada': nuevo_usuario['bodega_asignada'],
+            'activo': bool(nuevo_usuario['activo']),
+            'fecha_creacion': nuevo_usuario['fecha_creacion'],
+            'fecha_ultimo_acceso': nuevo_usuario['fecha_ultimo_acceso']
+        }
+
+        print(f"✅ Usuario '{username}' creado exitosamente")
+        print("="*70 + "\n")
+
+        return jsonify({
+            'success': True,
+            'message': f'Usuario "{username}" creado exitosamente',
+            'usuario': usuario_dict
+        }), 201
+
+    except Exception as e:
+        print(f"❌ ERROR en crear_usuario: {e}")
+        import traceback
+        traceback.print_exc()
+        print("="*70 + "\n")
+        return jsonify({'success': False, 'message': f'Error: {str(e)}'}), 500
+
+
+@app.route('/api/auth/actualizar-usuario', methods=['PUT'])
+@require_api_key
+@verificar_admin
+def actualizar_usuario(**kwargs):
+    """Actualiza un usuario (Solo admins)"""
+    try:
+        data = request.get_json()
+        user_id = data.get('id')
+
+        if not user_id:
+            return jsonify({'success': False, 'message': 'ID requerido'}), 400
+
+        conn = get_db_connection()
+        usuario = conn.execute('SELECT * FROM usuarios WHERE id = ?', (user_id,)).fetchone()
+
+        if not usuario:
+            conn.close()
+            return jsonify({'success': False, 'message': 'Usuario no encontrado'}), 404
+
+        campos = []
+        valores = []
+
+        if 'nombre_completo' in data and data['nombre_completo']:
+            campos.append('nombre_completo = ?')
+            valores.append(data['nombre_completo'].strip())
+
+        if 'email' in data and data['email']:
+            nuevo_email = data['email'].strip()
+            if '@' not in nuevo_email:
+                conn.close()
+                return jsonify({'success': False, 'message': 'Email inválido'}), 400
+
+            existe_email = conn.execute(
+                'SELECT COUNT(*) FROM usuarios WHERE email = ? AND id != ?',
+                (nuevo_email, user_id)
+            ).fetchone()[0]
+
+            if existe_email:
+                conn.close()
+                return jsonify({'success': False, 'message': 'Email ya está en uso'}), 400
+
+            campos.append('email = ?')
+            valores.append(nuevo_email)
+
+        if 'nueva_password' in data and data['nueva_password']:
+            if len(data['nueva_password']) < 6:
+                conn.close()
+                return jsonify({'success': False, 'message': 'Contraseña debe tener al menos 6 caracteres'}), 400
+
+            password_hash = hashlib.sha256(data['nueva_password'].encode()).hexdigest()
+            campos.append('password = ?')
+            valores.append(password_hash)
+
+        if 'rol' in data and data['rol']:
+            if data['rol'] not in ['Admin', 'User']:
+                conn.close()
+                return jsonify({'success': False, 'message': 'Rol inválido'}), 400
+            campos.append('rol = ?')
+            valores.append(data['rol'])
+
+        if 'bodega_asignada' in data:
+            campos.append('bodega_asignada = ?')
+            valores.append(data['bodega_asignada'])
+
+        if 'activo' in data:
+            campos.append('activo = ?')
+            valores.append(1 if data['activo'] else 0)
+
+        if campos:
+            valores.append(user_id)
+            query = f"UPDATE usuarios SET {', '.join(campos)} WHERE id = ?"
+            conn.execute(query, valores)
+            conn.commit()
+
+        usuario_actualizado = conn.execute('SELECT * FROM usuarios WHERE id = ?', (user_id,)).fetchone()
+        conn.close()
+
+        return jsonify({
+            'success': True,
+            'message': 'Usuario actualizado exitosamente',
+            'usuario': usuario_dict_from_row(usuario_actualizado)
+        }), 200
+
+    except Exception as e:
+        return jsonify({'success': False, 'message': f'Error: {str(e)}'}), 500
+
+
+@app.route('/api/auth/toggle-activo/<int:user_id>', methods=['PATCH'])
+@require_api_key
+@verificar_admin
+def toggle_usuario_activo(user_id, **kwargs):
+    """Activa/Desactiva un usuario (Solo admins)"""
+    try:
+        conn = get_db_connection()
+        usuario = conn.execute('SELECT * FROM usuarios WHERE id = ?', (user_id,)).fetchone()
+
+        if not usuario:
+            conn.close()
+            return jsonify({'success': False, 'message': 'Usuario no encontrado'}), 404
+
+        if usuario['rol'] == 'Admin' and usuario['activo']:
+            admins_activos = conn.execute(
+                'SELECT COUNT(*) FROM usuarios WHERE rol = "Admin" AND activo = 1'
+            ).fetchone()[0]
+
+            if admins_activos <= 1:
+                conn.close()
+                return jsonify({'success': False, 'message': 'No se puede desactivar el último admin'}), 400
+
+        nuevo_estado = 0 if usuario['activo'] else 1
+        conn.execute('UPDATE usuarios SET activo = ? WHERE id = ?', (nuevo_estado, user_id))
+        conn.commit()
+        conn.close()
+
+        return jsonify({
+            'success': True,
+            'message': f'Usuario {"activado" if nuevo_estado else "desactivado"}',
+            'activo': bool(nuevo_estado)
+        }), 200
+
+    except Exception as e:
+        return jsonify({'success': False, 'message': f'Error: {str(e)}'}), 500
+
+
+@app.route('/api/auth/eliminar-usuario/<int:user_id>', methods=['DELETE'])
+@require_api_key
+@verificar_admin
+def eliminar_usuario(user_id, **kwargs):
+    """Elimina un usuario (Solo admins)"""
+    try:
+        usuario_actual_id = kwargs.get('usuario_actual_id')
+
+        if usuario_actual_id == user_id:
+            return jsonify({'success': False, 'message': 'No puedes eliminar tu propio usuario'}), 400
+
+        conn = get_db_connection()
+        usuario = conn.execute('SELECT * FROM usuarios WHERE id = ?', (user_id,)).fetchone()
+
+        if not usuario:
+            conn.close()
+            return jsonify({'success': False, 'message': 'Usuario no encontrado'}), 404
+
+        if usuario['rol'] == 'Admin':
+            admins_count = conn.execute('SELECT COUNT(*) FROM usuarios WHERE rol = "Admin"').fetchone()[0]
+            if admins_count <= 1:
+                conn.close()
+                return jsonify({'success': False, 'message': 'No se puede eliminar el último admin'}), 400
+
+        username = usuario['username']
+        conn.execute('DELETE FROM usuarios WHERE id = ?', (user_id,))
+        conn.commit()
+        conn.close()
+
+        return jsonify({
+            'success': True,
+            'message': f'Usuario "{username}" eliminado'
+        }), 200
+
+    except Exception as e:
+        return jsonify({'success': False, 'message': f'Error: {str(e)}'}), 500
+
+# ============================================================
+# ENDPOINT PDF
+# ============================================================
+
+from io import BytesIO
+from reportlab.lib.pagesizes import A4, landscape
+from reportlab.lib import colors
+from reportlab.lib.units import cm
+from reportlab.platypus import (SimpleDocTemplate, Table, TableStyle,
+                                Paragraph, Spacer, PageBreak)
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from reportlab.lib.enums import TA_CENTER, TA_LEFT, TA_RIGHT
+
+
+# ── Colores globales ──────────────────────────────────────────────
+_C_DARK  = colors.HexColor('#1A3A5C')
+_C_MID   = colors.HexColor('#2980B9')
+_C_LIGHT = colors.HexColor('#D6EAF8')
+_C_BAND  = colors.HexColor('#EBF5FB')
+_C_GRAY  = colors.HexColor('#F0F3F4')
+_C_LINE  = colors.HexColor('#CCCCCC')
+
+
+def _pdf_color_med(med_valor):
+    """(color_fondo, color_texto) según meses de existencia."""
+    if med_valor in ('S/D', None, ''):
+        return colors.HexColor('#27AE60'), colors.white
+    try:
+        m = float(med_valor)
+        if 1 <= m <= 12:    return colors.HexColor('#E74C3C'), colors.white
+        elif 13 <= m <= 17: return colors.HexColor('#E67E22'), colors.white
+        else:               return colors.HexColor('#27AE60'), colors.white
+    except Exception:
+        return colors.HexColor('#27AE60'), colors.white
+
+
+def _fmt_n(n):
+    try:    return f'{int(n):,}'
+    except: return str(n)
+
+
+def _med_txt(v):
+    try:
+        return 'S/D' if v == 'S/D' else f'{int(float(v))} meses'
+    except Exception:
+        return 'S/D'
+
+
+def _make_pdf_styles():
+    base = getSampleStyleSheet()
+    def s(name, **kw):
+        return ParagraphStyle(name, parent=base['Normal'], **kw)
+    return {
+        # encabezado documento
+        'titulo':   s('PT', fontSize=18, textColor=colors.white,
+                      alignment=TA_CENTER, fontName='Helvetica-Bold'),
+        'subfecha': s('PF', fontSize=8,  textColor=colors.HexColor('#B0C4DE'),
+                      alignment=TA_CENTER, fontName='Helvetica'),
+        # cabecera de bodega
+        'bod_t':    s('BT', fontSize=12, textColor=colors.white,
+                      fontName='Helvetica-Bold', leftIndent=8),
+        'bod_s':    s('BS', fontSize=8,  textColor=colors.HexColor('#B0C4DE'),
+                      fontName='Helvetica', leftIndent=8),
+        # separador de tipo
+        'tipo_s':   s('TS', fontSize=8.5, textColor=_C_DARK,
+                      fontName='Helvetica-Bold', leftIndent=8),
+        # columnas
+        'col_hdr':  s('CH', fontSize=8,  textColor=colors.white,
+                      alignment=TA_CENTER, fontName='Helvetica-Bold', leading=10),
+        'c_izq':    s('CI', fontSize=7.5, textColor=colors.HexColor('#1A1A1A'),
+                      fontName='Helvetica', leading=10),
+        'c_izq_b':  s('CB', fontSize=7.5, textColor=_C_DARK,
+                      fontName='Helvetica-Bold', leading=10),
+        'c_cnt':    s('CC', fontSize=7.5, textColor=colors.HexColor('#333333'),
+                      alignment=TA_CENTER, fontName='Helvetica', leading=10),
+        'c_sal':    s('CS', fontSize=8,   textColor=colors.HexColor('#1A5276'),
+                      alignment=TA_RIGHT,  fontName='Helvetica-Bold', leading=10),
+        'c_med':    s('CM', fontSize=7.5, textColor=colors.white,
+                      alignment=TA_CENTER, fontName='Helvetica-Bold', leading=10),
+        # resumen
+        'res_hdr':  s('RH', fontSize=8.5, textColor=colors.white,
+                      alignment=TA_CENTER, fontName='Helvetica-Bold'),
+        'res_val':  s('RV', fontSize=8.5, textColor=_C_DARK,
+                      alignment=TA_CENTER, fontName='Helvetica'),
+        'res_tot':  s('RT', fontSize=9,   textColor=_C_DARK,
+                      alignment=TA_CENTER, fontName='Helvetica-Bold'),
+        # totales
+        'tot_lbl':  s('TL', fontSize=8.5, textColor=_C_DARK,
+                      alignment=TA_RIGHT,  fontName='Helvetica-Bold'),
+        'tot_val':  s('TV', fontSize=9,   textColor=colors.HexColor('#1A5276'),
+                      alignment=TA_RIGHT,  fontName='Helvetica-Bold'),
+        # leyenda
+        'ley_txt':  s('LT', fontSize=8,   textColor=colors.white,
+                      fontName='Helvetica-Bold'),
+        'ley_desc': s('LD', fontSize=8,   textColor=_C_DARK,
+                      fontName='Helvetica'),
+        'pie':      s('PP', fontSize=7,   textColor=colors.HexColor('#888888'),
+                      alignment=TA_CENTER, fontName='Helvetica'),
+    }
+
+
+# Proporciones de columna compartidas entre resumen y tablas de bodega (con tipos)
+_CW_PROPS = [2.0, 6.5, 2.2, 2.8, 1.3, 1.5, 2.2, 2.8, 1.7]
+
+
+def _build_resumen(S, W, datos_inventario, fecha_str):
+    """Construye la tabla de Resumen General con el mismo ancho que las tablas de bodega."""
+    total_cw = sum(_CW_PROPS)
+    CW = [W * (w / total_cw) for w in _CW_PROPS]
+
+    # Encabezado: col 0-4 → "Bodega / Almacén", cols 5-8 → métricas
+    hdr = [
+        Paragraph('Bodega / Almacén',   S['res_hdr']),
+        Paragraph('', S['res_hdr']),
+        Paragraph('', S['res_hdr']),
+        Paragraph('', S['res_hdr']),
+        Paragraph('', S['res_hdr']),
+        Paragraph('Productos', S['res_hdr']),
+        Paragraph('Lotes',     S['res_hdr']),
+        Paragraph('Saldo Total', S['res_hdr']),
+        Paragraph('',          S['res_hdr']),
+    ]
+    rows = [hdr]
+
+    resumen_info = []
+    for cb, inv in datos_inventario.items():
+        nb   = BODEGAS[cb]['nombre']
+        prds = [p for p in inv.values() if p.get('lotes')]
+        tl   = sum(len(p['lotes']) for p in prds)
+        ts   = sum(l['saldo'] for p in prds for l in p['lotes'])
+        resumen_info.append({'bodega': nb, 'productos': len(prds),
+                              'lotes': tl, 'saldo': ts})
+
+    tot_p = sum(r['productos'] for r in resumen_info)
+    tot_l = sum(r['lotes']     for r in resumen_info)
+    tot_s = sum(r['saldo']     for r in resumen_info)
+
+    for r in resumen_info:
+        rows.append([
+            Paragraph(r['bodega'],        S['res_val']),
+            Paragraph('', S['res_val']),
+            Paragraph('', S['res_val']),
+            Paragraph('', S['res_val']),
+            Paragraph('', S['res_val']),
+            Paragraph(str(r['productos']), S['res_val']),
+            Paragraph(_fmt_n(r['lotes']),  S['res_val']),
+            Paragraph(_fmt_n(r['saldo']),  S['res_val']),
+            Paragraph('', S['res_val']),
+        ])
+
+    rows.append([
+        Paragraph('TOTALES GENERALES', S['res_tot']),
+        Paragraph('', S['res_tot']),
+        Paragraph('', S['res_tot']),
+        Paragraph('', S['res_tot']),
+        Paragraph('', S['res_tot']),
+        Paragraph(str(tot_p),   S['res_tot']),
+        Paragraph(_fmt_n(tot_l), S['res_tot']),
+        Paragraph(_fmt_n(tot_s), S['res_tot']),
+        Paragraph('', S['res_tot']),
+    ])
+
+    n_r = len(rows)
+    style_cmds = [
+        # encabezado
+        ('BACKGROUND',     (0, 0),      (-1, 0),       _C_DARK),
+        ('SPAN',           (0, 0),      (4, 0)),
+        # filas de datos
+        ('ROWBACKGROUNDS', (0, 1),      (-1, n_r - 2), [_C_LIGHT, colors.white]),
+        # fila de totales
+        ('BACKGROUND',     (0, n_r-1),  (-1, n_r-1),   _C_DARK),
+        # bordes
+        ('GRID',           (0, 0),      (-1, -1),       0.5, _C_LINE),
+        ('BOX',            (0, 0),      (-1, -1),       1.2, _C_DARK),
+        ('LINEBELOW',      (0, 0),      (-1, 0),        1.5, _C_MID),
+        # padding
+        ('TOPPADDING',     (0, 0),      (-1, -1),       6),
+        ('BOTTOMPADDING',  (0, 0),      (-1, -1),       6),
+        ('LEFTPADDING',    (0, 0),      (-1, -1),       6),
+        ('RIGHTPADDING',   (0, 0),      (-1, -1),       6),
+        ('VALIGN',         (0, 0),      (-1, -1),       'MIDDLE'),
+    ]
+    # span bodega por cada fila de datos y totales
+    for ri in range(1, n_r):
+        style_cmds.append(('SPAN', (0, ri), (4, ri)))
+
+    tbl = Table(rows, colWidths=CW)
+    tbl.setStyle(TableStyle(style_cmds))
+    return tbl
+
+
+def _build_bodega_section(codigo_bodega, inv, S, W):
+    """Retorna lista de flowables para una bodega. Empieza con título."""
+    items = []
+    nombre_bodega = BODEGAS[codigo_bodega]['nombre']
+    tiene_tipos   = BODEGAS[codigo_bodega].get('tiene_tipos', False)
+
+    prods = sorted(
+        [p for p in inv.values() if p.get('lotes')],
+        key=lambda d: (d.get('tipo', ''), d.get('medicamento', ''))
+    )
+    if not prods:
+        return items
+
+    total_s_b = sum(l['saldo'] for p in prods for l in p['lotes'])
+    total_l_b = sum(len(p['lotes']) for p in prods)
+
+    # ── Encabezado de bodega ──────────────────────────────────────
+    tbl_bh = Table([
+        [Paragraph(f'  {nombre_bodega.upper()}', S['bod_t'])],
+        [Paragraph(
+            f'  {len(prods)} productos  |  {_fmt_n(total_l_b)} lotes  |  '
+            f'Saldo total: {_fmt_n(total_s_b)} unidades',
+            S['bod_s'])],
+    ], colWidths=[W])
+    tbl_bh.setStyle(TableStyle([
+        ('BACKGROUND',    (0, 0), (-1, -1), _C_DARK),
+        ('TOPPADDING',    (0, 0), (-1, 0),  10),
+        ('BOTTOMPADDING', (0, 0), (-1, 0),  2),
+        ('TOPPADDING',    (0, 1), (-1, 1),  2),
+        ('BOTTOMPADDING', (0, 1), (-1, 1),  8),
+        ('LINEBELOW',     (0, 1), (-1, 1),  2, _C_MID),
+    ]))
+    items.append(tbl_bh)
+    items.append(Spacer(1, 6))
+
+    # ── Definición de columnas ────────────────────────────────────
+    if tiene_tipos:
+        hdrs  = ['Código', 'Medicamento / Producto', 'Tipo', 'Presentación',
+                 'Lote #', 'Saldo', 'F. Vencimiento', 'No. Lote', 'MED']
+        CW_B  = _CW_PROPS                    # mismas proporciones que el resumen
+    else:
+        hdrs  = ['Código', 'Medicamento / Producto', 'Presentación',
+                 'Lote #', 'Saldo', 'F. Vencimiento', 'No. Lote', 'MED']
+        CW_B  = [2.0, 7.5, 2.8, 1.3, 1.5, 2.2, 2.8, 1.7]
+
+    tcw   = sum(CW_B)
+    cw    = [W * (w / tcw) for w in CW_B]
+    n_col = len(hdrs)
+    c_med = n_col - 1
+
+    rows      = [[Paragraph(h, S['col_hdr']) for h in hdrs]]
+    s_cmds    = []
+    row_idx   = 1
+    tipo_act  = '__INIT__'
+
+    for pi, prod in enumerate(prods):
+        tipo  = prod.get('tipo', '')
+        lotes = prod.get('lotes', [])
+
+        # separador de tipo
+        if tiene_tipos and tipo != tipo_act:
+            tipo_act = tipo
+            ti  = TIPOS_INSUMO.get(tipo, {'nombre': tipo or 'Sin clasificar'})
+            sep = ([Paragraph(f'   {ti.get("nombre", tipo)}', S['tipo_s'])]
+                   + [Paragraph('', S['tipo_s'])] * (n_col - 1))
+            rows.append(sep)
+            s_cmds += [
+                ('BACKGROUND', (0, row_idx), (-1, row_idx), _C_BAND),
+                ('SPAN',       (0, row_idx), (-1, row_idx)),
+                ('LINEABOVE',  (0, row_idx), (-1, row_idx), 0.8, _C_MID),
+                ('LINEBELOW',  (0, row_idx), (-1, row_idx), 0.4, _C_LINE),
+            ]
+            row_idx += 1
+
+        bg = _C_LIGHT if pi % 2 == 0 else colors.white
+
+        for i_l, lote in enumerate(lotes):
+            bg_med, _ = _pdf_color_med(lote.get('med', 'S/D'))
+            md = _med_txt(lote.get('med', 'S/D'))
+
+            if tiene_tipos:
+                ti  = TIPOS_INSUMO.get(tipo, {'nombre': tipo or '—'})
+                row = [
+                    Paragraph(prod['codigo']                if i_l == 0 else '', S['c_izq_b']),
+                    Paragraph(prod['medicamento']            if i_l == 0 else '', S['c_izq']),
+                    Paragraph(ti.get('nombre', tipo)        if i_l == 0 else '', S['c_cnt']),
+                    Paragraph(prod.get('presentacion', '')  if i_l == 0 else '', S['c_cnt']),
+                    Paragraph(f'Lote {lote["numero"]}',     S['c_cnt']),
+                    Paragraph(_fmt_n(lote['saldo']),         S['c_sal']),
+                    Paragraph(str(lote.get('fv',  'S/D')),  S['c_cnt']),
+                    Paragraph(str(lote.get('lote','S/D')),  S['c_cnt']),
+                    Paragraph(md, S['c_med']),
+                ]
+            else:
+                row = [
+                    Paragraph(prod['codigo']                if i_l == 0 else '', S['c_izq_b']),
+                    Paragraph(prod['medicamento']            if i_l == 0 else '', S['c_izq']),
+                    Paragraph(prod.get('presentacion', '')  if i_l == 0 else '', S['c_cnt']),
+                    Paragraph(f'Lote {lote["numero"]}',     S['c_cnt']),
+                    Paragraph(_fmt_n(lote['saldo']),         S['c_sal']),
+                    Paragraph(str(lote.get('fv',  'S/D')),  S['c_cnt']),
+                    Paragraph(str(lote.get('lote','S/D')),  S['c_cnt']),
+                    Paragraph(md, S['c_med']),
+                ]
+
+            rows.append(row)
+            s_cmds.append(('BACKGROUND', (0,      row_idx), (c_med-1, row_idx), bg))
+            s_cmds.append(('BACKGROUND', (c_med,  row_idx), (c_med,   row_idx), bg_med))
+            row_idx += 1
+
+    # fila total
+    empty = [Paragraph('', S['c_izq'])] * (n_col - 3)
+    rows.append(
+        [Paragraph('TOTAL ALMACÉN', S['tot_lbl'])]
+        + empty
+        + [Paragraph(_fmt_n(total_s_b), S['tot_val'])]
+        + [Paragraph('', S['c_cnt'])] * 2
+    )
+    s_cmds += [
+        ('BACKGROUND', (0, row_idx), (-1, row_idx), _C_GRAY),
+        ('LINEABOVE',  (0, row_idx), (-1, row_idx), 1.2, _C_DARK),
+    ]
+
+    base_cmds = [
+        ('BACKGROUND',    (0, 0), (-1, 0),  _C_MID),
+        ('GRID',          (0, 0), (-1, -1),  0.4, _C_LINE),
+        ('BOX',           (0, 0), (-1, -1),  1.2, _C_DARK),
+        ('LINEBELOW',     (0, 0), (-1, 0),   1.2, _C_DARK),
+        ('TOPPADDING',    (0, 0), (-1, -1),  3),
+        ('BOTTOMPADDING', (0, 0), (-1, -1),  3),
+        ('LEFTPADDING',   (0, 0), (-1, -1),  4),
+        ('RIGHTPADDING',  (0, 0), (-1, -1),  4),
+        ('VALIGN',        (0, 0), (-1, -1),  'MIDDLE'),
+    ]
+    tbl = Table(rows, colWidths=cw, repeatRows=1)
+    tbl.setStyle(TableStyle(base_cmds + s_cmds))
+    items.append(tbl)
+    return items
+
+
+def _build_leyenda(S, W):
+    """Tabla de leyenda del semáforo MED."""
+    ley_rows = [[
+        Paragraph('Semáforo MED — Meses de Existencia Disponible', S['res_hdr']),
+        Paragraph('', S['res_hdr']),
+        Paragraph('', S['res_hdr']),
+    ]]
+    datos_ley = [
+        (colors.HexColor('#E74C3C'), '  1 – 12 meses',   'CRÍTICO — Reabastecer urgente'),
+        (colors.HexColor('#E67E22'), '  13 – 17 meses',  'ALERTA — Monitorear'),
+        (colors.HexColor('#27AE60'), '  18+ meses / S/D','ÓPTIMO — Stock suficiente'),
+    ]
+    for bg, rng, desc in datos_ley:
+        ley_rows.append([
+            Paragraph(rng,  S['ley_txt']),
+            Paragraph(desc, S['ley_desc']),
+            Paragraph('',   S['pie']),
+        ])
+
+    tbl = Table(ley_rows, colWidths=[W * 0.22, W * 0.52, W * 0.26])
+    tbl.setStyle(TableStyle([
+        ('BACKGROUND',    (0, 0), (-1, 0),  _C_DARK),
+        ('SPAN',          (0, 0), (-1, 0)),
+        ('BACKGROUND',    (0, 1), (0, 1),   colors.HexColor('#E74C3C')),
+        ('BACKGROUND',    (0, 2), (0, 2),   colors.HexColor('#E67E22')),
+        ('BACKGROUND',    (0, 3), (0, 3),   colors.HexColor('#27AE60')),
+        ('GRID',          (0, 0), (-1, -1), 0.5, _C_LINE),
+        ('BOX',           (0, 0), (-1, -1), 1.2, _C_DARK),
+        ('TOPPADDING',    (0, 0), (-1, -1), 5),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 5),
+        ('LEFTPADDING',   (0, 0), (-1, -1), 8),
+        ('RIGHTPADDING',  (0, 0), (-1, -1), 8),
+        ('VALIGN',        (0, 0), (-1, -1), 'MIDDLE'),
+    ]))
+    return tbl
+
+
+# ── Endpoint Flask ────────────────────────────────────────────────
+
+@app.route('/reporte-excel/todas-bodegas')
+def reporte_excel_todas_bodegas():
+    """
+    Genera y descarga un PDF con el inventario completo de todas las bodegas.
+    - Página 1: portada + tabla resumen (mismas proporciones que tablas de bodega)
+    - Página siguiente por cada bodega (título + tabla completa)
+    - Última sección: leyenda del semáforo MED
+    - Número de página centrado al pie en todas las páginas
+    """
+    from flask import send_file
+
+    fecha_reporte = obtener_hora_actual().strftime('%d/%m/%Y %H:%M:%S')
+    fecha_archivo = obtener_hora_actual().strftime('%Y%m%d_%H%M')
+
+    S   = _make_pdf_styles()
+    buf = BytesIO()
+
+    doc = SimpleDocTemplate(
+        buf,
+        pagesize=landscape(A4),
+        leftMargin=1.2 * cm, rightMargin=1.2 * cm,
+        topMargin=1.4 * cm,  bottomMargin=1.6 * cm,
+        title='Reporte Inventario Médico',
+        author='Sistema de Inventario',
+    )
+    W = doc.width
+    story = []
+
+    # ── Encabezado del documento ──────────────────────────────────
+    tbl_t = Table(
+        [[Paragraph('REPORTE GENERAL DE INVENTARIO MEDICO', S['titulo'])]],
+        colWidths=[W])
+    tbl_t.setStyle(TableStyle([
+        ('BACKGROUND',    (0, 0), (-1, -1), _C_DARK),
+        ('TOPPADDING',    (0, 0), (-1, -1), 12),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 8),
+    ]))
+    story.append(tbl_t)
+
+    tbl_f = Table(
+        [[Paragraph(
+            f'Generado: {fecha_reporte}  |  Guatemala (UTC\u20126)',
+            S['subfecha'])]],
+        colWidths=[W])
+    tbl_f.setStyle(TableStyle([
+        ('BACKGROUND',    (0, 0), (-1, -1), _C_MID),
+        ('TOPPADDING',    (0, 0), (-1, -1), 4),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
+    ]))
+    story.append(tbl_f)
+    story.append(Spacer(1, 14))
+
+    # ── Tabla Resumen ─────────────────────────────────────────────
+    story.append(_build_resumen(S, W, datos_inventario, fecha_reporte))
+    story.append(Spacer(1, 10))
+
+    # ── Sección por bodega (cada una en página nueva) ─────────────
+    for codigo_bodega, inv in datos_inventario.items():
+        story.append(PageBreak())
+        for fl in _build_bodega_section(codigo_bodega, inv, S, W):
+            story.append(fl)
+
+    # ── Leyenda semáforo ──────────────────────────────────────────
+    story.append(Spacer(1, 14))
+    story.append(_build_leyenda(S, W))
+
+    # ── Número de página al pie ───────────────────────────────────
+    def _on_page(canvas, doc):
+        canvas.saveState()
+        canvas.setFont('Helvetica', 7)
+        canvas.setFillColor(colors.HexColor('#AAAAAA'))
+        canvas.drawCentredString(
+            doc.pagesize[0] / 2, 0.65 * cm,
+            f'Página {doc.page}  |  Sistema de Inventario Multi-Bodega  |  {fecha_reporte}'
+        )
+        canvas.restoreState()
+
+    doc.build(story, onFirstPage=_on_page, onLaterPages=_on_page)
+    buf.seek(0)
+
+    return send_file(
+        buf,
+        mimetype='application/pdf',
+        as_attachment=True,
+        download_name=f'inventario_todas_bodegas_{fecha_archivo}.pdf'
+    )
 
 if __name__ == '__main__':
     app.run()
