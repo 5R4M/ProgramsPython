@@ -14,3 +14,35 @@
 2026-03-18 10:14:31,537 - INFO - ✅ Servidor recargado correctamente
 2026-03-18 10:14:31,539 - INFO - 📊 Resultado: 6 exitosas | 0 fallidas
 2026-03-18 10:14:31,539 - INFO - ============================================================
+2026-03-18 13:44:52,232 - INFO - ============================================================
+2026-03-18 13:44:52,232 - INFO - 🔄 INICIO SINCRONIZACIÓN AUTOMÁTICA
+2026-03-18 13:44:52,233 - INFO - 📁 Directorio base : C:\Users\SELSO\PythonPrgrams\ProgramsPython\etiqueta_app\dist
+2026-03-18 13:44:52,233 - INFO - 📋 Config          : C:\Users\SELSO\PythonPrgrams\ProgramsPython\etiqueta_app\dist\config_sincronizacion_multibodega.json
+2026-03-18 13:44:52,233 - INFO - 📝 Log             : C:\Users\SELSO\PythonPrgrams\ProgramsPython\etiqueta_app\dist\logs\sync_log.txt
+2026-03-18 13:44:52,233 - INFO - ============================================================
+2026-03-18 13:44:52,234 - ERROR - No se encontró config en: C:\Users\SELSO\PythonPrgrams\ProgramsPython\etiqueta_app\dist\config_sincronizacion_multibodega.json
+2026-03-18 13:44:52,234 - ERROR - No hay configuración disponible. Ejecuta primero el sincronizador principal.
+2026-03-18 13:45:19,704 - INFO - ============================================================
+2026-03-18 13:45:19,705 - INFO - 🔄 INICIO SINCRONIZACIÓN AUTOMÁTICA
+2026-03-18 13:45:19,705 - INFO - 📁 Directorio base : C:\Users\SELSO\PythonPrgrams\ProgramsPython\etiqueta_app\dist
+2026-03-18 13:45:19,705 - INFO - 📋 Config          : C:\Users\SELSO\PythonPrgrams\ProgramsPython\etiqueta_app\dist\config_sincronizacion_multibodega.json
+2026-03-18 13:45:19,705 - INFO - 📝 Log             : C:\Users\SELSO\PythonPrgrams\ProgramsPython\etiqueta_app\dist\logs\sync_log.txt
+2026-03-18 13:45:19,706 - INFO - ============================================================
+2026-03-18 13:45:19,706 - ERROR - No se encontró config en: C:\Users\SELSO\PythonPrgrams\ProgramsPython\etiqueta_app\dist\config_sincronizacion_multibodega.json
+2026-03-18 13:45:19,706 - ERROR - No hay configuración disponible. Ejecuta primero el sincronizador principal.
+2026-03-18 13:45:44,785 - INFO - ============================================================
+2026-03-18 13:45:44,786 - INFO - 🔄 INICIO SINCRONIZACIÓN AUTOMÁTICA
+2026-03-18 13:45:44,786 - INFO - 📁 Directorio base : C:\Users\SELSO\PythonPrgrams\ProgramsPython\etiqueta_app\dist
+2026-03-18 13:45:44,786 - INFO - 📋 Config          : C:\Users\SELSO\PythonPrgrams\ProgramsPython\etiqueta_app\dist\config_sincronizacion_multibodega.json
+2026-03-18 13:45:44,786 - INFO - 📝 Log             : C:\Users\SELSO\PythonPrgrams\ProgramsPython\etiqueta_app\dist\logs\sync_log.txt
+2026-03-18 13:45:44,787 - INFO - ============================================================
+2026-03-18 13:45:44,787 - INFO - Usuario: salonso | Bodegas: 6
+2026-03-18 13:45:45,521 - INFO - [medico] ✅ Subido correctamente - FORMATO INVENTARIO MQ Y LABORATORIO.xlsx
+2026-03-18 13:45:46,157 - INFO - [oficina] ✅ Subido correctamente - FORMATO INVENTARIO OFICINA.xlsx
+2026-03-18 13:45:46,788 - INFO - [varios] ✅ Subido correctamente - FORMATO INVENTARIO VARIOS.xlsx
+2026-03-18 13:45:47,475 - INFO - [limpieza] ✅ Subido correctamente - FORMATO INVENTARIO LIMPIEZA.xlsx
+2026-03-18 13:45:48,282 - INFO - [medicamentos] ✅ Subido correctamente - FORMATO INVENTARIO MEDICAMENTOS.xlsx
+2026-03-18 13:45:48,951 - INFO - [programas] ✅ Subido correctamente - FORMATO INVENTARIO PROGRAMAS.xlsx
+2026-03-18 13:45:52,113 - INFO - ✅ Servidor recargado correctamente
+2026-03-18 13:45:52,117 - INFO - 📊 Resultado: 6 exitosas | 0 fallidas
+2026-03-18 13:45:52,117 - INFO - ============================================================

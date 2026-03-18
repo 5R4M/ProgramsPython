@@ -1,0 +1,24 @@
+2026-03-18 13:00:01,697 - INFO - ============================================================
+2026-03-18 13:00:01,698 - INFO - 🔄 INICIO SINCRONIZACIÓN AUTOMÁTICA
+2026-03-18 13:00:01,698 - INFO - 📁 Directorio base : C:\Users\SELSO\PythonPrgrams\ProgramsPython\etiqueta_app
+2026-03-18 13:00:01,698 - INFO - 📋 Config          : C:\Users\SELSO\PythonPrgrams\ProgramsPython\etiqueta_app\config_sincronizacion_multibodega.json
+2026-03-18 13:00:01,698 - INFO - 📝 Log             : C:\Users\SELSO\PythonPrgrams\ProgramsPython\etiqueta_app\logs\sync_log.txt
+2026-03-18 13:00:01,699 - INFO - ============================================================
+2026-03-18 13:00:01,699 - ERROR - No se encontró config en: C:\Users\SELSO\PythonPrgrams\ProgramsPython\etiqueta_app\config_sincronizacion_multibodega.json
+2026-03-18 13:00:01,700 - ERROR - No hay configuración disponible. Ejecuta primero el sincronizador principal.
+2026-03-18 13:46:24,757 - INFO - ============================================================
+2026-03-18 13:46:24,757 - INFO - 🔄 INICIO SINCRONIZACIÓN AUTOMÁTICA
+2026-03-18 13:46:24,758 - INFO - 📁 Directorio base : C:\Users\SELSO\PythonPrgrams\ProgramsPython\etiqueta_app
+2026-03-18 13:46:24,758 - INFO - 📋 Config          : C:\Users\SELSO\PythonPrgrams\ProgramsPython\etiqueta_app\config_sincronizacion_multibodega.json
+2026-03-18 13:46:24,758 - INFO - 📝 Log             : C:\Users\SELSO\PythonPrgrams\ProgramsPython\etiqueta_app\logs\sync_log.txt
+2026-03-18 13:46:24,758 - INFO - ============================================================
+2026-03-18 13:46:24,760 - INFO - Usuario: salonso | Bodegas: 6
+2026-03-18 13:46:25,631 - INFO - [medico] ✅ Subido correctamente - FORMATO INVENTARIO MQ Y LABORATORIO.xlsx
+2026-03-18 13:46:26,258 - INFO - [oficina] ✅ Subido correctamente - FORMATO INVENTARIO OFICINA.xlsx
+2026-03-18 13:46:26,906 - INFO - [varios] ✅ Subido correctamente - FORMATO INVENTARIO VARIOS.xlsx
+2026-03-18 13:46:27,656 - INFO - [limpieza] ✅ Subido correctamente - FORMATO INVENTARIO LIMPIEZA.xlsx
+2026-03-18 13:46:30,083 - INFO - [medicamentos] ✅ Subido correctamente - FORMATO INVENTARIO MEDICAMENTOS.xlsx
+2026-03-18 13:46:30,725 - INFO - [programas] ✅ Subido correctamente - FORMATO INVENTARIO PROGRAMAS.xlsx
+2026-03-18 13:46:32,372 - INFO - ✅ Servidor recargado correctamente
+2026-03-18 13:46:32,377 - INFO - 📊 Resultado: 6 exitosas | 0 fallidas
+2026-03-18 13:46:32,378 - INFO - ============================================================
