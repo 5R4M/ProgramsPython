@@ -388,15 +388,11 @@
 <div class="cover">
   <div style="font-size:3em;margin-bottom:16px;">📦</div>
   <h1>Manual de Usuario</h1>
-  <p class="subtitle">Sistema Integrado de Gestión de Insumos y Actas Notariales</p>
+  <p class="subtitle">Sistema de Gestión de Insumos Médicos</p>
   <div class="apps">
     <div class="app-badge">
       <h3>📦 Módulo de Insumos</h3>
       <p>Inventario, movimientos y reportes de suministros médicos</p>
-    </div>
-    <div class="app-badge">
-      <h3>📄 Módulo Notarial</h3>
-      <p>Creación y gestión de actas notariales digitales</p>
     </div>
   </div>
   <p class="version">Versión 1.0 · Marzo 2026</p>
@@ -416,10 +412,6 @@
     <li><a href="#insumos-gestion">Gestión de insumos, servicios y movimientos</a></li>
     <li><a href="#insumos-reportes">Reportes</a></li>
     <li><a href="#insumos-usuarios">Gestión de usuarios</a></li>
-    <li><a href="#notarial-main">Módulo Notarial — Ventana principal</a></li>
-    <li><a href="#notarial-cargar">Cargar documentos</a></li>
-    <li><a href="#notarial-crear">Crear acta notarial</a></li>
-    <li><a href="#notarial-buscar">Buscar documentos</a></li>
     <li><a href="#accesos-rapidos">Accesos rápidos y atajos de teclado</a></li>
     <li><a href="#faq">Preguntas frecuentes</a></li>
   </ol>
@@ -432,16 +424,10 @@
 <div class="section" id="intro">
   <div class="section-title">📌 1. Introducción al sistema</div>
   <div class="section-body">
-    <p>El sistema está compuesto por <strong>dos aplicaciones integradas</strong> que comparten la misma base de datos y paleta visual:</p>
-    <div class="grid2">
-      <div>
-        <h3 class="subhead">📦 Módulo de Productos Afines (Insumos)</h3>
-        <p>Gestiona el inventario de insumos médicos / farmacéuticos. Permite registrar entradas y salidas, generar reportes de kardex, demanda, balance de bodega y más.</p>
-      </div>
-      <div>
-        <h3 class="subhead">📄 Sistema de Actas Notariales</h3>
-        <p>Administra documentos notariales digitales. Permite crear actas desde plantillas Word, cargar documentos existentes, buscar por criterios y generar PDFs.</p>
-      </div>
+    <p>El sistema gestiona el inventario de insumos médicos y farmacéuticos:</p>
+    <div>
+      <h3 class="subhead">📦 Módulo de Productos Afines (Insumos)</h3>
+      <p>Gestiona el inventario de insumos médicos / farmacéuticos. Permite registrar entradas y salidas, generar reportes de kardex, demanda, balance de bodega y más.</p>
     </div>
     <div class="note">
       <span class="icon">ℹ️</span>
@@ -457,7 +443,7 @@
 <div class="section" id="inicio-sesion">
   <div class="section-title">🔐 2. Inicio de sesión</div>
   <div class="section-body">
-    <p>Ambas aplicaciones requieren autenticación. Al ejecutar cualquiera de ellas aparece la pantalla de inicio de sesión.</p>
+    <p>La aplicación requiere autenticación. Al ejecutarla aparece la pantalla de inicio de sesión.</p>
 
     <div class="mockup-wrap">
       <p class="mockup-label">Pantalla de inicio de sesión — Módulo de Insumos</p>
@@ -945,220 +931,22 @@
 
 
 <!-- ════════════════════════════════════════ -->
-<!-- 8. MÓDULO NOTARIAL — VENTANA PRINCIPAL  -->
-<!-- ════════════════════════════════════════ -->
-<div class="section" id="notarial-main">
-  <div class="section-title">📄 8. Sistema de Actas Notariales — Ventana principal</div>
-  <div class="section-body">
-    <p>El Sistema de Actas Notariales usa un <strong>tema oscuro moderno</strong> (CustomTkinter). Al iniciar sesión se muestra la pantalla de bienvenida con tarjetas de acceso rápido.</p>
-
-    <div class="mockup-wrap">
-      <p class="mockup-label">Ventana principal del Sistema de Actas Notariales (tema oscuro)</p>
-      <div class="win dark-win">
-        <div class="win-bar">
-          <span class="win-dot r"></span><span class="win-dot y"></span><span class="win-dot g"></span>
-          <span class="win-title">Sistema de Actas Notariales · Usuario: admin</span>
-        </div>
-        <div class="win-body">
-          <div class="dark-sidebar">
-            <div class="dark-sidebar-logo">
-              <div class="logo-icon">⚖️</div>
-              <p>Actas Notariales</p>
-            </div>
-            <div class="dark-sidebar-item active">🏠 Inicio</div>
-            <div class="dark-sidebar-item">📂 Cargar Documento</div>
-            <div class="dark-sidebar-item">✏️ Crear Acta</div>
-            <div class="dark-sidebar-item">🔍 Buscar</div>
-            <div class="dark-sidebar-item">👥 Usuarios</div>
-            <div class="dark-sidebar-item">💾 Respaldo</div>
-          </div>
-          <div class="dark-main">
-            <div class="dark-header">
-              <h3>🏠 Bienvenido al Sistema de Actas Notariales</h3>
-              <p>Seleccione una opción del menú para comenzar</p>
-            </div>
-            <!-- tarjetas de inicio -->
-            <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;padding:12px;">
-              <div class="dark-card">
-                <div class="dark-card-header">📂 Cargar Documento</div>
-                <div class="dark-card-body" style="color:#aab;font-size:10px;">
-                  Cargue documentos Word o PDF existentes para extraer y procesar su contenido.
-                </div>
-              </div>
-              <div class="dark-card">
-                <div class="dark-card-header">✏️ Crear Acta Nueva</div>
-                <div class="dark-card-body" style="color:#aab;font-size:10px;">
-                  Genere una nueva acta notarial a partir de las plantillas disponibles.
-                </div>
-              </div>
-              <div class="dark-card">
-                <div class="dark-card-header">🔍 Buscar Documentos</div>
-                <div class="dark-card-body" style="color:#aab;font-size:10px;">
-                  Localice actas por número, fecha, comparecientes u otros criterios.
-                </div>
-              </div>
-              <div class="dark-card">
-                <div class="dark-card-header">💾 Respaldar BD</div>
-                <div class="dark-card-body" style="color:#aab;font-size:10px;">
-                  Genere una copia de seguridad de la base de datos y documentos.
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  </div>
-</div>
-
-
-<!-- ════════════════════════════════════════ -->
-<!-- 9. CARGAR DOCUMENTOS                    -->
-<!-- ════════════════════════════════════════ -->
-<div class="section" id="notarial-cargar">
-  <div class="section-title">📂 9. Cargar Documentos</div>
-  <div class="section-body">
-    <div class="breadcrumb">Sidebar → <span>📂 Cargar Documento</span></div>
-    <p>Permite cargar documentos Word (.docx) o PDF existentes para extraer sus datos y registrarlos en el sistema.</p>
-
-    <div class="steps">
-      <div class="step"><div class="step-num"></div>
-        <div class="step-content"><h4>Seleccione el archivo</h4><p>Haga clic en <strong>📂 Examinar</strong> y navegue hasta el documento (.docx o .pdf).</p></div>
-      </div>
-      <div class="step"><div class="step-num"></div>
-        <div class="step-content"><h4>Extraer datos</h4><p>Haga clic en <strong>🔍 Extraer</strong>. El sistema leerá el contenido y rellenará automáticamente los campos.</p></div>
-      </div>
-      <div class="step"><div class="step-num"></div>
-        <div class="step-content"><h4>Verifique y corrija</h4><p>Revise los campos extraídos. Puede editarlos manualmente antes de guardar.</p></div>
-      </div>
-      <div class="step"><div class="step-num"></div>
-        <div class="step-content"><h4>Guardar en base de datos</h4><p>Haga clic en <strong>💾 Guardar</strong> para registrar el documento.</p></div>
-      </div>
-    </div>
-
-    <div class="warning">
-      <span class="icon">⚠️</span>
-      <div>Los archivos deben estar en formato <strong>.docx</strong> (Word 2007+) o <strong>.pdf</strong> con texto seleccionable. Los PDFs escaneados sin OCR no pueden extraerse automáticamente.</div>
-    </div>
-  </div>
-</div>
-
-
-<!-- ════════════════════════════════════════ -->
-<!-- 10. CREAR ACTA NOTARIAL                 -->
-<!-- ════════════════════════════════════════ -->
-<div class="section" id="notarial-crear">
-  <div class="section-title">✏️ 10. Crear Acta Notarial</div>
-  <div class="section-body">
-    <div class="breadcrumb">Sidebar → <span>✏️ Crear Acta</span></div>
-    <p>Genera una nueva acta notarial completa rellenando un formulario. El sistema inserta los datos en la plantilla Word y puede generar un PDF.</p>
-
-    <div class="mockup-wrap">
-      <p class="mockup-label">Formulario de creación de acta notarial</p>
-      <div class="win dark-win">
-        <div class="win-bar">
-          <span class="win-dot r"></span><span class="win-dot y"></span><span class="win-dot g"></span>
-          <span class="win-title">Crear Acta Notarial</span>
-        </div>
-        <div class="win-body">
-          <div class="dark-main">
-            <div class="dark-header">
-              <h3>✏️ Crear Nueva Acta Notarial</h3>
-              <p>Complete todos los campos requeridos</p>
-            </div>
-            <div class="dark-card">
-              <div class="dark-card-header">📋 Datos del Acta</div>
-              <div class="dark-card-body">
-                <div class="form-row" style="margin-bottom:6px;">
-                  <span class="form-label" style="color:#aab;">N° de Acta:</span>
-                  <input class="dark-input" value="2026-0087" readonly style="flex:1;max-width:120px;">
-                  <span class="form-label" style="color:#aab;margin-left:12px;">Fecha:</span>
-                  <input class="dark-input" value="20/03/2026" readonly style="flex:1;max-width:110px;">
-                </div>
-                <div class="form-row" style="margin-bottom:6px;">
-                  <span class="form-label" style="color:#aab;">Tipo de Acta:</span>
-                  <select class="dark-input" style="flex:1;padding:2px 4px;"><option>Compraventa</option></select>
-                </div>
-                <div class="form-row" style="margin-bottom:6px;">
-                  <span class="form-label" style="color:#aab;">Compareciente 1:</span>
-                  <input class="dark-input" value="JUAN CARLOS PÉREZ LÓPEZ" readonly style="flex:1;">
-                </div>
-                <div class="form-row" style="margin-bottom:6px;">
-                  <span class="form-label" style="color:#aab;">Compareciente 2:</span>
-                  <input class="dark-input" value="MARÍA ELENA RODRÍGUEZ" readonly style="flex:1;">
-                </div>
-                <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap;">
-                  <button class="dark-btn primary">💾 Guardar Acta</button>
-                  <button class="dark-btn" style="background:#17a2b8;color:white;">📄 Generar PDF</button>
-                  <button class="dark-btn" style="background:#6c757d;color:white;">🗑️ Limpiar</button>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <div class="tip">
-      <span class="icon">💡</span>
-      <div>Use el botón <strong>📄 Generar PDF</strong> para crear un PDF firmable del acta. El archivo se guardará en la carpeta <code>data/documentos/</code>.</div>
-    </div>
-  </div>
-</div>
-
-
-<!-- ════════════════════════════════════════ -->
-<!-- 11. BUSCAR DOCUMENTOS                   -->
-<!-- ════════════════════════════════════════ -->
-<div class="section" id="notarial-buscar">
-  <div class="section-title">🔍 11. Buscar Documentos</div>
-  <div class="section-body">
-    <div class="breadcrumb">Sidebar → <span>🔍 Buscar</span></div>
-    <p>Localice actas registradas usando uno o varios criterios de búsqueda combinados.</p>
-
-    <table class="feat-table">
-      <thead><tr><th>Criterio</th><th>Descripción</th></tr></thead>
-      <tbody>
-        <tr><td>Número de acta</td><td>Búsqueda exacta o parcial por número correlativo.</td></tr>
-        <tr><td>Fecha</td><td>Rango de fechas (desde / hasta).</td></tr>
-        <tr><td>Compareciente</td><td>Nombre completo o parcial de algún otorgante.</td></tr>
-        <tr><td>Tipo de acta</td><td>Filtra por tipo (compraventa, poder, testamento, etc.).</td></tr>
-        <tr><td>Texto libre</td><td>Búsqueda en el contenido del documento.</td></tr>
-      </tbody>
-    </table>
-
-    <div class="steps">
-      <div class="step"><div class="step-num"></div>
-        <div class="step-content"><h4>Ingrese uno o más criterios</h4><p>Puede combinar número de acta, fechas y nombre del compareciente para acotar los resultados.</p></div>
-      </div>
-      <div class="step"><div class="step-num"></div>
-        <div class="step-content"><h4>Haga clic en "🔍 Buscar"</h4><p>Los resultados aparecerán en la tabla inferior.</p></div>
-      </div>
-      <div class="step"><div class="step-num"></div>
-        <div class="step-content"><h4>Seleccione un resultado</h4><p>Haga doble clic en una fila para abrir el documento completo, o use los botones de acción.</p></div>
-      </div>
-    </div>
-  </div>
-</div>
-
-
-<!-- ════════════════════════════════════════ -->
-<!-- 12. ATAJOS DE TECLADO                   -->
+<!-- 8. ATAJOS DE TECLADO                    -->
 <!-- ════════════════════════════════════════ -->
 <div class="section" id="accesos-rapidos">
-  <div class="section-title">⌨️ 12. Accesos rápidos y atajos de teclado</div>
+  <div class="section-title">⌨️ 8. Accesos rápidos y atajos de teclado</div>
   <div class="section-body">
     <table class="feat-table">
       <thead><tr><th>Atajo</th><th>Acción</th><th>Módulo</th></tr></thead>
       <tbody>
-        <tr><td><kbd>F5</kbd></td><td>Actualizar / recargar datos</td><td>Ambos</td></tr>
-        <tr><td><kbd>Ctrl</kbd>+<kbd>S</kbd></td><td>Guardar registro actual</td><td>Ambos</td></tr>
-        <tr><td><kbd>Ctrl</kbd>+<kbd>N</kbd></td><td>Nuevo registro</td><td>Ambos</td></tr>
-        <tr><td><kbd>Ctrl</kbd>+<kbd>F</kbd></td><td>Buscar</td><td>Ambos</td></tr>
+        <tr><td><kbd>F5</kbd></td><td>Actualizar / recargar datos</td><td>Insumos</td></tr>
+        <tr><td><kbd>Ctrl</kbd>+<kbd>S</kbd></td><td>Guardar registro actual</td><td>Insumos</td></tr>
+        <tr><td><kbd>Ctrl</kbd>+<kbd>N</kbd></td><td>Nuevo registro</td><td>Insumos</td></tr>
+        <tr><td><kbd>Ctrl</kbd>+<kbd>F</kbd></td><td>Buscar</td><td>Insumos</td></tr>
         <tr><td><kbd>Ctrl</kbd>+<kbd>E</kbd></td><td>Exportar a Excel</td><td>Insumos</td></tr>
-        <tr><td><kbd>Ctrl</kbd>+<kbd>P</kbd></td><td>Imprimir / generar PDF</td><td>Ambos</td></tr>
-        <tr><td><kbd>Esc</kbd></td><td>Cerrar diálogo actual</td><td>Ambos</td></tr>
-        <tr><td><kbd>Alt</kbd>+<kbd>F4</kbd></td><td>Cerrar aplicación</td><td>Ambos</td></tr>
+        <tr><td><kbd>Ctrl</kbd>+<kbd>P</kbd></td><td>Imprimir / generar PDF</td><td>Insumos</td></tr>
+        <tr><td><kbd>Esc</kbd></td><td>Cerrar diálogo actual</td><td>Insumos</td></tr>
+        <tr><td><kbd>Alt</kbd>+<kbd>F4</kbd></td><td>Cerrar aplicación</td><td>Insumos</td></tr>
       </tbody>
     </table>
   </div>
@@ -1166,10 +954,10 @@
 
 
 <!-- ════════════════════════════════════════ -->
-<!-- 13. FAQ                                 -->
+<!-- 9. FAQ                                  -->
 <!-- ════════════════════════════════════════ -->
 <div class="section" id="faq">
-  <div class="section-title">❓ 13. Preguntas frecuentes</div>
+  <div class="section-title">❓ 9. Preguntas frecuentes</div>
   <div class="section-body">
 
     <h3 class="subhead">¿Qué hago si no puedo conectar a la base de datos?</h3>
@@ -1182,10 +970,10 @@
     <p>Verifique que el rango de fechas del reporte contenga datos y que haya hecho clic en <strong>Generar Reporte</strong> antes de exportar.</p>
 
     <h3 class="subhead">¿Puedo usar el sistema en pantallas pequeñas (1366×768)?</h3>
-    <p>Sí. El Sistema de Actas Notariales detecta la resolución automáticamente y escala la interfaz. Para el Módulo de Insumos, maximice la ventana y use el botón "◀ Ocultar menú" para ganar espacio.</p>
+    <p>Sí. Maximice la ventana y use el botón <strong>"◀ Ocultar menú"</strong> del sidebar para ganar espacio en el área de trabajo.</p>
 
     <h3 class="subhead">¿Cómo hago un respaldo de la base de datos?</h3>
-    <p>En el Módulo Notarial: <em>Sidebar → 💾 Respaldo</em>. Para el Módulo de Insumos, realice el respaldo directamente desde el servidor MySQL (mysqldump).</p>
+    <p>Realice el respaldo directamente desde el servidor MySQL usando <code>mysqldump</code> o desde la herramienta de administración de su preferencia (phpMyAdmin, MySQL Workbench, etc.).</p>
 
     <div class="note">
       <span class="icon">ℹ️</span>
@@ -1196,7 +984,7 @@
 
 <!-- pie de página -->
 <div style="text-align:center;padding:30px;color:#aaa;font-size:12px;border-top:1px solid #eee;margin-top:40px;">
-  Sistema de Gestión Integrado · Manual de Usuario v1.0 · Marzo 2026<br>
+  Sistema de Gestión de Insumos · Manual de Usuario v1.0 · Marzo 2026<br>
   Documento generado automáticamente. Para consultas contacte al administrador del sistema.
 </div>
 
