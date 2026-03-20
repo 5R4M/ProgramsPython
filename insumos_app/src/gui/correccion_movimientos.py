@@ -11,6 +11,7 @@ import tkinter.font as tkfont
 # Agregar el directorio raíz del proyecto al PATH de Python
 sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
+from src.gui import styles
 from src.database.db_manager import (
     obtener_areas,
     obtener_distritos,
@@ -286,20 +287,8 @@ class CorreccionMovimientos:
         self.parent = parent_frame
         self.main_window = main_window
 
-        # Paleta igual a IngresoInsumos / MainWindow
-        self.COLORS = {
-            'primary':   '#2c3e50',
-            'secondary': '#34495e',
-            'accent':    '#3498db',
-            'success':   '#27ae60',
-            'warning':   '#f39c12',
-            'danger':    '#e74c3c',
-            'light':     '#ecf0f1',
-            'white':     '#ffffff',
-            'text_dark': '#2c3e50',
-            'text_light':'#7f8c8d',
-            'border':    '#bdc3c7'
-        }
+        # Paleta compartida del sistema
+        self.COLORS = styles.COLORS
 
         self.cargar_iconos()  # Carga los iconos PNG aquí
         self.movimientos_data = None

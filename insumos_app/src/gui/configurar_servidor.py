@@ -16,6 +16,8 @@ try:
 except Exception:
     mysql = None
 
+from src.gui import styles
+
 
 def crear_script_bat(bind_address, port, max_connections, ruta_bat):
     contenido = f"""@echo off
@@ -81,63 +83,21 @@ class ConfigurarServidor:
         self.main_window = main_window
         self.config_file = "mysql_config.ini"
 
-        # Paleta local solo para headers/cards (sin afectar el Main Window)
-        self.COLORS = {
-            'primary':   '#2c3e50',
-            'accent':    '#3498db',
-            'danger':    '#e74c3c',
-            'light':     '#ecf0f1',
-            'white':     '#ffffff',
-            'text_dark': '#2c3e50',
-        }
+        # Paleta compartida del sistema
+        self.COLORS = styles.COLORS
 
         self.setup_ui()
         self.cargar_configuracion()
 
-    # Helpers de UI locales (no globales)
+    # Helpers de UI — delegan a styles.py
     def _header_title_sub(self, parent, title_text, subtitle_text):
-        header_frame = tk.Frame(parent, bg=self.COLORS['primary'], height=55)
-        # full-bleed sin separación superior
-        header_frame.pack(fill='x', padx=0, pady=(0, 6))
-        header_frame.pack_propagate(False)
-
-        inner = tk.Frame(header_frame, bg=self.COLORS['primary'])
-        inner.pack(fill='both', expand=True, padx=15, pady=6)
-
-        tk.Label(inner, text=title_text,
-                font=('Segoe UI', 11, 'bold'),
-                fg=self.COLORS['white'], bg=self.COLORS['primary']).pack(anchor='w')
-        tk.Label(inner, text=subtitle_text,
-                font=('Segoe UI', 8),
-                fg=self.COLORS['white'], bg=self.COLORS['primary']).pack(anchor='w', pady=(2, 0))
+        styles.make_header(parent, title_text, subtitle_text)
 
     def _card(self, parent, title, icon_text):
-        container = tk.Frame(parent, bg=self.COLORS['light'])
-        container.pack(fill='x', padx=10, pady=6)
-
-        card = tk.Frame(container, bg=self.COLORS['white'], bd=1, relief='solid', highlightthickness=0)
-        card.pack(fill='x')
-
-        header = tk.Frame(card, bg=self.COLORS['primary'], height=26)
-        header.pack(fill='x')
-        header.pack_propagate(False)
-
-        tk.Label(header, text=f"{icon_text} {title}",
-                 font=('Segoe UI', 9, 'bold'),
-                 fg=self.COLORS['white'], bg=self.COLORS['primary']).pack(side='left', padx=10)
-
-        content = tk.Frame(card, bg=self.COLORS['white'])
-        content.pack(fill='x', padx=12, pady=8)
-
-        return content
+        return styles.make_card_section(parent, title, icon_text)
 
     def _primary_button(self, parent, text, command):
-        btn = tk.Button(parent, text=text, command=command,
-                        font=('Segoe UI', 9, 'bold'),
-                        bg=self.COLORS['accent'], fg='white',
-                        relief='flat', borderwidth=0, padx=10, pady=5, cursor='hand2',
-                        activebackground='#2980b9', activeforeground='white')
-        return btn
+        return styles.make_primary_button(parent, text, command)
     
     def setup_ui(self):
         

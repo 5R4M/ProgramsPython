@@ -25,6 +25,8 @@ COLORS = {
     'white':        '#ffffff',   # Blanco — fondo de tarjetas/campos
     'text_dark':    '#2c3e50',   # Texto principal
     'text_light':   '#7f8c8d',   # Texto secundario / placeholders
+    'border':       '#bdc3c7',   # Bordes de tablas y separadores
+    'header_dark':  '#1f2937',   # Encabezados muy oscuros (reportes)
     'hover':        '#3498db',   # Color genérico de hover
     'active':       '#2980b9',   # Color genérico de active
     'exit_btn':     '#17a2b8',   # Celeste — botón salir
