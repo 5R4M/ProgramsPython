@@ -11,7 +11,7 @@ from src.database.db_manager import (
     actualizar_tipo_movimiento,
     eliminar_tipo_movimiento,
 )
-
+from src.gui import styles
 
 # Agregar el directorio raíz del proyecto al PATH de Python
 project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -22,53 +22,18 @@ class GestionMovimientos:
         self.parent = parent_frame
         self.main_window = main_window
 
-        # Paleta local (no afecta estilos globales del Main Window)
-        self.COLORS = {
-            'primary':   '#2c3e50',
-            'accent':    '#3498db',
-            'light':     '#ecf0f1',
-            'white':     '#ffffff',
-            'text_dark': '#2c3e50',
-        }
+        # Paleta compartida del sistema
+        self.COLORS = styles.COLORS
 
         self.setup_ui()
         self.actualizar_tipos()
 
-    # ---------- Utilería de UI ----------
+    # ---------- Utilería de UI — delegan a styles.py ----------
     def _header_title_sub(self, parent, title_text, subtitle_text):
-        # Header azul a todo el ancho, pegado arriba, sin separadores laterales
-        header_frame = tk.Frame(parent, bg=self.COLORS['primary'], height=55)
-        header_frame.pack(fill='x', padx=0, pady=(0, 6))  # sin margen superior ni laterales
-        header_frame.pack_propagate(False)
-
-        header_inner = tk.Frame(header_frame, bg=self.COLORS['primary'])
-        header_inner.pack(fill='both', expand=True, padx=10, pady=4)  # padding interno solo para el contenido
-
-        tk.Label(header_inner, text=title_text,
-                font=('Segoe UI', 12, 'bold'),
-                fg=self.COLORS['white'], bg=self.COLORS['primary']).pack(anchor='w')
-        tk.Label(header_inner, text=subtitle_text,
-                font=('Segoe UI', 9),
-                fg=self.COLORS['white'], bg=self.COLORS['primary']).pack(anchor='w', pady=(1, 0))
+        styles.make_header(parent, title_text, subtitle_text)
 
     def _card_section(self, parent, title, icon):
-        container = tk.Frame(parent, bg=self.COLORS['light'])
-        container.pack(fill='x', padx=10, pady=6)
-
-        card = tk.Frame(container, bg=self.COLORS['white'], bd=1, relief='solid', highlightthickness=0)
-        card.pack(fill='both', expand=True)
-
-        header = tk.Frame(card, bg=self.COLORS['primary'], height=24)
-        header.pack(fill='x')
-        header.pack_propagate(False)
-
-        tk.Label(header, text=f"{icon} {title}", font=('Segoe UI', 10, 'bold'),
-                 fg=self.COLORS['white'], bg=self.COLORS['primary']).pack(side='left', padx=10)
-
-        content = tk.Frame(card, bg=self.COLORS['white'])
-        content.pack(fill='both', expand=True, padx=12, pady=8)
-
-        return content
+        return styles.make_card_section(parent, title, icon)
 
     # ---------- Utilidades ----------
     def centrar_ventana(self, ventana):
