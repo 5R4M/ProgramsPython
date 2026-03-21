@@ -46,3 +46,19 @@
 2026-03-18 13:45:52,113 - INFO - ✅ Servidor recargado correctamente
 2026-03-18 13:45:52,117 - INFO - 📊 Resultado: 6 exitosas | 0 fallidas
 2026-03-18 13:45:52,117 - INFO - ============================================================
+2026-03-20 19:01:41,497 - INFO - ============================================================
+2026-03-20 19:01:41,497 - INFO - 🔄 INICIO SINCRONIZACIÓN AUTOMÁTICA
+2026-03-20 19:01:41,498 - INFO - 📁 Directorio base : C:\Users\selso\source\repos\ProgrmsPython\ProgramsPython\etiqueta_app\dist
+2026-03-20 19:01:41,498 - INFO - 📋 Config          : C:\Users\selso\source\repos\ProgrmsPython\ProgramsPython\etiqueta_app\dist\config_sincronizacion_multibodega.json
+2026-03-20 19:01:41,498 - INFO - 📝 Log             : C:\Users\selso\source\repos\ProgrmsPython\ProgramsPython\etiqueta_app\dist\logs\sync_log.txt
+2026-03-20 19:01:41,498 - INFO - ============================================================
+2026-03-20 19:01:41,499 - INFO - Usuario: salonso | Bodegas: 6
+2026-03-20 19:01:41,499 - WARNING - [medico] Archivo no encontrado: C:\Users\SELSO\OneDrive - DIRECCION DE AREA DE SALUD GUATEMALA NOR ORIENTE\Escritorio\Etiquetas Bodegas\FORMATO INVENTARIO MQ Y LABORATORIO.xlsx
+2026-03-20 19:01:41,499 - WARNING - [oficina] Archivo no encontrado: C:\Users\SELSO\OneDrive - DIRECCION DE AREA DE SALUD GUATEMALA NOR ORIENTE\Escritorio\Etiquetas Bodegas\FORMATO INVENTARIO OFICINA.xlsx
+2026-03-20 19:01:41,500 - WARNING - [varios] Archivo no encontrado: C:\Users\SELSO\OneDrive - DIRECCION DE AREA DE SALUD GUATEMALA NOR ORIENTE\Escritorio\Etiquetas Bodegas\FORMATO INVENTARIO VARIOS.xlsx
+2026-03-20 19:01:41,500 - WARNING - [limpieza] Archivo no encontrado: C:\Users\SELSO\OneDrive - DIRECCION DE AREA DE SALUD GUATEMALA NOR ORIENTE\Escritorio\Etiquetas Bodegas\FORMATO INVENTARIO LIMPIEZA.xlsx
+2026-03-20 19:01:41,500 - WARNING - [medicamentos] Archivo no encontrado: C:\Users\SELSO\OneDrive - DIRECCION DE AREA DE SALUD GUATEMALA NOR ORIENTE\Escritorio\Etiquetas Bodegas\FORMATO INVENTARIO MEDICAMENTOS.xlsx
+2026-03-20 19:01:41,500 - WARNING - [programas] Archivo no encontrado: C:\Users\SELSO\OneDrive - DIRECCION DE AREA DE SALUD GUATEMALA NOR ORIENTE\Escritorio\Etiquetas Bodegas\FORMATO INVENTARIO PROGRAMAS.xlsx
+2026-03-20 19:01:45,522 - INFO - ✅ Servidor recargado correctamente
+2026-03-20 19:01:45,535 - INFO - 📊 Resultado: 0 exitosas | 6 fallidas
+2026-03-20 19:01:45,537 - INFO - ============================================================
