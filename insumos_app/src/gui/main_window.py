@@ -62,16 +62,18 @@ class MainWindow:
         self.sidebar_visible = True
         self.sidebar_width = 240
 
-        # Inicializar la base de datos antes de crear la ventana
+        # CREAR VENTANA OCULTA PRIMERO — así messagebox tiene padre válido
+        self.root = tk.Tk()
+        self.root.withdraw()
+
+        # Inicializar la base de datos (messagebox ya tiene padre)
         if not self.initialize_database():
             messagebox.showerror("Error Fatal",
-                "No se pudo inicializar la base de datos. El programa se cerrará.")
+                "No se pudo inicializar la base de datos. El programa se cerrará.",
+                parent=self.root)
+            self.root.destroy()
             sys.exit(1)
 
-        # CREAR VENTANA PERO MANTENERLA OCULTA INICIALMENTE
-        self.root = tk.Tk()
-        self.root.withdraw()  # OCULTAR VENTANA DURANTE CONFIGURACIÓN
-        
         self.root.title("Módulo de Productos Afines")
 
         # Configurar icono de la ventana si existe
@@ -1145,7 +1147,9 @@ class MainWindow:
 
         except Exception as e:
             print(f"Error al inicializar la base de datos: {e}")
-            messagebox.showerror("Error", f"Error al inicializar la base de datos: {str(e)}")
+            parent = getattr(self, 'root', None)
+            messagebox.showerror("Error", f"Error al inicializar la base de datos: {str(e)}",
+                                 parent=parent)
             return False
 
     def verify_database_connection(self):
