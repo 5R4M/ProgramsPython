@@ -1868,17 +1868,13 @@ class LoginWindow:
 
                 if usuario:
                     def abrir_aplicacion():
-                        self.root.withdraw()  # ocultar login (no destruir aún)
+                        self.root.destroy()
                         try:
                             from src.gui.main_window import MainWindow
                             app = MainWindow(usuario)
-                            self.root.destroy()  # destruir login DESPUÉS de que MainWindow esté listo
                             app.run()
-                        except Exception as e:
-                            self.root.deiconify()  # restaurar login si falla
-                            messagebox.showerror("Error",
-                                f"Error al cargar la aplicación principal:\n{str(e)}",
-                                parent=self.root)
+                        except ImportError:
+                            messagebox.showerror("Error", "Error al cargar la aplicación principal")
 
                     self.root.after(0, abrir_aplicacion)
                 else:
