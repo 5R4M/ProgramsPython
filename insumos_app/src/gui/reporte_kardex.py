@@ -745,8 +745,9 @@ class ReporteKardex:
         self.mostrar_mensaje_inicial()
         
         # --- Frame para botones (abajo) ---
-        self.frame_botones = ttk.Frame(self.main_container, style='White.TFrame')
-        self.frame_botones.pack(fill="x", side="bottom", pady=(15, 8))  
+        self.frame_botones = tk.Frame(self.main_container, bg=self.COLORS['light'], height=48)
+        self.frame_botones.pack(fill="x", side="bottom", pady=(8, 8))
+        self.frame_botones.pack_propagate(False)
 
         btn_font = ('Segoe UI', 9, 'bold')
         btn_bg = self.COLORS['light']
@@ -758,11 +759,11 @@ class ReporteKardex:
             command=self.generar_vista_previa,
             font=btn_font, bg=btn_bg, fg=btn_fg,
             relief='flat', borderwidth=0,
-            highlightthickness=0, padx=15, pady=6,
+            highlightthickness=0, padx=15, pady=4,
             cursor='hand2',
             image=self.icon_preview, compound='left'
         )
-        btn_preview.pack(side="left", padx=5)
+        btn_preview.pack(side="left", padx=5, pady=4)
 
         btn_print = tk.Button(
             self.frame_botones,
@@ -770,11 +771,11 @@ class ReporteKardex:
             command=self.imprimir_pdf,
             font=btn_font, bg=btn_bg, fg=btn_fg,
             relief='flat', borderwidth=0,
-            highlightthickness=0, padx=15, pady=6,
+            highlightthickness=0, padx=15, pady=4,
             cursor='hand2',
             image=self.icon_print, compound='left'
         )
-        btn_print.pack(side="left", padx=5)
+        btn_print.pack(side="left", padx=5, pady=4)
 
         btn_pdf = tk.Button(
             self.frame_botones,
@@ -782,11 +783,11 @@ class ReporteKardex:
             command=self.exportar_pdf,
             font=btn_font, bg=btn_bg, fg=btn_fg,
             relief='flat', borderwidth=0,
-            highlightthickness=0, padx=15, pady=6,
+            highlightthickness=0, padx=15, pady=4,
             cursor='hand2',
             image=self.icon_pdf, compound='left'
         )
-        btn_pdf.pack(side="left", padx=5)
+        btn_pdf.pack(side="left", padx=5, pady=4)
 
         btn_excel = tk.Button(
             self.frame_botones,
@@ -794,11 +795,11 @@ class ReporteKardex:
             command=self.generar_kardex,
             font=btn_font, bg=btn_bg, fg=btn_fg,
             relief='flat', borderwidth=0,
-            highlightthickness=0, padx=15, pady=6,
+            highlightthickness=0, padx=15, pady=4,
             cursor='hand2',
             image=self.icon_excel, compound='left'
         )
-        btn_excel.pack(side="left", padx=5)
+        btn_excel.pack(side="left", padx=5, pady=4)
 
         btn_close = tk.Button(
             self.frame_botones,
@@ -806,11 +807,11 @@ class ReporteKardex:
             command=self.cerrar_ventana,
             font=btn_font, bg=btn_bg, fg=btn_fg,
             relief='flat', borderwidth=0,
-            highlightthickness=0, padx=15, pady=6,
+            highlightthickness=0, padx=15, pady=4,
             cursor='hand2',
             image=self.icon_close, compound='left'
         )
-        btn_close.pack(side="right", padx=5)
+        btn_close.pack(side="right", padx=5, pady=4)
 
         # Vincular eventos de cambio
         self.combo_area.bind('<<ComboboxSelected>>', self.cargar_distritos_por_area)
