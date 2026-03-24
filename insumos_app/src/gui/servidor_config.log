@@ -1,0 +1,35 @@
+[09:07:13] ────────────────────────────────────────────────────────────
+[09:07:13]   🩺 VERIFICACIÓN DE ESTADO — 24/03/2026 09:07:13
+[09:07:13] ────────────────────────────────────────────────────────────
+[09:07:14] ✅ Servidor ACTIVO
+[09:07:14] 📊 Versión MySQL: 8.0.43
+[09:07:14] 
+[09:07:14] 🔧 Configuración actual:
+[09:07:14]   • bind_address: *
+[09:07:14]   • port: 3306
+[09:07:14]   • max_connections: 151
+[09:07:14]   • wait_timeout: 28800
+[09:07:14]   • interactive_timeout: 28800
+[09:07:14] 
+[09:07:14] 📈 Estadísticas de conexión:
+[09:07:14]   • Threads_connected: 1
+[09:07:14]   • Connections: 627
+[09:07:14]   • Max_used_connections: 3
+[09:07:14]   • Aborted_connects: 32
+[09:07:14]   • Uptime: 6718
+[09:07:20] ────────────────────────────────────────────────────────────
+[09:07:20]   🧵 CONEXIONES ACTIVAS
+[09:07:20] ────────────────────────────────────────────────────────────
+[09:07:20] Total conexiones: 2
+[09:07:20] ID      Usuario        Host                     DB             Estado      
+[09:07:20] ───────────────────────────────────────────────────────────────────────────
+[09:07:20] 5       event_schedulerlocalhost                N/A            Daemon      
+[09:07:20] 628     root           DESKTOP-BJ8BGM2:51122    N/A            Query       
+[09:07:28] ────────────────────────────────────────────────────────────
+[09:07:28]   🪵 LOG DE ERRORES MySQL
+[09:07:28] ────────────────────────────────────────────────────────────
+[09:07:29] Archivo: .\DESKTOP-KVJ8QQ3.err
+[09:07:29] Últimas 30 líneas:
+[09:07:29] ────────────────────────────────────────────────────────────
+[09:07:29] No se pudo leer el archivo: [Errno 2] No such file or directory: '.\\DESKTOP-KVJ8QQ3.err'
+[09:07:29] Ruta del archivo: .\DESKTOP-KVJ8QQ3.err
