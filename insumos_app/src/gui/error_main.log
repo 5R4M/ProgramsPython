@@ -1,0 +1,40 @@
+[07:59:01] === INICIANDO abrir_aplicacion ===
+[07:59:01] Paso 1: Intentando importar MainWindow...
+[07:59:02] ERROR: ModuleNotFoundError: No module named 'frontend'
+[07:59:02] Traceback (most recent call last):
+  File "C:\Users\SELSO\PythonPrgrams\ProgramsPython\insumos_app\.claude\worktrees\hardcore-golick\insumos_app\src\gui\login_window.py", line 1383, in abrir_aplicacion
+    from src.gui.main_window import MainWindow
+  File "C:\Users\SELSO\PythonPrgrams\ProgramsPython\insumos_app\.claude\worktrees\hardcore-golick\insumos_app\src\gui\main_window.py", line 16, in <module>
+    from src.gui.reporte_demanda_real import ReporteDemandaReal
+  File "C:\Users\SELSO\PythonPrgrams\ProgramsPython\insumos_app\.claude\worktrees\hardcore-golick\insumos_app\src\gui\reporte_demanda_real.py", line 10, in <module>
+    import fitz  # PyMuPDF
+    ^^^^^^^^^^^
+  File "C:\Users\SELSO\AppData\Local\Programs\Python\Python314\Lib\site-packages\fitz\__init__.py", line 1, in <module>
+    from frontend import *
+ModuleNotFoundError: No module named 'frontend'
+
+[08:01:27] === INICIANDO abrir_aplicacion ===
+[08:01:27] Paso 1: Intentando importar MainWindow...
+[08:01:28] Paso 2: Import exitoso, ocultando login...
+[08:01:28] Paso 3: Creando MainWindow...
+[08:01:30] ERROR: TclError: image "pyimage40" doesn't exist
+[08:01:30] Traceback (most recent call last):
+  File "C:\Users\SELSO\PythonPrgrams\ProgramsPython\insumos_app\.claude\worktrees\hardcore-golick\insumos_app\src\gui\login_window.py", line 1387, in abrir_aplicacion
+    app = MainWindow(usuario)
+  File "C:\Users\SELSO\PythonPrgrams\ProgramsPython\insumos_app\.claude\worktrees\hardcore-golick\insumos_app\src\gui\main_window.py", line 94, in __init__
+    self.create_layout()
+    ~~~~~~~~~~~~~~~~~~^^
+  File "C:\Users\SELSO\PythonPrgrams\ProgramsPython\insumos_app\.claude\worktrees\hardcore-golick\insumos_app\src\gui\main_window.py", line 375, in create_layout
+    self.create_sidebar()
+    ~~~~~~~~~~~~~~~~~~~^^
+  File "C:\Users\SELSO\PythonPrgrams\ProgramsPython\insumos_app\.claude\worktrees\hardcore-golick\insumos_app\src\gui\main_window.py", line 443, in create_sidebar
+    exit_btn.config(image=self.icons['salir'], compound='left')
+    ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\SELSO\AppData\Local\Programs\Python\Python314\Lib\tkinter\__init__.py", line 1842, in configure
+    return self._configure('configure', cnf, kw)
+           ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\SELSO\AppData\Local\Programs\Python\Python314\Lib\tkinter\__init__.py", line 1826, in _configure
+    self.tk.call(_flatten((self._w, cmd)) + self._options(cnf))
+    ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_tkinter.TclError: image "pyimage40" doesn't exist
+
