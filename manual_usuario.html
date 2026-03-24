@@ -1,0 +1,993 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Manual de Usuario — Sistema de Gestión</title>
+<style>
+  /* ── Reset & Base ── */
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: 'Segoe UI', Arial, sans-serif;
+    background: #f4f6f9;
+    color: #2c3e50;
+    font-size: 14px;
+    line-height: 1.6;
+  }
+
+  /* ── Variables ── */
+  :root {
+    --primary:    #2c3e50;
+    --accent:     #3498db;
+    --accent-dk:  #2980b9;
+    --success:    #27ae60;
+    --danger:     #e74c3c;
+    --warning:    #f39c12;
+    --light:      #ecf0f1;
+    --white:      #ffffff;
+    --text-light: #7f8c8d;
+    --dark-bg:    #001a33;
+    --dark-sec:   #003d66;
+  }
+
+  /* ── Cover page ── */
+  .cover {
+    background: linear-gradient(135deg, var(--primary) 0%, var(--accent-dk) 100%);
+    color: white;
+    text-align: center;
+    padding: 80px 40px;
+    page-break-after: always;
+  }
+  .cover h1 { font-size: 2.6em; margin-bottom: 12px; }
+  .cover .subtitle { font-size: 1.2em; opacity: 0.85; margin-bottom: 40px; }
+  .cover .version { font-size: 0.9em; opacity: 0.6; margin-top: 50px; }
+  .cover .apps {
+    display: flex; justify-content: center; gap: 40px; margin-top: 40px;
+    flex-wrap: wrap;
+  }
+  .cover .app-badge {
+    background: rgba(255,255,255,0.15);
+    border: 1px solid rgba(255,255,255,0.3);
+    border-radius: 12px;
+    padding: 20px 30px;
+    min-width: 180px;
+  }
+  .cover .app-badge h3 { font-size: 1.1em; margin-bottom: 6px; }
+  .cover .app-badge p { font-size: 0.85em; opacity: 0.75; }
+
+  /* ── Layout ── */
+  .page { max-width: 960px; margin: 0 auto; padding: 40px 30px; }
+
+  /* ── TOC ── */
+  .toc { background: white; border-radius: 10px; padding: 30px; margin-bottom: 40px; box-shadow: 0 2px 8px rgba(0,0,0,.08); }
+  .toc h2 { color: var(--primary); margin-bottom: 16px; border-bottom: 2px solid var(--accent); padding-bottom: 8px; }
+  .toc ol { padding-left: 22px; }
+  .toc li { margin: 6px 0; }
+  .toc a { color: var(--accent); text-decoration: none; }
+  .toc a:hover { text-decoration: underline; }
+
+  /* ── Section ── */
+  .section { margin-bottom: 60px; }
+  .section-title {
+    background: var(--primary);
+    color: white;
+    padding: 14px 20px;
+    border-radius: 8px 8px 0 0;
+    font-size: 1.2em;
+    font-weight: bold;
+    display: flex; align-items: center; gap: 10px;
+  }
+  .section-body {
+    background: white;
+    border: 1px solid #dde3ea;
+    border-top: none;
+    border-radius: 0 0 8px 8px;
+    padding: 24px;
+  }
+
+  /* ── Step ── */
+  .steps { counter-reset: step; }
+  .step {
+    display: flex; gap: 16px; margin-bottom: 20px;
+    padding: 16px; border-radius: 8px;
+    border-left: 4px solid var(--accent);
+    background: #f8fafc;
+  }
+  .step-num {
+    counter-increment: step;
+    background: var(--accent);
+    color: white;
+    border-radius: 50%;
+    width: 32px; height: 32px;
+    display: flex; align-items: center; justify-content: center;
+    font-weight: bold; font-size: 0.95em;
+    flex-shrink: 0;
+  }
+  .step-num::before { content: counter(step); }
+  .step-content h4 { margin-bottom: 4px; color: var(--primary); }
+  .step-content p { color: #444; }
+
+  /* ── Note / Warning / Tip ── */
+  .note, .warning, .tip {
+    border-radius: 6px; padding: 12px 16px; margin: 14px 0;
+    display: flex; gap: 10px; align-items: flex-start;
+  }
+  .note   { background: #eaf4fb; border-left: 4px solid var(--accent); }
+  .warning{ background: #fef9ec; border-left: 4px solid var(--warning); }
+  .tip    { background: #eafaf1; border-left: 4px solid var(--success); }
+  .note .icon   { color: var(--accent);  font-size: 1.2em; }
+  .warning .icon{ color: var(--warning); font-size: 1.2em; }
+  .tip .icon    { color: var(--success); font-size: 1.2em; }
+
+  /* ─────────────────────────────────────────────────
+     BOCETOS DE PANTALLAS  (mockups CSS puros)
+  ───────────────────────────────────────────────── */
+  .mockup-wrap { margin: 24px 0; }
+  .mockup-label {
+    font-size: 0.8em; color: var(--text-light);
+    margin-bottom: 6px; font-style: italic;
+    display: flex; align-items: center; gap: 6px;
+  }
+  .mockup-label::before { content: '🖼️'; }
+
+  /* ventana genérica */
+  .win {
+    border: 2px solid #b0bec5;
+    border-radius: 8px;
+    overflow: hidden;
+    box-shadow: 0 4px 16px rgba(0,0,0,.12);
+    font-size: 12px;
+    max-width: 100%;
+  }
+  .win-bar {
+    background: #37474f;
+    color: white;
+    padding: 6px 12px;
+    display: flex; align-items: center; gap: 8px;
+    font-size: 11px;
+  }
+  .win-dot { width:10px; height:10px; border-radius:50%; display:inline-block; }
+  .win-dot.r{ background:#e74c3c; }
+  .win-dot.y{ background:#f39c12; }
+  .win-dot.g{ background:#27ae60; }
+  .win-title { flex:1; text-align:center; font-weight:bold; font-size:11px; }
+
+  /* layout principal: sidebar + contenido */
+  .win-body { display:flex; min-height:320px; }
+
+  /* sidebar */
+  .sidebar {
+    background: var(--primary);
+    width: 180px;
+    flex-shrink: 0;
+    padding: 0;
+    display: flex; flex-direction: column;
+  }
+  .sidebar-logo {
+    padding: 14px 12px 10px;
+    text-align: center;
+    border-bottom: 1px solid rgba(255,255,255,.1);
+  }
+  .sidebar-logo .logo-icon { font-size: 28px; }
+  .sidebar-logo p { color: rgba(255,255,255,.7); font-size: 10px; margin-top:3px; }
+  .sidebar-item {
+    padding: 9px 14px;
+    color: rgba(255,255,255,.8);
+    cursor: pointer;
+    display: flex; align-items:center; gap:8px;
+    font-size: 11px;
+    border-left: 3px solid transparent;
+  }
+  .sidebar-item.active {
+    background: rgba(52,152,219,.25);
+    border-left-color: var(--accent);
+    color: white;
+  }
+  .sidebar-item:hover { background: rgba(255,255,255,.07); }
+  .sidebar-section {
+    padding: 6px 14px 2px;
+    font-size: 9px;
+    color: rgba(255,255,255,.4);
+    text-transform: uppercase;
+    letter-spacing: .5px;
+    margin-top: 8px;
+  }
+  .sidebar-exit {
+    margin-top: auto;
+    padding: 9px 14px;
+    background: #17a2b8;
+    color: white;
+    font-size: 11px;
+    display:flex; align-items:center; gap:8px;
+  }
+
+  /* área principal de contenido */
+  .main-content { flex:1; background: var(--light); display:flex; flex-direction:column; }
+
+  /* barra de encabezado azul */
+  .content-header {
+    background: var(--primary);
+    color: white;
+    padding: 10px 14px;
+  }
+  .content-header h3 { font-size: 12px; font-weight:bold; }
+  .content-header p  { font-size: 10px; opacity:.75; margin-top:1px; }
+
+  /* tarjeta de contenido */
+  .card {
+    background: white;
+    margin: 10px;
+    border-radius: 4px;
+    border: 1px solid #dde3ea;
+    overflow: hidden;
+  }
+  .card-header {
+    background: var(--primary);
+    color: white;
+    padding: 5px 10px;
+    font-size: 10px; font-weight:bold;
+    display:flex; align-items:center; gap:6px;
+  }
+  .card-body { padding: 10px; }
+
+  /* tabla de demo */
+  .demo-table { width:100%; border-collapse:collapse; font-size:10px; }
+  .demo-table th {
+    background: var(--primary);
+    color: white;
+    padding: 5px 8px;
+    text-align:left;
+  }
+  .demo-table td { padding: 5px 8px; border-bottom: 1px solid #eee; }
+  .demo-table tr:last-child td { border:none; }
+  .demo-table tr:hover td { background:#f0f4f8; }
+
+  /* botones de demo */
+  .btn-row { display:flex; gap:6px; padding: 8px 10px; flex-wrap:wrap; }
+  .btn { padding: 4px 10px; border-radius:3px; font-size:10px; font-weight:bold; cursor:pointer; border:none; color:white; }
+  .btn.primary { background: var(--accent); }
+  .btn.success { background: var(--success); }
+  .btn.danger  { background: var(--danger);  }
+  .btn.warning { background: var(--warning); }
+  .btn.info    { background: #17a2b8; }
+
+  /* formulario de demo */
+  .form-row { display:flex; gap:10px; align-items:center; margin-bottom:6px; }
+  .form-label { width:100px; font-size:10px; color:#555; text-align:right; flex-shrink:0; }
+  .form-input {
+    flex:1; border:1px solid #ccc; border-radius:3px;
+    padding: 3px 6px; font-size:10px; color:#333;
+    background:white;
+  }
+
+  /* barra de estado */
+  .statusbar {
+    background: var(--primary);
+    color: rgba(255,255,255,.8);
+    padding: 4px 10px;
+    font-size: 10px;
+    display:flex; gap:16px;
+  }
+
+  /* login mockup */
+  .login-win {
+    max-width: 380px;
+    margin: 0 auto;
+  }
+  .login-body {
+    background: white;
+    padding: 30px 24px;
+    display:flex; flex-direction:column; align-items:center; gap:12px;
+  }
+  .login-logo { font-size:40px; }
+  .login-title { font-size:14px; font-weight:bold; color: var(--primary); }
+  .login-sub   { font-size:10px; color: var(--text-light); margin-top:-8px; }
+  .login-field { width:100%; }
+  .login-field label { display:block; font-size:10px; font-weight:bold; color:#555; margin-bottom:3px; }
+  .login-field input {
+    width:100%; border:1px solid #ccc; border-radius:4px;
+    padding:5px 8px; font-size:11px;
+  }
+  .login-btn {
+    width:100%; background: var(--accent); color:white;
+    border:none; border-radius:4px; padding:8px;
+    font-size:11px; font-weight:bold; cursor:pointer; margin-top:6px;
+  }
+
+  /* dark app mockup (declaraciones) */
+  .dark-win .win-body { background: var(--dark-bg); }
+  .dark-sidebar {
+    background: var(--dark-sec);
+    width: 180px; flex-shrink:0;
+    display:flex; flex-direction:column;
+    padding:0;
+  }
+  .dark-sidebar-logo { padding:14px 12px; text-align:center; border-bottom:1px solid rgba(255,255,255,.1); }
+  .dark-sidebar-logo .logo-icon { font-size:24px; }
+  .dark-sidebar-logo p { color:rgba(255,255,255,.6); font-size:10px; margin-top:2px; }
+  .dark-sidebar-item {
+    padding:8px 14px; color:rgba(255,255,255,.7);
+    font-size:11px; display:flex; align-items:center; gap:8px;
+    border-left: 3px solid transparent;
+  }
+  .dark-sidebar-item.active {
+    background: rgba(52,152,219,.2);
+    border-left-color: var(--accent);
+    color: white;
+  }
+  .dark-main { flex:1; display:flex; flex-direction:column; background: var(--dark-bg); }
+  .dark-header { background: var(--dark-sec); color:white; padding:10px 14px; }
+  .dark-header h3 { font-size:12px; font-weight:bold; }
+  .dark-header p  { font-size:10px; opacity:.6; }
+  .dark-card {
+    background: rgba(255,255,255,.05);
+    margin:10px; border-radius:6px;
+    border: 1px solid rgba(255,255,255,.1);
+    overflow:hidden;
+  }
+  .dark-card-header {
+    background: var(--dark-sec);
+    color:white; padding:5px 10px;
+    font-size:10px; font-weight:bold;
+    display:flex; align-items:center; gap:6px;
+  }
+  .dark-card-body { padding:10px; }
+  .dark-input {
+    background:rgba(255,255,255,.08); border:1px solid rgba(255,255,255,.15);
+    color:#e0e1dd; border-radius:3px; padding:3px 6px; font-size:10px; width:100%;
+  }
+  .dark-btn { padding:5px 12px; border-radius:4px; font-size:10px; font-weight:bold; border:none; cursor:pointer; }
+  .dark-btn.primary { background: var(--accent); color:white; }
+  .dark-table { width:100%; border-collapse:collapse; font-size:10px; color:#e0e1dd; }
+  .dark-table th { background:rgba(255,255,255,.1); color:#aab; padding:5px 8px; text-align:left; }
+  .dark-table td { padding:5px 8px; border-bottom:1px solid rgba(255,255,255,.06); }
+
+  /* ── Keyboard shortcuts ── */
+  kbd {
+    background:#ecf0f1; border:1px solid #b0bec5;
+    border-radius:3px; padding:1px 5px; font-size:11px;
+    font-family: monospace;
+  }
+
+  /* ── Table of features ── */
+  .feat-table { width:100%; border-collapse:collapse; margin:12px 0; }
+  .feat-table th { background:var(--primary); color:white; padding:8px 12px; text-align:left; }
+  .feat-table td { padding:8px 12px; border-bottom:1px solid #eee; vertical-align:top; }
+  .feat-table tr:nth-child(even) td { background:#f8fafc; }
+
+  /* ── Breadcrumb ── */
+  .breadcrumb { font-size:11px; color:var(--text-light); margin-bottom:8px; }
+  .breadcrumb span { color:var(--accent); }
+
+  /* ── Grid ── */
+  .grid2 { display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-bottom:16px; }
+  .grid3 { display:grid; grid-template-columns:repeat(3,1fr); gap:12px; margin-bottom:16px; }
+
+  /* ── Responsive ── */
+  @media (max-width:680px) {
+    .grid2, .grid3 { grid-template-columns:1fr; }
+    .sidebar, .dark-sidebar { width:130px; }
+  }
+
+  h2.chaphead {
+    color: var(--primary);
+    border-bottom: 3px solid var(--accent);
+    padding-bottom: 8px;
+    margin-bottom: 24px;
+    font-size: 1.4em;
+  }
+  h3.subhead { color: var(--primary); margin: 20px 0 10px; font-size: 1.05em; }
+  p { margin-bottom: 10px; color: #444; }
+</style>
+</head>
+<body>
+
+<!-- ╔════════════════════════════════════════╗ -->
+<!-- ║            PORTADA                      ║ -->
+<!-- ╚════════════════════════════════════════╝ -->
+<div class="cover">
+  <div style="font-size:3em;margin-bottom:16px;">📦</div>
+  <h1>Manual de Usuario</h1>
+  <p class="subtitle">Sistema de Gestión de Insumos Médicos</p>
+  <div class="apps">
+    <div class="app-badge">
+      <h3>📦 Módulo de Insumos</h3>
+      <p>Inventario, movimientos y reportes de suministros médicos</p>
+    </div>
+  </div>
+  <p class="version">Versión 1.0 · Marzo 2026</p>
+</div>
+
+<!-- ╔════════════════════════════════════════╗ -->
+<!-- ║         TABLA DE CONTENIDOS            ║ -->
+<!-- ╚════════════════════════════════════════╝ -->
+<div class="page">
+<div class="toc">
+  <h2>📋 Tabla de Contenidos</h2>
+  <ol>
+    <li><a href="#intro">Introducción al sistema</a></li>
+    <li><a href="#inicio-sesion">Inicio de sesión</a></li>
+    <li><a href="#insumos-main">Módulo de Insumos — Ventana principal</a></li>
+    <li><a href="#insumos-ingreso">Ingreso de insumos</a></li>
+    <li><a href="#insumos-gestion">Gestión de insumos, servicios y movimientos</a></li>
+    <li><a href="#insumos-reportes">Reportes</a></li>
+    <li><a href="#insumos-usuarios">Gestión de usuarios</a></li>
+    <li><a href="#accesos-rapidos">Accesos rápidos y atajos de teclado</a></li>
+    <li><a href="#faq">Preguntas frecuentes</a></li>
+  </ol>
+</div>
+
+
+<!-- ════════════════════════════════════════ -->
+<!-- 1. INTRODUCCIÓN                          -->
+<!-- ════════════════════════════════════════ -->
+<div class="section" id="intro">
+  <div class="section-title">📌 1. Introducción al sistema</div>
+  <div class="section-body">
+    <p>El sistema gestiona el inventario de insumos médicos y farmacéuticos:</p>
+    <div>
+      <h3 class="subhead">📦 Módulo de Productos Afines (Insumos)</h3>
+      <p>Gestiona el inventario de insumos médicos / farmacéuticos. Permite registrar entradas y salidas, generar reportes de kardex, demanda, balance de bodega y más.</p>
+    </div>
+    <div class="note">
+      <span class="icon">ℹ️</span>
+      <div><strong>Requisitos:</strong> Windows 10/11 · Python 3.9+ · MySQL (para Insumos) · Resolución mínima 1280 × 720.</div>
+    </div>
+  </div>
+</div>
+
+
+<!-- ════════════════════════════════════════ -->
+<!-- 2. INICIO DE SESIÓN                     -->
+<!-- ════════════════════════════════════════ -->
+<div class="section" id="inicio-sesion">
+  <div class="section-title">🔐 2. Inicio de sesión</div>
+  <div class="section-body">
+    <p>La aplicación requiere autenticación. Al ejecutarla aparece la pantalla de inicio de sesión.</p>
+
+    <div class="mockup-wrap">
+      <p class="mockup-label">Pantalla de inicio de sesión — Módulo de Insumos</p>
+      <div class="win login-win">
+        <div class="win-bar">
+          <span class="win-dot r"></span>
+          <span class="win-dot y"></span>
+          <span class="win-dot g"></span>
+          <span class="win-title">Módulo de Productos Afines — Inicio de Sesión</span>
+        </div>
+        <div class="login-body">
+          <div class="login-logo">📦</div>
+          <div class="login-title">Módulo de Productos Afines</div>
+          <div class="login-sub">Sistema de gestión de insumos médicos</div>
+          <div class="login-field" style="margin-top:10px;">
+            <label>👤 Usuario</label>
+            <input type="text" value="admin" readonly>
+          </div>
+          <div class="login-field">
+            <label>🔒 Contraseña</label>
+            <input type="password" value="••••••••" readonly>
+          </div>
+          <button class="login-btn">🚀 Ingresar al Sistema</button>
+          <p style="font-size:10px;color:#aaa;text-align:center;margin-top:8px;">
+            ¿Olvidó su contraseña? Contacte al administrador.
+          </p>
+        </div>
+      </div>
+    </div>
+
+    <div class="steps">
+      <div class="step"><div class="step-num"></div>
+        <div class="step-content">
+          <h4>Escriba su nombre de usuario</h4>
+          <p>Ingrese el nombre de usuario asignado por el administrador (ej. <code>admin</code>).</p>
+        </div>
+      </div>
+      <div class="step"><div class="step-num"></div>
+        <div class="step-content">
+          <h4>Ingrese su contraseña</h4>
+          <p>Los caracteres se ocultan con puntos por seguridad.</p>
+        </div>
+      </div>
+      <div class="step"><div class="step-num"></div>
+        <div class="step-content">
+          <h4>Haga clic en "Ingresar al Sistema"</h4>
+          <p>Si los datos son correctos, se abrirá la ventana principal. En caso de error, se mostrará un mensaje indicando la causa.</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="warning">
+      <span class="icon">⚠️</span>
+      <div>Después de <strong>3 intentos fallidos</strong> su cuenta puede bloquearse temporalmente. Contacte al administrador para reactivarla.</div>
+    </div>
+  </div>
+</div>
+
+
+<!-- ════════════════════════════════════════ -->
+<!-- 3. MÓDULO INSUMOS — VENTANA PRINCIPAL   -->
+<!-- ════════════════════════════════════════ -->
+<div class="section" id="insumos-main">
+  <div class="section-title">🏠 3. Módulo de Insumos — Ventana principal</div>
+  <div class="section-body">
+    <p>Después de iniciar sesión se abre la ventana principal. Está compuesta por tres zonas:</p>
+
+    <div class="mockup-wrap">
+      <p class="mockup-label">Ventana principal del Módulo de Insumos</p>
+      <div class="win">
+        <div class="win-bar">
+          <span class="win-dot r"></span>
+          <span class="win-dot y"></span>
+          <span class="win-dot g"></span>
+          <span class="win-title">Módulo de Productos Afines · Usuario: admin</span>
+        </div>
+        <div class="win-body">
+          <!-- sidebar -->
+          <div class="sidebar">
+            <div class="sidebar-logo">
+              <div class="logo-icon">📦</div>
+              <p>Productos Afines</p>
+            </div>
+            <div class="sidebar-section">Gestión</div>
+            <div class="sidebar-item">👤 Usuarios</div>
+            <div class="sidebar-item active">📦 Ingresar Insumos</div>
+            <div class="sidebar-item">🗂️ Gestión Insumos</div>
+            <div class="sidebar-item">🏥 Servicios</div>
+            <div class="sidebar-item">🔄 Tipos Movimiento</div>
+            <div class="sidebar-section">Reportes</div>
+            <div class="sidebar-item">📊 Kardex</div>
+            <div class="sidebar-item">📈 Demanda Real</div>
+            <div class="sidebar-item">📋 BRES</div>
+            <div class="sidebar-item">⚖️ Balance Bodega</div>
+            <div class="sidebar-section">Sistema</div>
+            <div class="sidebar-item">⚙️ Servidor</div>
+            <div class="sidebar-exit">🚪 Salir del sistema</div>
+          </div>
+          <!-- main -->
+          <div class="main-content">
+            <div class="content-header">
+              <h3>📦 Ingreso de Insumos al Sistema</h3>
+              <p>Registre entradas y movimientos de insumos médicos</p>
+            </div>
+            <div class="card">
+              <div class="card-header">📥  Registro de Ingreso</div>
+              <div class="card-body">
+                <div class="form-row">
+                  <span class="form-label">Fecha:</span>
+                  <input class="form-input" type="text" value="20/03/2026" readonly>
+                </div>
+                <div class="form-row">
+                  <span class="form-label">Insumo:</span>
+                  <input class="form-input" type="text" value="Amoxicilina 500mg" readonly>
+                </div>
+                <div class="form-row">
+                  <span class="form-label">Cantidad:</span>
+                  <input class="form-input" type="text" value="100" readonly>
+                </div>
+                <div class="btn-row">
+                  <button class="btn primary">💾 Guardar</button>
+                  <button class="btn success">✅ Confirmar</button>
+                  <button class="btn danger">🗑️ Limpiar</button>
+                </div>
+              </div>
+            </div>
+            <div class="statusbar">
+              <span>🟢 Conectado · Base de datos: localhost</span>
+              <span>Usuario: admin (Administrador)</span>
+              <span>20/03/2026 · 08:45</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <table class="feat-table">
+      <thead><tr><th>Zona</th><th>Descripción</th></tr></thead>
+      <tbody>
+        <tr><td><strong>Sidebar (izq.)</strong></td><td>Menú de navegación principal. Se puede colapsar con el botón "◀ Ocultar menú" para ganar espacio.</td></tr>
+        <tr><td><strong>Área central</strong></td><td>Muestra el módulo activo. Cambia según la opción seleccionada en el sidebar.</td></tr>
+        <tr><td><strong>Barra de estado (inf.)</strong></td><td>Indica el estado de la conexión, el usuario activo y la hora del sistema.</td></tr>
+      </tbody>
+    </table>
+
+    <div class="tip">
+      <span class="icon">💡</span>
+      <div>Haga clic en el botón <strong>◀ Ocultar menú</strong> para aumentar el espacio del área de trabajo. Vuelva a hacer clic para mostrar el menú nuevamente.</div>
+    </div>
+  </div>
+</div>
+
+
+<!-- ════════════════════════════════════════ -->
+<!-- 4. INGRESO DE INSUMOS                   -->
+<!-- ════════════════════════════════════════ -->
+<div class="section" id="insumos-ingreso">
+  <div class="section-title">📥 4. Ingreso de Insumos</div>
+  <div class="section-body">
+    <div class="breadcrumb">Sidebar → <span>📦 Ingresar Insumos</span></div>
+    <p>Esta pantalla permite registrar la entrada de insumos al sistema. Utiliza pestañas para organizar los diferentes tipos de operación.</p>
+
+    <div class="mockup-wrap">
+      <p class="mockup-label">Pantalla de ingreso de insumos con filtros jerárquicos</p>
+      <div class="win">
+        <div class="win-bar">
+          <span class="win-dot r"></span><span class="win-dot y"></span><span class="win-dot g"></span>
+          <span class="win-title">Ingreso de Insumos</span>
+        </div>
+        <div class="win-body">
+          <div class="sidebar" style="width:140px;">
+            <div class="sidebar-item">📦 Ingresar Insumos</div>
+          </div>
+          <div class="main-content">
+            <div class="content-header">
+              <h3>📦 Ingreso de Insumos al Sistema</h3>
+              <p>Complete los campos y confirme el ingreso</p>
+            </div>
+            <!-- Filtros en tarjeta -->
+            <div class="card">
+              <div class="card-header">🔍  Filtros de Selección</div>
+              <div class="card-body">
+                <div class="form-row">
+                  <span class="form-label">Área:</span>
+                  <select class="form-input" style="padding:2px 4px;"><option>ZONA NORTE</option></select>
+                </div>
+                <div class="form-row">
+                  <span class="form-label">Distrito:</span>
+                  <select class="form-input" style="padding:2px 4px;"><option>DIST. CENTRAL</option></select>
+                </div>
+                <div class="form-row">
+                  <span class="form-label">Servicio:</span>
+                  <select class="form-input" style="padding:2px 4px;"><option>MEDICINA GENERAL</option></select>
+                </div>
+                <div class="form-row">
+                  <span class="form-label">Tipo Insumo:</span>
+                  <select class="form-input" style="padding:2px 4px;"><option>MEDICAMENTOS</option></select>
+                </div>
+              </div>
+            </div>
+            <!-- Tabla de insumos -->
+            <div class="card">
+              <div class="card-header">📋  Insumos Disponibles</div>
+              <div class="card-body" style="padding:0;">
+                <table class="demo-table">
+                  <thead>
+                    <tr><th>Código</th><th>Insumo</th><th>Presentación</th><th>Stock</th><th>Cantidad</th></tr>
+                  </thead>
+                  <tbody>
+                    <tr><td>001</td><td>Amoxicilina 500mg</td><td>Cápsula</td><td>250</td><td><input class="form-input" value="100" style="width:50px;"></td></tr>
+                    <tr><td>002</td><td>Paracetamol 500mg</td><td>Tableta</td><td>500</td><td><input class="form-input" value="200" style="width:50px;"></td></tr>
+                    <tr><td>003</td><td>Ibuprofeno 400mg</td><td>Tableta</td><td>150</td><td><input class="form-input" value="" style="width:50px;"></td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+            <div class="btn-row">
+              <button class="btn primary">💾 Guardar Ingreso</button>
+              <button class="btn warning">📤 Exportar Excel</button>
+              <button class="btn info">↩️ Volver</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="steps">
+      <div class="step"><div class="step-num"></div>
+        <div class="step-content"><h4>Seleccione el Área geográfica</h4><p>Use el desplegable "Área" para filtrar los distritos disponibles.</p></div>
+      </div>
+      <div class="step"><div class="step-num"></div>
+        <div class="step-content"><h4>Seleccione Distrito, Tipo de Servicio y Servicio</h4><p>Cada selección filtra los elementos del siguiente nivel.</p></div>
+      </div>
+      <div class="step"><div class="step-num"></div>
+        <div class="step-content"><h4>Elija el Tipo de Insumo</h4><p>La tabla mostrará los insumos correspondientes.</p></div>
+      </div>
+      <div class="step"><div class="step-num"></div>
+        <div class="step-content"><h4>Ingrese las cantidades</h4><p>Escriba la cantidad a ingresar en la columna "Cantidad" de cada fila.</p></div>
+      </div>
+      <div class="step"><div class="step-num"></div>
+        <div class="step-content"><h4>Haga clic en "Guardar Ingreso"</h4><p>El sistema registrará los movimientos y actualizará el stock.</p></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+
+<!-- ════════════════════════════════════════ -->
+<!-- 5. GESTIÓN DE INSUMOS / SERVICIOS       -->
+<!-- ════════════════════════════════════════ -->
+<div class="section" id="insumos-gestion">
+  <div class="section-title">🗂️ 5. Gestión de Insumos, Servicios y Tipos de Movimiento</div>
+  <div class="section-body">
+    <p>Estas tres vistas comparten la misma estructura de diseño: encabezado azul, pestañas por categoría, tarjetas con tablas y botones de acción estándar.</p>
+
+    <div class="grid3">
+      <div>
+        <h3 class="subhead">Gestión de Insumos</h3>
+        <p>Administra tipos de insumo, presentaciones e insumos individuales. Acceso desde: <em>Sidebar → 🗂️ Gestión Insumos</em>.</p>
+      </div>
+      <div>
+        <h3 class="subhead">Gestión de Servicios</h3>
+        <p>Configura áreas, distritos, tipos de servicio y servicios. Acceso desde: <em>Sidebar → 🏥 Servicios</em>.</p>
+      </div>
+      <div>
+        <h3 class="subhead">Tipos de Movimiento</h3>
+        <p>Define los tipos de transacción (entrada, salida, ajuste, etc.). Acceso desde: <em>Sidebar → 🔄 Tipos Movimiento</em>.</p>
+      </div>
+    </div>
+
+    <div class="mockup-wrap">
+      <p class="mockup-label">Diseño estándar de pantallas de gestión (ejemplo: Gestión de Insumos)</p>
+      <div class="win">
+        <div class="win-bar">
+          <span class="win-dot r"></span><span class="win-dot y"></span><span class="win-dot g"></span>
+          <span class="win-title">Gestión de Insumos</span>
+        </div>
+        <div class="win-body">
+          <div class="sidebar" style="width:140px;"><div class="sidebar-item active">🗂️ Gestión Insumos</div></div>
+          <div class="main-content">
+            <div class="content-header">
+              <h3>🗂️ Gestión de Insumos del Sistema</h3>
+              <p>Administre tipos, presentaciones e insumos</p>
+            </div>
+            <!-- Pestañas -->
+            <div style="display:flex;gap:0;padding:8px 10px 0;background:var(--light);">
+              <div style="background:white;border:1px solid #ccc;border-bottom:none;padding:4px 12px;border-radius:4px 4px 0 0;font-size:11px;font-weight:bold;color:var(--primary);">Tipos de Insumo</div>
+              <div style="background:var(--light);border:1px solid #ddd;border-bottom:none;padding:4px 12px;border-radius:4px 4px 0 0;font-size:11px;color:#888;margin-left:4px;">Presentaciones</div>
+              <div style="background:var(--light);border:1px solid #ddd;border-bottom:none;padding:4px 12px;border-radius:4px 4px 0 0;font-size:11px;color:#888;margin-left:4px;">Insumos</div>
+            </div>
+            <div class="card" style="margin-top:0;border-radius:0 4px 4px 4px;">
+              <div class="card-header">📥  Carga desde Excel</div>
+              <div class="card-body">
+                <div class="form-row">
+                  <span class="form-label">Archivo:</span>
+                  <input class="form-input" type="text" value="tipos_insumo.xlsx" readonly style="flex:1;">
+                  <button class="btn primary" style="margin-left:6px;">📂 Examinar</button>
+                </div>
+                <div class="btn-row" style="padding:4px 0 0 0;">
+                  <button class="btn success">⬆️ Importar</button>
+                </div>
+              </div>
+            </div>
+            <div class="card">
+              <div class="card-header">📑  Tipos de Insumo</div>
+              <div class="card-body" style="padding:0;">
+                <table class="demo-table">
+                  <thead><tr><th>ID</th><th>Descripción</th><th>Activo</th></tr></thead>
+                  <tbody>
+                    <tr><td>1</td><td>MEDICAMENTOS</td><td>✅</td></tr>
+                    <tr><td>2</td><td>MATERIAL MÉDICO</td><td>✅</td></tr>
+                    <tr><td>3</td><td>REACTIVOS</td><td>✅</td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+            <div class="btn-row">
+              <button class="btn primary">➕ Agregar</button>
+              <button class="btn warning">✏️ Editar</button>
+              <button class="btn danger">🗑️ Eliminar</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <table class="feat-table">
+      <thead><tr><th>Acción</th><th>Cómo ejecutarla</th></tr></thead>
+      <tbody>
+        <tr><td>Agregar registro</td><td>Clic en <strong>➕ Agregar</strong> → rellene el formulario → Guardar.</td></tr>
+        <tr><td>Editar registro</td><td>Seleccione una fila → clic en <strong>✏️ Editar</strong> → modifique → Guardar.</td></tr>
+        <tr><td>Eliminar registro</td><td>Seleccione una fila → clic en <strong>🗑️ Eliminar</strong> → confirme en el diálogo.</td></tr>
+        <tr><td>Importar desde Excel</td><td>Use la tarjeta "Carga desde Excel": seleccione el archivo y haga clic en <strong>⬆️ Importar</strong>.</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+
+<!-- ════════════════════════════════════════ -->
+<!-- 6. REPORTES                             -->
+<!-- ════════════════════════════════════════ -->
+<div class="section" id="insumos-reportes">
+  <div class="section-title">📊 6. Reportes</div>
+  <div class="section-body">
+    <p>El sistema incluye cinco tipos de reportes accesibles desde el sidebar bajo la sección <strong>Reportes</strong>.</p>
+
+    <div class="grid2">
+      <div>
+        <h3 class="subhead">📊 Reporte Kardex</h3>
+        <p>Historial completo de entradas y salidas por insumo en un período dado. Ideal para auditoría.</p>
+      </div>
+      <div>
+        <h3 class="subhead">📈 Demanda Real</h3>
+        <p>Análisis de la demanda por servicio y período. Útil para planificación de compras.</p>
+      </div>
+      <div>
+        <h3 class="subhead">📋 Reporte BRES</h3>
+        <p>Balance de existencias por servicio. Muestra stock actual vs. stock requerido.</p>
+      </div>
+      <div>
+        <h3 class="subhead">⚖️ Balance de Bodega</h3>
+        <p>Resumen de inventario total por bodega/área. Detecta déficit o exceso de stock.</p>
+      </div>
+    </div>
+
+    <div class="mockup-wrap">
+      <p class="mockup-label">Pantalla de reporte Kardex con filtros de fecha</p>
+      <div class="win">
+        <div class="win-bar">
+          <span class="win-dot r"></span><span class="win-dot y"></span><span class="win-dot g"></span>
+          <span class="win-title">Reporte Kardex</span>
+        </div>
+        <div class="win-body">
+          <div class="sidebar" style="width:140px;"><div class="sidebar-item active">📊 Kardex</div></div>
+          <div class="main-content">
+            <div class="content-header"><h3>📊 Reporte Kardex</h3><p>Historial de movimientos de insumos</p></div>
+            <div class="card">
+              <div class="card-header">🔍  Filtros de Búsqueda</div>
+              <div class="card-body">
+                <div class="form-row">
+                  <span class="form-label">Fecha inicio:</span>
+                  <input class="form-input" type="text" value="01/01/2026" readonly>
+                  <span class="form-label" style="margin-left:8px;">Fecha fin:</span>
+                  <input class="form-input" type="text" value="31/03/2026" readonly>
+                </div>
+                <div class="form-row">
+                  <span class="form-label">Área:</span>
+                  <select class="form-input" style="padding:2px 4px;"><option>Todas</option></select>
+                  <span class="form-label" style="margin-left:8px;">Insumo:</span>
+                  <select class="form-input" style="padding:2px 4px;"><option>Todos</option></select>
+                </div>
+                <div class="btn-row" style="padding:4px 0 0;">
+                  <button class="btn primary">🔍 Generar Reporte</button>
+                  <button class="btn success">📤 Exportar Excel</button>
+                  <button class="btn warning">🖨️ Imprimir</button>
+                </div>
+              </div>
+            </div>
+            <div class="card">
+              <div class="card-header">📋  Resultados</div>
+              <div class="card-body" style="padding:0;">
+                <table class="demo-table">
+                  <thead><tr><th>Fecha</th><th>Insumo</th><th>Tipo Mov.</th><th>Entrada</th><th>Salida</th><th>Saldo</th></tr></thead>
+                  <tbody>
+                    <tr><td>05/01/26</td><td>Amoxicilina 500mg</td><td>Ingreso</td><td style="color:green;">+100</td><td></td><td>350</td></tr>
+                    <tr><td>10/01/26</td><td>Amoxicilina 500mg</td><td>Despacho</td><td></td><td style="color:red;">-30</td><td>320</td></tr>
+                    <tr><td>15/02/26</td><td>Paracetamol 500mg</td><td>Ingreso</td><td style="color:green;">+200</td><td></td><td>700</td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="tip">
+      <span class="icon">💡</span>
+      <div>Todos los reportes pueden exportarse a <strong>Excel (.xlsx)</strong> usando el botón "📤 Exportar Excel". Los archivos se guardan en la carpeta que elija.</div>
+    </div>
+  </div>
+</div>
+
+
+<!-- ════════════════════════════════════════ -->
+<!-- 7. GESTIÓN DE USUARIOS (INSUMOS)        -->
+<!-- ════════════════════════════════════════ -->
+<div class="section" id="insumos-usuarios">
+  <div class="section-title">👥 7. Gestión de Usuarios</div>
+  <div class="section-body">
+    <div class="breadcrumb">Sidebar → <span>👤 Usuarios</span> &nbsp;(solo disponible para Administradores)</div>
+    <p>Permite crear, editar y eliminar usuarios del sistema, así como cambiar contraseñas.</p>
+
+    <div class="mockup-wrap">
+      <p class="mockup-label">Pantalla de gestión de usuarios</p>
+      <div class="win">
+        <div class="win-bar">
+          <span class="win-dot r"></span><span class="win-dot y"></span><span class="win-dot g"></span>
+          <span class="win-title">Gestión de Usuarios del Sistema</span>
+        </div>
+        <div class="win-body">
+          <div class="sidebar" style="width:140px;"><div class="sidebar-item active">👤 Usuarios</div></div>
+          <div class="main-content">
+            <div class="content-header">
+              <h3>👥 Gestión de Usuarios del Sistema</h3>
+              <p>Administre los usuarios y sus permisos de acceso</p>
+            </div>
+            <div class="card">
+              <div class="card-header">📋  Gestión de Usuarios</div>
+              <div class="card-body" style="padding:0;">
+                <table class="demo-table">
+                  <thead><tr><th>ID</th><th>Usuario</th><th>Nombre</th><th>Rol</th><th>Activo</th></tr></thead>
+                  <tbody>
+                    <tr style="background:#eaf4fb;"><td>1</td><td>admin</td><td>Administrador Principal</td><td>admin</td><td>Sí</td></tr>
+                    <tr><td>2</td><td>jperez</td><td>Juan Pérez</td><td>usuario</td><td>Sí</td></tr>
+                    <tr><td>3</td><td>mlopez</td><td>María López</td><td>usuario</td><td>No</td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+            <div class="btn-row">
+              <button class="btn primary">➕ Crear Usuario</button>
+              <button class="btn warning">✏️ Editar Usuario</button>
+              <button class="btn info">🔐 Cambiar Contraseña</button>
+              <button class="btn danger">🗑️ Eliminar Usuario</button>
+              <button class="btn" style="background:#6c757d;">↩️ Volver</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <table class="feat-table">
+      <thead><tr><th>Función</th><th>Descripción</th></tr></thead>
+      <tbody>
+        <tr><td><strong>Crear Usuario</strong></td><td>Abre un diálogo para definir nombre, contraseña, rol (admin / usuario) y estado (activo/inactivo).</td></tr>
+        <tr><td><strong>Editar Usuario</strong></td><td>Permite cambiar nombre completo, rol y estado del usuario seleccionado.</td></tr>
+        <tr><td><strong>Cambiar Contraseña</strong></td><td>Solicita la nueva contraseña mediante un cuadro de diálogo seguro (los caracteres se ocultan).</td></tr>
+        <tr><td><strong>Eliminar Usuario</strong></td><td>Elimina permanentemente al usuario. Se solicita confirmación antes de proceder.</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+
+<!-- ════════════════════════════════════════ -->
+<!-- 8. ATAJOS DE TECLADO                    -->
+<!-- ════════════════════════════════════════ -->
+<div class="section" id="accesos-rapidos">
+  <div class="section-title">⌨️ 8. Accesos rápidos y atajos de teclado</div>
+  <div class="section-body">
+    <table class="feat-table">
+      <thead><tr><th>Atajo</th><th>Acción</th><th>Módulo</th></tr></thead>
+      <tbody>
+        <tr><td><kbd>F5</kbd></td><td>Actualizar / recargar datos</td><td>Insumos</td></tr>
+        <tr><td><kbd>Ctrl</kbd>+<kbd>S</kbd></td><td>Guardar registro actual</td><td>Insumos</td></tr>
+        <tr><td><kbd>Ctrl</kbd>+<kbd>N</kbd></td><td>Nuevo registro</td><td>Insumos</td></tr>
+        <tr><td><kbd>Ctrl</kbd>+<kbd>F</kbd></td><td>Buscar</td><td>Insumos</td></tr>
+        <tr><td><kbd>Ctrl</kbd>+<kbd>E</kbd></td><td>Exportar a Excel</td><td>Insumos</td></tr>
+        <tr><td><kbd>Ctrl</kbd>+<kbd>P</kbd></td><td>Imprimir / generar PDF</td><td>Insumos</td></tr>
+        <tr><td><kbd>Esc</kbd></td><td>Cerrar diálogo actual</td><td>Insumos</td></tr>
+        <tr><td><kbd>Alt</kbd>+<kbd>F4</kbd></td><td>Cerrar aplicación</td><td>Insumos</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+
+<!-- ════════════════════════════════════════ -->
+<!-- 9. FAQ                                  -->
+<!-- ════════════════════════════════════════ -->
+<div class="section" id="faq">
+  <div class="section-title">❓ 9. Preguntas frecuentes</div>
+  <div class="section-body">
+
+    <h3 class="subhead">¿Qué hago si no puedo conectar a la base de datos?</h3>
+    <p>Vaya a <em>Sidebar → ⚙️ Servidor</em> y verifique los datos de conexión (host, puerto, usuario, contraseña, nombre de BD). Asegúrese de que MySQL esté ejecutándose.</p>
+
+    <h3 class="subhead">¿Cómo cambio mi contraseña?</h3>
+    <p>Un administrador debe ir a <em>Usuarios → Cambiar Contraseña</em> y seleccionar su cuenta. Los usuarios estándar no pueden cambiar su propia contraseña directamente.</p>
+
+    <h3 class="subhead">¿Por qué el reporte exportado está vacío?</h3>
+    <p>Verifique que el rango de fechas del reporte contenga datos y que haya hecho clic en <strong>Generar Reporte</strong> antes de exportar.</p>
+
+    <h3 class="subhead">¿Puedo usar el sistema en pantallas pequeñas (1366×768)?</h3>
+    <p>Sí. Maximice la ventana y use el botón <strong>"◀ Ocultar menú"</strong> del sidebar para ganar espacio en el área de trabajo.</p>
+
+    <h3 class="subhead">¿Cómo hago un respaldo de la base de datos?</h3>
+    <p>Realice el respaldo directamente desde el servidor MySQL usando <code>mysqldump</code> o desde la herramienta de administración de su preferencia (phpMyAdmin, MySQL Workbench, etc.).</p>
+
+    <div class="note">
+      <span class="icon">ℹ️</span>
+      <div>Para reportar errores o solicitar soporte, contacte al administrador del sistema o al equipo técnico responsable del mantenimiento.</div>
+    </div>
+  </div>
+</div>
+
+<!-- pie de página -->
+<div style="text-align:center;padding:30px;color:#aaa;font-size:12px;border-top:1px solid #eee;margin-top:40px;">
+  Sistema de Gestión de Insumos · Manual de Usuario v1.0 · Marzo 2026<br>
+  Documento generado automáticamente. Para consultas contacte al administrador del sistema.
+</div>
+
+</div><!-- /page -->
+</body>
+</html>

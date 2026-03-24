@@ -63,14 +63,15 @@ class MainWindow:
         self.sidebar_width = 240
 
         # Inicializar la base de datos antes de crear la ventana
+        self.root = tk.Tk()
+        self.root.withdraw()
+
         if not self.initialize_database():
             messagebox.showerror("Error Fatal",
-                "No se pudo inicializar la base de datos. El programa se cerrará.")
+                "No se pudo inicializar la base de datos. El programa se cerrará.",
+                parent=self.root)
+            self.root.destroy()
             sys.exit(1)
-
-        # CREAR VENTANA PERO MANTENERLA OCULTA INICIALMENTE
-        self.root = tk.Tk()
-        self.root.withdraw()  # OCULTAR VENTANA DURANTE CONFIGURACIÓN
         
         self.root.title("Módulo de Productos Afines")
 
@@ -1126,26 +1127,27 @@ class MainWindow:
         self.root.bind('<F9>', lambda e: self.toggle_sidebar())
         self.root.bind('<Control-b>', lambda e: self.toggle_sidebar())
     
+    # DESPUÉS
     def initialize_database(self):
-        """Inicializa la base de datos y verifica su estructura en MySQL"""
         try:
-            # Crear base de datos y tablas si no existen
             if not crear_base_datos():
                 raise Exception("No se pudo crear la base de datos")
-
-            # Verificar que las tablas existan
             if not verificar_tablas():
-                # En MySQL no hay archivo local que eliminar, solo recrear tablas
                 print("La estructura de la base de datos es incorrecta. Recreándola...")
                 if not crear_base_datos():
                     raise Exception("No se pudo recrear la base de datos")
                 print("Base de datos recreada correctamente")
-
             return True
-
         except Exception as e:
             print(f"Error al inicializar la base de datos: {e}")
-            messagebox.showerror("Error", f"Error al inicializar la base de datos: {str(e)}")
+            # Crear ventana temporal para el messagebox ya que self.root aún no existe
+            import tkinter as tk
+            temp = tk.Tk()
+            temp.withdraw()
+            messagebox.showerror("Error",
+                f"Error al inicializar la base de datos: {str(e)}",
+                parent=temp)
+            temp.destroy()
             return False
 
     def verify_database_connection(self):
