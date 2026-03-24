@@ -215,7 +215,292 @@ class ImportarExportarManager:
                  ).pack(anchor='nw', fill='both', expand=True)
 
     # ------------------------
-    # Lógica de exportación/importación (sin cambios funcionales)
+    # Diálogos de advertencia
+    # ------------------------
+    def _dialogo_confirmar_reemplazar(self, nombre_archivo):
+        """Muestra un diálogo de advertencia crítica para importación con reemplazo total.
+        Devuelve True si el usuario confirma, False si cancela."""
+        resultado = {'ok': False}
+
+        dlg = tk.Toplevel()
+        dlg.title("⚠️  ADVERTENCIA CRÍTICA — Reemplazar todos los datos")
+        dlg.resizable(False, False)
+        dlg.grab_set()
+        dlg.focus_set()
+
+        # Centrar en pantalla
+        dlg.update_idletasks()
+        w, h = 580, 560
+        x = (dlg.winfo_screenwidth() - w) // 2
+        y = (dlg.winfo_screenheight() - h) // 2
+        dlg.geometry(f"{w}x{h}+{x}+{y}")
+        dlg.configure(bg=self.COLORS['light'])
+
+        # Cabecera roja
+        header = tk.Frame(dlg, bg='#c0392b', height=70)
+        header.pack(fill='x')
+        header.pack_propagate(False)
+        tk.Label(header, text="⚠️  ACCIÓN DESTRUCTIVA E IRREVERSIBLE",
+                 font=('Segoe UI', 13, 'bold'), bg='#c0392b', fg='white'
+                 ).pack(expand=True)
+
+        # Cuerpo
+        body = tk.Frame(dlg, bg=self.COLORS['light'], padx=20, pady=10)
+        body.pack(fill='both', expand=True)
+
+        # Archivo seleccionado
+        tk.Label(body, text="Archivo seleccionado:",
+                 font=('Segoe UI', 9, 'bold'), bg=self.COLORS['light'],
+                 fg=self.COLORS['text_dark']).pack(anchor='w', pady=(6, 0))
+        tk.Label(body, text=os.path.basename(nombre_archivo),
+                 font=('Segoe UI', 9), bg='#fdecea', fg='#c0392b',
+                 relief='solid', bd=1, padx=6, pady=3
+                 ).pack(anchor='w', pady=(2, 10), fill='x')
+
+        # Qué pasará
+        tk.Label(body, text="¿Qué ocurrirá si continúa?",
+                 font=('Segoe UI', 10, 'bold'), bg=self.COLORS['light'],
+                 fg='#c0392b').pack(anchor='w')
+
+        consecuencias = (
+            "  1. Se ELIMINARÁN permanentemente TODOS los registros actuales\n"
+            "     de las siguientes tablas:\n\n"
+            "       área · distrito · tipo_servicio · servicio · tipo_insumo\n"
+            "       presentación · insumo · insumo_presentación · tipo_movimiento\n"
+            "       movimiento · usuarios\n\n"
+            "  2. Los datos se reemplazarán con el contenido del archivo seleccionado.\n\n"
+            "  3. Esta operación NO puede deshacerse. No existe forma de\n"
+            "     recuperar los datos borrados si no cuenta con otro respaldo."
+        )
+        cons_frame = tk.Frame(body, bg='#fdecea', relief='solid', bd=1)
+        cons_frame.pack(fill='x', pady=(4, 10))
+        tk.Label(cons_frame, text=consecuencias,
+                 font=('Segoe UI', 9), bg='#fdecea', fg='#7b241c',
+                 justify='left', padx=10, pady=8
+                 ).pack(anchor='w')
+
+        # Responsabilidad
+        resp_frame = tk.Frame(body, bg='#fef9e7', relief='solid', bd=1)
+        resp_frame.pack(fill='x', pady=(0, 10))
+        resp_text = (
+            "⚖️  Responsabilidad del usuario\n"
+            "Al continuar, usted asume plena responsabilidad sobre la pérdida de\n"
+            "datos que pueda producirse. Se recomienda exportar un backup completo\n"
+            "ANTES de ejecutar esta acción."
+        )
+        tk.Label(resp_frame, text=resp_text,
+                 font=('Segoe UI', 9), bg='#fef9e7', fg='#7d6608',
+                 justify='left', padx=10, pady=8
+                 ).pack(anchor='w')
+
+        # Checkbox de confirmación
+        check_var = tk.BooleanVar(value=False)
+        check_frame = tk.Frame(body, bg=self.COLORS['light'])
+        check_frame.pack(fill='x', pady=(0, 6))
+
+        def _toggle_btn(*_):
+            btn_confirmar.config(
+                state='normal' if check_var.get() else 'disabled',
+                bg='#c0392b' if check_var.get() else '#bdc3c7',
+                activebackground='#a93226' if check_var.get() else '#bdc3c7'
+            )
+
+        chk = tk.Checkbutton(
+            check_frame,
+            text="Entiendo que se eliminarán TODOS los datos actuales y acepto\n"
+                 "la responsabilidad de esta acción.",
+            variable=check_var, command=_toggle_btn,
+            font=('Segoe UI', 9, 'bold'), bg=self.COLORS['light'],
+            fg='#c0392b', activebackground=self.COLORS['light'],
+            wraplength=520, justify='left', anchor='w'
+        )
+        chk.pack(anchor='w')
+
+        # Botones
+        btn_frame = tk.Frame(dlg, bg=self.COLORS['light'], pady=10)
+        btn_frame.pack(fill='x', padx=20)
+
+        def _cancelar():
+            resultado['ok'] = False
+            dlg.destroy()
+
+        def _confirmar():
+            resultado['ok'] = True
+            dlg.destroy()
+
+        tk.Button(btn_frame, text="Cancelar — No hacer nada",
+                  font=('Segoe UI', 10), bg=self.COLORS['secondary'],
+                  fg='white', relief='flat', padx=14, pady=6,
+                  cursor='hand2', command=_cancelar,
+                  activebackground=self.COLORS['primary'], activeforeground='white'
+                  ).pack(side='left')
+
+        btn_confirmar = tk.Button(
+            btn_frame,
+            text="⚠️  Sí, eliminar todo e importar",
+            font=('Segoe UI', 10, 'bold'), bg='#bdc3c7',
+            fg='white', relief='flat', padx=14, pady=6,
+            cursor='hand2', state='disabled', command=_confirmar,
+            activebackground='#a93226', activeforeground='white'
+        )
+        btn_confirmar.pack(side='right')
+
+        dlg.protocol("WM_DELETE_WINDOW", _cancelar)
+        dlg.wait_window()
+        return resultado['ok']
+
+    def _dialogo_confirmar_mantener(self, nombre_archivo, total_registros):
+        """Advertencia para importación que mantiene datos (REPLACE INTO)."""
+        resultado = {'ok': False}
+
+        dlg = tk.Toplevel()
+        dlg.title("⚠️  Confirmar importación")
+        dlg.resizable(False, False)
+        dlg.grab_set()
+        dlg.focus_set()
+
+        dlg.update_idletasks()
+        w, h = 520, 380
+        x = (dlg.winfo_screenwidth() - w) // 2
+        y = (dlg.winfo_screenheight() - h) // 2
+        dlg.geometry(f"{w}x{h}+{x}+{y}")
+        dlg.configure(bg=self.COLORS['light'])
+
+        # Cabecera naranja
+        header = tk.Frame(dlg, bg='#e67e22', height=60)
+        header.pack(fill='x')
+        header.pack_propagate(False)
+        tk.Label(header, text="⚠️  Importar datos (modo: mantener existentes)",
+                 font=('Segoe UI', 11, 'bold'), bg='#e67e22', fg='white'
+                 ).pack(expand=True)
+
+        body = tk.Frame(dlg, bg=self.COLORS['light'], padx=20, pady=12)
+        body.pack(fill='both', expand=True)
+
+        tk.Label(body, text=f"Archivo:  {os.path.basename(nombre_archivo)}",
+                 font=('Segoe UI', 9, 'bold'), bg=self.COLORS['light'],
+                 fg=self.COLORS['text_dark']).pack(anchor='w', pady=(0, 8))
+
+        info_text = (
+            f"Se procesarán {total_registros} registros del archivo.\n\n"
+            "• Los registros nuevos (ID no existente) se INSERTARÁN.\n"
+            "• Los registros con ID ya existente se SOBREESCRIBIRÁN\n"
+            "  con los valores del archivo (REPLACE INTO).\n\n"
+            "⚠️  Los datos actuales con el mismo ID serán reemplazados.\n"
+            "     Esta acción no puede deshacerse.\n\n"
+            "Se recomienda exportar un backup antes de continuar."
+        )
+        info_frame = tk.Frame(body, bg='#fef9e7', relief='solid', bd=1)
+        info_frame.pack(fill='x', pady=(0, 14))
+        tk.Label(info_frame, text=info_text,
+                 font=('Segoe UI', 9), bg='#fef9e7', fg='#7d6608',
+                 justify='left', padx=10, pady=8
+                 ).pack(anchor='w')
+
+        btn_frame = tk.Frame(dlg, bg=self.COLORS['light'], pady=10)
+        btn_frame.pack(fill='x', padx=20)
+
+        def _cancelar():
+            resultado['ok'] = False
+            dlg.destroy()
+
+        def _confirmar():
+            resultado['ok'] = True
+            dlg.destroy()
+
+        tk.Button(btn_frame, text="Cancelar",
+                  font=('Segoe UI', 10), bg=self.COLORS['secondary'],
+                  fg='white', relief='flat', padx=14, pady=6,
+                  cursor='hand2', command=_cancelar,
+                  activebackground=self.COLORS['primary'], activeforeground='white'
+                  ).pack(side='left')
+
+        tk.Button(btn_frame, text="Sí, importar",
+                  font=('Segoe UI', 10, 'bold'), bg='#e67e22',
+                  fg='white', relief='flat', padx=14, pady=6,
+                  cursor='hand2', command=_confirmar,
+                  activebackground='#ca6f1e', activeforeground='white'
+                  ).pack(side='right')
+
+        dlg.protocol("WM_DELETE_WINDOW", _cancelar)
+        dlg.wait_window()
+        return resultado['ok']
+
+    def _dialogo_confirmar_tabla(self, tabla, nombre_archivo, total_registros):
+        """Advertencia para importación de tabla individual."""
+        resultado = {'ok': False}
+
+        dlg = tk.Toplevel()
+        dlg.title("⚠️  Confirmar importación de tabla")
+        dlg.resizable(False, False)
+        dlg.grab_set()
+        dlg.focus_set()
+
+        dlg.update_idletasks()
+        w, h = 500, 340
+        x = (dlg.winfo_screenwidth() - w) // 2
+        y = (dlg.winfo_screenheight() - h) // 2
+        dlg.geometry(f"{w}x{h}+{x}+{y}")
+        dlg.configure(bg=self.COLORS['light'])
+
+        header = tk.Frame(dlg, bg='#e67e22', height=60)
+        header.pack(fill='x')
+        header.pack_propagate(False)
+        tk.Label(header, text=f"⚠️  Importar tabla: {tabla}",
+                 font=('Segoe UI', 11, 'bold'), bg='#e67e22', fg='white'
+                 ).pack(expand=True)
+
+        body = tk.Frame(dlg, bg=self.COLORS['light'], padx=20, pady=12)
+        body.pack(fill='both', expand=True)
+
+        info_text = (
+            f"Archivo:   {os.path.basename(nombre_archivo)}\n"
+            f"Registros: {total_registros}\n"
+            f"Tabla:     {tabla}\n\n"
+            "• Los registros nuevos se INSERTARÁN en la tabla.\n"
+            "• Los registros con clave duplicada se SOBREESCRIBIRÁN.\n\n"
+            "⚠️  Los datos actuales con el mismo ID serán reemplazados.\n"
+            "     Esta acción no puede deshacerse.\n\n"
+            "Exporte un backup antes de continuar si tiene dudas."
+        )
+        info_frame = tk.Frame(body, bg='#fef9e7', relief='solid', bd=1)
+        info_frame.pack(fill='x', pady=(0, 14))
+        tk.Label(info_frame, text=info_text,
+                 font=('Segoe UI', 9), bg='#fef9e7', fg='#7d6608',
+                 justify='left', padx=10, pady=8
+                 ).pack(anchor='w')
+
+        btn_frame = tk.Frame(dlg, bg=self.COLORS['light'], pady=10)
+        btn_frame.pack(fill='x', padx=20)
+
+        def _cancelar():
+            resultado['ok'] = False
+            dlg.destroy()
+
+        def _confirmar():
+            resultado['ok'] = True
+            dlg.destroy()
+
+        tk.Button(btn_frame, text="Cancelar",
+                  font=('Segoe UI', 10), bg=self.COLORS['secondary'],
+                  fg='white', relief='flat', padx=14, pady=6,
+                  cursor='hand2', command=_cancelar,
+                  activebackground=self.COLORS['primary'], activeforeground='white'
+                  ).pack(side='left')
+
+        tk.Button(btn_frame, text="Sí, importar",
+                  font=('Segoe UI', 10, 'bold'), bg='#e67e22',
+                  fg='white', relief='flat', padx=14, pady=6,
+                  cursor='hand2', command=_confirmar,
+                  activebackground='#ca6f1e', activeforeground='white'
+                  ).pack(side='right')
+
+        dlg.protocol("WM_DELETE_WINDOW", _cancelar)
+        dlg.wait_window()
+        return resultado['ok']
+
+    # ------------------------
+    # Lógica de exportación/importación
     # ------------------------
     def exportar_datos_completos(self, ruta_archivo=None):
         try:
@@ -297,20 +582,22 @@ class ImportarExportarManager:
                 messagebox.showerror("Error", "Formato inválido")
                 return False
 
+            # ── Advertencia antes de conectar ────────────────────────────────
+            if limpiar_antes:
+                if not self._dialogo_confirmar_reemplazar(ruta_archivo):
+                    return False
+            else:
+                # Contar registros totales del archivo para mostrar en advertencia
+                total_prev = sum(len(v) for v in datos['datos'].values())
+                if not self._dialogo_confirmar_mantener(ruta_archivo, total_prev):
+                    return False
+
             conn = get_mysql_conn()
             cur = conn.cursor()
             cur.execute("SET FOREIGN_KEY_CHECKS=0")
 
             try:
                 if limpiar_antes:
-                    if not messagebox.askyesno(
-                        "Confirmación",
-                        "Esto eliminará TODOS los datos actuales antes de importar. ¿Continuar?"
-                    ):
-                        cur.execute("SET FOREIGN_KEY_CHECKS=1")
-                        cur.close()
-                        conn.close()
-                        return False
                     for tabla in reversed(self.tablas_orden):
                         try:
                             cur.execute(f"TRUNCATE TABLE `{tabla}`")
@@ -456,10 +743,7 @@ class ImportarExportarManager:
                 messagebox.showerror("Error de Validación", f"Faltan columnas requeridas: {', '.join(faltan)}")
                 return False
 
-            if not messagebox.askyesno(
-                "Confirmar",
-                f"¿Importar {len(df)} registros en '{tabla}'?\nSi hay claves duplicadas, se reemplazarán."
-            ):
+            if not self._dialogo_confirmar_tabla(tabla, ruta_archivo, len(df)):
                 return False
 
             conn = get_mysql_conn()
