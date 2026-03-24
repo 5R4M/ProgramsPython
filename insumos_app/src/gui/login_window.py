@@ -1381,27 +1381,28 @@ class LoginWindow:
                         try:
                             escribir_log_archivo("Paso 1: Intentando importar MainWindow...")
                             from src.gui.main_window import MainWindow
-                            escribir_log_archivo("Paso 2: Import exitoso, ocultando login...")
-                            self.root.withdraw()
+                            escribir_log_archivo("Paso 2: Import exitoso, destruyendo login...")
+                            self.root.destroy()  # destruir ANTES de crear nuevo tk.Tk()
                             escribir_log_archivo("Paso 3: Creando MainWindow...")
                             app = MainWindow(usuario)
-                            escribir_log_archivo("Paso 4: MainWindow creado, destruyendo login...")
-                            self.root.destroy()
-                            escribir_log_archivo("Paso 5: Ejecutando app.run()...")
+                            escribir_log_archivo("Paso 4: MainWindow creado, ejecutando app.run()...")
                             app.run()
                             escribir_log_archivo("Paso 6: app.run() terminó")
                         except Exception as e:
                             escribir_log_archivo(f"ERROR: {type(e).__name__}: {str(e)}")
                             escribir_log_archivo(traceback.format_exc())
                             try:
-                                self.root.deiconify()
+                                # login ya fue destruido — crear Tk temporal solo para el error
+                                err_root = tk.Tk()
+                                err_root.withdraw()
                                 messagebox.showerror(
                                     "Error al cargar aplicación",
                                     f"Tipo: {type(e).__name__}\n"
                                     f"Mensaje: {str(e)}\n\n"
                                     f"Detalle guardado en:\n{LOG_PATH}",
-                                    parent=self.root
+                                    parent=err_root
                                 )
+                                err_root.destroy()
                             except Exception:
                                 pass
 
