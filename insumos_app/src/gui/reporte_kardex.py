@@ -644,9 +644,15 @@ class ReporteKardex:
         self.combo_mes_inicio.bind('<<ComboboxSelected>>', self.actualizar_fechas_por_corte)
         self.combo_mes_final.bind('<<ComboboxSelected>>', self.actualizar_fechas_por_corte)
 
-        # Frame para combos
+        # Frame de botones: empaquetar ANTES de frame_combos para que el
+        # pack manager le reserve su espacio antes de que expand=True lo consuma
+        self.frame_botones = tk.Frame(self.main_container, bg=self.COLORS['light'], height=48)
+        self.frame_botones.pack(fill="x", side="bottom", pady=(4, 6))
+        self.frame_botones.pack_propagate(False)
+
+        # Frame para combos (expand=True toma el espacio restante)
         self.frame_combos = ttk.Frame(self.main_container, style='White.TFrame')
-        self.frame_combos.pack(fill="both", expand=True, padx=5, pady=0)  
+        self.frame_combos.pack(fill="both", expand=True, padx=5, pady=0)
 
         # Inicializar visibilidad
         self.actualizar_visibilidad_fechas()
@@ -745,10 +751,6 @@ class ReporteKardex:
         self.mostrar_mensaje_inicial()
         
         # --- Frame para botones (abajo) ---
-        self.frame_botones = tk.Frame(self.main_container, bg=self.COLORS['light'], height=48)
-        self.frame_botones.pack(fill="x", side="bottom", pady=(8, 8))
-        self.frame_botones.pack_propagate(False)
-
         btn_font = ('Segoe UI', 9, 'bold')
         btn_bg = self.COLORS['light']
         btn_fg = self.COLORS['text_dark']
