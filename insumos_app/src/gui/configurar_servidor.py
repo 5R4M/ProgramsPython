@@ -9,6 +9,7 @@ import subprocess
 import configparser
 import socket
 import threading
+from datetime import datetime
 
 # Asegúrate de tener mysql-connector-python instalado si usas la parte de MySQL
 try:
@@ -83,11 +84,65 @@ class ConfigurarServidor:
         self.main_window = main_window
         self.config_file = "mysql_config.ini"
 
+        # Ruta del log de configuración de servidor
+        log_dir = os.path.dirname(os.path.abspath(__file__))
+        self.log_path = os.path.join(log_dir, "servidor_config.log")
+
         # Paleta compartida del sistema
         self.COLORS = styles.COLORS
 
         self.setup_ui()
         self.cargar_configuracion()
+
+    # ── Log centralizado ────────────────────────────────────────────────────
+    def _log(self, msg, also_file=True):
+        """Escribe msg en info_text (thread-safe) y opcionalmente en archivo."""
+        ts = datetime.now().strftime("%H:%M:%S")
+        line = f"[{ts}] {msg}\n"
+
+        # Archivo de log
+        if also_file:
+            try:
+                with open(self.log_path, 'a', encoding='utf-8') as f:
+                    f.write(line)
+            except Exception:
+                pass
+
+        # Widget de texto — siempre en el hilo principal
+        def _insert():
+            try:
+                if hasattr(self, 'info_text') and self.info_text.winfo_exists():
+                    self.info_text.insert(tk.END, line)
+                    self.info_text.see(tk.END)
+            except Exception:
+                pass
+        try:
+            self.parent.after(0, _insert)
+        except Exception:
+            pass
+
+    def _set_status(self, text, color=None):
+        """Actualiza status_label de forma thread-safe."""
+        def _update():
+            try:
+                if hasattr(self, 'status_label') and self.status_label.winfo_exists():
+                    kw = {'text': text}
+                    if color:
+                        kw['fg'] = color
+                    self.status_label.config(**kw)
+            except Exception:
+                pass
+        try:
+            self.parent.after(0, _update)
+        except Exception:
+            pass
+
+    def _log_separador(self, titulo=""):
+        sep = "─" * 60
+        self._log(sep)
+        if titulo:
+            self._log(f"  {titulo}")
+            self._log(sep)
 
     # Helpers de UI — delegan a styles.py
     def _header_title_sub(self, parent, title_text, subtitle_text):
@@ -257,13 +312,22 @@ class ConfigurarServidor:
         self.info_text.pack(side="left", fill="both", expand=True, padx=0, pady=0)
         info_scroll.pack(side="right", fill="y")
 
+        # Ruta del archivo de log
+        log_info = tk.Frame(tab, bg=self.COLORS['light'])
+        log_info.pack(fill="x", padx=10, pady=(0, 2))
+        tk.Label(log_info, text=f"📄 Log: {self.log_path}",
+                 font=('Segoe UI', 8), bg=self.COLORS['light'],
+                 fg=self.COLORS['text_light']).pack(side="left")
+
         # Botones de estado
         btns = tk.Frame(tab, bg=self.COLORS['light'])
         btns.pack(fill="x", padx=10, pady=5)
         self._primary_button(btns, "🩺 Verificar Estado", self.verificar_estado).pack(side="left", padx=5)
         self._primary_button(btns, "🧵 Ver Conexiones Activas", self.ver_conexiones_activas).pack(side="left", padx=5)
         self._primary_button(btns, "🌍 Probar desde IP Externa", self.probar_ip_externa).pack(side="left", padx=5)
-        self._primary_button(btns, "🪵 Ver Log de Errores", self.ver_log_errores).pack(side="left", padx=5)
+        self._primary_button(btns, "🪵 Ver Log MySQL", self.ver_log_errores).pack(side="left", padx=5)
+        self._primary_button(btns, "📂 Abrir Log App", self.abrir_log_app).pack(side="left", padx=5)
+        self._primary_button(btns, "🗑️ Limpiar", self.limpiar_info_text).pack(side="left", padx=5)
         self._primary_button(btns, "↩️ Volver", self.volver).pack(side="right", padx=5)
 
     def obtener_ip_local(self):
@@ -547,185 +611,158 @@ max_connections = {max_connections}
             except Exception:
                 pass
 
-    def verificar_estado(self):
-        if mysql is None or mysql.connector is None:
+    def _conectar_mysql(self):
+        """Devuelve una conexión MySQL usando los datos del formulario."""
+        return mysql.connector.connect(
+            host=self.host_var.get().strip(),
+            port=int(self.puerto_var.get().strip()),
+            user=self.admin_user_var.get().strip(),
+            password=self.admin_pass_var.get(),
+            auth_plugin='mysql_native_password',
+            connection_timeout=10
+        )
+
+    def _check_mysql_disponible(self):
+        if mysql is None:
             messagebox.showerror("MySQL", "mysql-connector-python no está disponible.")
+            return False
+        return True
+
+    def limpiar_info_text(self):
+        try:
+            self.info_text.delete(1.0, tk.END)
+        except Exception:
+            pass
+
+    def verificar_estado(self):
+        if not self._check_mysql_disponible():
             return
 
         def check_status():
+            self._log_separador("🩺 VERIFICACIÓN DE ESTADO — " + datetime.now().strftime("%d/%m/%Y %H:%M:%S"))
             try:
-                try:
-                    self.info_text.delete(1.0, tk.END)
-                except Exception:
-                    pass
-                connection = mysql.connector.connect(
-                    host=self.host_var.get(),
-                    port=int(self.puerto_var.get()),
-                    user=self.admin_user_var.get(),
-                    password=self.admin_pass_var.get()
-                )
-                cursor = connection.cursor()
-                cursor.execute("SELECT VERSION()")
-                version = cursor.fetchone()[0]
-                try:
-                    self.info_text.insert(tk.END, "🔄 Estado del Servidor MySQL\n")
-                    self.info_text.insert(tk.END, "✅ Servidor ACTIVO\n")
-                    self.info_text.insert(tk.END, f"📊 Versión: {version}\n\n")
-                except Exception:
-                    pass
+                conn = self._conectar_mysql()
+                cur = conn.cursor()
 
-                variables = ['max_connections', 'port', 'bind_address', 'wait_timeout', 'interactive_timeout']
-                try:
-                    self.info_text.insert(tk.END, "🔧 Configuración Actual:\n")
-                except Exception:
-                    pass
-                for var in variables:
-                    cursor.execute(f"SHOW VARIABLES LIKE '{var}'")
-                    result = cursor.fetchone()
-                    if result:
-                        try:
-                            self.info_text.insert(tk.END, f"  • {var}: {result[1]}\n")
-                        except Exception:
-                            pass
+                cur.execute("SELECT VERSION()")
+                version = cur.fetchone()[0]
+                self._log("✅ Servidor ACTIVO")
+                self._log(f"📊 Versión MySQL: {version}")
+                self._set_status("✅ MySQL Server ACTIVO", self.COLORS['success'])
 
-                try:
-                    self.info_text.insert(tk.END, "\n📈 Estadísticas de Conexión:\n")
-                except Exception:
-                    pass
-                status_vars = ['Threads_connected', 'Connections', 'Max_used_connections']
-                for var in status_vars:
-                    cursor.execute(f"SHOW STATUS LIKE '{var}'")
-                    result = cursor.fetchone()
-                    if result:
-                        try:
-                            self.info_text.insert(tk.END, f"  • {var}: {result[1]}\n")
-                        except Exception:
-                            pass
+                self._log("")
+                self._log("🔧 Configuración actual:")
+                for var in ['bind_address', 'port', 'max_connections',
+                            'wait_timeout', 'interactive_timeout']:
+                    cur.execute(f"SHOW VARIABLES LIKE '{var}'")
+                    r = cur.fetchone()
+                    if r:
+                        self._log(f"  • {r[0]}: {r[1]}")
 
-                cursor.close()
-                connection.close()
-                self.status_label.config(text="✅ MySQL Server ACTIVO")
+                self._log("")
+                self._log("📈 Estadísticas de conexión:")
+                for var in ['Threads_connected', 'Connections', 'Max_used_connections',
+                            'Aborted_connects', 'Uptime']:
+                    cur.execute(f"SHOW STATUS LIKE '{var}'")
+                    r = cur.fetchone()
+                    if r:
+                        self._log(f"  • {r[0]}: {r[1]}")
+
+                cur.close()
+                conn.close()
 
             except Exception as e:
-                try:
-                    self.info_text.insert(tk.END, f"❌ Error: {str(e)}\n")
-                except Exception:
-                    pass
-                self.status_label.config(text="❌ MySQL Server NO DISPONIBLE")
+                self._log(f"❌ Error al conectar: {str(e)}")
+                self._set_status("❌ MySQL Server NO DISPONIBLE", self.COLORS['danger'])
 
         threading.Thread(target=check_status, daemon=True).start()
 
     def ver_conexiones_activas(self):
-        if mysql is None or mysql.connector is None:
-            messagebox.showerror("MySQL", "mysql-connector-python no está disponible.")
+        if not self._check_mysql_disponible():
             return
-        try:
-            connection = mysql.connector.connect(
-                host=self.host_var.get(),
-                port=int(self.puerto_var.get()),
-                user=self.admin_user_var.get(),
-                password=self.admin_pass_var.get()
-            )
-            cursor = connection.cursor()
-            cursor.execute("SHOW PROCESSLIST")
-            procesos = cursor.fetchall()
 
+        def show_conns():
+            self._log_separador("🧵 CONEXIONES ACTIVAS")
             try:
-                self.info_text.insert(tk.END, f"\n🔗 Conexiones Activas ({len(procesos)}):\n")
-                self.info_text.insert(tk.END, "-" * 80 + "\n")
-                self.info_text.insert(tk.END, f"{'ID':<8}{'Usuario':<15}{'Host':<25}{'DB':<15}{'Estado':<15}\n")
-                self.info_text.insert(tk.END, "-" * 80 + "\n")
-            except Exception:
-                pass
+                conn = self._conectar_mysql()
+                cur = conn.cursor()
+                cur.execute("SHOW PROCESSLIST")
+                procesos = cur.fetchall()
+                cur.close()
+                conn.close()
 
-            for proceso in procesos:
-                id_proc = proceso[0] or 0
-                user = proceso[1] or "N/A"
-                host = proceso[2] or "N/A"
-                db = proceso[3] or "N/A"
-                state = proceso[4] or "N/A"
-                try:
-                    self.info_text.insert(tk.END, f"{id_proc:<8}{user:<15}{host:<25}{db:<15}{state:<15}\n")
-                except Exception:
-                    pass
+                self._log(f"Total conexiones: {len(procesos)}")
+                self._log(f"{'ID':<8}{'Usuario':<15}{'Host':<25}{'DB':<15}{'Estado':<12}")
+                self._log("─" * 75)
+                for p in procesos:
+                    self._log(f"{str(p[0]):<8}{str(p[1] or 'N/A'):<15}"
+                              f"{str(p[2] or 'N/A'):<25}{str(p[3] or 'N/A'):<15}"
+                              f"{str(p[4] or 'N/A'):<12}")
+            except Exception as e:
+                self._log(f"❌ Error al obtener conexiones: {str(e)}")
 
-            cursor.close()
-            connection.close()
-
-        except Exception as e:
-            try:
-                self.info_text.insert(tk.END, f"❌ Error al obtener conexiones: {str(e)}\n")
-            except Exception:
-                pass
+        threading.Thread(target=show_conns, daemon=True).start()
 
     def probar_ip_externa(self):
-        ip_externa = simpledialog.askstring("Prueba IP Externa", "Ingrese la IP desde la cual probar la conexión:")
-        if ip_externa:
-            usuario_prueba = simpledialog.askstring("Usuario de Prueba", "Usuario para la prueba:")
-            if usuario_prueba:
-                password_prueba = simpledialog.askstring("Contraseña", "Contraseña:", show="*")
-                if password_prueba:
-                    try:
-                        self.info_text.insert(tk.END, f"\n🌍 Simulando conexión desde {ip_externa}...\n")
-                        self.info_text.insert(tk.END, f"Usuario: {usuario_prueba}\n")
-                        self.info_text.insert(tk.END, "⚠️  Nota: Esta es una simulación local.\n")
-                        self.info_text.insert(tk.END, f"Para una prueba real, ejecute desde {ip_externa}:\n")
-                        self.info_text.insert(tk.END, f"mysql -h {self.host_var.get()} -P {self.puerto_var.get()} -u {usuario_prueba} -p\n\n")
-                    except Exception:
-                        pass
+        ip_externa = simpledialog.askstring(
+            "Prueba IP Externa", "IP o hostname desde el que se conectaría:")
+        if not ip_externa:
+            return
+        usuario_prueba = simpledialog.askstring("Usuario de Prueba", "Usuario MySQL:")
+        if not usuario_prueba:
+            return
+        self._log_separador(f"🌍 PRUEBA DESDE IP EXTERNA: {ip_externa}")
+        self._log(f"Usuario: {usuario_prueba}")
+        self._log("⚠️  Simulación local — ejecute el comando real desde el equipo remoto:")
+        self._log(f"  mysql -h {self.host_var.get()} -P {self.puerto_var.get()} "
+                  f"-u {usuario_prueba} -p")
+        self._log("Verifique también que el firewall permita el puerto en el servidor.")
 
     def ver_log_errores(self):
-        if mysql is None or mysql.connector is None:
-            messagebox.showerror("MySQL", "mysql-connector-python no está disponible.")
+        if not self._check_mysql_disponible():
             return
 
         def show_log():
+            self._log_separador("🪵 LOG DE ERRORES MySQL")
             try:
-                connection = mysql.connector.connect(
-                    host=self.host_var.get(),
-                    port=int(self.puerto_var.get()),
-                    user=self.admin_user_var.get(),
-                    password=self.admin_pass_var.get()
-                )
-                cursor = connection.cursor()
-                cursor.execute("SHOW VARIABLES LIKE 'log_error'")
-                result = cursor.fetchone()
-                if result and result[1]:
-                    log_path = result[1]
-                    try:
-                        self.info_text.insert(tk.END, f"\n📋 Log de Errores: {log_path}\n")
-                        self.info_text.insert(tk.END, "-" * 80 + "\n")
-                    except Exception:
-                        pass
+                conn = self._conectar_mysql()
+                cur = conn.cursor()
+                cur.execute("SHOW VARIABLES LIKE 'log_error'")
+                r = cur.fetchone()
+                cur.close()
+                conn.close()
+
+                if r and r[1]:
+                    log_path = r[1]
+                    self._log(f"Archivo: {log_path}")
+                    self._log("Últimas 30 líneas:")
+                    self._log("─" * 60)
                     try:
                         with open(log_path, 'r', encoding='utf-8', errors='ignore') as f:
                             lines = f.readlines()
-                            for line in lines[-20:]:
-                                try:
-                                    self.info_text.insert(tk.END, line)
-                                except Exception:
-                                    pass
+                        for line in lines[-30:]:
+                            self._log(line.rstrip())
                     except Exception as e:
-                        try:
-                            self.info_text.insert(tk.END, f"No se puede leer el archivo: {str(e)}\n")
-                            self.info_text.insert(tk.END, f"Archivo ubicado en: {log_path}\n")
-                        except Exception:
-                            pass
+                        self._log(f"No se pudo leer el archivo: {e}")
+                        self._log(f"Ruta del archivo: {log_path}")
                 else:
-                    try:
-                        self.info_text.insert(tk.END, "\n📋 Log de errores no configurado o no disponible\n")
-                    except Exception:
-                        pass
-
-                cursor.close()
-                connection.close()
+                    self._log("Log de errores MySQL no configurado o no disponible.")
+                    self._log("Para habilitarlo agregue en my.ini: log_error = error.log")
             except Exception as e:
-                try:
-                    self.info_text.insert(tk.END, f"❌ Error al acceder al log: {str(e)}\n")
-                except Exception:
-                    pass
+                self._log(f"❌ Error al acceder al log MySQL: {str(e)}")
 
         threading.Thread(target=show_log, daemon=True).start()
+
+    def abrir_log_app(self):
+        """Abre el archivo de log de la aplicación en el editor de texto."""
+        if not os.path.exists(self.log_path):
+            self._log("ℹ️ Aún no hay log generado. Ejecute alguna verificación primero.")
+            return
+        try:
+            import subprocess as sp
+            sp.Popen(['notepad.exe', self.log_path])
+        except Exception as e:
+            messagebox.showerror("Error", f"No se pudo abrir el log:\n{e}")
 
     def modificar_privilegios(self):
         selected = getattr(self, 'users_tree', None).selection()
