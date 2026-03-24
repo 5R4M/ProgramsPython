@@ -105,7 +105,8 @@ def obtener_registros(filtro_usuario=None, filtro_accion=None,
         params = []
 
         if filtro_usuario:
-            where.append("(usuario LIKE %s OR nombre_usuario LIKE %s)")
+            # LOWER() garantiza búsqueda indiferente a mayúsculas/minúsculas
+            where.append("(LOWER(usuario) LIKE LOWER(%s) OR LOWER(nombre_usuario) LIKE LOWER(%s))")
             params += [f"%{filtro_usuario}%", f"%{filtro_usuario}%"]
         if filtro_accion and filtro_accion != "TODAS":
             where.append("accion = %s")

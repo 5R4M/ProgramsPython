@@ -278,6 +278,24 @@ class MainWindow:
                 print(f"Error cargando icono {filename}: {e}")
                 self.icons[key] = None
 
+        # Ícono de bitácora generado programáticamente (lista/documento)
+        try:
+            from PIL import Image as _Img, ImageDraw as _Draw
+            sz = 20
+            img = _Img.new('RGBA', (sz, sz), (0, 0, 0, 0))
+            d = _Draw.Draw(img)
+            # Cuerpo del documento (fondo blanco, borde azul oscuro)
+            d.rectangle([2, 1, sz - 3, sz - 2], fill='#ecf0f1', outline='#2c3e50', width=1)
+            # Líneas que simulan texto de registro
+            line_color = '#2c3e50'
+            for y_line in [5, 8, 11, 14]:
+                d.rectangle([5, y_line, sz - 6, y_line + 1], fill=line_color)
+            # Última línea más corta (aspecto de log)
+            d.rectangle([5, 17, sz - 10, 18], fill='#3498db')
+            self.icons['bitacora'] = ImageTk.PhotoImage(img)
+        except Exception:
+            self.icons['bitacora'] = None
+
     def setup_window(self):
         """Configura la ventana principal con tamaño estándar"""
         # Configurar tamaño y centrar ventana
