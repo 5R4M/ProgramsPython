@@ -509,15 +509,15 @@ class ReporteKardex:
             return str(fecha) if fecha else ""
 
     def destroy(self):
-        # Desvincular eventos de los combobox
-        try:
-            self.combo_area.unbind('<<ComboboxSelected>>')
-            self.combo_distrito.unbind('<<ComboboxSelected>>')
-            self.combo_tipo_servicio.unbind('<<ComboboxSelected>>')
-            self.combo_tipo_insumo.unbind('<<ComboboxSelected>>')
-            self.combo_insumo.unbind('<<ComboboxSelected>>')
-        except Exception as e:
-            print("Error al desvincular eventos:", e)
+        # Desvincular eventos solo si el widget aún existe
+        for attr in ('combo_area', 'combo_distrito', 'combo_tipo_servicio',
+                     'combo_tipo_insumo', 'combo_insumo'):
+            try:
+                w = getattr(self, attr, None)
+                if w is not None and w.winfo_exists():
+                    w.unbind('<<ComboboxSelected>>')
+            except Exception:
+                pass
         # Limpiar archivo temporal si existe
         if hasattr(self, 'temp_pdf_path') and os.path.exists(self.temp_pdf_path):
             try:
