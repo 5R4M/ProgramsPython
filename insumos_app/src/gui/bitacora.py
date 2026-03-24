@@ -217,6 +217,19 @@ class Bitacora:
                            "📋 Bitácora de Auditoría",
                            "Registro de todas las acciones realizadas en el sistema")
 
+        # Barra de acciones superior (Volver)
+        top_actions = tk.Frame(self.main_frame, bg=self.COLORS['light'])
+        top_actions.pack(fill='x', padx=10, pady=(4, 0))
+        tk.Button(
+            top_actions,
+            text="🏠  Ir a ventana principal",
+            font=('Segoe UI', 9, 'bold'),
+            bg=self.COLORS['secondary'], fg='white',
+            activebackground=self.COLORS['primary'], activeforeground='white',
+            relief='flat', padx=12, pady=5, cursor='hand2',
+            command=self._volver
+        ).pack(side='left')
+
         # ── Filtros ──────────────────────────────────────────────
         filter_card = styles.make_card_section(self.main_frame, "Filtros de búsqueda", "🔍")
 
@@ -419,6 +432,10 @@ class Bitacora:
         for i, (_, k) in enumerate(items):
             self.tree.move(k, '', i)
         self._sort_reverse = not getattr(self, '_sort_reverse', False)
+
+    def _volver(self):
+        if self.main_window and hasattr(self.main_window, 'show_welcome_screen'):
+            self.main_window.show_welcome_screen()
 
     def destroy(self):
         try:

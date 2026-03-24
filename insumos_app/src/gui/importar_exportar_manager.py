@@ -115,9 +115,22 @@ class ImportarExportarManager:
             "Administre los respaldos y transferencias de datos del sistema"
         )
 
+        # Barra de acciones superior (Volver)
+        top_actions = tk.Frame(self.main_frame, bg=self.COLORS['light'])
+        top_actions.pack(fill='x', padx=10, pady=(4, 0))
+        tk.Button(
+            top_actions,
+            text="🏠  Ir a ventana principal",
+            font=('Segoe UI', 9, 'bold'),
+            bg=self.COLORS['secondary'], fg='white',
+            activebackground=self.COLORS['primary'], activeforeground='white',
+            relief='flat', padx=12, pady=5, cursor='hand2',
+            command=self._volver
+        ).pack(side='left')
+
         # Notebook local sin padding externo
         self.notebook = ttk.Notebook(self.main_frame)
-        self.notebook.pack(fill='both', expand=True, padx=0, pady=0)
+        self.notebook.pack(fill='both', expand=True, padx=0, pady=(6, 0))
 
         self._crear_pestana_backup()
         self._crear_pestana_tablas()
@@ -810,6 +823,10 @@ class ImportarExportarManager:
         tabla = getattr(self, 'combo_tabla', None).get() if hasattr(self, 'combo_tabla') else None
         if tabla:
             self.importar_tabla_excel(tabla)
+
+    def _volver(self):
+        if self.main_window and hasattr(self.main_window, 'show_welcome_screen'):
+            self.main_window.show_welcome_screen()
 
     # Limpieza local
     def destroy(self):

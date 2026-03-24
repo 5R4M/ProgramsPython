@@ -168,9 +168,22 @@ class ConfigurarServidor:
             "Configure el servidor MySQL para permitir conexiones remotas"
         )
 
+        # Barra de acciones superior (Volver)
+        top_actions = tk.Frame(self.parent, bg=self.COLORS['light'])
+        top_actions.pack(fill='x', padx=10, pady=(4, 0))
+        tk.Button(
+            top_actions,
+            text="🏠  Ir a ventana principal",
+            font=('Segoe UI', 9, 'bold'),
+            bg=self.COLORS['secondary'], fg='white',
+            activebackground=self.COLORS['primary'], activeforeground='white',
+            relief='flat', padx=12, pady=5, cursor='hand2',
+            command=self.volver
+        ).pack(side='left')
+
         # Notebook
         self.notebook = ttk.Notebook(self.parent)
-        self.notebook.pack(fill="both", expand=True, padx=10, pady=10)
+        self.notebook.pack(fill="both", expand=True, padx=10, pady=(6, 10))
 
         # Tabs
         self.config_tab = tk.Frame(self.notebook, bg=self.COLORS['light'])
