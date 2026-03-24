@@ -30,6 +30,7 @@ if project_root not in sys.path:
     sys.path.append(project_root)
 
 from src.gui import styles
+from src.database import bitacora as bdb
 
 class GestionServicios:
     def __init__(self, parent_frame, main_window):
@@ -62,6 +63,14 @@ class GestionServicios:
 
         # Carga diferida al cambiar de pestaña
         self.notebook.bind("<<NotebookTabChanged>>", self._on_tab_changed)
+
+    # ---------- Bitácora ----------
+    def _reg(self, accion, descripcion, antes=None, despues=None):
+        try:
+            bdb.registrar(getattr(self.main_window, 'usuario', None),
+                          accion, 'Servicios', descripcion, antes, despues)
+        except Exception:
+            pass
 
     # ---------- Utilería de UI — delegan a styles.py ----------
     def _header_title_sub(self, parent, title_text, subtitle_text):
@@ -325,6 +334,7 @@ class GestionServicios:
             new_id = agregar_area(nom)
             self.areas_by_id[new_id] = nom
             self.areas_by_name[nom] = new_id
+            self._reg('AGREGAR', f'Área: {nom}')
             self.actualizar_areas()
             ventana.destroy()
             messagebox.showinfo("Éxito", "Área agregada correctamente")
@@ -364,6 +374,7 @@ class GestionServicios:
             self.areas_by_id[area_id] = new_name
             self.areas_by_name.pop(old_name, None)
             self.areas_by_name[new_name] = area_id
+            self._reg('MODIFICAR', f'Área: {old_name} → {new_name}')
             self.actualizar_areas()
             ventana.destroy()
             messagebox.showinfo("Éxito", "Área actualizada correctamente")
@@ -394,6 +405,7 @@ class GestionServicios:
                 self._refresh_cache_tipos()
                 self._refresh_cache_servicios()
                 self.actualizar_servicios()
+            self._reg('ELIMINAR', f'Área ID {area_id}')
             messagebox.showinfo("Éxito", "Área eliminada correctamente")
 
     def actualizar_areas(self):
@@ -518,6 +530,7 @@ class GestionServicios:
             self.distritos_by_id[d_id] = {'id': d_id, 'nombre': nom, 'area_id': area_id, 'area_nombre': area_nombre}
             self.distritos_by_name[nom] = d_id
             self.distritos_by_area.setdefault(area_id, []).append({'id': d_id, 'nombre': nom})
+            self._reg('AGREGAR', f'Distrito: {nom} (área: {area_nombre})')
             self.actualizar_distritos()
             ventana.destroy()
             messagebox.showinfo("Éxito", "Distrito agregado correctamente")
@@ -568,6 +581,7 @@ class GestionServicios:
                 if not self.distritos_by_area[aid]:
                     self.distritos_by_area.pop(aid, None)
             self.distritos_by_area.setdefault(new_area_id, []).append({'id': d_id, 'nombre': new_name})
+            self._reg('MODIFICAR', f'Distrito ID {d_id}: actualizado → {new_name}')
             self.actualizar_distritos()
             ventana.destroy()
             messagebox.showinfo("Éxito", "Distrito actualizado correctamente")
@@ -601,6 +615,7 @@ class GestionServicios:
                 self._refresh_cache_tipos()
                 self._refresh_cache_servicios()
                 self.actualizar_servicios()
+            self._reg('ELIMINAR', f'Distrito ID {d_id}')
             messagebox.showinfo("Éxito", "Distrito eliminado correctamente")
 
     def actualizar_distritos(self):
@@ -754,6 +769,7 @@ class GestionServicios:
             agregar_tipo_servicio(d_id, tipo)
             self.tipos_by_distrito[d_id] = obtener_tipos_servicio_por_distrito(d_id) or []
             self._tipos_loaded = True
+            self._reg('AGREGAR', f'Tipo de servicio: {tipo} (distrito: {combo_distrito.get()})')
             self.actualizar_tipos()
             ventana.destroy()
             messagebox.showinfo("Éxito", "Tipo de servicio agregado correctamente")
@@ -811,6 +827,7 @@ class GestionServicios:
             actualizar_tipo_servicio(t_id, descripcion.get().strip())
             d_id = self.distritos_by_name.get(d_name)
             self.tipos_by_distrito[d_id] = obtener_tipos_servicio_por_distrito(d_id) or []
+            self._reg('MODIFICAR', f'Tipo de servicio ID {t_id}: actualizado → {descripcion.get().strip()}')
             self.actualizar_tipos()
             ventana.destroy()
             messagebox.showinfo("Éxito", "Tipo de servicio actualizado correctamente")
@@ -833,6 +850,7 @@ class GestionServicios:
             if self._servicios_loaded:
                 self._refresh_cache_servicios()
                 self.actualizar_servicios()
+            self._reg('ELIMINAR', f'Tipo de servicio ID {t_id}')
             messagebox.showinfo("Éxito", "Tipo de servicio eliminado correctamente")
 
     def actualizar_tipos(self):
@@ -1002,6 +1020,7 @@ class GestionServicios:
             agregar_servicio(t_id, nombre.get().strip())
             self.servicios_by_tipo[t_id] = obtener_servicios_por_tipo(t_id) or []
             self._servicios_loaded = True
+            self._reg('AGREGAR', f'Servicio: {nombre.get().strip()} (tipo: {combo_tipo.get()})')
             self.actualizar_servicios()
             ventana.destroy()
             messagebox.showinfo("Éxito", "Servicio agregado correctamente")
@@ -1076,6 +1095,7 @@ class GestionServicios:
             actualizar_servicio(s_id, new_name)
             t_id = self.obtener_id_tipo_servicio(combo_tipo.get(), combo_distrito.get())
             self.servicios_by_tipo[t_id] = obtener_servicios_por_tipo(t_id) or []
+            self._reg('MODIFICAR', f'Servicio ID {s_id}: actualizado → {new_name}')
             self.actualizar_servicios()
             ventana.destroy()
             messagebox.showinfo("Éxito", "Servicio actualizado correctamente")
@@ -1094,6 +1114,7 @@ class GestionServicios:
             eliminar_servicio(s_id)
             t_id = self.obtener_id_tipo_servicio(item['values'][1], item['values'][0])
             self.servicios_by_tipo[t_id] = [s for s in self.servicios_by_tipo.get(t_id, []) if s.get('id') != s_id and s.get('nombre') != item['values'][2]]
+            self._reg('ELIMINAR', f'Servicio: {item["values"][2]} (tipo: {item["values"][1]})')
             self.actualizar_servicios()
             messagebox.showinfo("Éxito", "Servicio eliminado correctamente")
 

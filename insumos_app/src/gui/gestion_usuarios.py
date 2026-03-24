@@ -9,6 +9,7 @@ from src.database.db_manager import (
     cambiar_password_usuario, eliminar_usuario, existe_usuario
 )
 from src.gui import styles
+from src.database import bitacora as bdb
 
 def resource_path(relative_path):
     try:
@@ -32,6 +33,14 @@ class GestionUsuarios:
         self._build_once = False
         self.setup_ui()
         self.cargar_usuarios()
+
+    # ---------- Bitácora ----------
+    def _reg(self, accion, descripcion, antes=None, despues=None):
+        try:
+            bdb.registrar(getattr(self.main_window, 'usuario', None),
+                          accion, 'Usuarios', descripcion, antes, despues)
+        except Exception:
+            pass
 
     # Utilería de UI — delegan a styles.py para diseño uniforme
     def _header_title_sub(self, parent, title_text, subtitle_text):
@@ -164,6 +173,7 @@ class GestionUsuarios:
                 ok = False
                 messagebox.showerror("Error", f"No se pudo crear el usuario: {e}")
             if ok:
+                self._reg('AGREGAR', f'Usuario creado: {username} ({rol})')
                 messagebox.showinfo("Éxito", "Usuario creado correctamente")
                 self.cargar_usuarios()
 
@@ -196,6 +206,7 @@ class GestionUsuarios:
                 ok = False
                 messagebox.showerror("Error", f"No se pudo actualizar: {e}")
             if ok:
+                self._reg('MODIFICAR', f'Usuario modificado: {username} — nombre: {nombre}, rol: {rol}')
                 messagebox.showinfo("Éxito", "Usuario actualizado correctamente")
                 self.cargar_usuarios()
 
@@ -214,6 +225,7 @@ class GestionUsuarios:
                 ok = False
                 messagebox.showerror("Error", f"No se pudo cambiar la contraseña: {e}")
             if ok:
+                self._reg('MODIFICAR', f'Cambio de contraseña para usuario ID {id_usuario}')
                 messagebox.showinfo("Éxito", "Contraseña actualizada")
 
     def eliminar_usuario(self):
@@ -230,6 +242,7 @@ class GestionUsuarios:
                 ok = False
                 messagebox.showerror("Error", f"No se pudo eliminar el usuario: {e}")
             if ok:
+                self._reg('ELIMINAR', f'Usuario ID {id_usuario} eliminado')
                 messagebox.showinfo("Éxito", "Usuario eliminado")
                 self.cargar_usuarios()
 

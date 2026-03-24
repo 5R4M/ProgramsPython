@@ -28,6 +28,7 @@ from src.database import (
     crear_base_datos
 )
 from src.gui import styles
+from src.database import bitacora as bdb
 
 # Agregar el directorio raíz del proyecto al PATH de Python
 project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -60,6 +61,14 @@ class GestionInsumos:
             return
 
         self.setup_ui()
+
+    # ---------- Bitácora ----------
+    def _reg(self, accion, descripcion, antes=None, despues=None):
+        try:
+            bdb.registrar(getattr(self.main_window, 'usuario', None),
+                          accion, 'Insumos', descripcion, antes, despues)
+        except Exception:
+            pass
 
     # ---------- Utilería de UI (header/cards) — delegan a styles.py ----------
     def _header_title_sub(self, parent, title_text, subtitle_text):
@@ -260,6 +269,7 @@ class GestionInsumos:
                 messagebox.showerror("Error", "Ya existe un tipo de insumo con esa descripción")
                 return
             agregar_tipo_insumo(desc)
+            self._reg('AGREGAR', f'Tipo de insumo: {desc}')
             self.actualizar_tipos()
             ventana.destroy()
             messagebox.showinfo("Éxito", "Tipo de insumo agregado correctamente")
@@ -299,6 +309,7 @@ class GestionInsumos:
                 messagebox.showerror("Error", "Ya existe un tipo de insumo con esa descripción")
                 return
             actualizar_tipo_insumo(id_tipo, nuevo_desc)
+            self._reg('MODIFICAR', f'Tipo de insumo: {item["values"][0]} → {nuevo_desc}')
             self.actualizar_tipos()
             ventana.destroy()
             messagebox.showinfo("Éxito", "Tipo de insumo actualizado correctamente")
@@ -316,6 +327,7 @@ class GestionInsumos:
             if id_tipo:
                 eliminado = eliminar_tipo_insumo(id_tipo)
                 if eliminado:
+                    self._reg('ELIMINAR', f'Tipo de insumo: {item["values"][0]}')
                     self.actualizar_tipos()
                     messagebox.showinfo("Éxito", "Tipo de insumo eliminado correctamente")
                 else:
@@ -466,6 +478,7 @@ class GestionInsumos:
                 return
 
             agregar_insumo(nombre.get().strip(), None, id_presentacion, None, id_tipo)
+            self._reg('AGREGAR', f'Insumo: {nombre.get().strip()} (tipo: {combo_tipo.get()})')
             self.actualizar_insumos()
             ventana.destroy()
             messagebox.showinfo("Éxito", "Insumo agregado correctamente")
@@ -525,6 +538,7 @@ class GestionInsumos:
                 return
 
             actualizar_insumo(id_insumo, nombre.get().strip(), None, id_presentacion, None, id_tipo_sel)
+            self._reg('MODIFICAR', f'Insumo ID {id_insumo}: actualizado → {nombre.get().strip()}')
             self.actualizar_insumos()
             ventana.destroy()
             messagebox.showinfo("Éxito", "Insumo actualizado correctamente")
@@ -543,6 +557,7 @@ class GestionInsumos:
             if id_insumo:
                 eliminado = eliminar_insumo(id_insumo)
                 if eliminado:
+                    self._reg('ELIMINAR', f'Insumo: {item["values"][1]} (tipo: {item["values"][0]})')
                     self.actualizar_insumos()
                     messagebox.showinfo("Éxito", "Insumo eliminado correctamente")
                 else:
@@ -678,6 +693,7 @@ class GestionInsumos:
                 id_presentacion = agregar_presentacion(nombre.get().strip())
 
             actualizar_insumo(id_insumo, combo_insumo.get(), None, id_presentacion, None, id_tipo)
+            self._reg('AGREGAR', f'Presentación: {nombre.get().strip()} en insumo {combo_insumo.get()}')
             self.actualizar_presentaciones()
             ventana.destroy()
             messagebox.showinfo("Éxito", "Presentación agregada correctamente")
@@ -742,6 +758,7 @@ class GestionInsumos:
                 id_presentacion = id_presentacion_actual
 
             actualizar_insumo(id_insumo, combo_insumo.get(), None, id_presentacion, None, id_tipo)
+            self._reg('MODIFICAR', f'Presentación: {item["values"][2]} → {nuevo_nombre.get().strip()}')
             self.actualizar_presentaciones()
             ventana.destroy()
             messagebox.showinfo("Éxito", "Presentación actualizada correctamente")
@@ -759,6 +776,7 @@ class GestionInsumos:
             if id_pres:
                 eliminado = eliminar_presentacion(id_pres)
                 if eliminado:
+                    self._reg('ELIMINAR', f'Presentación: {item["values"][2]}')
                     self.actualizar_presentaciones()
                     messagebox.showinfo("Éxito", "Presentación eliminada correctamente")
                 else:

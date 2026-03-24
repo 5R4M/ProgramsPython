@@ -327,10 +327,11 @@ class MainWindow:
                 ("Gestión de Servicios", self.load_gestion_servicios, 'servicios'),
                 ("Gestión de Movimientos", self.load_gestion_movimientos, 'movimientos'),
             ]
-            
+
             menu_structure["⚙️ CONFIGURACIÓN"] = [
                 ("Configurar Servidor", self.load_configurar_servidor, 'configurar_servidor'),
                 ("Importar/Exportar", self.load_importar_exportar, 'import_export'),
+                ("Bitácora de Auditoría", self.load_bitacora, 'bitacora'),
             ]
         elif rol == "usuario":
             # Para usuarios normales, solo exponemos Importar/Exportar en Configuración
@@ -1307,6 +1308,20 @@ class MainWindow:
             db_path = 'database.db'
         self.pantalla_actual = ImportarExportarManager(self.main_content_frame, self)
         self.pantalla_actual.db_path = db_path
+
+    def load_bitacora(self):
+        if not self.verify_database_connection():
+            messagebox.showerror("Error", "No se puede conectar a la base de datos")
+            return
+        rol = self.usuario.get('rol', '')
+        if rol not in ('admin', 'super_admin'):
+            messagebox.showerror("Acceso denegado",
+                                 "Solo los administradores pueden acceder a la Bitácora.")
+            return
+        self.clear_content_frame()
+        self.reset_window_size()
+        from src.gui.bitacora import Bitacora
+        self.pantalla_actual = Bitacora(self.main_content_frame, self)
 
     def run(self):
         """Ejecuta la aplicación"""

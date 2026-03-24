@@ -13,6 +13,7 @@ import pandas as pd
 import mysql.connector
 
 from src.gui import styles
+from src.database import bitacora as bdb
 
 
 def get_config_path(filename):
@@ -635,6 +636,13 @@ class ImportarExportarManager:
                 conn.close()
 
                 msg = f"Importación completada. Registros procesados: {total}"
+                modo = 'Reemplazar Todo' if limpiar_antes else 'Mantener Datos'
+                try:
+                    usuario = getattr(self.main_window, 'usuario', None)
+                    bdb.registrar(usuario, 'IMPORTAR', 'Importar/Exportar',
+                                  f'Backup importado ({modo}): {os.path.basename(ruta_archivo)} — {total} registros')
+                except Exception:
+                    pass
                 if errores:
                     msg += f"\nAdvertencias/errores: {len(errores)} (ver consola)"
                     print("\n".join(errores[:100]))

@@ -372,7 +372,14 @@ def crear_base_datos():
         conn.close()
         
         agregar_columna_codigo_prefijo()
-        
+
+        # Crear tabla bitácora si no existe
+        try:
+            from src.database.bitacora import crear_tabla_bitacora
+            crear_tabla_bitacora()
+        except Exception as e:
+            print(f"[bitacora] Advertencia al crear tabla bitacora: {e}")
+
         return True
 
     except mysql.connector.Error:

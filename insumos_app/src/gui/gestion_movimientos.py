@@ -12,6 +12,7 @@ from src.database.db_manager import (
     eliminar_tipo_movimiento,
 )
 from src.gui import styles
+from src.database import bitacora as bdb
 
 # Agregar el directorio raíz del proyecto al PATH de Python
 project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -27,6 +28,14 @@ class GestionMovimientos:
 
         self.setup_ui()
         self.actualizar_tipos()
+
+    # ---------- Bitácora ----------
+    def _reg(self, accion, descripcion, antes=None, despues=None):
+        try:
+            bdb.registrar(getattr(self.main_window, 'usuario', None),
+                          accion, 'Movimientos', descripcion, antes, despues)
+        except Exception:
+            pass
 
     # ---------- Utilería de UI — delegan a styles.py ----------
     def _header_title_sub(self, parent, title_text, subtitle_text):
@@ -218,6 +227,7 @@ class GestionMovimientos:
                 return
             try:
                 agregar_tipo_movimiento(texto)
+                self._reg('AGREGAR', f'Tipo de movimiento: {texto}')
                 self.actualizar_tipos()
                 ventana.destroy()
                 messagebox.showinfo("Éxito", "Tipo de movimiento agregado correctamente")
@@ -251,6 +261,7 @@ class GestionMovimientos:
                 id_tipo = next((tipo['id'] for tipo in tipos if tipo['descripcion'] == item['values'][0]), None)
                 if id_tipo:
                     actualizar_tipo_movimiento(id_tipo, descripcion.get().strip())
+                    self._reg('MODIFICAR', f'Tipo de movimiento: {item["values"][0]} → {descripcion.get().strip()}')
                     self.actualizar_tipos()
                     ventana.destroy()
                     messagebox.showinfo("Éxito", "Tipo de movimiento actualizado correctamente")
@@ -273,6 +284,7 @@ class GestionMovimientos:
                 id_tipo = next((tipo['id'] for tipo in tipos if tipo['descripcion'] == item['values'][0]), None)
                 if id_tipo:
                     eliminar_tipo_movimiento(id_tipo)
+                    self._reg('ELIMINAR', f'Tipo de movimiento: {item["values"][0]}')
                     self.actualizar_tipos()
                     messagebox.showinfo("Éxito", "Tipo de movimiento eliminado correctamente")
                 else:
