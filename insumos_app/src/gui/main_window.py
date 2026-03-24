@@ -13,7 +13,6 @@ from src.gui.gestion_insumos import GestionInsumos
 from src.gui.gestion_servicios import GestionServicios
 from src.gui.gestion_movimientos import GestionMovimientos
 from src.gui.reporte_kardex import ReporteKardex
-from src.gui.reporte_demanda_real import ReporteDemandaReal
 from src.gui.reporte_bres import ReporteBres
 from src.gui.reporte_balance_bodega import ReporteBalanceBodega
 from src.gui.configurar_servidor import ConfigurarServidor
@@ -347,7 +346,6 @@ class MainWindow:
             
             menu_structure["📊 REPORTES"] = [
                 ("Reporte Kardex", self.load_reporte_kardex, 'kardex'),
-                ("Reporte Demanda Real", self.load_reporte_demanda_real, 'demanda'),
                 ("Reporte BRES", self.load_reporte_bres, 'bres'),
                 ("Reporte Cantidad Solicitada", self.load_reporte_cantidad_solicitada, 'cantidad_solicitada'),
                 ("Reporte Balance Bodega", self.load_reporte_balance_bodega, 'balance'),
@@ -1271,14 +1269,6 @@ class MainWindow:
         self.reset_window_size()
         from src.gui.correccion_movimientos import CorreccionMovimientos
         self.pantalla_actual = CorreccionMovimientos(self.main_content_frame, self)
-
-    def load_reporte_demanda_real(self):
-        if not self.verify_database_connection():
-            messagebox.showerror("Error", "No se puede conectar a la base de datos")
-            return
-        self.clear_content_frame()
-        self.reset_window_size()
-        self.pantalla_actual = ReporteDemandaReal(self.main_content_frame, self)
 
     def load_reporte_bres(self):
         if not self.verify_database_connection():
