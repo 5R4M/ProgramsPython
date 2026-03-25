@@ -165,7 +165,8 @@ def get_config():
         'database': database.strip(),
         'charset': 'utf8mb4',
         'autocommit': False,
-        'use_unicode': True
+        'use_unicode': True,
+        'auth_plugin': 'mysql_native_password'
     }
 
 def crear_base_datos_si_no_existe():
@@ -186,7 +187,8 @@ def crear_base_datos_si_no_existe():
             charset='utf8mb4',
             use_unicode=True,
             autocommit=True,
-            connection_timeout=10
+            connection_timeout=10,
+            auth_plugin='mysql_native_password'
         )
         
         cursor = conn.cursor(buffered=True)
@@ -229,7 +231,8 @@ def conectar_db():
             charset=config['charset'],
             autocommit=config['autocommit'],
             use_unicode=config['use_unicode'],
-            connection_timeout=10
+            connection_timeout=10,
+            auth_plugin='mysql_native_password'
         )
                 
         # Crear tablas si no existen
@@ -1524,7 +1527,8 @@ def crear_super_usuario_si_no_existe():
             charset='utf8mb4',
             autocommit=False,
             use_unicode=True,
-            connection_timeout=10
+            connection_timeout=10,
+            auth_plugin='mysql_native_password'
         )
         
         if not conn:
@@ -1601,13 +1605,13 @@ def verificar_credenciales(username, password):
 
         if usuario and usuario['activo']:
             return {
-            'id': usuario['id'],
-            'username': usuario['username'],
-            'nombre_completo': usuario['nombre_completo'],
-            'rol': usuario['rol'],
-            'activo': usuario['activo']
+                'id': usuario['id'],
+                'username': usuario['username'],
+                'nombre_completo': usuario['nombre_completo'],
+                'rol': usuario['rol'],
+                'activo': usuario['activo']
             }
-            return None
+        return None  # ← aquí, fuera del if
 
     except Exception as e:
         print(f"Error al verificar credenciales: {e}")

@@ -8,6 +8,7 @@ from src.database.db_manager import (
     obtener_usuarios, crear_usuario, actualizar_usuario,
     cambiar_password_usuario, eliminar_usuario, existe_usuario
 )
+from src.gui import styles
 
 def resource_path(relative_path):
     try:
@@ -22,14 +23,8 @@ class GestionUsuarios:
         self.parent = parent_frame
         self.main_window = main_window
 
-        # Paleta local solo para esta vista (no toca estilos globales)
-        self.COLORS = {
-            'primary':   '#2c3e50',
-            'accent':    '#3498db',
-            'light':     '#ecf0f1',
-            'white':     '#ffffff',
-            'text_dark': '#2c3e50'
-        }
+        # Paleta compartida del sistema
+        self.COLORS = styles.COLORS
 
         # Cache en memoria para minimizar lecturas repetidas
         self._usuarios_cache = []
@@ -38,47 +33,15 @@ class GestionUsuarios:
         self.setup_ui()
         self.cargar_usuarios()
 
-    # Header (título + subtítulo) — local, sin estilos globales
+    # Utilería de UI — delegan a styles.py para diseño uniforme
     def _header_title_sub(self, parent, title_text, subtitle_text):
-        # Header azul a todo el ancho, pegado arriba, sin separadores laterales
-        header_frame = tk.Frame(parent, bg=self.COLORS['primary'], height=55)
-        header_frame.pack(fill='x', padx=0, pady=(0, 6))  # sin margen superior ni laterales
-        header_frame.pack_propagate(False)
+        styles.make_header(parent, title_text, subtitle_text)
 
-        header_inner = tk.Frame(header_frame, bg=self.COLORS['primary'])
-        header_inner.pack(fill='both', expand=True, padx=15, pady=4)  # padding interno para el contenido (conserva tus 15 px)
-
-        tk.Label(header_inner, text=title_text, font=('Segoe UI', 11, 'bold'),
-                fg=self.COLORS['white'], bg=self.COLORS['primary']).pack(anchor='w')
-        tk.Label(header_inner, text=subtitle_text, font=('Segoe UI', 8),
-                fg=self.COLORS['white'], bg=self.COLORS['primary']).pack(anchor='w', pady=(1, 0))
-
-    # Card con header azul e icono — todo con tk Frames/Labels locales
     def _card_section(self, parent, title, icon):
-        container = tk.Frame(parent, bg=self.COLORS['light'])
-        container.pack(fill='x', padx=10, pady=6)
-
-        card = tk.Frame(container, bg=self.COLORS['white'], bd=1, relief='solid', highlightthickness=0)
-        card.pack(fill='both', expand=True)
-
-        header = tk.Frame(card, bg=self.COLORS['primary'], height=26)
-        header.pack(fill='x')
-        header.pack_propagate(False)
-
-        tk.Label(header, text=f"{icon} {title}", font=('Segoe UI', 9, 'bold'),
-                 fg=self.COLORS['white'], bg=self.COLORS['primary']).pack(side='left', padx=10)
-
-        content = tk.Frame(card, bg=self.COLORS['white'])
-        content.pack(fill='both', expand=True, padx=12, pady=8)
-
-        return content
+        return styles.make_card_section(parent, title, icon)
 
     def _primary_button(self, parent, text, command):
-        return tk.Button(parent, text=text, command=command,
-                         font=('Segoe UI', 9, 'bold'),
-                         bg=self.COLORS['accent'], fg='white',
-                         relief='flat', borderwidth=0, padx=10, pady=5, cursor='hand2',
-                         activebackground='#2980b9', activeforeground='white')
+        return styles.make_primary_button(parent, text, command)
 
     def setup_ui(self):
         if not self._build_once:

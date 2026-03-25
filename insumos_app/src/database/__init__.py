@@ -79,7 +79,8 @@ def asegurar_base_datos():
             host=config['host'],
             port=config['port'],
             user=config['user'],
-            password=config['password']
+            password=config['password'],
+            auth_plugin='mysql_native_password'
         )
         cursor = conn.cursor()
         dbname = config['database']
@@ -111,7 +112,8 @@ def verificar_tablas():
             port=config['port'],
             user=config['user'],
             password=config['password'],
-            database=config['database']
+            database=config['database'],
+            auth_plugin='mysql_native_password'
         )
         cursor = conn.cursor()
 
@@ -159,7 +161,8 @@ def agregar_columna_codigo_prefijo():
             port=config['port'],
             user=config['user'],
             password=config['password'],
-            database=config['database']
+            database=config['database'],
+            auth_plugin='mysql_native_password'
         )
         cursor = conn.cursor()
         
@@ -211,7 +214,8 @@ def crear_base_datos():
             port=config['port'],
             user=config['user'],
             password=config['password'],
-            database=config['database']
+            database=config['database'],
+            auth_plugin='mysql_native_password'
         )
         cursor = conn.cursor()
 

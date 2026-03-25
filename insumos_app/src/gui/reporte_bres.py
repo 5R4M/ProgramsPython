@@ -21,6 +21,7 @@ from PIL import Image, ImageTk
 # Agregar el directorio raíz del proyecto al PATH de Python
 sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
+from src.gui import styles
 from src.database.db_manager import (
     conectar_db,
     obtener_areas,
@@ -68,16 +69,8 @@ class ReporteBres:
         self._cache_promedios = {}
         self._cache_saldos = {}
 
-        # Paleta local (solo variables, no estilos globales)
-        self.COLORS = {
-            'primary':   '#2c3e50',
-            'accent':    '#3498db',
-            'danger':    '#e74c3c',
-            'white':     '#ffffff',
-            'light':     '#f7f7f7',
-            'text_dark': '#2c3e50',
-            'text_light': '#95A5A6'
-        }
+        # Paleta compartida del sistema
+        self.COLORS = styles.COLORS
 
         self.areas = []
         self.distritos = []

@@ -18,6 +18,7 @@ from reportlab.lib.units import inch
 # Agregar el directorio raíz del proyecto al PATH de Python
 sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
+from src.gui import styles
 from src.database.db_manager import (
     obtener_areas,
     obtener_distritos,
@@ -76,21 +77,8 @@ class ReporteKardex:
         self.setup_ui()
 
     def setup_styles(self):
-        # Paleta local (no altera sidebar/panel derecho)
-        self.COLORS = {
-            'primary':   '#2c3e50',
-            'secondary': '#34495e',
-            'accent':    '#3498db',
-            'success':   '#27ae60',
-            'warning':   '#f39c12',
-            'danger':    '#e74c3c',
-            'light':     '#ecf0f1',
-            'white':     '#ffffff',
-            'text_dark': '#2c3e50',
-            'text_light':'#7f8c8d',
-            'border':    '#bdc3c7',
-            'header_dark': '#1f2937'
-        }
+        # Paleta compartida del sistema
+        self.COLORS = styles.COLORS
 
         # Solo estilos locales, sin imponer tema global
         style = ttk.Style(self.parent if hasattr(self, 'parent') else None)

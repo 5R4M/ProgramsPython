@@ -21,6 +21,7 @@ from PIL import Image, ImageTk
 # Agregar el directorio raíz del proyecto al PATH de Python
 sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
+from src.gui import styles
 from src.database.db_manager import (
     conectar_db,
     obtener_areas,
@@ -58,19 +59,8 @@ class ReporteBalanceBodega:
 
         self.cargar_iconos()
 
-        # Paleta local (solo para contenedores de esta vista)
-        self.COLORS = {
-            'primary': '#2c3e50',
-            'secondary': '#34495e',
-            'accent': '#3498db',
-            'success': '#27ae60',
-            'warning': '#f39c12',
-            'danger': '#e74c3c',
-            'light': '#ecf0f1',
-            'white': '#ffffff',
-            'text_dark': '#2c3e50',
-            'text_light': '#7f8c8d'
-        }
+        # Paleta compartida del sistema
+        self.COLORS = styles.COLORS
         
         self.modo_fecha_var = tk.StringVar(value="rango")
         self.area_var = tk.StringVar()
