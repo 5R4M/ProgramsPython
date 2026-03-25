@@ -188,7 +188,8 @@ def crear_base_datos_si_no_existe():
             use_unicode=True,
             autocommit=True,
             connection_timeout=10,
-            auth_plugin='mysql_native_password'
+            auth_plugin='mysql_native_password',
+                use_pure=True
         )
         
         cursor = conn.cursor(buffered=True)
@@ -232,7 +233,8 @@ def conectar_db():
             autocommit=config['autocommit'],
             use_unicode=config['use_unicode'],
             connection_timeout=10,
-            auth_plugin='mysql_native_password'
+            auth_plugin='mysql_native_password',
+                use_pure=True
         )
                 
         # Crear tablas si no existen
@@ -1528,7 +1530,8 @@ def crear_super_usuario_si_no_existe():
             autocommit=False,
             use_unicode=True,
             connection_timeout=10,
-            auth_plugin='mysql_native_password'
+            auth_plugin='mysql_native_password',
+                use_pure=True
         )
         
         if not conn:

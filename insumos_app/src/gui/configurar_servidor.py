@@ -382,7 +382,9 @@ class ConfigurarServidor:
                     port=port,
                     user=user,
                     password=password,
-                    connection_timeout=10
+                    connection_timeout=10,
+                    auth_plugin="mysql_native_password",
+                    use_pure=True
                 )
 
                 cursor = connection.cursor()
@@ -426,7 +428,9 @@ class ConfigurarServidor:
                 host=host,
                 port=port,
                 user=user,
-                password=password
+                password=password,
+                auth_plugin='mysql_native_password',
+                use_pure=True
             )
             cursor = connection.cursor()
 
@@ -563,7 +567,9 @@ max_connections = {max_connections}
                     host=self.host_var.get(),
                     port=int(self.puerto_var.get()),
                     user=self.admin_user_var.get(),
-                    password=self.admin_pass_var.get()
+                    password=self.admin_pass_var.get(),
+                    auth_plugin='mysql_native_password',
+                    use_pure=True
                 )
                 cursor = connection.cursor()
                 cursor.execute(f"CREATE USER '{username}'@'{host}' IDENTIFIED BY '{password}'")
@@ -594,7 +600,9 @@ max_connections = {max_connections}
                 port=int(self.puerto_var.get()),
                 user=self.admin_user_var.get(),
                 password=self.admin_pass_var.get(),
-                database="mysql"
+                database="mysql",
+                auth_plugin='mysql_native_password',
+                use_pure=True
             )
 
             cursor = connection.cursor()
@@ -632,6 +640,7 @@ max_connections = {max_connections}
             user=self.admin_user_var.get().strip(),
             password=self.admin_pass_var.get(),
             auth_plugin='mysql_native_password',
+                use_pure=True,
             connection_timeout=10
         )
 
@@ -795,7 +804,9 @@ max_connections = {max_connections}
                     host=self.host_var.get(),
                     port=int(self.puerto_var.get()),
                     user=self.admin_user_var.get(),
-                    password=self.admin_pass_var.get()
+                    password=self.admin_pass_var.get(),
+                    auth_plugin='mysql_native_password',
+                    use_pure=True
                 )
                 cursor = connection.cursor()
                 cursor.execute(f"REVOKE ALL PRIVILEGES ON *.* FROM '{usuario}'@'{host}'")
@@ -827,7 +838,9 @@ max_connections = {max_connections}
                     host=self.host_var.get(),
                     port=int(self.puerto_var.get()),
                     user=self.admin_user_var.get(),
-                    password=self.admin_pass_var.get()
+                    password=self.admin_pass_var.get(),
+                    auth_plugin='mysql_native_password',
+                    use_pure=True
                 )
                 cursor = connection.cursor()
                 cursor.execute(f"DROP USER '{usuario}'@'{host}'")

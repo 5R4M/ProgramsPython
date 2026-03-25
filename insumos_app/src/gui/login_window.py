@@ -139,7 +139,8 @@ def test_mysql_connection(host, port, user, password):
             password=password,
             connection_timeout=10,
             autocommit=True,
-            auth_plugin='mysql_native_password'
+            auth_plugin='mysql_native_password',
+                use_pure=True
         )
         cursor = connection.cursor()
         cursor.execute("SELECT VERSION()")
@@ -205,12 +206,23 @@ if not getattr(sys, 'frozen', False):
         pass
 
 # ── LOG DE ARRANQUE ─────────────────────────────────────────────────────────
+def _get_startup_log_path():
+    """Ruta del log siempre junto al .exe (o junto al script en desarrollo)."""
+    if getattr(sys, 'frozen', False):
+        return os.path.join(os.path.dirname(os.path.abspath(sys.executable)), "insumos_startup.log")
+    return os.path.join(os.path.dirname(os.path.abspath(__file__)), "insumos_startup.log")
+
 def _startup_log(msg):
-    """Escribe en el log de arranque SIEMPRE (no depende de SILENT)."""
+    """Escribe en consola Y en archivo SIEMPRE (sin depender de LOG_PATH global)."""
+    import datetime
+    linea = f"[{datetime.datetime.now().strftime('%H:%M:%S')}] {msg}"
     try:
-        import datetime
-        with open(LOG_PATH, "a", encoding="utf-8") as f:
-            f.write(f"[{datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] {msg}\n")
+        print(linea, flush=True)
+    except Exception:
+        pass
+    try:
+        with open(_get_startup_log_path(), "a", encoding="utf-8") as f:
+            f.write(linea + "\n")
     except Exception:
         pass
 
@@ -225,7 +237,7 @@ def _run_startup_diagnostics():
     _startup_log(f"[ENV] frozen       : {getattr(sys, 'frozen', False)}")
     _startup_log(f"[ENV] Python       : {sys.version}")
     _startup_log(f"[ENV] executable   : {sys.executable}")
-    _startup_log(f"[ENV] LOG_PATH     : {LOG_PATH}")
+    _startup_log(f"[ENV] LOG_PATH     : {_get_startup_log_path()}")
     try:
         _startup_log(f"[ENV] cwd          : {os.getcwd()}")
     except Exception as e:
@@ -290,27 +302,44 @@ def _run_startup_diagnostics():
     try:
         import configparser as _cp
         import mysql.connector as _mc
+        import traceback as _tb
         cfg = _cp.ConfigParser()
         cfg.read(config_path, encoding="utf-8")
         if 'MySQL' in cfg:
-            conn = _mc.connect(
-                host=cfg['MySQL'].get('host','').strip(),
-                port=int(cfg['MySQL'].get('port','3306')),
-                user=cfg['MySQL'].get('admin_user','').strip(),
-                password=cfg['MySQL'].get('admin_pass',''),
-                connection_timeout=8,
-                auth_plugin='mysql_native_password'
-            )
-            cur = conn.cursor()
-            cur.execute("SELECT VERSION()")
-            ver = cur.fetchone()[0]
-            cur.close()
-            conn.close()
-            _startup_log(f"[SQL] Conexión OK  — MySQL {ver}")
+            _host = cfg['MySQL'].get('host','').strip()
+            _port = int(cfg['MySQL'].get('port','3306'))
+            _user = cfg['MySQL'].get('admin_user','').strip()
+            _pass = cfg['MySQL'].get('admin_pass','')
+            _db   = cfg['MySQL'].get('database','').strip()
+            _startup_log(f"[SQL] Intentando conectar a {_user}@{_host}:{_port}/{_db} ...")
+            try:
+                conn = _mc.connect(
+                    host=_host,
+                    port=_port,
+                    user=_user,
+                    password=_pass,
+                    connection_timeout=8,
+                    auth_plugin='mysql_native_password',
+                    use_pure=True
+                )
+                cur = conn.cursor()
+                cur.execute("SELECT VERSION()")
+                ver = cur.fetchone()[0]
+                cur.close()
+                conn.close()
+                _startup_log(f"[SQL] Conexion OK — MySQL {ver}")
+            except _mc.Error as e:
+                _startup_log(f"[SQL] ERROR mysql.connector => errno={e.errno} msg={e.msg}")
+                _startup_log(f"[SQL] TRACEBACK:\n{_tb.format_exc()}")
+            except Exception as e:
+                _startup_log(f"[SQL] ERROR inesperado => {type(e).__name__}: {e}")
+                _startup_log(f"[SQL] TRACEBACK:\n{_tb.format_exc()}")
         else:
-            _startup_log("[SQL] Sin sección [MySQL], conexión omitida")
+            _startup_log("[SQL] Sin seccion [MySQL] en el ini, conexion omitida")
     except Exception as e:
-        _startup_log(f"[SQL] ERROR conexión: {type(e).__name__}: {e}")
+        import traceback as _tb
+        _startup_log(f"[SQL] FALLO CRITICO: {type(e).__name__}: {e}")
+        _startup_log(f"[SQL] TRACEBACK:\n{_tb.format_exc()}")
 
     _startup_log("=" * 60)
 
@@ -390,7 +419,8 @@ def verificar_credenciales_fallback(username, password):
             user=user,
             password=password_db,
             connection_timeout=10,
-            auth_plugin='mysql_native_password'
+            auth_plugin='mysql_native_password',
+                use_pure=True
         )
         cursor = connection.cursor()
 
@@ -534,7 +564,8 @@ def debug_mysql_connection():
                 password=password,
                 connection_timeout=10,
                 autocommit=True,
-                auth_plugin='mysql_native_password'
+                auth_plugin='mysql_native_password',
+                use_pure=True
             )
             cursor = connection.cursor()
             cursor.execute("SELECT VERSION()")
@@ -846,7 +877,8 @@ class ConfiguracionMySQL:
                     password=password,
                     connection_timeout=10,
                     autocommit=True,
-                    auth_plugin='mysql_native_password'
+                    auth_plugin='mysql_native_password',
+                use_pure=True
                 )
                 cursor = connection.cursor()
                 cursor.execute("SELECT VERSION()")
@@ -1051,7 +1083,8 @@ class LoginWindow:
                         password=password,
                         connection_timeout=10,
                         autocommit=True,
-                        auth_plugin='mysql_native_password'
+                        auth_plugin='mysql_native_password',
+                use_pure=True
                     )
                     cursor = connection.cursor()
                     cursor.execute("SELECT VERSION()")
