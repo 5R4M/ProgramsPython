@@ -204,6 +204,123 @@ if not getattr(sys, 'frozen', False):
     except Exception:
         pass
 
+# ── LOG DE ARRANQUE ─────────────────────────────────────────────────────────
+def _startup_log(msg):
+    """Escribe en el log de arranque SIEMPRE (no depende de SILENT)."""
+    try:
+        import datetime
+        with open(LOG_PATH, "a", encoding="utf-8") as f:
+            f.write(f"[{datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] {msg}\n")
+    except Exception:
+        pass
+
+def _run_startup_diagnostics():
+    """Diagnóstico completo al iniciar la app. Resultado siempre en insumos_startup.log."""
+    import datetime
+    _startup_log("=" * 60)
+    _startup_log(f"INICIO APP  v1.1  —  {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+    _startup_log("=" * 60)
+
+    # ── Entorno ────────────────────────────────────────────────
+    _startup_log(f"[ENV] frozen       : {getattr(sys, 'frozen', False)}")
+    _startup_log(f"[ENV] Python       : {sys.version}")
+    _startup_log(f"[ENV] executable   : {sys.executable}")
+    _startup_log(f"[ENV] LOG_PATH     : {LOG_PATH}")
+    try:
+        _startup_log(f"[ENV] cwd          : {os.getcwd()}")
+    except Exception as e:
+        _startup_log(f"[ENV] cwd ERROR    : {e}")
+
+    # ── mysql_config.ini ──────────────────────────────────────
+    config_path = get_config_path("mysql_config.ini")
+    _startup_log(f"[CFG] ruta ini     : {config_path}")
+    _startup_log(f"[CFG] ini existe   : {os.path.exists(config_path)}")
+    if os.path.exists(config_path):
+        try:
+            import configparser as _cp
+            cfg = _cp.ConfigParser()
+            cfg.read(config_path, encoding="utf-8")
+            if "MySQL" in cfg:
+                _startup_log(f"[CFG] host         : {cfg['MySQL'].get('host','—')}")
+                _startup_log(f"[CFG] port         : {cfg['MySQL'].get('port','—')}")
+                _startup_log(f"[CFG] admin_user   : {cfg['MySQL'].get('admin_user','—')}")
+                _startup_log(f"[CFG] admin_pass   : {'(ok)' if cfg['MySQL'].get('admin_pass') else '(vacío!)'}")
+                _startup_log(f"[CFG] database     : {cfg['MySQL'].get('database','—')}")
+            else:
+                _startup_log("[CFG] ERROR: sección [MySQL] no encontrada en el ini")
+        except Exception as e:
+            _startup_log(f"[CFG] ERROR leyendo ini: {e}")
+    else:
+        _startup_log("[CFG] ERROR: archivo mysql_config.ini NO ENCONTRADO")
+
+    # ── modificar_mysql.bat ───────────────────────────────────
+    bat_path = get_bat_path()
+    _startup_log(f"[BAT] ruta bat     : {bat_path}")
+    _startup_log(f"[BAT] bat existe   : {os.path.exists(bat_path)}")
+
+    # ── mysql.connector ───────────────────────────────────────
+    try:
+        import mysql.connector as _mc
+        _startup_log(f"[PKG] mysql.connector: {_mc.__version__}")
+    except ImportError as e:
+        _startup_log(f"[PKG] mysql.connector FALTA: {e}")
+
+    # ── Conectividad TCP ──────────────────────────────────────
+    try:
+        import configparser as _cp
+        cfg = _cp.ConfigParser()
+        cfg.read(config_path, encoding="utf-8")
+        host = cfg['MySQL'].get('host', '').strip() if 'MySQL' in cfg else ''
+        port = int(cfg['MySQL'].get('port', '3306')) if 'MySQL' in cfg else 3306
+        if host:
+            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            sock.settimeout(5)
+            result = sock.connect_ex((host, port))
+            sock.close()
+            if result == 0:
+                _startup_log(f"[NET] TCP {host}:{port} → ABIERTO ✓")
+            else:
+                _startup_log(f"[NET] TCP {host}:{port} → CERRADO/INACCESIBLE (código {result})")
+        else:
+            _startup_log("[NET] host vacío, no se probó TCP")
+    except Exception as e:
+        _startup_log(f"[NET] ERROR prueba TCP: {e}")
+
+    # ── Conexión MySQL ────────────────────────────────────────
+    try:
+        import configparser as _cp
+        import mysql.connector as _mc
+        cfg = _cp.ConfigParser()
+        cfg.read(config_path, encoding="utf-8")
+        if 'MySQL' in cfg:
+            conn = _mc.connect(
+                host=cfg['MySQL'].get('host','').strip(),
+                port=int(cfg['MySQL'].get('port','3306')),
+                user=cfg['MySQL'].get('admin_user','').strip(),
+                password=cfg['MySQL'].get('admin_pass',''),
+                connection_timeout=8,
+                auth_plugin='mysql_native_password'
+            )
+            cur = conn.cursor()
+            cur.execute("SELECT VERSION()")
+            ver = cur.fetchone()[0]
+            cur.close()
+            conn.close()
+            _startup_log(f"[SQL] Conexión OK  — MySQL {ver}")
+        else:
+            _startup_log("[SQL] Sin sección [MySQL], conexión omitida")
+    except Exception as e:
+        _startup_log(f"[SQL] ERROR conexión: {type(e).__name__}: {e}")
+
+    _startup_log("=" * 60)
+
+# Ejecutar diagnóstico siempre al arrancar
+try:
+    _run_startup_diagnostics()
+except Exception:
+    pass
+# ── FIN LOG DE ARRANQUE ──────────────────────────────────────────────────────
+
 try:
     from src.database.db_manager import verificar_credenciales, crear_tabla_usuarios
 except ImportError:
@@ -528,7 +645,14 @@ def verificar_conectividad_red(host, port):
 # ─────────────────────────────────────────────
 # Helper de log para archivo (siempre activo)
 # ─────────────────────────────────────────────
-LOG_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "error_main.log")
+def _get_log_path():
+    """Siempre junto al .exe (o junto al script en desarrollo)."""
+    if getattr(sys, 'frozen', False):
+        return os.path.join(os.path.dirname(os.path.abspath(sys.executable)), "insumos_startup.log")
+    else:
+        return os.path.join(os.path.dirname(os.path.abspath(__file__)), "insumos_startup.log")
+
+LOG_PATH = _get_log_path()
 
 def escribir_log_archivo(texto):
     """Escribe en error_main.log independientemente del modo SILENT."""

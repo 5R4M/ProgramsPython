@@ -86,3 +86,19 @@
 2026-03-24 13:00:16,870 - INFO - ✅ Servidor recargado correctamente
 2026-03-24 13:00:16,875 - INFO - 📊 Resultado: 6 exitosas | 0 fallidas
 2026-03-24 13:00:16,876 - INFO - ============================================================
+2026-03-25 13:00:04,194 - INFO - ============================================================
+2026-03-25 13:00:04,201 - INFO - 🔄 INICIO SINCRONIZACIÓN AUTOMÁTICA
+2026-03-25 13:00:04,201 - INFO - 📁 Directorio base : C:\Users\SELSO\PythonPrgrams\ProgramsPython\etiqueta_app
+2026-03-25 13:00:04,201 - INFO - 📋 Config          : C:\Users\SELSO\PythonPrgrams\ProgramsPython\etiqueta_app\config_sincronizacion_multibodega.json
+2026-03-25 13:00:04,201 - INFO - 📝 Log             : C:\Users\SELSO\PythonPrgrams\ProgramsPython\etiqueta_app\logs\sync_log.txt
+2026-03-25 13:00:04,202 - INFO - ============================================================
+2026-03-25 13:00:04,219 - INFO - Usuario: salonso | Bodegas: 6
+2026-03-25 13:00:05,947 - INFO - [medico] ✅ Subido correctamente - FORMATO INVENTARIO MQ Y LABORATORIO.xlsx
+2026-03-25 13:00:06,615 - INFO - [oficina] ✅ Subido correctamente - FORMATO INVENTARIO OFICINA.xlsx
+2026-03-25 13:00:07,336 - INFO - [varios] ✅ Subido correctamente - FORMATO INVENTARIO VARIOS.xlsx
+2026-03-25 13:00:08,838 - INFO - [limpieza] ✅ Subido correctamente - FORMATO INVENTARIO LIMPIEZA.xlsx
+2026-03-25 13:00:10,067 - INFO - [medicamentos] ✅ Subido correctamente - FORMATO INVENTARIO MEDICAMENTOS.xlsx
+2026-03-25 13:00:11,152 - INFO - [programas] ✅ Subido correctamente - FORMATO INVENTARIO PROGRAMAS.xlsx
+2026-03-25 13:00:20,221 - INFO - ✅ Servidor recargado correctamente
+2026-03-25 13:00:20,226 - INFO - 📊 Resultado: 6 exitosas | 0 fallidas
+2026-03-25 13:00:20,227 - INFO - ============================================================
