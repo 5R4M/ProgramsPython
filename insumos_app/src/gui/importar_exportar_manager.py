@@ -35,6 +35,8 @@ def get_mysql_conn():
         cfg['user'] = s.get('admin_user', cfg['user'])
         cfg['password'] = s.get('admin_pass', cfg['password'])
         cfg['database'] = s.get('database', cfg['database'])
+    cfg['auth_plugin'] = 'mysql_native_password'
+    cfg['use_pure'] = True
     return mysql.connector.connect(**cfg)
 
 

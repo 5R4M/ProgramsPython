@@ -295,7 +295,9 @@ def debug_mysql_connection():
                 port=config['port'],
                 user=config['user'],
                 password=config['password'],
-                connection_timeout=5
+                connection_timeout=5,
+                auth_plugin='mysql_native_password',
+                use_pure=True
             )
             print("✅ Conexión MySQL básica exitosa")
             conn.close()
@@ -315,7 +317,9 @@ def debug_mysql_connection():
                 user=config['user'],
                 password=config['password'],
                 database=config['database'],
-                connection_timeout=5
+                connection_timeout=5,
+                auth_plugin='mysql_native_password',
+                use_pure=True
             )
             print("✅ Conexión completa exitosa")
             

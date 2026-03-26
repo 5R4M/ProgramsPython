@@ -1018,21 +1018,12 @@ class LoginWindow:
                 log(f"Buscando archivo de configuración en: {config_file}")
 
                 if not os.path.exists(config_file):
-                    if getattr(sys, 'frozen', False):
-                        try:
-                            self.crear_config_basico(config_file)
-                            if not os.path.exists(config_file):
-                                error_msg = f"No se pudo crear archivo de configuración en: {config_file}"
-                                self.root.after(0, lambda: self.mostrar_configuracion_mysql(error_msg))
-                                return
-                        except Exception as e:
-                            error_msg = f"Error creando configuración básica: {str(e)}"
-                            self.root.after(0, lambda: self.mostrar_configuracion_mysql(error_msg))
-                            return
-                    else:
-                        error_msg = f"Archivo de configuración MySQL no encontrado en: {config_file}"
-                        self.root.after(0, lambda: self.mostrar_configuracion_mysql(error_msg))
-                        return
+                    # Siempre mostrar la pantalla de configuración en el hilo principal.
+                    # crear_config_basico usaba simpledialog desde un hilo de fondo,
+                    # lo que causaba el error "window deleted before visibility changed".
+                    error_msg = f"Archivo de configuración MySQL no encontrado en: {config_file}"
+                    self.root.after(0, lambda: self.mostrar_configuracion_mysql(error_msg))
+                    return
 
                 config = configparser.ConfigParser()
                 try:
