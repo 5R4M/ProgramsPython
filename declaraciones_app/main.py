@@ -53,26 +53,18 @@ def main():
 
     def on_login_ok(info_usuario):
         usuario_autenticado["data"] = info_usuario
-
-        # Cancelar afters internos del root_login antes de destruirlo
-        try:
-            afters = root_login.tk.call("after", "info")
-            if afters:
-                for aid in str(afters).split():
-                    try:
-                        root_login.after_cancel(aid)
-                    except Exception:
-                        pass
-        except Exception:
-            pass
-
-        root_login.destroy()
+        # quit() detiene el mainloop limpiamente sin destruir la ventana todavía.
+        # Esto evita que los callbacks "after" internos de customtkinter
+        # (update, check_dpi_scaling) se disparen sobre widgets ya destruidos.
+        root_login.quit()
 
     # Construir UI de login sobre root_login
     VentanaLogin(root_login, on_login_ok)
 
     # Loop SOLO del login
     root_login.mainloop()
+    # Destruir DESPUÉS de que el mainloop haya salido completamente
+    root_login.destroy()
 
     # Si se autenticó, abrir ventana principal
     if usuario_autenticado["data"] is not None:
