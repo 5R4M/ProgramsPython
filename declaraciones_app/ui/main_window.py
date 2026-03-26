@@ -846,15 +846,5 @@ class MainWindow(ctk.CTk):
         except Exception:
             pass
 
-        try:
-            afters = self.tk.call("after", "info")
-            if afters:
-                for aid in str(afters).split():
-                    try:
-                        self.after_cancel(aid)
-                    except Exception:
-                        pass
-        except Exception:
-            pass
-
+        self.quit()
         self.destroy()
