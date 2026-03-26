@@ -113,8 +113,6 @@ class VentanaCrearDocumento:
         screen_width = self.ventana.winfo_screenwidth()
         screen_height = self.ventana.winfo_screenheight()
         
-        print(f"📐 Resolución detectada: {screen_width}x{screen_height}")
-        
         # ✅ CÁLCULO CORREGIDO con medidas más precisas
         altura_titulo = escalar(30)           # Título principal
         altura_plantilla = escalar(70)        # Sección plantilla
@@ -134,26 +132,18 @@ class VentanaCrearDocumento:
         # ✅ CONDICIÓN CORREGIDA: Usar < en vez de <=
         necesita_scroll = screen_height < altura_necesaria
         
-        if necesita_scroll:
-            print(f"⚠️ Pantalla pequeña detectada ({screen_height}px < {altura_necesaria}px). Activando scroll.")
-        else:
-            print(f"✅ Pantalla suficiente ({screen_height}px >= {altura_necesaria}px). Sin scroll.")
-        
         return necesita_scroll
     
     def cargar_iconos(self):
-        """Carga los iconos PNG para los botones - ✅ USANDO CONSTANTES"""
+        """Carga los iconos PNG para los botones"""
         try:
             from config import escalar
-            
+
             ruta_base = os.path.dirname(os.path.abspath(__file__))
             ruta_proyecto = os.path.dirname(ruta_base)
             ruta_iconos = os.path.join(ruta_proyecto, "utils", "iconos")
-            
-            print(f"🔍 Buscando iconos en: {ruta_iconos}")
-            
+
             if not os.path.exists(ruta_iconos):
-                print(f"⚠️ La carpeta de iconos no existe: {ruta_iconos}")
                 raise FileNotFoundError(f"No existe la carpeta: {ruta_iconos}")
             
             # ===== ICONOS PARA BOTONES PRINCIPALES =====
@@ -204,13 +194,7 @@ class VentanaCrearDocumento:
                 size=icon_size_small
             )
             
-            print("✅ Iconos cargados correctamente en crear_documento")
-            
-        except Exception as e:
-            print(f"⚠️ Error al cargar iconos: {e}")
-            import traceback
-            traceback.print_exc()
-            
+        except Exception:
             for attr in ['icono_guardar', 'icono_preview', 'icono_imprimir', 'icono_generar',
                         'icono_buscar', 'icono_limpiar', 'icono_plantilla']:
                 setattr(self, attr, None)
@@ -854,15 +838,12 @@ class VentanaCrearDocumento:
                 width=escalar(650),
                 fg_color="#001a33"
             )
-            print("🔄 Panel izquierdo: SCROLLABLE")
         else:
-            # Usar CTkFrame normal si la pantalla es grande
             panel_izquierdo = ctk.CTkFrame(
                 contenedor_principal,
                 width=escalar(650),
                 fg_color="#001a33"
             )
-            print("📄 Panel izquierdo: NORMAL")
         
         panel_izquierdo.pack(side="left", fill="both", expand=False, padx=PADDING_MEDIUM, pady=PADDING_MEDIUM)
         

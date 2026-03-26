@@ -37,13 +37,12 @@ class VentanaLogin:
         # ✅ Color de fondo oscuro
         self.root.configure(fg_color="#001a33")
 
-        # Tamaño y centrado - ✅ RESPONSIVO
-        w = escalar(380)
-        # ✅ Aumentar altura en pantallas pequeñas
+        # Tamaño y centrado - responsivo según resolución
+        w = escalar(400)
         if self._es_pantalla_pequena():
-            h = escalar(520)  # Más altura para pantallas pequeñas
+            h = escalar(560)  # Más altura para pantallas pequeñas
         else:
-            h = escalar(480)  # Altura normal
+            h = escalar(520)  # Altura normal
             
         self.root.geometry(f"{w}x{h}")
         self.root.update_idletasks()
@@ -73,78 +72,51 @@ class VentanaLogin:
             ruta_base = os.path.dirname(os.path.abspath(__file__))
             ruta_proyecto = os.path.dirname(ruta_base)
             icon_path = os.path.join(ruta_proyecto, "utils", "app_icono.ico")
-            
             if os.path.exists(icon_path):
                 self.root.iconbitmap(icon_path)
-                print(f"✅ Icono de ventana establecido: {icon_path}")
-            else:
-                print(f"⚠️ Icono no encontrado: {icon_path}")
-                
-        except Exception as e:
-            print(f"⚠️ No se pudo establecer el icono: {e}")
+        except Exception:
+            pass
     
     def cargar_iconos(self):
-        """Carga los iconos PNG para los botones y labels - ✅ USANDO CONSTANTES"""
+        """Carga los iconos PNG para los botones y labels"""
         try:
-            # Ruta absoluta a la carpeta de iconos
-            ruta_base = os.path.dirname(os.path.abspath(__file__))  # declaraciones_app/ui
-            ruta_proyecto = os.path.dirname(ruta_base)  # declaraciones_app
+            ruta_base = os.path.dirname(os.path.abspath(__file__))
+            ruta_proyecto = os.path.dirname(ruta_base)
             ruta_iconos = os.path.join(ruta_proyecto, "utils", "iconos")
-            
-            print(f"🔍 Buscando iconos en: {ruta_iconos}")
-            
-            # Verificar que la carpeta existe
+
             if not os.path.exists(ruta_iconos):
-                print(f"⚠️ La carpeta de iconos no existe: {ruta_iconos}")
                 raise FileNotFoundError(f"No existe la carpeta: {ruta_iconos}")
-            
-            # Cargar iconos
+
             from PIL import Image
-            
-            # ✅ Icono para el botón de login - USAR ICON_SIZE_MEDIUM
+
             self.icono_login = ctk.CTkImage(
                 light_image=Image.open(os.path.join(ruta_iconos, "procesar.png")),
                 dark_image=Image.open(os.path.join(ruta_iconos, "procesar.png")),
                 size=ICON_SIZE_MEDIUM
             )
-            
-            # ✅ Icono para el título - USAR ICON_SIZE_LARGE
             self.icono_titulo = ctk.CTkImage(
                 light_image=Image.open(os.path.join(ruta_iconos, "cargado.png")),
                 dark_image=Image.open(os.path.join(ruta_iconos, "cargado.png")),
                 size=ICON_SIZE_LARGE
             )
-            
-            # ✅ Iconos para los labels - USAR ICON_SIZE_SMALL
-            # Icono de usuario
             self.icono_usuario = ctk.CTkImage(
                 light_image=Image.open(os.path.join(ruta_iconos, "usuario.png")),
                 dark_image=Image.open(os.path.join(ruta_iconos, "usuario.png")),
                 size=ICON_SIZE_SMALL
             )
-            
-            # Icono de contraseña/candado
             self.icono_password = ctk.CTkImage(
                 light_image=Image.open(os.path.join(ruta_iconos, "candado.png")),
                 dark_image=Image.open(os.path.join(ruta_iconos, "candado.png")),
                 size=ICON_SIZE_SMALL
             )
-            
-            print("✅ Iconos cargados correctamente en ventana_login")
-            
-        except Exception as e:
-            print(f"⚠️ Error al cargar iconos: {e}")
-            import traceback
-            traceback.print_exc()
-            
-            # Si falla, los iconos serán None
+        except Exception:
             self.icono_login = None
             self.icono_titulo = None
             self.icono_usuario = None
             self.icono_password = None
     
     def crear_interfaz(self):
-        # ✅ Frame principal con color oscuro #001a33 y padding responsivo
+        # Frame principal
         frame = ctk.CTkFrame(self.root, fg_color="#001a33")
         frame.pack(fill="both", expand=True, padx=PADDING_MEDIUM, pady=PADDING_MEDIUM)
 
@@ -182,13 +154,15 @@ class VentanaLogin:
         )
         subtitulo.pack(anchor="center", pady=(PADDING_SMALL, 0))  # ✅ Centrado
 
-        # ✅ Separador con color #003d66 y altura escalada
-        separator = ctk.CTkFrame(frame, fg_color="#003d66", height=escalar(1))
-        separator.pack(fill="x", pady=(PADDING_MEDIUM, PADDING_LARGE))
+        # Separador
+        ctk.CTkFrame(frame, fg_color="#005187", height=1).pack(fill="x", pady=(PADDING_MEDIUM, PADDING_LARGE))
 
-        # ===== Formulario =====
-        form = ctk.CTkFrame(frame, fg_color="#001a33")
-        form.pack(fill="x", expand=False, pady=(0, PADDING_MEDIUM))
+        # ===== Card del formulario =====
+        card_form = ctk.CTkFrame(frame, fg_color="#003d66", corner_radius=escalar(10))
+        card_form.pack(fill="x", pady=(0, PADDING_MEDIUM))
+
+        form = ctk.CTkFrame(card_form, fg_color="transparent")
+        form.pack(fill="x", expand=False, padx=PADDING_MEDIUM, pady=PADDING_MEDIUM)
 
         # ===== Label Usuario con icono =====
         usuario_label_frame = ctk.CTkFrame(form, fg_color="#001a33")
@@ -321,7 +295,8 @@ class VentanaLogin:
         )
         lbl_footer.pack(anchor="center")
 
-        # Atajos
+        # Atajos de teclado
+        self.entry_user.bind("<Return>", lambda e: self.entry_pass.focus_set())
         self.entry_pass.bind("<Return>", lambda e: self.intentar_login())
 
         # Dar foco al campo de usuario una vez que la ventana esté lista
