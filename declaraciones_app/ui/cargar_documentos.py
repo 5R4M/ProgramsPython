@@ -212,18 +212,15 @@ class VentanaCargarDocumentos:
                 self.ventana.after(50, self.center_window)
     
     def cargar_iconos(self):
-        """Carga los iconos PNG para los botones - ✅ USANDO CONSTANTES"""
+        """Carga los iconos PNG para los botones"""
         try:
             from config import ICON_SIZE_BUTTON
-            
+
             ruta_base = os.path.dirname(os.path.abspath(__file__))
             ruta_proyecto = os.path.dirname(ruta_base)
             ruta_iconos = os.path.join(ruta_proyecto, "utils", "iconos")
-            
-            print(f"🔍 Buscando iconos en: {ruta_iconos}")
-            
+
             if not os.path.exists(ruta_iconos):
-                print(f"⚠️ La carpeta de iconos no existe: {ruta_iconos}")
                 raise FileNotFoundError(f"No existe la carpeta: {ruta_iconos}")
             
             # ===== ICONOS PARA BOTONES PRINCIPALES - ✅ USAR ICON_SIZE_CARD =====
@@ -307,13 +304,7 @@ class VentanaCargarDocumentos:
                 size=(escalar(16), escalar(16))
             )
             
-            print("✅ Iconos cargados correctamente en cargar_documento")
-            
-        except Exception as e:
-            print(f"⚠️ Error al cargar iconos: {e}")
-            import traceback
-            traceback.print_exc()
-            
+        except Exception:
             for attr in ['icono_seleccionar', 'icono_limpiar', 'icono_procesar', 'icono_huerfanos',
                         'icono_generar', 'icono_regenerar', 'icono_sincronizar', 'icono_corregir',
                         'icono_buscar', 'icono_eliminar', 'icono_ver', 'icono_nuevo', 'icono_cargado']:
@@ -325,19 +316,10 @@ class VentanaCargarDocumentos:
             cursor = self.db.conn.cursor()
             cursor.execute("SELECT COUNT(*) FROM sugerencias_palabras")
             total_sugerencias = cursor.fetchone()[0]
-            
             if total_sugerencias == 0:
-                print("🔄 Tabla de sugerencias vacía. Alimentando desde datos existentes...")
-                
-                # Alimentar desde personas existentes
-                total_alimentado = self.db.alimentar_sugerencias_desde_bd()
-                
-                if total_alimentado > 0:
-                    print(f"✅ {total_alimentado} personas procesadas para sugerencias")
-                else:
-                    print("⚠️ No hay datos para alimentar sugerencias")
-        except Exception as e:
-            print(f"⚠️ Error al verificar sugerencias: {e}")
+                self.db.alimentar_sugerencias_desde_bd()
+        except Exception:
+            pass
     
     def cerrar_ventana(self):
         """Maneja el cierre seguro de la ventana"""

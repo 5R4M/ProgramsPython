@@ -153,16 +153,13 @@ class VentanaBuscarDocumento:
         self.cargar_todos_documentos_iniciales()
       
     def cargar_iconos(self):
-        """Carga los iconos PNG para los botones - ✅ USANDO CONSTANTES RESPONSIVAS"""
+        """Carga los iconos PNG para los botones"""
         try:
             ruta_base = os.path.dirname(os.path.abspath(__file__))
             ruta_proyecto = os.path.dirname(ruta_base)
             ruta_iconos = os.path.join(ruta_proyecto, "utils", "iconos")
-          
-            print(f"🔍 Buscando iconos en: {ruta_iconos}")
-          
+
             if not os.path.exists(ruta_iconos):
-                print(f"⚠️ La carpeta de iconos no existe: {ruta_iconos}")
                 raise FileNotFoundError(f"No existe la carpeta: {ruta_iconos}")
           
             # ✅ USAR ICON_SIZE_BUTTON (tamaño escalado automáticamente)
@@ -190,10 +187,7 @@ class VentanaBuscarDocumento:
                 size=ICON_SIZE_BUTTON
             )
           
-            print("✅ Iconos cargados correctamente en buscar_documento")
-          
-        except Exception as e:
-            print(f"⚠️ Error al cargar iconos: {e}")
+        except Exception:
             self.icono_buscar = None
             self.icono_seleccionar = None
             self.icono_editar = None

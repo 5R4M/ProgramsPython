@@ -37,6 +37,7 @@ from config import (
     # Funciones auxiliares responsivas
     ajustar_grid_columnas,
     es_pantalla_pequena,
+    escalar,
 )
 from database import DatabaseManager
 from .cargar_documentos import VentanaCargarDocumentos
@@ -78,6 +79,9 @@ class MainWindow(ctk.CTk):
         ctk.set_appearance_mode("dark")
         ctk.set_default_color_theme("blue")
         self.configure(fg_color="#001a33")
+
+        # Tamaño mínimo para garantizar usabilidad en todas las pantallas
+        self.minsize(escalar(800), escalar(500))
         
         # Inicializar base de datos
         self.db = DatabaseManager()
@@ -121,11 +125,8 @@ class MainWindow(ctk.CTk):
             base_dir = os.path.dirname(os.path.abspath(__file__))
             project_root = os.path.dirname(base_dir)
             ruta_iconos = os.path.join(project_root, "utils", "iconos")
-            
-            print(f"🔍 Cargando iconos desde: {ruta_iconos}")
-            
+
             if not os.path.exists(ruta_iconos):
-                print(f"⚠️ Carpeta de iconos no encontrada: {ruta_iconos}")
                 raise FileNotFoundError(f"No existe la carpeta: {ruta_iconos}")
             
             # Iconos para menú lateral (tamaños ya escalados)
@@ -209,13 +210,7 @@ class MainWindow(ctk.CTk):
                 size=ICON_SIZE_LOGO
             )
             
-            print("✅ Todos los iconos cargados correctamente")
-            
         except Exception as e:
-            print(f"⚠️ Error al cargar iconos: {e}")
-            import traceback
-            traceback.print_exc()
-            
             # Establecer todos los iconos como None si falla
             for attr in ['icono_inicio', 'icono_cargar', 'icono_buscar', 'icono_crear',
                         'icono_backup', 'icono_usuarios', 'icono_salir', 'icono_opciones',
@@ -258,8 +253,11 @@ class MainWindow(ctk.CTk):
     def crear_interfaz(self):
         """Crea la interfaz principal con constantes responsivas"""
 
+        # Separador superior de la barra de estado
+        ctk.CTkFrame(self, fg_color="#005187", height=1).pack(fill="x", side="bottom")
+
         # Barra de estado inferior
-        self.status_bar = ctk.CTkFrame(self, height=STATUS_BAR_HEIGHT, fg_color="#001a33")  # ✅ CORRECTO
+        self.status_bar = ctk.CTkFrame(self, height=STATUS_BAR_HEIGHT, fg_color="#001a33")
         self.status_bar.pack(fill="x", side="bottom")
 
         self.lbl_status_personas = ctk.CTkLabel(
@@ -326,15 +324,21 @@ class MainWindow(ctk.CTk):
             font=ctk.CTkFont(size=FONT_SIZE_SUBTITLE, weight="bold"),
         ).pack(pady=(0, PADDING_SMALL))
 
-        # Label "Opciones"
+        # Separador bajo el logo
+        ctk.CTkFrame(
+            menu_lateral, fg_color="#005187", height=1
+        ).pack(fill="x", padx=PADDING_SMALL, pady=(0, PADDING_SMALL))
+
+        # Label sección "NAVEGACIÓN"
         label_opciones = ctk.CTkLabel(
             menu_lateral,
-            text="  Opciones",
+            text="  NAVEGACIÓN",
             image=self.icono_opciones if hasattr(self, 'icono_opciones') and self.icono_opciones else None,
             compound="left",
-            font=ctk.CTkFont(size=FONT_SIZE_SMALL, weight="bold"),
+            font=ctk.CTkFont(size=FONT_SIZE_TINY, weight="bold"),
+            text_color="#778da9",
         )
-        label_opciones.pack(pady=(PADDING_TINY, PADDING_SMALL), padx=PADDING_SMALL, anchor="w")
+        label_opciones.pack(pady=(PADDING_SMALL, PADDING_TINY), padx=PADDING_SMALL, anchor="w")
 
         # Botones del menú
         botones_config = [
@@ -384,6 +388,11 @@ class MainWindow(ctk.CTk):
 
         # Espaciador
         ctk.CTkFrame(menu_lateral, fg_color="transparent").pack(fill="both", expand=True)
+
+        # Separador antes del botón Salir
+        ctk.CTkFrame(
+            menu_lateral, fg_color="#005187", height=1
+        ).pack(fill="x", padx=PADDING_SMALL, pady=(0, PADDING_TINY))
 
         # Botón Salir
         btn_salir = ctk.CTkButton(
@@ -456,9 +465,12 @@ class MainWindow(ctk.CTk):
         # Obtener número óptimo de columnas según resolución
         num_columnas = ajustar_grid_columnas()
 
-        # Configurar columnas dinámicamente
+        # Configurar columnas y filas dinámicamente
         for i in range(num_columnas):
             cards_frame.grid_columnconfigure(i, weight=1)
+        num_filas = -(-len([1, 2, 3, 4]) // num_columnas)  # ceil division
+        for i in range(num_filas):
+            cards_frame.grid_rowconfigure(i, weight=1)
 
         # Configuración de tarjetas
         cards_info = [

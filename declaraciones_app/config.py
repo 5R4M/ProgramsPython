@@ -62,25 +62,14 @@ def obtener_info_pantalla():
             escala = 1.5
         
         return ancho, alto, escala, tipo
-        
+
     except Exception as e:
-        print(f"⚠️ Error detectando pantalla: {e}")
         # Valores por defecto seguros (1366x768)
         return 1366, 768, 0.75, "DESCONOCIDA"
 
 
 # Obtener información de pantalla
 ANCHO_PANTALLA, ALTO_PANTALLA, ESCALA_PANTALLA, TIPO_PANTALLA = obtener_info_pantalla()
-
-# Imprimir información de detección (útil para debug)
-print("=" * 60)
-print("🖥️  DETECCIÓN AUTOMÁTICA DE PANTALLA")
-print("=" * 60)
-print(f"📐 Resolución detectada: {ANCHO_PANTALLA} x {ALTO_PANTALLA}")
-print(f"📺 Tipo de pantalla: {TIPO_PANTALLA}")
-print(f"⚖️  Factor de escala: {ESCALA_PANTALLA:.2f}x")
-print(f"🎯 Optimización: {'ACTIVADA' if ESCALA_PANTALLA != 1.0 else 'MODO ESTÁNDAR'}")
-print("=" * 60)
 
 
 # ===== FUNCIÓN DE ESCALADO =====
@@ -215,15 +204,13 @@ TEXTBOX_LOG_HEIGHT = escalar(280)
 
 # Para pantallas muy pequeñas (≤1366x768), hacer ajustes adicionales
 if ANCHO_PANTALLA <= 1366:
-    print("🔧 Aplicando optimizaciones para pantalla pequeña...")
-    MENU_WIDTH = int(MENU_WIDTH * 0.9)          # Menú más delgado
-    CARD_PADDING = max(8, int(CARD_PADDING * 0.7))  # Menos padding
+    MENU_WIDTH = int(MENU_WIDTH * 0.9)
+    CARD_PADDING = max(8, int(CARD_PADDING * 0.7))
     PADDING_LARGE = max(10, int(PADDING_LARGE * 0.8))
 
 # Para pantallas grandes (≥2560), hacer ajustes adicionales
 elif ANCHO_PANTALLA >= 2560:
-    print("🔧 Aplicando optimizaciones para pantalla grande...")
-    CARD_MIN_WIDTH = int(CARD_MIN_WIDTH * 1.2)  # Tarjetas más anchas
+    CARD_MIN_WIDTH = int(CARD_MIN_WIDTH * 1.2)
 
 
 # ===== LISTA DE NOTARIOS =====
@@ -238,31 +225,6 @@ NOMBRES_NOTARIOS = [
 # ============================================================
 # FUNCIONES AUXILIARES PARA UI RESPONSIVO
 # ============================================================
-
-def obtener_fuente(tipo="normal", peso="normal"):
-    """
-    Retorna configuración de fuente según tipo.
-    
-    Args:
-        tipo: "titulo", "subtitulo", "normal", "small", "tiny", "button", "card"
-        peso: "normal", "bold"
-    
-    Returns:
-        Tupla (tamaño, peso)
-    """
-    tamaños = {
-        "titulo_main": FONT_SIZE_TITLE_MAIN,
-        "titulo": FONT_SIZE_TITLE,
-        "subtitulo": FONT_SIZE_SUBTITLE,
-        "normal": FONT_SIZE_NORMAL,
-        "small": FONT_SIZE_SMALL,
-        "tiny": FONT_SIZE_TINY,
-        "button": FONT_SIZE_BUTTON,
-        "card": FONT_SIZE_CARD_TITLE,
-    }
-    
-    return (tamaños.get(tipo, FONT_SIZE_NORMAL), peso)
-
 
 def es_pantalla_pequena():
     """Retorna True si la pantalla es pequeña (≤1366x768)"""
@@ -293,21 +255,3 @@ def ajustar_grid_columnas():
 # INFORMACIÓN DE CONFIGURACIÓN (DEBUG)
 # ============================================================
 
-def imprimir_configuracion():
-    """Imprime la configuración actual (útil para debugging)"""
-    print("\n" + "=" * 60)
-    print("⚙️  CONFIGURACIÓN RESPONSIVA CARGADA")
-    print("=" * 60)
-    print(f"📱 Ventana inicial: {WINDOW_SIZE}")
-    print(f"📏 Menú lateral: {MENU_WIDTH}px")
-    print(f"🔤 Fuente título: {FONT_SIZE_TITLE_MAIN}px")
-    print(f"🔤 Fuente normal: {FONT_SIZE_NORMAL}px")
-    print(f"🔲 Botones: {BUTTON_HEIGHT}px altura")
-    print(f"📊 Columnas grid: {ajustar_grid_columnas()}")
-    print(f"💾 Base de datos: {DB_PATH}")
-    print("=" * 60 + "\n")
-
-
-# Imprimir configuración al cargar (comentar en producción)
-if __name__ != "__main__":
-    imprimir_configuracion()
