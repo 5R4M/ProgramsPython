@@ -174,9 +174,6 @@ datos_inventario = {}
 tipos_por_bodega = {}  # Nueva estructura para almacenar tipos disponibles por bodega
 
 def cargar_datos_bodega(codigo_bodega, archivo_excel):
-    """
-    ✅ Lee datos directamente del Excel (sin SQLite)
-    """
     try:
         if not os.path.exists(archivo_excel):
             print(f"⚠️  Archivo no encontrado: {archivo_excel}")
@@ -190,107 +187,113 @@ def cargar_datos_bodega(codigo_bodega, archivo_excel):
 
         print(f"📊 Bodega '{codigo_bodega}': {len(df)} productos leídos del Excel")
 
-        # ⚠️ REMOVIDO: No filtrar por saldo_total aquí
-        # El filtro se aplica a nivel de LOTE, no de producto completo
-        # if len(df.columns) > 29:
-        #     df = df[df.iloc[:, 29] > 0]
-
         inventario_bodega = {}
         tipos_encontrados = set()
-        productos_sin_lotes = 0  # Contador de productos sin lotes válidos
+        productos_sin_lotes = 0
 
         for idx, row in df.iterrows():
             codigo = str(row.get('Código', ''))
             if not codigo or codigo == 'nan':
                 continue
 
-            # ✅ Precio desde Excel (columna AB = índice 27)
-            precio_unitario_producto = None
-            try:
-                precio_val = row.iloc[27]
-                if pd.notna(precio_val):
-                    precio_unitario_producto = float(precio_val)
-            except:
-                precio_unitario_producto = None
-
             lotes = []
-            # Columnas por lote: (F/V, Lote, Saldo)
+
+            # (F/V, Lote, Saldo, PrecioUnit, PrecioTotal)
             columnas_lotes = [
-                (6, 7, 8),      # Lote 1: G, H, I
-                (9, 10, 11),    # Lote 2: J, K, L
-                (12, 13, 14),   # Lote 3: M, N, O
-                (15, 16, 17),   # Lote 4: P, Q, R
-                (18, 19, 20)    # Lote 5: S, T, U
+                (6,  7,  8,  27, 32),   # Lote 1: G,H,I,AB,AG
+                (9,  10, 11, 28, 33),   # Lote 2: J,K,L,AC,AH
+                (12, 13, 14, 29, 34),   # Lote 3: M,N,O,AD,AI
+                (15, 16, 17, 30, 35),   # Lote 4: P,Q,R,AE,AJ
+                (18, 19, 20, 31, 36)    # Lote 5: S,T,U,AF,AK
             ]
 
             columnas_med = [22, 23, 24, 25, 26]
 
-            for i, (col_fv, col_lote, col_saldo) in enumerate(columnas_lotes, start=1):
+            for i, (col_fv, col_lote, col_saldo, col_pu, col_pt) in enumerate(columnas_lotes, start=1):
                 try:
-                    # ✅ Leer DIRECTAMENTE del Excel
-                    fv = row.iloc[col_fv]
-                    lote = row.iloc[col_lote]
+                    fv    = row.iloc[col_fv]
+                    lote  = row.iloc[col_lote]
                     saldo = row.iloc[col_saldo]
 
-                    # Convertir a string o 'S/D' si está vacío
-                    fv_str = str(fv) if pd.notna(fv) and str(fv) != 'nan' else 'S/D'
+                    fv_str   = str(fv)   if pd.notna(fv)   and str(fv)   != 'nan' else 'S/D'
                     lote_str = str(lote) if pd.notna(lote) and str(lote) != 'nan' else 'S/D'
 
-                    # Formatear fecha si viene como datetime
                     if isinstance(fv, pd.Timestamp):
                         fv_str = fv.strftime('%d/%m/%Y')
 
-                    # MED (Meses de Existencia)
+                    # MED
                     med_valor = 'S/D'
                     try:
                         med_excel = row.iloc[columnas_med[i-1]]
                         if pd.notna(med_excel):
-                            try:
-                                med_float = float(med_excel)
-                                med_valor = 'S/D' if med_float >= 1000 else med_float
-                            except:
-                                med_valor = 'S/D'
+                            med_float = float(med_excel)
+                            med_valor = 'S/D' if med_float >= 1000 else med_float
                     except:
                         med_valor = 'S/D'
 
-                    # Solo agregar lotes con saldo > 0
+                    # Precio Unitario por lote (AB–AF)
+                    precio_unit = None
+                    try:
+                        pu = row.iloc[col_pu]
+                        if pd.notna(pu):
+                            precio_unit = float(pu)
+                    except:
+                        precio_unit = None
+
+                    # Precio Total por lote (AG–AK)
+                    precio_total_lote = None
+                    try:
+                        pt = row.iloc[col_pt]
+                        if pd.notna(pt):
+                            precio_total_lote = float(pt)
+                    except:
+                        precio_total_lote = None
+
                     if pd.notna(saldo) and saldo > 0:
                         lotes.append({
-                            'numero': i,
-                            'fv': fv_str,
-                            'lote': lote_str,
-                            'saldo': int(saldo) if saldo == int(saldo) else saldo,
-                            'med': med_valor,
-                            'precio_unitario': precio_unitario_producto
+                            'numero':           i,
+                            'fv':               fv_str,
+                            'lote':             lote_str,
+                            'saldo':            int(saldo) if saldo == int(saldo) else saldo,
+                            'med':              med_valor,
+                            'precio_unitario':  precio_unit,
+                            'precio_total_lote': precio_total_lote
                         })
                 except Exception as e:
                     print(f"⚠️ Error procesando lote {i} del código {codigo}: {e}")
                     continue
 
-            # ✅ CAMBIO CRÍTICO: Agregar productos INCLUSO SIN LOTES
-            # para diagnóstico, pero marcarlo
+            # Tipo de insumo
             tipo_insumo = ''
             if BODEGAS[codigo_bodega].get('tiene_tipos', False):
                 tipo_insumo = str(row.get('Tipo de Insumo', '')) if pd.notna(row.get('Tipo de Insumo')) else ''
                 if tipo_insumo and tipo_insumo != 'nan':
                     tipos_encontrados.add(tipo_insumo)
 
-            # Saldo total (columna AD = índice 29)
-            saldo_total = row.iloc[29] if len(row) > 29 and pd.notna(row.iloc[29]) else 0
+            # Precio Total General (columna AL = índice 37)
+            precio_total_general = None
+            try:
+                ptg = row.iloc[37]
+                if pd.notna(ptg):
+                    precio_total_general = float(ptg)
+            except:
+                precio_total_general = None
+
+            # Saldo total CORREGIDO (columna AM = índice 38)
+            saldo_total = row.iloc[38] if len(row) > 38 and pd.notna(row.iloc[38]) else 0
 
             if lotes:
-                # Producto con lotes válidos
                 inventario_bodega[codigo] = {
-                    'codigo': codigo,
-                    'medicamento': str(row.get('Medicamento', '')),
-                    'tipo': tipo_insumo,
-                    'presentacion': str(row.get('Presentación Primaria', '')) if pd.notna(row.get('Presentación Primaria')) else '',
-                    'lotes': lotes,
-                    'saldo_total': saldo_total,
-                    'bodega': codigo_bodega
+                    'codigo':               codigo,
+                    'medicamento':          str(row.get('Medicamento', '')),
+                    'tipo':                 tipo_insumo,
+                    'presentacion':         str(row.get('Presentación Primaria', '')) if pd.notna(row.get('Presentación Primaria')) else '',
+                    'lotes':                lotes,
+                    'saldo_total':          saldo_total,
+                    'precio_total_general': precio_total_general,
+                    'bodega':               codigo_bodega
                 }
             else:
-                # Producto sin lotes válidos (para diagnóstico)
                 productos_sin_lotes += 1
 
         print(f"✅ Bodega '{codigo_bodega}': {len(inventario_bodega)} productos con lotes, {productos_sin_lotes} sin lotes")
@@ -540,14 +543,12 @@ init_db()
 
 @app.route('/api/medicamento')
 def api_medicamento():
-    """Endpoint JSON para la aplicación móvil"""
-    codigo = request.args.get('codigo', '')
+    codigo      = request.args.get('codigo', '')
     bodega_param = request.args.get('bodega', '')
 
     if not codigo:
         return jsonify({'error': 'Código requerido'}), 400
 
-    # Buscar el medicamento
     datos = None
     bodega_encontrada = None
 
@@ -565,22 +566,45 @@ def api_medicamento():
     if not datos:
         return jsonify({'error': 'Producto no encontrado'}), 404
 
-    # ✅ Agregar timestamp para evitar cache
     import time
-
-    # Retornar JSON con timestamp
     return jsonify({
-        'codigo': datos['codigo'],
-        'medicamento': datos['medicamento'],
-        'tipo': datos.get('tipo', ''),
-        'presentacion': datos.get('presentacion', ''),
-        'saldo_total': datos.get('saldo_total', 0),
-        'bodega': bodega_encontrada,
-        'bodega_nombre': BODEGAS[bodega_encontrada]['nombre'],
-        'lotes': datos['lotes'],
-        'timestamp': int(time.time()),  # ✅ Evita cache
-        'actualizado': obtener_hora_actual().strftime('%Y-%m-%d %H:%M:%S')
+        'codigo':               datos['codigo'],
+        'medicamento':          datos['medicamento'],
+        'tipo':                 datos.get('tipo', ''),
+        'presentacion':         datos.get('presentacion', ''),
+        'saldo_total':          datos.get('saldo_total', 0),
+        'precio_total_general': datos.get('precio_total_general', 0),
+        'bodega':               bodega_encontrada,
+        'bodega_nombre':        BODEGAS[bodega_encontrada]['nombre'],
+        'lotes':                datos['lotes'],
+        'timestamp':            int(time.time()),
+        'actualizado':          obtener_hora_actual().strftime('%Y-%m-%d %H:%M:%S')
     })
+
+@app.route('/api/buscar')
+def api_buscar():
+    """Busca insumos por nombre o código (búsqueda parcial, todas las bodegas)"""
+    nombre = request.args.get('nombre', '').strip()
+
+    if not nombre or len(nombre) < 2:
+        return jsonify([])
+
+    nombre_lower = nombre.lower()
+    resultados = []
+
+    for codigo_bodega, inventario in datos_inventario.items():
+        for codigo, datos in inventario.items():
+            medicamento = datos.get('medicamento', '')
+            if nombre_lower in medicamento.lower() or nombre_lower in codigo.lower():
+                resultados.append({
+                    'codigo':      datos['codigo'],
+                    'medicamento': medicamento,
+                    'tipo':        datos.get('tipo', ''),
+                    'bodega':      codigo_bodega
+                })
+
+    resultados.sort(key=lambda x: x['medicamento'].lower())
+    return jsonify(resultados[:50])
 
 @app.route('/')
 def inicio():
@@ -1244,17 +1268,13 @@ def api_actualizar_datos_producto():
             }), 404
 
         # Mapeo de columnas por número de lote
-        # Lote 1: G(7), H(8), I(9)
-        # Lote 2: J(10), K(11), L(12)
-        # Lote 3: M(13), N(14), O(15)
-        # Lote 4: P(16), Q(17), R(18)
-        # Lote 5: S(19), T(20), U(21)
+
         columnas_lotes = {
-            1: {'fv': 7, 'lote': 8, 'saldo': 9},
-            2: {'fv': 10, 'lote': 11, 'saldo': 12},
-            3: {'fv': 13, 'lote': 14, 'saldo': 15},
-            4: {'fv': 16, 'lote': 17, 'saldo': 18},
-            5: {'fv': 19, 'lote': 20, 'saldo': 21}
+            1: {'fv': 7,  'lote': 8,  'saldo': 9,  'precio_unit': 28},
+            2: {'fv': 10, 'lote': 11, 'saldo': 12, 'precio_unit': 29},
+            3: {'fv': 13, 'lote': 14, 'saldo': 15, 'precio_unit': 30},
+            4: {'fv': 16, 'lote': 17, 'saldo': 18, 'precio_unit': 31},
+            5: {'fv': 19, 'lote': 20, 'saldo': 21, 'precio_unit': 32}
         }
 
         cols = columnas_lotes[lote_numero]
@@ -1278,9 +1298,9 @@ def api_actualizar_datos_producto():
 
         if 'precio_unitario' in datos:
             nuevo_precio = float(datos['precio_unitario'])
-            # Columna AB = 28
-            ws.cell(row=fila_producto, column=28).value = nuevo_precio
-            cambios_realizados.append(f"Precio Unitario: Q{nuevo_precio:.2f}")
+            ws.cell(row=fila_producto, column=cols['precio_unit']).value = nuevo_precio
+            cambios_realizados.append(f"Precio Lote {lote_numero}: Q{nuevo_precio:.2f}")
+
 
         # Guardar cambios en el Excel
         wb.save(archivo_excel)
@@ -1376,12 +1396,13 @@ def api_actualizar_datos_multiples():
             }), 404
 
         columnas_lotes = {
-            1: {'fv': 7, 'lote': 8, 'saldo': 9},
-            2: {'fv': 10, 'lote': 11, 'saldo': 12},
-            3: {'fv': 13, 'lote': 14, 'saldo': 15},
-            4: {'fv': 16, 'lote': 17, 'saldo': 18},
-            5: {'fv': 19, 'lote': 20, 'saldo': 21}
+            1: {'fv': 7,  'lote': 8,  'saldo': 9,  'precio_unit': 28},
+            2: {'fv': 10, 'lote': 11, 'saldo': 12, 'precio_unit': 29},
+            3: {'fv': 13, 'lote': 14, 'saldo': 15, 'precio_unit': 30},
+            4: {'fv': 16, 'lote': 17, 'saldo': 18, 'precio_unit': 31},
+            5: {'fv': 19, 'lote': 20, 'saldo': 21, 'precio_unit': 32}
         }
+
 
         todos_cambios = []
         precio_actualizado = False
@@ -1412,10 +1433,10 @@ def api_actualizar_datos_multiples():
                 todos_cambios.append(f"Lote {lote_numero}: {', '.join(cambios_lote)}")
 
             # Precio unitario (solo se actualiza una vez por producto)
-            if 'precio_unitario' in lote_data and not precio_actualizado:
-                ws.cell(row=fila_producto, column=28).value = float(lote_data['precio_unitario'])
-                todos_cambios.append(f"Precio Unitario: Q{lote_data['precio_unitario']:.2f}")
-                precio_actualizado = True
+            if 'precio_unitario' in lote_data:
+                ws.cell(row=fila_producto, column=cols['precio_unit']).value = float(lote_data['precio_unitario'])
+                todos_cambios.append(f"Precio Lote {lote_numero}: Q{lote_data['precio_unitario']:.2f}")
+
 
         # Guardar cambios
         wb.save(archivo_excel)
