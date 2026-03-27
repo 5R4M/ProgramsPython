@@ -289,6 +289,88 @@ def seleccionar_excel_bodega(bodega):
 
 
 # =====================================================
+# EXTRACCIÓN DE LOTES, FECHAS Y PRECIOS POR PRODUCTO
+# =====================================================
+
+def extraer_lotes_producto(row, df_cols):
+    """
+    Lee hasta 5 lotes por producto desde las columnas del Excel:
+      - Lote / fecha : detectados por nombre de columna
+      - Precio unitario por lote : columnas AB–AF (índice 27–31)
+      - Precio total por lote    : columnas AG–AK (índice 32–36)
+    Retorna lista de dicts con los lotes que tienen datos.
+    """
+    lotes = []
+    col_list = list(df_cols)
+
+    # --- Columnas de precio por posición (AB=27 ... AF=31, AG=32 ... AK=36) ---
+    precio_unit_cols  = col_list[27:32] if len(col_list) > 31 else []
+    precio_total_cols = col_list[32:37] if len(col_list) > 36 else []
+
+    # --- Detectar columnas de Lote y Fecha por nombre ---
+    lote_cols  = [c for c in col_list
+                  if 'lote'  in str(c).lower() and 'precio' not in str(c).lower()]
+    fecha_cols = [c for c in col_list
+                  if any(x in str(c).lower()
+                         for x in ['fecha', 'f.v', 'venc', 'expir'])]
+
+    max_lotes = max(len(lote_cols), len(precio_unit_cols), 5)
+
+    for i in range(min(max_lotes, 5)):
+        # Número de lote
+        lote_val = ""
+        if i < len(lote_cols):
+            v = row.get(lote_cols[i], "")
+            if pd.notna(v) and str(v).strip() not in ("", "nan", "0"):
+                lote_val = str(v).strip()
+
+        # Fecha de vencimiento
+        fecha_val = ""
+        if i < len(fecha_cols):
+            v = row.get(fecha_cols[i], "")
+            if pd.notna(v) and str(v).strip() not in ("", "nan"):
+                try:
+                    if hasattr(v, 'strftime'):
+                        fecha_val = v.strftime("%m/%Y")
+                    else:
+                        fecha_val = str(v).strip()[:7]   # "MM/YYYY" o similar
+                except Exception:
+                    fecha_val = str(v).strip()
+
+        # Precio unitario
+        precio_unit_val = None
+        if i < len(precio_unit_cols):
+            v = row.get(precio_unit_cols[i], None)
+            if pd.notna(v):
+                try:
+                    precio_unit_val = float(v)
+                except Exception:
+                    pass
+
+        # Precio total del lote
+        precio_total_val = None
+        if i < len(precio_total_cols):
+            v = row.get(precio_total_cols[i], None)
+            if pd.notna(v):
+                try:
+                    precio_total_val = float(v)
+                except Exception:
+                    pass
+
+        # Solo agregar si hay al menos un dato real
+        if any([lote_val, fecha_val,
+                precio_unit_val is not None,
+                precio_total_val is not None]):
+            lotes.append({
+                'lote'         : lote_val  or f"Lote {i+1}",
+                'fecha'        : fecha_val or "—",
+                'precio_unit'  : precio_unit_val,
+                'precio_total' : precio_total_val,
+            })
+
+    return lotes
+
+# =====================================================
 # GENERACIÓN DE QR CON CONTROL DE DUPLICADOS
 # =====================================================
 
@@ -340,7 +422,7 @@ def generar_qr_bodega(config, bodega, ruta_excel):
 
     Path(carpeta_salida).mkdir(exist_ok=True)
 
-    # ── Clasificar filas ──────────────────────────────────────────────────────
+    # ?? Clasificar filas ??????????????????????????????????????????????????????
     filas_nuevas      = []   # código no existe en el registro
     filas_regenerar   = []   # URL cambió o PNG fue borrado
     filas_omitidas    = []   # ya existen y no cambiaron → se omiten
@@ -350,10 +432,24 @@ def generar_qr_bodega(config, bodega, ruta_excel):
         producto = str(row.get('Medicamento', row.get('Producto', ''))).strip()
         url      = f"{URL_BASE}{codigo}&bodega={codigo_bodega}"
 
+        # *** NUEVO: extraer lotes, fechas y precios ***
+        lotes = extraer_lotes_producto(row, df.columns)
+
+        # Precio total general (columna AL = índice 37)
+        col_list = list(df.columns)
+        precio_general = None
+        if len(col_list) > 37:
+            v = row.get(col_list[37], None)
+            if pd.notna(v):
+                try:
+                    precio_general = float(v)
+                except Exception:
+                    pass
+
         if codigo not in codigos_previos:
-            filas_nuevas.append((codigo, producto, url))
+            filas_nuevas.append((codigo, producto, url, lotes, precio_general))
         elif codigo_necesita_regenerarse(codigos_previos[codigo], url):
-            filas_regenerar.append((codigo, producto, url))
+            filas_regenerar.append((codigo, producto, url, lotes, precio_general))
         else:
             filas_omitidas.append(codigo)
 
@@ -371,19 +467,17 @@ def generar_qr_bodega(config, bodega, ruta_excel):
         _ofrecer_pdf(registro, codigos_previos, carpeta_salida, usuario, bodega)
         return True
 
-    # ── Generar PNGs ──────────────────────────────────────────────────────────
-    print(f"\n🎯 Procesando {len(filas_a_procesar)} código(s)...\n")
+    # ?? Generar PNGs ??????????????????????????????????????????????????????????
+    print(f"\n📋 Procesando {len(filas_a_procesar)} código(s)...\n")
     codigos_generados_ahora = []
 
-    for idx, (codigo, producto, url) in enumerate(filas_a_procesar):
-        # Construir nombre de archivo (igual que antes)
+    for idx, (codigo, producto, url, lotes, precio_general) in enumerate(filas_a_procesar):
         nombre_archivo = f"QR_{codigo_bodega}_{codigo}.png"
         for char in ['/', '\\', ':', '*', '?', '"', '<', '>', '|']:
             nombre_archivo = nombre_archivo.replace(char, '-')
 
         ruta_png = Path(carpeta_salida) / nombre_archivo
 
-        # Crear QR
         qr = qrcode.QRCode(
             version=None,
             error_correction=qrcode.constants.ERROR_CORRECT_M,
@@ -395,27 +489,29 @@ def generar_qr_bodega(config, bodega, ruta_excel):
         img = qr.make_image(fill_color="black", back_color="white")
         img.save(ruta_png)
 
-        # Actualizar registro para este código
         codigos_previos[codigo] = {
             "url"             : url,
             "hash_url"        : _hash_url(url),
             "producto"        : producto,
+            "lotes"           : lotes,           # *** NUEVO ***
+            "precio_general"  : precio_general,  # *** NUEVO ***
             "fecha_generado"  : datetime.now().isoformat(),
             "archivo_png"     : str(ruta_png),
             "incluido_en_pdfs": codigos_previos.get(codigo, {}).get("incluido_en_pdfs", [])
         }
 
         codigos_generados_ahora.append({
-            'ruta'   : str(ruta_png),
-            'codigo' : codigo,
-            'producto': producto,
-            'bodega' : bodega['nombre']
+            'ruta'           : str(ruta_png),
+            'codigo'         : codigo,
+            'producto'       : producto,
+            'bodega'         : bodega['nombre'],
+            'lotes'          : lotes,           # *** NUEVO ***
+            'precio_general' : precio_general,  # *** NUEVO ***
         })
 
-        # Progreso
         if (idx + 1) % max(1, len(filas_a_procesar) // 10) == 0 or idx == 0:
             pct = int((idx + 1) / len(filas_a_procesar) * 100)
-            print(f"  {pct:3d}% ({idx + 1:3d}/{len(filas_a_procesar)})  ➜  {codigo}")
+            print(f"  {pct:3d}% ({idx + 1:3d}/{len(filas_a_procesar)})  →  {codigo}")
 
     # ── Persistir registro actualizado ────────────────────────────────────────
     registro["codigos"] = codigos_previos
@@ -460,13 +556,14 @@ def _todos_los_codigos(codigos_previos, carpeta_salida, nombre_bodega):
         ruta_png = info.get("archivo_png", "")
         if ruta_png and os.path.exists(ruta_png):
             resultado.append({
-                'ruta'   : ruta_png,
-                'codigo' : codigo,
-                'producto': info.get("producto", ""),
-                'bodega' : nombre_bodega
+                'ruta'          : ruta_png,
+                'codigo'        : codigo,
+                'producto'      : info.get("producto", ""),
+                'bodega'        : nombre_bodega,
+                'lotes'         : info.get("lotes", []),           # *** NUEVO ***
+                'precio_general': info.get("precio_general", None), # *** NUEVO ***
             })
     return resultado
-
 
 # =====================================================
 # GENERACIÓN DE PDF
@@ -479,21 +576,26 @@ def _nombre_pdf(bodega_codigo: str) -> str:
 
 
 def generar_pdf(codigos_generados, usuario, bodega, registro=None):
-    """Genera PDF con los QR - actualiza el registro con el PDF generado."""
+    """Genera PDF con los QR - muestra precio por lote y fecha de vencimiento."""
     try:
         pdf_path = _nombre_pdf(bodega['codigo'])
+
+        # Layout: 2 columnas × 3 filas por página
         c = canvas.Canvas(pdf_path, pagesize=letter)
         width, height = letter
 
-        cols, rows    = 2, 3
-        qr_size       = 1.7 * inch
-        margin        = 0.4 * inch
-        spacing_x     = (width  - 2 * margin) / cols
-        spacing_y     = (height - 2 * margin) / rows
+        cols, rows   = 2, 3
+        margin       = 0.35 * inch
+        spacing_x    = (width  - 2 * margin) / cols
+        spacing_y    = (height - 2 * margin) / rows
+        qr_size      = 1.5 * inch
 
-        COLOR_BORDE  = (0.2, 0.2, 0.2)
-        COLOR_FONDO  = (0.98, 0.98, 0.98)
-        COLOR_BODEGA = (0, 0.5, 0)
+        COLOR_BORDE    = (0.2, 0.2, 0.2)
+        COLOR_FONDO    = (0.97, 0.97, 0.97)
+        COLOR_BODEGA   = (0, 0.45, 0)
+        COLOR_HEADER   = (0.1, 0.1, 0.5)
+        COLOR_PRECIO   = (0.1, 0.4, 0.1)
+        COLOR_TOTAL    = (0.5, 0.0, 0.0)
 
         contador = 0
         total    = len(codigos_generados)
@@ -508,38 +610,38 @@ def generar_pdf(codigos_generados, usuario, bodega, registro=None):
             col = contador % cols
             row = contador // cols
 
-            x_recuadro   = margin + col * spacing_x + 10
-            y_recuadro   = height - margin - (row + 1) * spacing_y + 10
-            ancho_recuadro = spacing_x - 20
-            alto_recuadro  = spacing_y - 20
+            x_rec = margin + col * spacing_x + 6
+            y_rec = height - margin - (row + 1) * spacing_y + 6
+            ancho = spacing_x - 12
+            alto  = spacing_y - 12
 
-            # Fondo y borde
+            # --- Fondo y borde ---
             c.setFillColorRGB(*COLOR_FONDO)
             c.setStrokeColorRGB(*COLOR_BORDE)
-            c.setLineWidth(2)
-            c.roundRect(x_recuadro, y_recuadro, ancho_recuadro, alto_recuadro,
-                        8, fill=1, stroke=1)
+            c.setLineWidth(1.5)
+            c.roundRect(x_rec, y_rec, ancho, alto, 6, fill=1, stroke=1)
 
-            # QR centrado
-            x_qr = x_recuadro + (ancho_recuadro - qr_size) / 2
-            y_qr = y_recuadro + alto_recuadro - qr_size - 15
+            # --- QR (esquina superior izquierda del recuadro) ---
+            x_qr = x_rec + 8
+            y_qr = y_rec + alto - qr_size - 8
             c.drawImage(qr_data['ruta'], x_qr, y_qr, qr_size, qr_size)
 
-            text_x = x_recuadro + 8
-            text_y = y_qr - 10
+            # --- Código y producto (a la derecha del QR) ---
+            tx = x_qr + qr_size + 6
+            ty = y_qr + qr_size
 
             # Código
-            c.setFillColorRGB(0, 0, 0)
-            c.setFont("Helvetica-Bold", 11)
-            c.drawString(text_x, text_y, f"CÓDIGO: {qr_data['codigo']}")
-            text_y -= 18
+            c.setFillColorRGB(*COLOR_HEADER)
+            c.setFont("Helvetica-Bold", 9)
+            c.drawString(tx, ty - 10, f"COD: {qr_data['codigo']}")
 
-            # Producto (máx. 3 líneas)
-            c.setFont("Helvetica", 9)
-            palabras    = str(qr_data['producto']).split()
+            # Nombre del producto (máx. 3 líneas, ancho disponible)
+            c.setFillColorRGB(0, 0, 0)
+            c.setFont("Helvetica", 7.5)
+            palabras = str(qr_data['producto']).split()
             lineas, linea_actual = [], ""
             for palabra in palabras:
-                if len(linea_actual + " " + palabra) <= 45:
+                if len(linea_actual + " " + palabra) <= 28:
                     linea_actual += (" " if linea_actual else "") + palabra
                 else:
                     if linea_actual:
@@ -548,21 +650,89 @@ def generar_pdf(codigos_generados, usuario, bodega, registro=None):
             if linea_actual:
                 lineas.append(linea_actual)
 
+            nombre_y = ty - 22
             for linea in lineas[:3]:
-                c.drawString(text_x, text_y, linea)
-                text_y -= 12
+                c.drawString(tx, nombre_y, linea)
+                nombre_y -= 10
 
             # Bodega
-            text_y -= 5
-            c.setFont("Helvetica-Bold", 7)
+            c.setFont("Helvetica-Bold", 6)
             c.setFillColorRGB(*COLOR_BODEGA)
-            c.drawString(text_x, text_y, f"📦 {bodega['nombre']}")
+            c.drawString(tx, nombre_y - 4, f"🏥 {bodega['nombre'][:30]}")
 
-            # URL
-            text_y -= 10
-            c.setFont("Helvetica", 5)
-            c.setFillColorRGB(0.4, 0.4, 0.4)
-            c.drawString(text_x, text_y,
+            # --- Tabla de lotes debajo del QR ---
+            lotes = qr_data.get('lotes', [])
+            tabla_y = y_qr - 6
+
+            if lotes:
+                # Encabezado de tabla
+                c.setFillColorRGB(0.85, 0.85, 0.85)
+                c.rect(x_rec + 4, tabla_y - 11, ancho - 8, 11, fill=1, stroke=0)
+
+                c.setFillColorRGB(0.1, 0.1, 0.1)
+                c.setFont("Helvetica-Bold", 6.5)
+                col1 = x_rec + 7
+                col2 = x_rec + ancho * 0.30
+                col3 = x_rec + ancho * 0.55
+                col4 = x_rec + ancho * 0.77
+                c.drawString(col1, tabla_y - 9,  "Lote")
+                c.drawString(col2, tabla_y - 9,  "Vencimiento")
+                c.drawString(col3, tabla_y - 9,  "P. Unit.")
+                c.drawString(col4, tabla_y - 9,  "Total Lote")
+                tabla_y -= 12
+
+                # Línea separadora
+                c.setStrokeColorRGB(0.6, 0.6, 0.6)
+                c.setLineWidth(0.5)
+                c.line(x_rec + 4, tabla_y + 1, x_rec + ancho - 4, tabla_y + 1)
+
+                # Filas de lotes (máx. 5)
+                c.setFont("Helvetica", 6)
+                for i, lote in enumerate(lotes[:5]):
+                    # Fondo alternado
+                    if i % 2 == 0:
+                        c.setFillColorRGB(0.95, 0.95, 0.95)
+                        c.rect(x_rec + 4, tabla_y - 9, ancho - 8, 10, fill=1, stroke=0)
+
+                    c.setFillColorRGB(0, 0, 0)
+                    c.drawString(col1, tabla_y - 7, str(lote['lote'])[:12])
+                    c.drawString(col2, tabla_y - 7, str(lote['fecha'])[:8])
+
+                    c.setFillColorRGB(*COLOR_PRECIO)
+                    pu = lote.get('precio_unit')
+                    pt = lote.get('precio_total')
+                    c.drawString(col3, tabla_y - 7,
+                                 f"Q{pu:,.2f}" if pu is not None else "—")
+                    c.drawString(col4, tabla_y - 7,
+                                 f"Q{pt:,.2f}" if pt is not None else "—")
+                    tabla_y -= 10
+
+                # Línea separadora antes del total
+                c.setStrokeColorRGB(0.4, 0.4, 0.4)
+                c.setLineWidth(0.8)
+                c.line(x_rec + 4, tabla_y + 1, x_rec + ancho - 4, tabla_y + 1)
+                tabla_y -= 2
+
+                # Total general
+                precio_gral = qr_data.get('precio_general')
+                if precio_gral is not None:
+                    c.setFont("Helvetica-Bold", 7)
+                    c.setFillColorRGB(*COLOR_TOTAL)
+                    label_total = "TOTAL GENERAL:"
+                    valor_total = f"Q {precio_gral:,.2f}"
+                    c.drawString(col1, tabla_y - 7, label_total)
+                    c.drawRightString(x_rec + ancho - 6, tabla_y - 7, valor_total)
+
+            else:
+                # Sin datos de lotes
+                c.setFont("Helvetica-Oblique", 7)
+                c.setFillColorRGB(0.5, 0.5, 0.5)
+                c.drawString(x_rec + 8, tabla_y - 10, "Sin datos de lotes en Excel")
+
+            # URL pequeña al pie
+            c.setFont("Helvetica", 4.5)
+            c.setFillColorRGB(0.55, 0.55, 0.55)
+            c.drawString(x_rec + 6, y_rec + 4,
                          f"https://{usuario}.pythonanywhere.com")
 
             contador += 1
@@ -574,7 +744,7 @@ def generar_pdf(codigos_generados, usuario, bodega, registro=None):
         c.save()
         print(f"\n✅ PDF generado: {pdf_path}")
 
-        # ── Registrar PDF en cada código incluido ─────────────────────────────
+        # Registrar PDF en cada código
         if registro:
             for qr_data in codigos_generados:
                 codigo = qr_data['codigo']
@@ -584,9 +754,7 @@ def generar_pdf(codigos_generados, usuario, bodega, registro=None):
                         pdfs.append(pdf_path)
                     registro["codigos"][codigo]["incluido_en_pdfs"] = pdfs
             guardar_registro(bodega['codigo'], registro)
-            print(f"💾 Registro actualizado con el PDF generado")
 
-        # ── Abrir PDF ─────────────────────────────────────────────────────────
         print("\n¿Deseas abrir el PDF? (s/n): ", end='')
         if input().strip().lower() == 's':
             import platform, subprocess
@@ -604,7 +772,8 @@ def generar_pdf(codigos_generados, usuario, bodega, registro=None):
 
     except Exception as e:
         print(f"❌ Error generando PDF: {e}")
-
+        import traceback
+        traceback.print_exc()
 
 # =====================================================
 # UTILIDADES EXTRA
