@@ -1,6 +1,6 @@
 {
     "bodega": "medico",
-    "ultima_actualizacion": "2026-03-26T13:30:27.195004",
+    "ultima_actualizacion": "2026-03-27T14:56:27.813952",
     "codigos": {
         "EPP010": {
             "url": "https://salonso.pythonanywhere.com/medicamento?codigo=EPP010&bodega=medico",
@@ -10,7 +10,9 @@
             "archivo_png": "codigos_qr_medico\\QR_medico_EPP010.png",
             "incluido_en_pdfs": [
                 "codigos_qr_medico_20260326_1326.pdf",
-                "codigos_qr_medico_20260326_1330.pdf"
+                "codigos_qr_medico_20260326_1330.pdf",
+                "codigos_qr_medico_20260327_1444.pdf",
+                "codigos_qr_medico_20260327_1456.pdf"
             ]
         },
         "MQ0101220021": {
@@ -21,7 +23,9 @@
             "archivo_png": "codigos_qr_medico\\QR_medico_MQ0101220021.png",
             "incluido_en_pdfs": [
                 "codigos_qr_medico_20260326_1326.pdf",
-                "codigos_qr_medico_20260326_1330.pdf"
+                "codigos_qr_medico_20260326_1330.pdf",
+                "codigos_qr_medico_20260327_1444.pdf",
+                "codigos_qr_medico_20260327_1456.pdf"
             ]
         },
         "MQ0102220023": {
@@ -32,7 +36,9 @@
             "archivo_png": "codigos_qr_medico\\QR_medico_MQ0102220023.png",
             "incluido_en_pdfs": [
                 "codigos_qr_medico_20260326_1326.pdf",
-                "codigos_qr_medico_20260326_1330.pdf"
+                "codigos_qr_medico_20260326_1330.pdf",
+                "codigos_qr_medico_20260327_1444.pdf",
+                "codigos_qr_medico_20260327_1456.pdf"
             ]
         },
         "MQ0207220007": {
@@ -43,7 +49,9 @@
             "archivo_png": "codigos_qr_medico\\QR_medico_MQ0207220007.png",
             "incluido_en_pdfs": [
                 "codigos_qr_medico_20260326_1326.pdf",
-                "codigos_qr_medico_20260326_1330.pdf"
+                "codigos_qr_medico_20260326_1330.pdf",
+                "codigos_qr_medico_20260327_1444.pdf",
+                "codigos_qr_medico_20260327_1456.pdf"
             ]
         },
         "MQ0208220011": {
@@ -54,7 +62,9 @@
             "archivo_png": "codigos_qr_medico\\QR_medico_MQ0208220011.png",
             "incluido_en_pdfs": [
                 "codigos_qr_medico_20260326_1326.pdf",
-                "codigos_qr_medico_20260326_1330.pdf"
+                "codigos_qr_medico_20260326_1330.pdf",
+                "codigos_qr_medico_20260327_1444.pdf",
+                "codigos_qr_medico_20260327_1456.pdf"
             ]
         },
         "MQ0303030005": {
@@ -65,7 +75,9 @@
             "archivo_png": "codigos_qr_medico\\QR_medico_MQ0303030005.png",
             "incluido_en_pdfs": [
                 "codigos_qr_medico_20260326_1326.pdf",
-                "codigos_qr_medico_20260326_1330.pdf"
+                "codigos_qr_medico_20260326_1330.pdf",
+                "codigos_qr_medico_20260327_1444.pdf",
+                "codigos_qr_medico_20260327_1456.pdf"
             ]
         },
         "MQ0403050001": {
@@ -76,7 +88,9 @@
             "archivo_png": "codigos_qr_medico\\QR_medico_MQ0403050001.png",
             "incluido_en_pdfs": [
                 "codigos_qr_medico_20260326_1326.pdf",
-                "codigos_qr_medico_20260326_1330.pdf"
+                "codigos_qr_medico_20260326_1330.pdf",
+                "codigos_qr_medico_20260327_1444.pdf",
+                "codigos_qr_medico_20260327_1456.pdf"
             ]
         },
         "MQ0403220001": {
@@ -87,7 +101,9 @@
             "archivo_png": "codigos_qr_medico\\QR_medico_MQ0403220001.png",
             "incluido_en_pdfs": [
                 "codigos_qr_medico_20260326_1326.pdf",
-                "codigos_qr_medico_20260326_1330.pdf"
+                "codigos_qr_medico_20260326_1330.pdf",
+                "codigos_qr_medico_20260327_1444.pdf",
+                "codigos_qr_medico_20260327_1456.pdf"
             ]
         },
         "MQ0502050001": {
@@ -98,7 +114,9 @@
             "archivo_png": "codigos_qr_medico\\QR_medico_MQ0502050001.png",
             "incluido_en_pdfs": [
                 "codigos_qr_medico_20260326_1326.pdf",
-                "codigos_qr_medico_20260326_1330.pdf"
+                "codigos_qr_medico_20260326_1330.pdf",
+                "codigos_qr_medico_20260327_1444.pdf",
+                "codigos_qr_medico_20260327_1456.pdf"
             ]
         },
         "MQ0502130003": {
@@ -109,7 +127,9 @@
             "archivo_png": "codigos_qr_medico\\QR_medico_MQ0502130003.png",
             "incluido_en_pdfs": [
                 "codigos_qr_medico_20260326_1326.pdf",
-                "codigos_qr_medico_20260326_1330.pdf"
+                "codigos_qr_medico_20260326_1330.pdf",
+                "codigos_qr_medico_20260327_1444.pdf",
+                "codigos_qr_medico_20260327_1456.pdf"
             ]
         },
         "MQ0502130004": {
@@ -120,7 +140,9 @@
             "archivo_png": "codigos_qr_medico\\QR_medico_MQ0502130004.png",
             "incluido_en_pdfs": [
                 "codigos_qr_medico_20260326_1326.pdf",
-                "codigos_qr_medico_20260326_1330.pdf"
+                "codigos_qr_medico_20260326_1330.pdf",
+                "codigos_qr_medico_20260327_1444.pdf",
+                "codigos_qr_medico_20260327_1456.pdf"
             ]
         },
         "MQ0503220008": {
@@ -131,7 +153,9 @@
             "archivo_png": "codigos_qr_medico\\QR_medico_MQ0503220008.png",
             "incluido_en_pdfs": [
                 "codigos_qr_medico_20260326_1326.pdf",
-                "codigos_qr_medico_20260326_1330.pdf"
+                "codigos_qr_medico_20260326_1330.pdf",
+                "codigos_qr_medico_20260327_1444.pdf",
+                "codigos_qr_medico_20260327_1456.pdf"
             ]
         },
         "MQ0503220009": {
@@ -142,7 +166,9 @@
             "archivo_png": "codigos_qr_medico\\QR_medico_MQ0503220009.png",
             "incluido_en_pdfs": [
                 "codigos_qr_medico_20260326_1326.pdf",
-                "codigos_qr_medico_20260326_1330.pdf"
+                "codigos_qr_medico_20260326_1330.pdf",
+                "codigos_qr_medico_20260327_1444.pdf",
+                "codigos_qr_medico_20260327_1456.pdf"
             ]
         },
         "MQ0603140001": {
@@ -153,7 +179,9 @@
             "archivo_png": "codigos_qr_medico\\QR_medico_MQ0603140001.png",
             "incluido_en_pdfs": [
                 "codigos_qr_medico_20260326_1326.pdf",
-                "codigos_qr_medico_20260326_1330.pdf"
+                "codigos_qr_medico_20260326_1330.pdf",
+                "codigos_qr_medico_20260327_1444.pdf",
+                "codigos_qr_medico_20260327_1456.pdf"
             ]
         },
         "MQ0605150005": {
@@ -164,7 +192,9 @@
             "archivo_png": "codigos_qr_medico\\QR_medico_MQ0605150005.png",
             "incluido_en_pdfs": [
                 "codigos_qr_medico_20260326_1326.pdf",
-                "codigos_qr_medico_20260326_1330.pdf"
+                "codigos_qr_medico_20260326_1330.pdf",
+                "codigos_qr_medico_20260327_1444.pdf",
+                "codigos_qr_medico_20260327_1456.pdf"
             ]
         },
         "MQ0605150007": {
@@ -175,7 +205,9 @@
             "archivo_png": "codigos_qr_medico\\QR_medico_MQ0605150007.png",
             "incluido_en_pdfs": [
                 "codigos_qr_medico_20260326_1326.pdf",
-                "codigos_qr_medico_20260326_1330.pdf"
+                "codigos_qr_medico_20260326_1330.pdf",
+                "codigos_qr_medico_20260327_1444.pdf",
+                "codigos_qr_medico_20260327_1456.pdf"
             ]
         },
         "MQ0703220004": {
@@ -186,7 +218,9 @@
             "archivo_png": "codigos_qr_medico\\QR_medico_MQ0703220004.png",
             "incluido_en_pdfs": [
                 "codigos_qr_medico_20260326_1326.pdf",
-                "codigos_qr_medico_20260326_1330.pdf"
+                "codigos_qr_medico_20260326_1330.pdf",
+                "codigos_qr_medico_20260327_1444.pdf",
+                "codigos_qr_medico_20260327_1456.pdf"
             ]
         },
         "MQ0703220005": {
@@ -197,7 +231,9 @@
             "archivo_png": "codigos_qr_medico\\QR_medico_MQ0703220005.png",
             "incluido_en_pdfs": [
                 "codigos_qr_medico_20260326_1326.pdf",
-                "codigos_qr_medico_20260326_1330.pdf"
+                "codigos_qr_medico_20260326_1330.pdf",
+                "codigos_qr_medico_20260327_1444.pdf",
+                "codigos_qr_medico_20260327_1456.pdf"
             ]
         },
         "MQ0804220003": {
@@ -208,7 +244,9 @@
             "archivo_png": "codigos_qr_medico\\QR_medico_MQ0804220003.png",
             "incluido_en_pdfs": [
                 "codigos_qr_medico_20260326_1326.pdf",
-                "codigos_qr_medico_20260326_1330.pdf"
+                "codigos_qr_medico_20260326_1330.pdf",
+                "codigos_qr_medico_20260327_1444.pdf",
+                "codigos_qr_medico_20260327_1456.pdf"
             ]
         },
         "MQ1001180055": {
@@ -219,7 +257,9 @@
             "archivo_png": "codigos_qr_medico\\QR_medico_MQ1001180055.png",
             "incluido_en_pdfs": [
                 "codigos_qr_medico_20260326_1326.pdf",
-                "codigos_qr_medico_20260326_1330.pdf"
+                "codigos_qr_medico_20260326_1330.pdf",
+                "codigos_qr_medico_20260327_1444.pdf",
+                "codigos_qr_medico_20260327_1456.pdf"
             ]
         },
         "MQ1001180070": {
@@ -230,7 +270,9 @@
             "archivo_png": "codigos_qr_medico\\QR_medico_MQ1001180070.png",
             "incluido_en_pdfs": [
                 "codigos_qr_medico_20260326_1326.pdf",
-                "codigos_qr_medico_20260326_1330.pdf"
+                "codigos_qr_medico_20260326_1330.pdf",
+                "codigos_qr_medico_20260327_1444.pdf",
+                "codigos_qr_medico_20260327_1456.pdf"
             ]
         },
         "TL0300000020": {
@@ -241,7 +283,9 @@
             "archivo_png": "codigos_qr_medico\\QR_medico_TL0300000020.png",
             "incluido_en_pdfs": [
                 "codigos_qr_medico_20260326_1326.pdf",
-                "codigos_qr_medico_20260326_1330.pdf"
+                "codigos_qr_medico_20260326_1330.pdf",
+                "codigos_qr_medico_20260327_1444.pdf",
+                "codigos_qr_medico_20260327_1456.pdf"
             ]
         },
         "TQ0100000216": {
@@ -252,7 +296,9 @@
             "archivo_png": "codigos_qr_medico\\QR_medico_TQ0100000216.png",
             "incluido_en_pdfs": [
                 "codigos_qr_medico_20260326_1326.pdf",
-                "codigos_qr_medico_20260326_1330.pdf"
+                "codigos_qr_medico_20260326_1330.pdf",
+                "codigos_qr_medico_20260327_1444.pdf",
+                "codigos_qr_medico_20260327_1456.pdf"
             ]
         },
         "TQ0100000229": {
@@ -263,7 +309,9 @@
             "archivo_png": "codigos_qr_medico\\QR_medico_TQ0100000229.png",
             "incluido_en_pdfs": [
                 "codigos_qr_medico_20260326_1326.pdf",
-                "codigos_qr_medico_20260326_1330.pdf"
+                "codigos_qr_medico_20260326_1330.pdf",
+                "codigos_qr_medico_20260327_1444.pdf",
+                "codigos_qr_medico_20260327_1456.pdf"
             ]
         },
         "TR0200000097": {
@@ -274,7 +322,9 @@
             "archivo_png": "codigos_qr_medico\\QR_medico_TR0200000097.png",
             "incluido_en_pdfs": [
                 "codigos_qr_medico_20260326_1326.pdf",
-                "codigos_qr_medico_20260326_1330.pdf"
+                "codigos_qr_medico_20260326_1330.pdf",
+                "codigos_qr_medico_20260327_1444.pdf",
+                "codigos_qr_medico_20260327_1456.pdf"
             ]
         },
         "TR0200000120": {
@@ -285,7 +335,9 @@
             "archivo_png": "codigos_qr_medico\\QR_medico_TR0200000120.png",
             "incluido_en_pdfs": [
                 "codigos_qr_medico_20260326_1326.pdf",
-                "codigos_qr_medico_20260326_1330.pdf"
+                "codigos_qr_medico_20260326_1330.pdf",
+                "codigos_qr_medico_20260327_1444.pdf",
+                "codigos_qr_medico_20260327_1456.pdf"
             ]
         },
         "SC06": {
@@ -296,7 +348,9 @@
             "archivo_png": "codigos_qr_medico\\QR_medico_SC06.png",
             "incluido_en_pdfs": [
                 "codigos_qr_medico_20260326_1326.pdf",
-                "codigos_qr_medico_20260326_1330.pdf"
+                "codigos_qr_medico_20260326_1330.pdf",
+                "codigos_qr_medico_20260327_1444.pdf",
+                "codigos_qr_medico_20260327_1456.pdf"
             ]
         },
         "SC07": {
@@ -307,7 +361,9 @@
             "archivo_png": "codigos_qr_medico\\QR_medico_SC07.png",
             "incluido_en_pdfs": [
                 "codigos_qr_medico_20260326_1326.pdf",
-                "codigos_qr_medico_20260326_1330.pdf"
+                "codigos_qr_medico_20260326_1330.pdf",
+                "codigos_qr_medico_20260327_1444.pdf",
+                "codigos_qr_medico_20260327_1456.pdf"
             ]
         },
         "SC12": {
@@ -318,7 +374,9 @@
             "archivo_png": "codigos_qr_medico\\QR_medico_SC12.png",
             "incluido_en_pdfs": [
                 "codigos_qr_medico_20260326_1326.pdf",
-                "codigos_qr_medico_20260326_1330.pdf"
+                "codigos_qr_medico_20260326_1330.pdf",
+                "codigos_qr_medico_20260327_1444.pdf",
+                "codigos_qr_medico_20260327_1456.pdf"
             ]
         },
         "SC13": {
@@ -329,7 +387,9 @@
             "archivo_png": "codigos_qr_medico\\QR_medico_SC13.png",
             "incluido_en_pdfs": [
                 "codigos_qr_medico_20260326_1326.pdf",
-                "codigos_qr_medico_20260326_1330.pdf"
+                "codigos_qr_medico_20260326_1330.pdf",
+                "codigos_qr_medico_20260327_1444.pdf",
+                "codigos_qr_medico_20260327_1456.pdf"
             ]
         },
         "SC14": {
@@ -340,7 +400,9 @@
             "archivo_png": "codigos_qr_medico\\QR_medico_SC14.png",
             "incluido_en_pdfs": [
                 "codigos_qr_medico_20260326_1326.pdf",
-                "codigos_qr_medico_20260326_1330.pdf"
+                "codigos_qr_medico_20260326_1330.pdf",
+                "codigos_qr_medico_20260327_1444.pdf",
+                "codigos_qr_medico_20260327_1456.pdf"
             ]
         },
         "SC17": {
@@ -351,7 +413,9 @@
             "archivo_png": "codigos_qr_medico\\QR_medico_SC17.png",
             "incluido_en_pdfs": [
                 "codigos_qr_medico_20260326_1326.pdf",
-                "codigos_qr_medico_20260326_1330.pdf"
+                "codigos_qr_medico_20260326_1330.pdf",
+                "codigos_qr_medico_20260327_1444.pdf",
+                "codigos_qr_medico_20260327_1456.pdf"
             ]
         },
         "SC23": {
@@ -362,7 +426,9 @@
             "archivo_png": "codigos_qr_medico\\QR_medico_SC23.png",
             "incluido_en_pdfs": [
                 "codigos_qr_medico_20260326_1326.pdf",
-                "codigos_qr_medico_20260326_1330.pdf"
+                "codigos_qr_medico_20260326_1330.pdf",
+                "codigos_qr_medico_20260327_1444.pdf",
+                "codigos_qr_medico_20260327_1456.pdf"
             ]
         },
         "SC35": {
@@ -373,7 +439,9 @@
             "archivo_png": "codigos_qr_medico\\QR_medico_SC35.png",
             "incluido_en_pdfs": [
                 "codigos_qr_medico_20260326_1326.pdf",
-                "codigos_qr_medico_20260326_1330.pdf"
+                "codigos_qr_medico_20260326_1330.pdf",
+                "codigos_qr_medico_20260327_1444.pdf",
+                "codigos_qr_medico_20260327_1456.pdf"
             ]
         },
         "SC42": {
@@ -384,7 +452,9 @@
             "archivo_png": "codigos_qr_medico\\QR_medico_SC42.png",
             "incluido_en_pdfs": [
                 "codigos_qr_medico_20260326_1326.pdf",
-                "codigos_qr_medico_20260326_1330.pdf"
+                "codigos_qr_medico_20260326_1330.pdf",
+                "codigos_qr_medico_20260327_1444.pdf",
+                "codigos_qr_medico_20260327_1456.pdf"
             ]
         },
         "MQ0208220018": {
@@ -395,7 +465,9 @@
             "archivo_png": "codigos_qr_medico\\QR_medico_MQ0208220018.png",
             "incluido_en_pdfs": [
                 "codigos_qr_medico_20260326_1329.pdf",
-                "codigos_qr_medico_20260326_1330.pdf"
+                "codigos_qr_medico_20260326_1330.pdf",
+                "codigos_qr_medico_20260327_1444.pdf",
+                "codigos_qr_medico_20260327_1456.pdf"
             ]
         }
     }

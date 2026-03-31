@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, render_template_string, redirect, session
 import pandas as pd
 from functools import wraps
 from datetime import datetime
@@ -13,6 +13,8 @@ from datetime import timedelta
 from flask_cors import CORS
 
 app = Flask(__name__)
+
+app.secret_key = 'Admin2026!'
 
 CORS(app,
      origins=['http://localhost:5173'],
@@ -218,8 +220,14 @@ def cargar_datos_bodega(codigo_bodega, archivo_excel):
                     fv_str   = str(fv)   if pd.notna(fv)   and str(fv)   != 'nan' else 'S/D'
                     lote_str = str(lote) if pd.notna(lote) and str(lote) != 'nan' else 'S/D'
 
-                    if isinstance(fv, pd.Timestamp):
+                    if isinstance(fv, (pd.Timestamp, datetime)):
                         fv_str = fv.strftime('%d/%m/%Y')
+                    elif fv_str != 'S/D':
+                        # Limpiar strings con hora: "2025-01-15 00:00:00" → "15/01/2025"
+                        try:
+                            fv_str = datetime.strptime(fv_str.split(' ')[0], '%Y-%m-%d').strftime('%d/%m/%Y')
+                        except (ValueError, AttributeError):
+                            pass
 
                     # MED
                     med_valor = 'S/D'
@@ -1116,6 +1124,11 @@ def medicamento():
                 except:
                     valor_circulo = 'S/D'
 
+            pu = lote.get('precio_unitario')
+            pt = lote.get('precio_total_lote')
+            precio_unit_html = f'<div class="lote-detail"><strong>Precio Unitario:</strong> Q{pu:,.2f}</div>' if pu is not None else ''
+            precio_total_html = f'<div class="lote-detail"><strong>Total Lote:</strong> <strong style="color: #1a5276;">Q{pt:,.2f}</strong></div>' if pt is not None else ''
+
             html += f"""
         <div class="lote-section">
             <div class="med-indicator {color}">
@@ -1125,11 +1138,14 @@ def medicamento():
             <div class="lote-detail"><strong>F/V:</strong> {lote['fv']}</div>
             <div class="lote-detail"><strong>Lote:</strong> {lote['lote']}</div>
             <div class="lote-detail"><strong>Saldo:</strong> <strong style="color: #4caf50; font-size: 16px;">{lote['saldo']} unidades</strong></div>
+            {precio_unit_html}
+            {precio_total_html}
             <div class="med-info {color}">
                 📅 Existencia disponible: {texto_med}
             </div>
         </div>
 """
+
 
     html += f"""
         <div class="leyenda">
@@ -1539,16 +1555,18 @@ def reporte_por_color(color):
 
                 if med_color == color_ingles:
                     medicamentos_filtrados.append({
-                        'codigo': codigo,
-                        'medicamento': datos['medicamento'],
-                        'bodega': nombre_bodega,
-                        'tipo': datos.get('tipo', ''),
-                        'lote_numero': lote['numero'],
-                        'fv': lote['fv'],
-                        'lote': lote['lote'],
-                        'saldo': lote['saldo'],
-                        'med': lote.get('med'),
-                        'med_texto': texto_med
+                        'codigo':          codigo,
+                        'medicamento':     datos['medicamento'],
+                        'bodega':          nombre_bodega,
+                        'tipo':            datos.get('tipo', ''),
+                        'lote_numero':     lote['numero'],
+                        'fv':              lote['fv'],
+                        'lote':            lote['lote'],
+                        'saldo':           lote['saldo'],
+                        'med':             lote.get('med'),
+                        'med_texto':       texto_med,
+                        'precio_unitario':   lote.get('precio_unitario'),
+                        'precio_total_lote': lote.get('precio_total_lote')
                     })
 
     # Ordenar por bodega y medicamento
@@ -1556,31 +1574,31 @@ def reporte_por_color(color):
 
     # Configuración según el color
     if color == 'rojo':
-        color_hex = '#ff6b6b'
-        titulo = 'INSUMOS CRÍTICOS'
-        subtitulo = 'Existencia: 1-12 meses'
-        icono = '🔴'
+        color_hex   = '#ff6b6b'
+        titulo      = 'INSUMOS CRÍTICOS'
+        subtitulo   = 'Existencia: 1-12 meses'
+        icono       = '🔴'
         descripcion = 'Estos insumos requieren reabastecimiento URGENTE'
         bg_gradient = 'linear-gradient(135deg, #ff6b6b 0%, #ee5a6f 100%)'
     elif color == 'amarillo':
-        color_hex = '#ffd93d'
-        titulo = 'INSUMOS EN ALERTA'
-        subtitulo = 'Existencia: 13-17 meses'
-        icono = '🟡'
+        color_hex   = '#ffd93d'
+        titulo      = 'INSUMOS EN ALERTA'
+        subtitulo   = 'Existencia: 13-17 meses'
+        icono       = '🟡'
         descripcion = 'Estos insumos requieren monitoreo constante'
         bg_gradient = 'linear-gradient(135deg, #ffd93d 0%, #f6b93b 100%)'
     else:  # verde
-        color_hex = '#51cf66'
-        titulo = 'INSUMOS ÓPTIMOS'
-        subtitulo = 'Existencia: 18+ meses o S/D'
-        icono = '🟢'
+        color_hex   = '#51cf66'
+        titulo      = 'INSUMOS ÓPTIMOS'
+        subtitulo   = 'Existencia: 18+ meses o S/D'
+        icono       = '🟢'
         descripcion = 'Estos insumos tienen stock suficiente'
         bg_gradient = 'linear-gradient(135deg, #51cf66 0%, #37b24d 100%)'
 
     # Añadir info de tipo si está filtrado
     if tipo_param and tipo_param != 'TODOS' and tipo_param in TIPOS_INSUMO:
-        tipo_info = TIPOS_INSUMO[tipo_param]
-        titulo += f" - {tipo_info['nombre']}"
+        tipo_info    = TIPOS_INSUMO[tipo_param]
+        titulo      += f" - {tipo_info['nombre']}"
         nombre_filtro += f" ({tipo_info['icono']} {tipo_info['nombre']})"
     elif tipo_param == 'TODOS':
         nombre_filtro += " (Todos los tipos)"
@@ -1646,9 +1664,7 @@ def reporte_por_color(color):
             border-radius: 10px;
             margin-bottom: 20px;
         }}
-        .stat-item {{
-            text-align: center;
-        }}
+        .stat-item {{ text-align: center; }}
         .stat-number {{
             font-size: 32px;
             font-weight: bold;
@@ -1695,9 +1711,7 @@ def reporte_por_color(color):
             gap: 10px;
             flex-wrap: wrap;
         }}
-        .med-icono {{
-            font-size: 28px;
-        }}
+        .med-icono {{ font-size: 28px; }}
         .med-codigo {{
             background: {color_hex};
             color: white;
@@ -1731,9 +1745,7 @@ def reporte_por_color(color):
             align-items: center;
             gap: 6px;
         }}
-        .bodega-icon {{
-            font-size: 16px;
-        }}
+        .bodega-icon {{ font-size: 16px; }}
         .med-nombre {{
             font-weight: bold;
             color: #2c3e50;
@@ -1749,9 +1761,7 @@ def reporte_por_color(color):
             padding-top: 10px;
             border-top: 1px solid #e0e0e0;
         }}
-        .detalle-item {{
-            font-size: 12px;
-        }}
+        .detalle-item {{ font-size: 12px; }}
         .detalle-label {{
             font-weight: bold;
             color: #666;
@@ -1760,6 +1770,15 @@ def reporte_por_color(color):
         .detalle-valor {{
             color: #333;
             margin-top: 2px;
+        }}
+        .precio-badge {{
+            display: inline-block;
+            background: linear-gradient(135deg, #1a5276 0%, #2980b9 100%);
+            color: white;
+            padding: 2px 8px;
+            border-radius: 10px;
+            font-weight: bold;
+            font-size: 12px;
         }}
         .no-data {{
             text-align: center;
@@ -1785,7 +1804,6 @@ def reporte_por_color(color):
             margin-top: 20px;
             font-weight: bold;
         }}
-
         @media (max-width: 768px) {{
             .header h1 {{ font-size: 22px; }}
             .bodega-filtro {{ font-size: 13px; padding: 8px 16px; }}
@@ -1836,6 +1854,11 @@ def reporte_por_color(color):
                     <span><strong>{tipo_info['nombre']}</strong></span>
                 </div>
 """
+            # Precio unitario: mostrar solo si existe
+            pu = med.get('precio_unitario')
+            pt = med.get('precio_total_lote')
+            precio_html = f'<div class="detalle-item"><span class="detalle-label">💲 Precio Unitario</span><span class="detalle-valor"><span class="precio-badge">Q{pu:,.2f}</span></span></div>' if pu is not None else ''
+            precio_total_html = f'<div class="detalle-item"><span class="detalle-label">💰 Total Lote</span><span class="detalle-valor"><span class="precio-badge">Q{pt:,.2f}</span></span></div>' if pt is not None else ''
 
             html += f"""
         <div class="medicamento-card">
@@ -1870,6 +1893,8 @@ def reporte_por_color(color):
                     <span class="detalle-label">⏱️ Existencia</span>
                     <span class="detalle-valor"><strong>{med['med_texto']}</strong></span>
                 </div>
+                {precio_html}
+                {precio_total_html}
             </div>
         </div>
 """
@@ -3009,6 +3034,1673 @@ def reporte_excel_todas_bodegas():
         as_attachment=True,
         download_name=f'inventario_todas_bodegas_{fecha_archivo}.pdf'
     )
+
+# =============================================================================
+# MÓDULO: EDITOR WEB DE INVENTARIO
+# Pega este bloque completo al FINAL de tu flask_app.py
+# =============================================================================
+
+import secrets as _secrets_module
+
+if not app.secret_key:
+    app.secret_key = _secrets_module.token_hex(32)
+
+# ─── Rutas y configuración ───────────────────────────────────────────────────
+RUTA_DB = '/home/salonso/mysite/inventario_usuarios.db'
+
+RUTA_EXCEL_BODEGAS = {
+    'medico':       '/home/salonso/mysite/inventario_medico.xlsx',
+    'medicamentos': '/home/salonso/mysite/inventario_medicamentos.xlsx',
+    'limpieza':     '/home/salonso/mysite/inventario_limpieza.xlsx',
+    'oficina':      '/home/salonso/mysite/inventario_oficina.xlsx',
+    'varios':       '/home/salonso/mysite/inventario_varios.xlsx',
+    'programas':    '/home/salonso/mysite/inventario_programas.xlsx',
+}
+
+BODEGAS_LABELS = {
+    'medico':       'Material Médico / Quirúrgico',
+    'medicamentos': 'Medicamentos',
+    'limpieza':     'Limpieza',
+    'oficina':      'Oficina',
+    'varios':       'Varios',
+    'programas':    'Programas',
+}
+
+# Mapeo BD → clave interna  (la BD guarda "BODEGA_LIMPIEZA", el código usa "limpieza")
+_BODEGA_DB_MAP = {
+    'BODEGA_MEDICO':       'medico',
+    'BODEGA_MEDICAMENTOS': 'medicamentos',
+    'BODEGA_LIMPIEZA':     'limpieza',
+    'BODEGA_OFICINA':      'oficina',
+    'BODEGA_VARIOS':       'varios',
+    'BODEGA_PROGRAMAS':    'programas',
+}
+# Inverso: clave interna → valor para guardar en BD
+_BODEGA_BD_INVERSO = {v: k for k, v in _BODEGA_DB_MAP.items()}
+
+# Columnas Excel (base-1 para openpyxl)
+COLS_LOTES = [
+    {'fv': 7,  'lote': 8,  'saldo': 9,  'precio_uni': 28, 'precio_tot': 33},
+    {'fv': 10, 'lote': 11, 'saldo': 12, 'precio_uni': 29, 'precio_tot': 34},
+    {'fv': 13, 'lote': 14, 'saldo': 15, 'precio_uni': 30, 'precio_tot': 35},
+    {'fv': 16, 'lote': 17, 'saldo': 18, 'precio_uni': 31, 'precio_tot': 36},
+    {'fv': 19, 'lote': 20, 'saldo': 21, 'precio_uni': 32, 'precio_tot': 37},
+]
+EXCEL_FILA_INICIO_DATOS = 6
+COL_NOMBRE      = 2    # col B
+COL_CODIGO      = 1    # col A
+COL_TIPO        = 3    # col C  (Tipo de Insumo: LAB, LAB-SAN, MQ, MQ-ODONT…)
+COL_TARJETA     = 40   # col AN
+HOJA_INVENTARIO = 'Inventario General'
+
+# Columnas MED (Meses de Existencia Disponible) — base 1
+COL_MED = [23, 24, 25, 26, 27]   # W=MED1, X=MED2, Y=MED3, Z=MED4, AA=MED5
+
+# Umbrales semáforo por MED
+MED_VERDE_MIN    = 18   # MED > 18  → 🟢 Óptimo
+MED_AMARILLO_MIN = 13   # MED 13-17 → 🟡 En Alerta
+                        # MED  1-12 → 🔴 Crítico
+                        # MED  = 0  → sin saldo (excluir del semáforo)
+
+
+# =============================================================================
+# HELPERS
+# =============================================================================
+
+def _normalizar_bodega(valor_db):
+    if not valor_db:
+        return ''
+    if valor_db in BODEGAS_LABELS:
+        return valor_db
+    norm = _BODEGA_DB_MAP.get(valor_db.upper().strip())
+    if norm:
+        return norm
+    sin_pref = valor_db.upper().replace('BODEGA_', '').lower().strip()
+    return sin_pref if sin_pref in BODEGAS_LABELS else ''
+
+
+def _editor_requiere_login():
+    if 'editor_usuario' not in session:
+        return redirect('/editor/login')
+    return None
+
+
+def _editor_requiere_admin():
+    redir = _editor_requiere_login()
+    if redir:
+        return redir
+    if session.get('editor_rol') != 'Admin':
+        return redirect('/editor/dashboard')
+    return None
+
+
+def _editor_puede_acceder_bodega(bodega):
+    if session.get('editor_rol') == 'Admin':
+        return True
+    return bodega == session.get('editor_bodega_asignada', '')
+
+
+def _leer_todos_productos_editor(bodega):
+    """Lee TODOS los productos del Excel. Retorna [{codigo, nombre, tiene_saldo, saldo_total}]."""
+    ruta = RUTA_EXCEL_BODEGAS.get(bodega)
+    if not ruta:
+        return []
+    try:
+        from openpyxl import load_workbook
+        wb = load_workbook(ruta, read_only=True, data_only=True)
+        if HOJA_INVENTARIO not in wb.sheetnames:
+            wb.close(); return []
+        ws = wb[HOJA_INVENTARIO]
+        codigos_con_saldo = set(str(k).strip() for k in datos_inventario.get(bodega, {}).keys())
+        productos = []
+        for row in ws.iter_rows(min_row=EXCEL_FILA_INICIO_DATOS, values_only=True):
+            codigo = row[COL_CODIGO - 1]
+            nombre = row[COL_NOMBRE - 1]
+            cod_s  = str(codigo).strip() if codigo is not None else ''
+            nom_s  = str(nombre).strip() if nombre is not None else ''
+            if not cod_s and not nom_s:
+                continue
+            tiene_saldo = cod_s in codigos_con_saldo
+            saldo_total = 0.0
+            if tiene_saldo:
+                for lote in datos_inventario.get(bodega, {}).get(cod_s, {}).get('lotes', []):
+                    s = lote.get('saldo')
+                    if s is not None:
+                        try: saldo_total += float(s)
+                        except Exception: pass
+            # Leer MED de las columnas W-AA (23-27, base-1 → índice 22-26 base-0)
+            med_vals = []
+            for col_1b in COL_MED:
+                idx = col_1b - 1
+                v   = row[idx] if idx < len(row) else None
+                if v is not None:
+                    try:
+                        fv = float(v)
+                        if fv > 0:
+                            med_vals.append(fv)
+                    except Exception:
+                        pass
+            # Usar el mínimo MED no-cero (lote más crítico)
+            med_valor = round(min(med_vals), 1) if med_vals else 0.0
+            # Leer Tipo de Insumo (col C)
+            tipo_raw = row[COL_TIPO - 1]
+            tipo = str(tipo_raw).strip() if tipo_raw is not None else ''
+            productos.append({'codigo': cod_s, 'nombre': nom_s,
+                               'tiene_saldo': tiene_saldo,
+                               'saldo_total': round(saldo_total, 2),
+                               'med_valor':   med_valor,
+                               'tipo':        tipo})
+        wb.close()
+        productos.sort(key=lambda x: x['nombre'])
+        return productos
+    except Exception:
+        return []
+
+
+def _leer_lotes_editor(bodega, codigo):
+    """Lee lotes de un producto buscando por código (col A). Retorna dict o None."""
+    ruta = RUTA_EXCEL_BODEGAS.get(bodega)
+    if not ruta:
+        return None
+    try:
+        from openpyxl import load_workbook
+        from datetime import datetime as _dt, date as _date
+        wb = load_workbook(ruta, data_only=True)
+        if HOJA_INVENTARIO not in wb.sheetnames:
+            wb.close(); return None
+        ws  = wb[HOJA_INVENTARIO]
+        cod = str(codigo).strip()
+        for fila in range(EXCEL_FILA_INICIO_DATOS, ws.max_row + 1):
+            celda = ws.cell(row=fila, column=COL_CODIGO).value
+            if celda is None or str(celda).strip() != cod:
+                continue
+            nombre  = ws.cell(row=fila, column=COL_NOMBRE).value or ''
+            tarjeta = ws.cell(row=fila, column=COL_TARJETA).value
+            lotes   = []
+            for i, cols in enumerate(COLS_LOTES):
+                fv_val  = ws.cell(row=fila, column=cols['fv']).value
+                fv_str  = ''
+                if fv_val is not None:
+                    try:
+                        fv_str = fv_val.strftime('%d/%m/%Y') if isinstance(fv_val, (_dt, _date)) \
+                                 else str(fv_val).strip()
+                    except Exception:
+                        fv_str = str(fv_val)
+                lotes.append({
+                    'numero': i + 1,
+                    'fv':     fv_str,
+                    'lote':   str(ws.cell(row=fila, column=cols['lote']).value or '').strip(),
+                    'saldo':  ws.cell(row=fila, column=cols['saldo']).value,
+                    'precio_unitario':   ws.cell(row=fila, column=cols['precio_uni']).value,
+                    'precio_total_lote': ws.cell(row=fila, column=cols['precio_tot']).value,
+                })
+            wb.close()
+            return {'codigo': cod, 'nombre': str(nombre).strip(),
+                    'tarjeta_kardex': str(tarjeta).strip() if tarjeta is not None else '',
+                    'lotes': lotes}
+        wb.close(); return None
+    except Exception:
+        return None
+
+
+def _guardar_lotes_excel(bodega, codigo_producto, lotes_nuevos, tarjeta_kardex=None):
+    """Guarda lotes buscando por código (col A). Retorna (True, None) o (False, msg)."""
+    ruta = RUTA_EXCEL_BODEGAS.get(bodega)
+    if not ruta:
+        return False, f'Bodega "{bodega}" no reconocida'
+    try:
+        from openpyxl import load_workbook
+        wb = load_workbook(ruta)
+        if HOJA_INVENTARIO not in wb.sheetnames:
+            return False, f'Hoja "{HOJA_INVENTARIO}" no encontrada'
+        ws  = wb[HOJA_INVENTARIO]
+        cod = str(codigo_producto).strip()
+        fila_p = None
+        for fila in range(EXCEL_FILA_INICIO_DATOS, ws.max_row + 1):
+            v = ws.cell(row=fila, column=COL_CODIGO).value
+            if v is not None and str(v).strip() == cod:
+                fila_p = fila; break
+        if fila_p is None:
+            return False, f'Código "{codigo_producto}" no encontrado en bodega "{bodega}"'
+
+        if tarjeta_kardex is not None:
+            ws.cell(row=fila_p, column=COL_TARJETA).value = tarjeta_kardex or None
+
+        def _f(v):
+            if v is None or str(v).strip() == '': return None
+            try: return float(str(v).replace(',', '.'))
+            except: return None
+
+        for i, ld in enumerate(lotes_nuevos[:5]):
+            cols  = COLS_LOTES[i]
+            fv    = ld.get('fv', '')
+            if fv:
+                try:
+                    from datetime import datetime as _dt
+                    for fmt in ('%d/%m/%Y', '%Y-%m-%d', '%d-%m-%Y'):
+                        try: fv = _dt.strptime(str(fv), fmt); break
+                        except ValueError: pass
+                except Exception: pass
+            else:
+                fv = None
+            ws.cell(row=fila_p, column=cols['fv']).value         = fv
+            ws.cell(row=fila_p, column=cols['lote']).value        = ld.get('lote', '') or None
+            ws.cell(row=fila_p, column=cols['saldo']).value       = _f(ld.get('saldo'))
+            ws.cell(row=fila_p, column=cols['precio_uni']).value  = _f(ld.get('precio_unitario'))
+            ws.cell(row=fila_p, column=cols['precio_tot']).value  = _f(ld.get('precio_total_lote'))
+
+        wb.save(ruta)
+        return True, None
+    except Exception as e:
+        return False, str(e)
+
+
+# =============================================================================
+# RUTAS PRINCIPALES
+# =============================================================================
+
+@app.route('/editor')
+def editor_inicio():
+    if 'editor_usuario' not in session:
+        return redirect('/editor/login')
+    return redirect('/editor/dashboard')
+
+
+@app.route('/editor/login', methods=['GET', 'POST'])
+def editor_login():
+    error = ''
+    if request.method == 'POST':
+        usuario_form  = request.form.get('usuario',  '').strip()
+        password_form = request.form.get('password', '').strip()
+        pw_hash = hashlib.sha256(password_form.encode()).hexdigest()
+        try:
+            conn = sqlite3.connect(RUTA_DB)
+            cur  = conn.cursor()
+            cur.execute(
+                "SELECT id, nombre_completo, rol, bodega_asignada "
+                "FROM usuarios WHERE username=? AND password=? AND activo=1",
+                (usuario_form, pw_hash))
+            user = cur.fetchone()
+            conn.close()
+        except Exception as e:
+            error = f'Error de base de datos: {e}'; user = None
+
+        if user:
+            session['editor_usuario']         = usuario_form
+            session['editor_nombre']          = user[1] or usuario_form
+            session['editor_user_id']         = user[0]
+            session['editor_rol']             = user[2] or 'User'
+            session['editor_bodega_asignada'] = _normalizar_bodega(user[3])
+            return redirect('/editor/dashboard')
+        elif not error:
+            error = 'Usuario o contraseña incorrectos'
+
+    return render_template_string(_EDITOR_LOGIN_HTML, error=error)
+
+
+@app.route('/editor/salir')
+def editor_salir():
+    for k in ['editor_usuario', 'editor_nombre', 'editor_user_id',
+              'editor_rol', 'editor_bodega_asignada']:
+        session.pop(k, None)
+    return redirect('/editor/login')
+
+
+@app.route('/editor/dashboard')
+def editor_dashboard():
+    redir = _editor_requiere_login()
+    if redir: return redir
+    nombre_usuario  = session.get('editor_nombre', session.get('editor_usuario', ''))
+    rol             = session.get('editor_rol', 'User')
+    bodega_asignada = session.get('editor_bodega_asignada', '')
+
+    if rol == 'Admin':
+        bodegas_usuario = BODEGAS_LABELS
+        bodega_auto     = ''
+    elif bodega_asignada and bodega_asignada in BODEGAS_LABELS:
+        bodegas_usuario = {bodega_asignada: BODEGAS_LABELS[bodega_asignada]}
+        bodega_auto     = bodega_asignada
+    else:
+        bodegas_usuario = {}
+        bodega_auto     = ''
+
+    return render_template_string(
+        _EDITOR_DASHBOARD_HTML,
+        nombre_usuario=nombre_usuario,
+        bodegas=bodegas_usuario,
+        es_admin=(rol == 'Admin'),
+        bodega_auto=bodega_auto,
+    )
+
+
+# =============================================================================
+# API JSON
+# =============================================================================
+
+@app.route('/editor/api/productos')
+def editor_api_productos():
+    redir = _editor_requiere_login()
+    if redir: return jsonify({'error': 'No autenticado'}), 401
+    bodega   = request.args.get('bodega', '').strip().lower()
+    busqueda = request.args.get('q', '').strip().lower()
+    if bodega not in RUTA_EXCEL_BODEGAS:
+        return jsonify({'error': 'Bodega no válida'}), 400
+    if not _editor_puede_acceder_bodega(bodega):
+        return jsonify({'error': 'Acceso no autorizado'}), 403
+    todos = _leer_todos_productos_editor(bodega)
+    if busqueda:
+        todos = [p for p in todos if busqueda in p['nombre'].lower() or busqueda in p['codigo'].lower()]
+    return jsonify(todos)
+
+
+@app.route('/editor/api/lotes')
+def editor_api_lotes():
+    redir = _editor_requiere_login()
+    if redir: return jsonify({'error': 'No autenticado'}), 401
+    bodega = request.args.get('bodega', '').strip().lower()
+    codigo = request.args.get('codigo', '').strip()
+    if bodega not in RUTA_EXCEL_BODEGAS:
+        return jsonify({'error': 'Bodega no válida'}), 400
+    if not _editor_puede_acceder_bodega(bodega):
+        return jsonify({'error': 'Acceso no autorizado'}), 403
+    if not codigo:
+        return jsonify({'error': 'Parámetro "codigo" requerido'}), 400
+    resultado = _leer_lotes_editor(bodega, codigo)
+    if resultado is None:
+        return jsonify({'error': f'Código "{codigo}" no encontrado'}), 404
+    return jsonify(resultado)
+
+
+@app.route('/editor/api/guardar', methods=['POST'])
+def editor_api_guardar():
+    redir = _editor_requiere_login()
+    if redir: return jsonify({'error': 'No autenticado'}), 401
+    data   = request.get_json(force=True) or {}
+    bodega = data.get('bodega', '').strip().lower()
+    codigo = data.get('codigo', '').strip()
+    lotes  = data.get('lotes', [])
+    tarjeta_kardex = data.get('tarjeta_kardex', None)
+    if not bodega or not codigo:
+        return jsonify({'error': 'bodega y codigo son requeridos'}), 400
+    if bodega not in RUTA_EXCEL_BODEGAS:
+        return jsonify({'error': 'Bodega no válida'}), 400
+    if not _editor_puede_acceder_bodega(bodega):
+        return jsonify({'error': 'Acceso no autorizado'}), 403
+    ok, msg = _guardar_lotes_excel(bodega, codigo, lotes, tarjeta_kardex)
+    if ok:
+        try: cargar_datos_bodega(bodega, RUTA_EXCEL_BODEGAS[bodega])
+        except Exception: pass
+        return jsonify({'ok': True})
+    return jsonify({'ok': False, 'error': msg}), 500
+
+
+@app.route('/editor/api/dashboard')
+def editor_api_dashboard():
+    redir = _editor_requiere_login()
+    if redir: return jsonify({'error': 'No autenticado'}), 401
+    rol             = session.get('editor_rol', 'User')
+    bodega_asignada = session.get('editor_bodega_asignada', '')
+    bodegas_q = list(BODEGAS_LABELS.keys()) if rol == 'Admin' \
+                else ([bodega_asignada] if bodega_asignada else [])
+    resultado = {}
+    tot = {'total': 0, 'verde': 0, 'amarillo': 0, 'rojo': 0}
+    tipos_global = {}   # desglose por Tipo de Insumo (col C) a nivel global
+    for bodega in bodegas_q:
+        todos = _leer_todos_productos_editor(bodega)
+        v = a = r = con_med = 0
+        tipos_local = {}
+        for p in todos:
+            mv = p['med_valor']
+            if mv == 0:
+                continue          # sin saldo → no cuenta en semáforo
+            con_med += 1
+            if   mv > MED_VERDE_MIN:    v += 1; color = 'verde'
+            elif mv >= MED_AMARILLO_MIN: a += 1; color = 'amarillo'
+            else:                        r += 1; color = 'rojo'
+            # desglose por tipo
+            tipo = p.get('tipo', '') or 'Sin Tipo'
+            if tipo not in tipos_local:
+                tipos_local[tipo] = {'total': 0, 'verde': 0, 'amarillo': 0, 'rojo': 0}
+            tipos_local[tipo]['total']  += 1
+            tipos_local[tipo][color]    += 1
+            if tipo not in tipos_global:
+                tipos_global[tipo] = {'total': 0, 'verde': 0, 'amarillo': 0, 'rojo': 0}
+            tipos_global[tipo]['total'] += 1
+            tipos_global[tipo][color]   += 1
+        resultado[bodega] = {'label':    BODEGAS_LABELS.get(bodega, bodega),
+                             'total':    con_med,
+                             'verde':    v, 'amarillo': a, 'rojo': r,
+                             'tipos':    tipos_local}
+        tot['total']    += con_med
+        tot['verde']    += v
+        tot['amarillo'] += a
+        tot['rojo']     += r
+    return jsonify({
+        'bodegas':  resultado,
+        'totales':  tot,
+        'por_tipo': tipos_global,
+        'umbrales': {'verde_min': MED_VERDE_MIN, 'amarillo_min': MED_AMARILLO_MIN},
+    })
+
+
+# =============================================================================
+# GESTIÓN DE USUARIOS  (solo Admin)
+# =============================================================================
+
+@app.route('/editor/usuarios')
+def editor_usuarios():
+    redir = _editor_requiere_admin()
+    if redir: return redir
+    try:
+        conn = sqlite3.connect(RUTA_DB)
+        conn.row_factory = sqlite3.Row
+        cur  = conn.cursor()
+        cur.execute("SELECT id, username, nombre_completo, email, rol, "
+                    "bodega_asignada, activo, fecha_creacion "
+                    "FROM usuarios ORDER BY rol, username")
+        usuarios = [dict(r) for r in cur.fetchall()]
+        conn.close()
+    except Exception:
+        usuarios = []
+    return render_template_string(
+        _EDITOR_USUARIOS_HTML,
+        usuarios=usuarios, bodegas=BODEGAS_LABELS,
+        nombre_usuario=session.get('editor_nombre', ''),
+        mensaje=request.args.get('msg', ''),
+        error=request.args.get('err', ''),
+    )
+
+
+@app.route('/editor/usuarios/nuevo', methods=['GET', 'POST'])
+def editor_usuario_nuevo():
+    redir = _editor_requiere_admin()
+    if redir: return redir
+    error = ''
+    if request.method == 'POST':
+        username = request.form.get('username', '').strip()
+        password = request.form.get('password', '').strip()
+        nombre   = request.form.get('nombre_completo', '').strip()
+        email    = request.form.get('email', '').strip()
+        rol      = request.form.get('rol', 'User').strip()
+        bodega_c = request.form.get('bodega_asignada', '').strip()
+        activo   = 1 if request.form.get('activo') else 0
+        if not username or not password:
+            error = 'Usuario y contraseña son obligatorios.'
+        else:
+            bodega_bd = _BODEGA_BD_INVERSO.get(bodega_c, '') if bodega_c else ''
+            pw_hash   = hashlib.sha256(password.encode()).hexdigest()
+            try:
+                conn = sqlite3.connect(RUTA_DB)
+                cur  = conn.cursor()
+                cur.execute(
+                    "INSERT INTO usuarios (username, password, nombre_completo, email, "
+                    "rol, bodega_asignada, activo) VALUES (?,?,?,?,?,?,?)",
+                    (username, pw_hash, nombre, email, rol, bodega_bd or None, activo))
+                conn.commit(); conn.close()
+                return redirect('/editor/usuarios?msg=Usuario+creado+correctamente')
+            except sqlite3.IntegrityError:
+                error = f'El usuario "{username}" ya existe.'
+            except Exception as e:
+                error = f'Error al crear usuario: {e}'
+    return render_template_string(
+        _EDITOR_USUARIO_FORM_HTML,
+        accion='nuevo', usuario=None, bodegas=BODEGAS_LABELS,
+        nombre_usuario=session.get('editor_nombre', ''), error=error)
+
+
+@app.route('/editor/usuarios/editar/<int:uid>', methods=['GET', 'POST'])
+def editor_usuario_editar(uid):
+    redir = _editor_requiere_admin()
+    if redir: return redir
+    error = ''
+    try:
+        conn = sqlite3.connect(RUTA_DB)
+        conn.row_factory = sqlite3.Row
+        cur  = conn.cursor()
+        cur.execute("SELECT * FROM usuarios WHERE id=?", (uid,))
+        row = cur.fetchone(); conn.close()
+        if not row: return redirect('/editor/usuarios?err=Usuario+no+encontrado')
+        usuario = dict(row)
+        usuario['bodega_asignada_clave'] = _normalizar_bodega(usuario.get('bodega_asignada') or '')
+    except Exception as e:
+        return redirect(f'/editor/usuarios?err=Error:+{e}')
+
+    if request.method == 'POST':
+        username = request.form.get('username', '').strip()
+        password = request.form.get('password', '').strip()
+        nombre   = request.form.get('nombre_completo', '').strip()
+        email    = request.form.get('email', '').strip()
+        rol      = request.form.get('rol', 'User').strip()
+        bodega_c = request.form.get('bodega_asignada', '').strip()
+        activo   = 1 if request.form.get('activo') else 0
+        if not username:
+            error = 'El nombre de usuario es obligatorio.'
+        else:
+            bodega_bd = _BODEGA_BD_INVERSO.get(bodega_c, '') if bodega_c else ''
+            try:
+                conn = sqlite3.connect(RUTA_DB)
+                cur  = conn.cursor()
+                if password:
+                    pw_hash = hashlib.sha256(password.encode()).hexdigest()
+                    cur.execute(
+                        "UPDATE usuarios SET username=?, password=?, nombre_completo=?, "
+                        "email=?, rol=?, bodega_asignada=?, activo=? WHERE id=?",
+                        (username, pw_hash, nombre, email, rol, bodega_bd or None, activo, uid))
+                else:
+                    cur.execute(
+                        "UPDATE usuarios SET username=?, nombre_completo=?, email=?, "
+                        "rol=?, bodega_asignada=?, activo=? WHERE id=?",
+                        (username, nombre, email, rol, bodega_bd or None, activo, uid))
+                conn.commit(); conn.close()
+                return redirect('/editor/usuarios?msg=Usuario+actualizado+correctamente')
+            except sqlite3.IntegrityError:
+                error = f'El nombre "{username}" ya está en uso.'
+            except Exception as e:
+                error = f'Error al actualizar: {e}'
+    return render_template_string(
+        _EDITOR_USUARIO_FORM_HTML,
+        accion='editar', usuario=usuario, bodegas=BODEGAS_LABELS,
+        nombre_usuario=session.get('editor_nombre', ''), error=error)
+
+
+@app.route('/editor/usuarios/eliminar/<int:uid>', methods=['POST'])
+def editor_usuario_eliminar(uid):
+    redir = _editor_requiere_admin()
+    if redir: return redir
+    if uid == session.get('editor_user_id'):
+        return redirect('/editor/usuarios?err=No+puedes+eliminar+tu+propia+cuenta')
+    try:
+        conn = sqlite3.connect(RUTA_DB)
+        cur  = conn.cursor()
+        cur.execute("DELETE FROM usuarios WHERE id=?", (uid,))
+        conn.commit(); conn.close()
+        return redirect('/editor/usuarios?msg=Usuario+eliminado+correctamente')
+    except Exception as e:
+        return redirect(f'/editor/usuarios?err=Error+al+eliminar:+{e}')
+
+
+# =============================================================================
+# HTML: LOGIN
+# =============================================================================
+_EDITOR_LOGIN_HTML = '''<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>Editor de Inventario – Iniciar Sesión</title>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Segoe UI',system-ui,sans-serif;background:linear-gradient(135deg,#0d4f2e,#1a7a45,#0d4f2e);min-height:100vh;display:flex;align-items:center;justify-content:center}
+.card{background:#fff;border-radius:16px;box-shadow:0 20px 60px rgba(0,0,0,.35);padding:48px 40px 40px;width:100%;max-width:400px}
+.logo{text-align:center;margin-bottom:32px}
+.logo-icon{width:64px;height:64px;background:linear-gradient(135deg,#1a7a45,#0d4f2e);border-radius:16px;display:inline-flex;align-items:center;justify-content:center;font-size:30px;margin-bottom:12px}
+.logo h1{font-size:22px;color:#0d4f2e;font-weight:700}
+.logo p{font-size:13px;color:#666;margin-top:4px}
+.fg{margin-bottom:20px}
+label{display:block;font-size:13px;font-weight:600;color:#374151;margin-bottom:6px}
+input[type=text],input[type=password]{width:100%;padding:12px 14px;border:2px solid #e5e7eb;border-radius:8px;font-size:15px;outline:none;transition:border-color .2s}
+input:focus{border-color:#1a7a45}
+.btn{width:100%;padding:13px;background:linear-gradient(135deg,#1a7a45,#0d4f2e);color:#fff;border:none;border-radius:8px;font-size:16px;font-weight:600;cursor:pointer;transition:opacity .2s;margin-top:8px}
+.btn:hover{opacity:.9}
+.err{background:#fef2f2;border:1px solid #fca5a5;color:#dc2626;border-radius:8px;padding:10px 14px;font-size:13px;margin-bottom:20px}
+</style></head><body>
+<div class="card">
+  <div class="logo">
+    <div class="logo-icon">🏥</div>
+    <h1>Editor de Inventario</h1>
+    <p>Sistema de gestión de lotes y precios</p>
+  </div>
+  {% if error %}<div class="err">⚠️ {{ error }}</div>{% endif %}
+  <form method="POST" action="/editor/login">
+    <div class="fg"><label>Usuario</label><input type="text" name="usuario" placeholder="Ingresa tu usuario" autocomplete="username" required></div>
+    <div class="fg"><label>Contraseña</label><input type="password" name="password" placeholder="••••••••" autocomplete="current-password" required></div>
+    <button type="submit" class="btn">Iniciar Sesión →</button>
+  </form>
+</div></body></html>'''
+
+
+# =============================================================================
+# HTML: DASHBOARD PRINCIPAL
+# =============================================================================
+_EDITOR_DASHBOARD_HTML = '''<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>Editor de Inventario</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Segoe UI',system-ui,sans-serif;background:#f0f4f8;min-height:100vh}
+
+/* NAV */
+nav{background:linear-gradient(135deg,#0d4f2e,#1a7a45);color:#fff;padding:0 24px;
+    display:flex;align-items:center;justify-content:space-between;height:56px;
+    box-shadow:0 2px 8px rgba(0,0,0,.2)}
+.nav-title{font-size:18px;font-weight:700;display:flex;align-items:center;gap:10px}
+.nav-right{display:flex;align-items:center;gap:12px;font-size:13px}
+.nav-user{background:rgba(255,255,255,.15);border-radius:20px;padding:4px 14px}
+.nav-rol{font-size:11px;opacity:.75}
+.nav-btn{background:rgba(255,255,255,.2);border:1px solid rgba(255,255,255,.4);color:#fff;
+         border-radius:6px;padding:5px 14px;text-decoration:none;font-size:13px;transition:background .2s}
+.nav-btn:hover{background:rgba(255,255,255,.35)}
+
+/* LAYOUT */
+.container{display:flex;height:calc(100vh - 56px)}
+
+/* SIDEBAR */
+.sidebar{width:320px;min-width:280px;background:#fff;border-right:1px solid #e2e8f0;
+         display:flex;flex-direction:column;overflow:hidden}
+.sb-header{padding:16px;border-bottom:1px solid #e2e8f0;background:#f8fafc}
+.sb-header h2{font-size:14px;color:#374151;font-weight:600;margin-bottom:12px}
+select,.search-input{width:100%;padding:9px 12px;border:1.5px solid #d1d5db;
+  border-radius:8px;font-size:13px;outline:none;background:#fff;transition:border-color .2s}
+select:focus,.search-input:focus{border-color:#1a7a45}
+.search-wrap{margin-top:10px;position:relative}
+.search-wrap input{padding-left:34px}
+.search-icon{position:absolute;left:10px;top:50%;transform:translateY(-50%);color:#9ca3af;font-size:15px;pointer-events:none}
+.product-list{flex:1;overflow-y:auto}
+
+/* TREE */
+details.tg summary{list-style:none;padding:8px 14px;cursor:pointer;font-size:11px;font-weight:700;
+  text-transform:uppercase;letter-spacing:.6px;background:#f1f5f9;border-bottom:1px solid #e2e8f0;
+  user-select:none;display:flex;align-items:center;gap:6px}
+details.tg summary::-webkit-details-marker{display:none}
+details.tg summary::marker{display:none}
+details.tg summary:hover{background:#e8edf3}
+.ta{transition:transform .2s;display:inline-block;font-size:9px}
+details.tg[open] summary .ta{transform:rotate(90deg)}
+.tc{margin-left:auto;background:#e2e8f0;border-radius:10px;padding:1px 8px;font-size:11px;color:#374151}
+.tg-cs summary{color:#15803d}
+.tg-ss summary{color:#6b7280}
+
+/* PRODUCT ITEMS */
+.pi{padding:10px 16px;cursor:pointer;border-bottom:1px solid #f3f4f6;transition:background .15s}
+.pi:hover{background:#f0fdf4}
+.pi.active{background:#dcfce7;border-left:3px solid #1a7a45}
+.pi-name{font-size:13px;font-weight:600;color:#1f2937;display:flex;align-items:center}
+.pi-code{font-size:11px;color:#6b7280;margin-top:2px;margin-left:14px}
+.dot{width:8px;height:8px;min-width:8px;border-radius:50%;display:inline-block;margin-right:6px}
+.list-empty{padding:24px 16px;text-align:center;color:#9ca3af;font-size:13px}
+.list-loading{padding:24px 16px;text-align:center;color:#6b7280;font-size:13px}
+
+/* MAIN PANEL */
+.main-panel{flex:1;display:flex;flex-direction:column;overflow:hidden}
+
+/* ── DASHBOARD ── */
+.dash-scroll{flex:1;overflow-y:auto;padding:24px}
+.dash-topbar{display:flex;align-items:flex-start;justify-content:space-between;
+             margin-bottom:24px;gap:12px;flex-wrap:wrap}
+.dash-topbar h2{font-size:20px;font-weight:800;color:#0d4f2e}
+.dash-topbar p{font-size:12px;color:#6b7280;margin-top:3px}
+.btn-refresh{background:#f1f5f9;border:1px solid #e2e8f0;border-radius:8px;
+             padding:7px 16px;font-size:12px;font-weight:600;color:#374151;
+             cursor:pointer;white-space:nowrap;transition:background .2s;flex-shrink:0}
+.btn-refresh:hover{background:#e2e8f0}
+.filtro-banner{background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;
+               padding:10px 16px;margin-bottom:20px;display:none;
+               align-items:center;gap:10px;font-size:13px;font-weight:600;color:#1e40af}
+.filtro-banner button{background:none;border:none;cursor:pointer;font-size:18px;
+                      color:#6b7280;margin-left:auto;line-height:1}
+.filtro-banner button:hover{color:#374151}
+
+/* SEMAPHORE CARDS */
+.dash-cards{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:24px}
+.dc{background:#fff;border-radius:12px;padding:20px 18px;
+    box-shadow:0 2px 8px rgba(0,0,0,.06);border:2px solid transparent;transition:all .2s}
+.dc.clickable{cursor:pointer}
+.dc.clickable:hover{transform:translateY(-3px);box-shadow:0 6px 20px rgba(0,0,0,.12)}
+.dc.active-filter{border-color:currentColor;box-shadow:0 4px 16px rgba(0,0,0,.12)}
+.dc-icon{font-size:28px;margin-bottom:10px}
+.dc-num{font-size:38px;font-weight:800;line-height:1}
+.dc-label{font-size:11px;color:#6b7280;margin-top:6px;text-transform:uppercase;letter-spacing:.6px;font-weight:600}
+.dc-pct{font-size:12px;font-weight:700;margin-top:4px}
+.dc-total .dc-num{color:#1e40af}
+.dc-verde{color:#15803d} .dc-verde .dc-num{color:#15803d}
+.dc-amar{color:#92400e}  .dc-amar .dc-num{color:#d97706}
+.dc-rojo{color:#dc2626}  .dc-rojo .dc-num{color:#dc2626}
+
+/* CHARTS */
+.dash-charts{display:grid;grid-template-columns:1fr 1.6fr;gap:20px;margin-bottom:24px}
+.chart-card{background:#fff;border-radius:12px;padding:20px;box-shadow:0 2px 8px rgba(0,0,0,.06)}
+.chart-card h3{font-size:12px;font-weight:700;color:#374151;text-transform:uppercase;
+               letter-spacing:.6px;margin-bottom:16px;transition:color .3s}
+.chart-wrap{position:relative;height:200px}
+.chart-wrap-bar{position:relative;height:200px;transition:height .3s}
+
+/* BODEGA TABLE */
+.bodega-card{background:#fff;border-radius:12px;padding:20px;box-shadow:0 2px 8px rgba(0,0,0,.06);margin-bottom:16px}
+.section-title{font-size:12px;font-weight:700;color:#374151;text-transform:uppercase;letter-spacing:.5px;margin-bottom:12px}
+.bt{width:100%;border-collapse:collapse;font-size:13px}
+.bt th{text-align:left;padding:8px 12px;font-size:11px;font-weight:700;text-transform:uppercase;
+       letter-spacing:.5px;color:#6b7280;border-bottom:2px solid #f0f0f0;background:#f8fafc}
+.bt td{padding:10px 12px;border-bottom:1px solid #f5f5f5;vertical-align:middle}
+.bt tr:last-child td{border-bottom:none}
+.bt tr:hover td{background:#f9fafb}
+.semabar{display:flex;height:8px;border-radius:4px;overflow:hidden;min-width:80px}
+.s-v{background:#22c55e} .s-a{background:#f59e0b} .s-r{background:#ef4444}
+.umbral-note{font-size:11px;color:#9ca3af;margin-top:10px;text-align:right}
+
+/* EDIT AREA */
+.edit-scroll{flex:1;overflow-y:auto;padding:24px}
+.back-bar{margin-bottom:16px}
+.btn-back{background:#f1f5f9;border:1px solid #e2e8f0;border-radius:8px;
+          padding:8px 18px;font-size:13px;font-weight:600;color:#374151;
+          cursor:pointer;display:inline-flex;align-items:center;gap:6px;transition:background .2s}
+.btn-back:hover{background:#e2e8f0}
+
+/* EDIT CARD */
+.edit-card{background:#fff;border-radius:12px;box-shadow:0 2px 12px rgba(0,0,0,.08);overflow:hidden}
+.edit-header{background:linear-gradient(135deg,#0d4f2e,#1a7a45);color:#fff;padding:20px 24px}
+.edit-header h2{font-size:18px;font-weight:700}
+.edit-header .meta{font-size:12px;opacity:.8;margin-top:4px}
+.edit-body{padding:24px}
+.ftwrap{margin-bottom:20px}
+.ftwrap label{display:block;font-size:12px;font-weight:600;color:#374151;
+              text-transform:uppercase;letter-spacing:.4px;margin-bottom:6px}
+.fi{width:100%;padding:7px 10px;border:1.5px solid #e5e7eb;border-radius:6px;
+    font-size:13px;outline:none;transition:border-color .2s;background:#fff}
+.fi:focus{border-color:#1a7a45;background:#f0fdf4}
+.fi.num{text-align:right}
+.lotes-table{width:100%;border-collapse:separate;border-spacing:0}
+.lotes-table thead th{background:#f8fafc;color:#374151;font-size:12px;font-weight:600;
+  text-transform:uppercase;letter-spacing:.5px;padding:10px 12px;text-align:left;
+  border-bottom:2px solid #e2e8f0}
+.lotes-table tbody td{padding:8px 6px;border-bottom:1px solid #f0f0f0;vertical-align:middle}
+.lote-num{width:32px;height:32px;border-radius:50%;background:#dcfce7;color:#15803d;
+          font-weight:700;font-size:13px;display:flex;align-items:center;justify-content:center}
+.td-num{width:48px;text-align:center}
+.actions-bar{display:flex;align-items:center;gap:12px;padding:16px 24px 24px;
+             border-top:1px solid #f0f0f0;margin-top:8px}
+.btn{padding:10px 24px;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer;border:none;transition:all .2s}
+.btn-save{background:linear-gradient(135deg,#1a7a45,#0d4f2e);color:#fff}
+.btn-save:hover{opacity:.9;transform:translateY(-1px)}
+.btn-save:disabled{opacity:.5;cursor:not-allowed;transform:none}
+.btn-reset{background:#f3f4f6;color:#374151}
+.btn-reset:hover{background:#e5e7eb}
+.alert{padding:12px 16px;border-radius:8px;font-size:13px;display:none;margin-bottom:16px}
+.alert.show{display:block}
+.alert-ok{background:#dcfce7;border:1px solid #86efac;color:#15803d}
+.alert-err{background:#fef2f2;border:1px solid #fca5a5;color:#dc2626}
+
+@media(max-width:900px){.dash-cards{grid-template-columns:repeat(2,1fr)}.dash-charts{grid-template-columns:1fr}}
+@media(max-width:768px){.container{flex-direction:column;height:auto}.sidebar{width:100%;min-width:unset;max-height:340px;border-right:none;border-bottom:1px solid #e2e8f0}.dash-cards{grid-template-columns:repeat(2,1fr)}}
+</style>
+</head>
+<body>
+
+<nav>
+  <div class="nav-title">🏥 Editor de Inventario</div>
+  <div class="nav-right">
+    <span class="nav-user">
+      👤 {{ nombre_usuario }}
+      <span class="nav-rol">({{ 'Admin' if es_admin else 'Usuario' }})</span>
+    </span>
+    {% if es_admin %}<a href="/editor/usuarios" class="nav-btn">👥 Usuarios</a>{% endif %}
+    <a href="/editor/salir" class="nav-btn">Salir</a>
+  </div>
+</nav>
+
+<div class="container">
+
+  <!-- ═══ SIDEBAR ═══ -->
+  <aside class="sidebar">
+    <div class="sb-header">
+      <h2>📦 Seleccionar Producto</h2>
+      {% if bodegas|length > 1 %}
+      <select id="sel-bodega" onchange="cargarProductos()">
+        <option value="">— Elige una bodega —</option>
+        {% for key,label in bodegas.items() %}
+        <option value="{{ key }}">{{ label }}</option>
+        {% endfor %}
+      </select>
+      {% elif bodegas|length == 1 %}
+      <select id="sel-bodega" onchange="cargarProductos()">
+        {% for key,label in bodegas.items() %}
+        <option value="{{ key }}" selected>{{ label }}</option>
+        {% endfor %}
+      </select>
+      {% else %}
+      <div style="font-size:12px;color:#dc2626;padding:6px 0;">Sin bodega asignada. Contacta al administrador.</div>
+      <select id="sel-bodega" style="display:none"></select>
+      {% endif %}
+      <div class="search-wrap">
+        <span class="search-icon">🔍</span>
+        <input class="search-input" id="inp-buscar" type="text"
+               placeholder="Buscar producto…" oninput="filtrarLista()" disabled>
+      </div>
+    </div>
+    <div class="product-list" id="product-list">
+      <div class="list-empty">Selecciona una bodega para comenzar.</div>
+    </div>
+  </aside>
+
+  <!-- ═══ MAIN PANEL ═══ -->
+  <main class="main-panel">
+
+    <!-- ── DASHBOARD (default) ── -->
+    <div id="dash-view" class="dash-scroll">
+      <div id="dash-loading" style="display:flex;align-items:center;justify-content:center;height:200px;color:#6b7280;font-size:14px;">
+        ⏳ Cargando estadísticas…
+      </div>
+      <div id="dash-content" style="display:none">
+
+        <div class="dash-topbar">
+          <div>
+            <h2>📊 Panel de Control — Inventario</h2>
+            <p id="dash-sub">Estado general de todas las bodegas</p>
+          </div>
+          <button class="btn-refresh" onclick="cargarDashboard()">🔄 Actualizar</button>
+        </div>
+
+        <div id="filtro-banner" class="filtro-banner">
+          <span id="filtro-label"></span>
+          <button onclick="limpiarFiltro()" title="Quitar filtro">✕</button>
+        </div>
+
+        <!-- Cards semáforo MED -->
+        <div class="dash-cards">
+          <div class="dc dc-total">
+            <div class="dc-icon">📦</div>
+            <div class="dc-num" id="cnt-total">—</div>
+            <div class="dc-label">Con MED Disponible</div>
+          </div>
+          <div class="dc dc-verde clickable" id="card-verde"
+               onclick="filtrarPorSemaforo(\'verde\')" title="Clic para filtrar lista">
+            <div class="dc-icon">🟢</div>
+            <div class="dc-num" id="cnt-verde">—</div>
+            <div class="dc-label">Óptimos</div>
+            <div class="dc-pct" id="pct-verde" style="font-size:10px;color:#15803d">&gt; 18 meses</div>
+          </div>
+          <div class="dc dc-amar clickable" id="card-amarillo"
+               onclick="filtrarPorSemaforo(\'amarillo\')" title="Clic para filtrar lista">
+            <div class="dc-icon">🟡</div>
+            <div class="dc-num" id="cnt-amarillo">—</div>
+            <div class="dc-label">En Alerta</div>
+            <div class="dc-pct" id="pct-amarillo" style="font-size:10px;color:#92400e">13 – 17 meses</div>
+          </div>
+          <div class="dc dc-rojo clickable" id="card-rojo"
+               onclick="filtrarPorSemaforo(\'rojo\')" title="Clic para filtrar lista">
+            <div class="dc-icon">🔴</div>
+            <div class="dc-num" id="cnt-rojo">—</div>
+            <div class="dc-label">Críticos</div>
+            <div class="dc-pct" id="pct-rojo" style="font-size:10px;color:#dc2626">1 – 12 meses</div>
+          </div>
+        </div>
+
+        <!-- Gráficas -->
+        <div class="dash-charts">
+          <div class="chart-card">
+            <h3 id="title-donut">📈 Distribución General</h3>
+            <div class="chart-wrap"><canvas id="chart-donut"></canvas></div>
+          </div>
+          <div class="chart-card">
+            <h3 id="title-bar">📊 Estado por Bodega</h3>
+            <div class="chart-wrap chart-wrap-bar"><canvas id="chart-bar"></canvas></div>
+          </div>
+        </div>
+
+        <!-- Tabla por bodega -->
+        <div class="bodega-card">
+          <div class="section-title">🏪 Resumen por Bodega</div>
+          <table class="bt">
+            <thead>
+              <tr>
+                <th>Bodega</th><th>Total</th>
+                <th style="color:#15803d">🟢 Óptimos</th>
+                <th style="color:#d97706">🟡 En Alerta</th>
+                <th style="color:#dc2626">🔴 Críticos</th>
+                <th>Distribución</th>
+              </tr>
+            </thead>
+            <tbody id="bodega-tbody"></tbody>
+          </table>
+          <p class="umbral-note" id="umbral-note"></p>
+        </div>
+
+      </div><!-- /dash-content -->
+    </div><!-- /dash-view -->
+
+    <!-- ── FORMULARIO EDICIÓN (al seleccionar producto) ── -->
+    <div id="edit-area" class="edit-scroll" style="display:none"></div>
+
+  </main>
+</div>
+
+<script>
+// ══ ESTADO ════════════════════════════════════════════════════════════════════
+let todosLosProductos = [];
+let bodegaActual   = '';
+let codigoActual   = '';
+let filtroColor    = null;
+let dashData       = null;
+let chartDonut     = null;
+let chartBar       = null;
+let modoBodega     = false;   // true cuando hay una bodega seleccionada
+// Umbrales MED — se actualizan desde la API
+let MED_VERDE    = 18;
+let MED_AMAR_MIN = 13;
+
+const bodegaAuto = '{{ bodega_auto }}';
+const esAdmin    = {{ 'true' if es_admin else 'false' }};
+
+// ══ INIT ══════════════════════════════════════════════════════════════════════
+window.addEventListener('DOMContentLoaded', () => {
+  cargarDashboard();
+  if (bodegaAuto) {
+    const sel = document.getElementById('sel-bodega');
+    if (sel && sel.value) cargarProductos();
+  }
+});
+
+// ══ DASHBOARD ════════════════════════════════════════════════════════════════
+async function cargarDashboard() {
+  document.getElementById('dash-loading').style.display = 'flex';
+  document.getElementById('dash-content').style.display = 'none';
+  try {
+    const r = await fetch('/editor/api/dashboard');
+    dashData = await r.json();
+    if (dashData.error) throw new Error(dashData.error);
+    if (dashData.umbrales) {
+      MED_VERDE    = dashData.umbrales.verde_min    || 18;
+      MED_AMAR_MIN = dashData.umbrales.amarillo_min || 13;
+    }
+    actualizarCards(dashData.totales);
+    renderCharts(dashData);
+    renderBodegaTabla(dashData);
+    document.getElementById('dash-loading').style.display = 'none';
+    document.getElementById('dash-content').style.display = 'block';
+    document.getElementById('dash-sub').textContent = esAdmin
+      ? 'Estado general de todas las bodegas'
+      : (dashData.bodegas ? Object.values(dashData.bodegas)[0]?.label || '' : '');
+  } catch(e) {
+    document.getElementById('dash-loading').innerHTML =
+      `<span style="color:#dc2626">⚠️ Error: ${e.message}</span>`;
+  }
+}
+
+function actualizarCards(t) {
+  const pct = n => t.total > 0 ? Math.round(n * 100 / t.total) + '%' : '—';
+  document.getElementById('cnt-total').textContent    = t.total;
+  document.getElementById('cnt-verde').textContent    = t.verde;
+  document.getElementById('cnt-amarillo').textContent = t.amarillo;
+  document.getElementById('cnt-rojo').textContent     = t.rojo;
+  document.getElementById('pct-verde').textContent    = pct(t.verde);
+  document.getElementById('pct-amarillo').textContent = pct(t.amarillo);
+  document.getElementById('pct-rojo').textContent     = pct(t.rojo);
+}
+
+// ── Gráficas modo GLOBAL (todas las bodegas) ──────────────────────────────────
+function renderCharts(data) {
+  modoBodega = false;
+  const bods   = data.bodegas;
+  const labels = Object.values(bods).map(b => b.label);
+  const verts  = Object.values(bods).map(b => b.verde);
+  const amars  = Object.values(bods).map(b => b.amarillo);
+  const rojos  = Object.values(bods).map(b => b.rojo);
+  const t      = data.totales;
+
+  document.getElementById('title-donut').textContent = '📈 Distribución General';
+  document.getElementById('title-bar').textContent   = '📊 Estado por Bodega';
+
+  _buildDonut(t.verde, t.amarillo, t.rojo);
+  _buildBar(labels, verts, amars, rojos);
+}
+
+// ── Gráficas modo BODEGA (una sola bodega seleccionada) ───────────────────────
+function renderChartsConBodega(bodega, productos) {
+  modoBodega = true;
+  // Calcular totales MED de la bodega
+  let v = 0, a = 0, r = 0;
+  productos.forEach(p => {
+    const c = colorP(p);
+    if (c === 'verde')    v++;
+    else if (c === 'amarillo') a++;
+    else if (c === 'rojo')     r++;
+  });
+
+  // Calcular desglose por Tipo de Insumo
+  const tiposMap = {};
+  productos.forEach(p => {
+    const c = colorP(p);
+    if (c === 'sin_saldo') return;          // excluir sin saldo
+    const tipo = p.tipo || 'Sin Tipo';
+    if (!tiposMap[tipo]) tiposMap[tipo] = { verde: 0, amarillo: 0, rojo: 0 };
+    tiposMap[tipo][c]++;
+  });
+
+  const tiposOrden = Object.keys(tiposMap).sort();
+  const tVerts = tiposOrden.map(t => tiposMap[t].verde);
+  const tAmars = tiposOrden.map(t => tiposMap[t].amarillo);
+  const tRojos = tiposOrden.map(t => tiposMap[t].rojo);
+
+  const bodLabel = dashData?.bodegas?.[bodega]?.label || bodega;
+  document.getElementById('title-donut').textContent = `📈 ${bodLabel}`;
+  document.getElementById('title-bar').textContent   = '📊 Resumen por Tipo de Insumo';
+
+  _buildDonut(v, a, r);
+  // Ajustar altura de la barra según nº de tipos
+  const barHeight = Math.max(160, tiposOrden.length * 52 + 60);
+  document.querySelector('.chart-wrap-bar').style.height = barHeight + 'px';
+  _buildBar(tiposOrden, tVerts, tAmars, tRojos);
+}
+
+// ── Constructores internos ────────────────────────────────────────────────────
+function _buildDonut(v, a, r) {
+  if (chartDonut) { chartDonut.destroy(); chartDonut = null; }
+  chartDonut = new Chart(document.getElementById('chart-donut'), {
+    type: 'doughnut',
+    data: {
+      labels: ['Óptimos (>18m)', 'En Alerta (13-17m)', 'Críticos (1-12m)'],
+      datasets: [{ data: [v, a, r],
+                   backgroundColor: ['#22c55e','#f59e0b','#ef4444'],
+                   borderWidth: 3, borderColor: '#fff', hoverOffset: 6 }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false, cutout: '62%',
+      plugins: {
+        legend: { position: 'bottom', labels: { font: { size: 11 }, padding: 14 } },
+        tooltip: { callbacks: { label: ctx => {
+          const s = ctx.dataset.data.reduce((a,b)=>a+b,0);
+          return ` ${ctx.label}: ${ctx.parsed} (${s>0?Math.round(ctx.parsed*100/s):0}%)`;
+        }}}
+      }
+    }
+  });
+}
+
+function _buildBar(labels, verts, amars, rojos) {
+  if (chartBar) { chartBar.destroy(); chartBar = null; }
+  chartBar = new Chart(document.getElementById('chart-bar'), {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [
+        { label: 'Óptimos',   data: verts, backgroundColor: '#22c55e' },
+        { label: 'En Alerta', data: amars, backgroundColor: '#f59e0b' },
+        { label: 'Críticos',  data: rojos, backgroundColor: '#ef4444' },
+      ]
+    },
+    options: {
+      indexAxis: 'y', responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { position: 'bottom', labels: { font:{size:11}, padding:12 } },
+                 tooltip: { mode: 'index' } },
+      scales: {
+        x: { stacked: true, grid: { color: '#f5f5f5' }, ticks: { font:{size:11} } },
+        y: { stacked: true, ticks: { font:{size:11} } }
+      }
+    }
+  });
+}
+
+function renderBodegaTabla(data) {
+  const tbody = document.getElementById('bodega-tbody');
+  tbody.innerHTML = Object.entries(data.bodegas).map(([,b]) => {
+    const tot = b.total || 1;
+    const wv  = Math.round(b.verde    * 100 / tot);
+    const wa  = Math.round(b.amarillo * 100 / tot);
+    const wr  = Math.max(100 - wv - wa, 0);
+    return `<tr>
+      <td><strong>${esc(b.label)}</strong></td>
+      <td>${b.total}</td>
+      <td style="color:#15803d;font-weight:700">${b.verde}</td>
+      <td style="color:#d97706;font-weight:700">${b.amarillo}</td>
+      <td style="color:#dc2626;font-weight:700">${b.rojo}</td>
+      <td><div class="semabar" title="${wv}% / ${wa}% / ${wr}%">
+        <div class="s-v" style="width:${wv}%"></div>
+        <div class="s-a" style="width:${wa}%"></div>
+        <div class="s-r" style="width:${wr}%"></div>
+      </div></td>
+    </tr>`;
+  }).join('');
+  const u = data.umbrales || {};
+  document.getElementById('umbral-note').textContent =
+    `🟢 Óptimo: MED > ${u.verde_min||18} meses  |  🟡 En Alerta: ${u.amarillo_min||13}–${u.verde_min||18} meses  |  🔴 Crítico: 1–${(u.amarillo_min||13)-1} meses`;
+}
+
+function actualizarEstadisticasLocales(productos) {
+  let v=0, a=0, r=0, conMed=0;
+  productos.forEach(p => {
+    if (!p.tiene_saldo || p.med_valor === 0) return;  // excluir sin saldo
+    conMed++;
+    const c = colorP(p);
+    if (c==='verde') v++; else if (c==='amarillo') a++; else r++;
+  });
+  actualizarCards({ total: conMed, verde: v, amarillo: a, rojo: r });
+  const bodLabel = bodegaActual && dashData?.bodegas?.[bodegaActual]?.label
+    ? dashData.bodegas[bodegaActual].label : bodegaActual;
+  document.getElementById('dash-sub').textContent =
+    `Bodega: ${bodLabel}  —  ${conMed} insumos con MED`;
+  // Actualizar gráficas para la bodega seleccionada
+  renderChartsConBodega(bodegaActual, productos);
+  // Actualizar tabla de resumen para mostrar solo esta bodega
+  if (dashData?.bodegas?.[bodegaActual]) {
+    renderBodegaTabla({ bodegas: { [bodegaActual]: dashData.bodegas[bodegaActual] },
+                        umbrales: dashData.umbrales });
+  }
+}
+
+// ══ SEMÁFORO — basado en MED (Meses de Existencia Disponible) ════════════════
+function colorP(p) {
+  if (!p.tiene_saldo || p.med_valor === 0) return 'sin_saldo';
+  if (p.med_valor > MED_VERDE)    return 'verde';     // > 18 meses
+  if (p.med_valor >= MED_AMAR_MIN) return 'amarillo';  // 13-17 meses
+  return 'rojo';                                        // 1-12 meses
+}
+
+function filtrarPorSemaforo(color) {
+  filtroColor = filtroColor === color ? null : color;
+  ['verde','amarillo','rojo'].forEach(c =>
+    document.getElementById(`card-${c}`).classList.toggle('active-filter', c === filtroColor));
+  const banner = document.getElementById('filtro-banner');
+  if (filtroColor) {
+    banner.style.display = 'flex';
+    document.getElementById('filtro-label').textContent = {
+      verde:    `🟢 Filtrando: Óptimos — MED > ${MED_VERDE} meses`,
+      amarillo: `🟡 Filtrando: En Alerta — MED ${MED_AMAR_MIN}–${MED_VERDE} meses`,
+      rojo:     `🔴 Filtrando: Críticos — MED 1–${MED_AMAR_MIN-1} meses`,
+    }[filtroColor];
+    // Abrir el grupo del color filtrado
+    document.querySelectorAll(`details.tg-${filtroColor}`).forEach(d => d.open = true);
+  } else {
+    banner.style.display = 'none';
+  }
+  filtrarLista();
+}
+
+function limpiarFiltro() {
+  filtroColor = null;
+  ['verde','amarillo','rojo'].forEach(c =>
+    document.getElementById(`card-${c}`).classList.remove('active-filter'));
+  document.getElementById('filtro-banner').style.display = 'none';
+  filtrarLista();
+}
+
+// ══ LISTA DE PRODUCTOS ════════════════════════════════════════════════════════
+async function cargarProductos() {
+  const bodega = document.getElementById('sel-bodega').value;
+  const lista  = document.getElementById('product-list');
+  const buscar = document.getElementById('inp-buscar');
+
+  if (!bodega) {
+    todosLosProductos = [];
+    bodegaActual = '';
+    lista.innerHTML = '<div class="list-empty">Selecciona una bodega para comenzar.</div>';
+    buscar.disabled = true; buscar.value = '';
+    if (dashData) {
+      actualizarCards(dashData.totales);
+      renderCharts(dashData);          // restaurar gráficas globales
+      renderBodegaTabla(dashData);     // restaurar tabla completa
+      // restaurar altura normal de la barra
+      document.querySelector('.chart-wrap-bar').style.height = '200px';
+      document.getElementById('dash-sub').textContent = esAdmin
+        ? 'Estado general de todas las bodegas'
+        : (Object.values(dashData.bodegas)[0]?.label || '');
+    }
+    return;
+  }
+  bodegaActual = bodega;
+  lista.innerHTML = '<div class="list-loading">⏳ Cargando productos…</div>';
+  buscar.disabled = true;
+  try {
+    const r = await fetch(`/editor/api/productos?bodega=${encodeURIComponent(bodega)}`);
+    const data = await r.json();
+    if (data.error) throw new Error(data.error);
+    todosLosProductos = data;
+    buscar.disabled = false; buscar.value = '';
+    filtrarLista();
+    actualizarEstadisticasLocales(data);
+  } catch(e) {
+    lista.innerHTML = `<div class="list-empty">⚠️ Error: ${e.message}</div>`;
+  }
+}
+
+function filtrarLista() {
+  const q = document.getElementById('inp-buscar').value.toLowerCase().trim();
+  let f = todosLosProductos;
+  if (q) f = f.filter(p => p.nombre.toLowerCase().includes(q) || p.codigo.toLowerCase().includes(q));
+  // Al filtrar por semáforo solo se muestran productos CON MED (con saldo)
+  if (filtroColor) f = f.filter(p => colorP(p) === filtroColor);
+  renderLista(f);
+}
+
+const COLORS = { verde:'#22c55e', amarillo:'#f59e0b', rojo:'#ef4444', sin_saldo:'#d1d5db' };
+function dot(p) {
+  return `<span class="dot" style="background:${COLORS[colorP(p)]}"></span>`;
+}
+
+function medTag(p) {
+  if (!p.tiene_saldo || p.med_valor === 0) return '';
+  const c = colorP(p);
+  const bg = { verde:'#dcfce7', amarillo:'#fef9c3', rojo:'#fee2e2' }[c];
+  const fg = { verde:'#15803d', amarillo:'#92400e', rojo:'#dc2626' }[c];
+  return `<span style="margin-left:6px;background:${bg};color:${fg};border-radius:4px;
+                        padding:1px 5px;font-size:10px;font-weight:700;">
+            MED ${p.med_valor}m</span>`;
+}
+
+function renderLista(productos) {
+  const lista = document.getElementById('product-list');
+  if (!productos.length) { lista.innerHTML = '<div class="list-empty">Sin resultados.</div>'; return; }
+
+  const verdes   = productos.filter(p => colorP(p) === 'verde');
+  const amarillos= productos.filter(p => colorP(p) === 'amarillo');
+  const rojos    = productos.filter(p => colorP(p) === 'rojo');
+  const sinS     = productos.filter(p => colorP(p) === 'sin_saldo');
+
+  const items = arr => arr.map(p => `
+    <div class="pi ${p.codigo===codigoActual?'active':''}"
+         data-nombre="${esc(p.nombre)}" data-codigo="${esc(p.codigo)}"
+         onclick="seleccionarProducto(this.dataset.nombre,this.dataset.codigo,this)">
+      <div class="pi-name">${dot(p)}${esc(p.nombre)}${medTag(p)}</div>
+      <div class="pi-code">Cód: ${esc(p.codigo)} | Saldo: ${p.saldo_total}</div>
+    </div>`).join('');
+
+  let html = '';
+  // Si hay filtro activo sólo se muestra el grupo correspondiente abierto
+  const soloColor = filtroColor;
+  if (verdes.length && (!soloColor || soloColor==='verde'))
+    html += `<details class="tg tg-verde" ${soloColor==='verde'?'open':''}>
+      <summary><span class="ta">▶</span> 🟢 Óptimos <span class="tc">${verdes.length}</span></summary>
+      ${items(verdes)}</details>`;
+  if (amarillos.length && (!soloColor || soloColor==='amarillo'))
+    html += `<details class="tg tg-amarillo" ${soloColor==='amarillo'?'open':''}>
+      <summary><span class="ta">▶</span> 🟡 En Alerta <span class="tc">${amarillos.length}</span></summary>
+      ${items(amarillos)}</details>`;
+  if (rojos.length && (!soloColor || soloColor==='rojo'))
+    html += `<details class="tg tg-rojo" ${soloColor==='rojo'?'open':''}>
+      <summary><span class="ta">▶</span> 🔴 Críticos <span class="tc">${rojos.length}</span></summary>
+      ${items(rojos)}</details>`;
+  if (sinS.length && !soloColor)
+    html += `<details class="tg tg-ss">
+      <summary style="color:#6b7280"><span class="ta">▶</span> ⚫ Sin Saldo <span class="tc">${sinS.length}</span></summary>
+      ${items(sinS)}</details>`;
+  if (!html) html = '<div class="list-empty">Sin resultados.</div>';
+  lista.innerHTML = html;
+}
+
+// ══ SELECCIÓN → FORMULARIO ════════════════════════════════════════════════════
+async function seleccionarProducto(nombre, codigo, el) {
+  codigoActual = codigo;
+  document.querySelectorAll('.pi').forEach(i => i.classList.remove('active'));
+  el.classList.add('active');
+
+  document.getElementById('dash-view').style.display = 'none';
+  const area = document.getElementById('edit-area');
+  area.style.display = 'block';
+  area.innerHTML = `
+    <div class="back-bar">
+      <button class="btn-back" onclick="volverDashboard()">← Volver al Dashboard</button>
+    </div>
+    <div class="list-loading" style="padding:40px;text-align:center">⏳ Cargando lotes…</div>`;
+  try {
+    const r = await fetch(`/editor/api/lotes?bodega=${encodeURIComponent(bodegaActual)}&codigo=${encodeURIComponent(codigo)}`);
+    const data = await r.json();
+    if (data.error) throw new Error(data.error);
+    renderFormulario(data);
+  } catch(e) {
+    area.innerHTML = `
+      <div class="back-bar"><button class="btn-back" onclick="volverDashboard()">← Volver al Dashboard</button></div>
+      <div class="edit-card"><div class="edit-body" style="color:#dc2626">⚠️ Error: ${e.message}</div></div>`;
+  }
+}
+
+function volverDashboard() {
+  codigoActual = '';
+  document.querySelectorAll('.pi').forEach(i => i.classList.remove('active'));
+  document.getElementById('edit-area').style.display = 'none';
+  document.getElementById('dash-view').style.display = 'block';
+}
+
+// ══ FORMULARIO DE EDICIÓN ═════════════════════════════════════════════════════
+function renderFormulario(producto) {
+  const lotes = producto.lotes || [];
+  while (lotes.length < 5) lotes.push({ numero: lotes.length + 1 });
+
+  const filas = lotes.slice(0,5).map((l,i) => `
+    <tr>
+      <td class="td-num"><div class="lote-num">${i+1}</div></td>
+      <td><input class="fi" id="fv_${i}" type="text" placeholder="dd/mm/aaaa" value="${esc(l.fv||'')}"></td>
+      <td><input class="fi" id="lote_${i}" type="text" placeholder="Cód. lote" value="${esc(l.lote||'')}"></td>
+      <td><input class="fi num" id="saldo_${i}" type="number" placeholder="0" min="0" step="0.01" value="${l.saldo!=null?l.saldo:''}"></td>
+      <td><input class="fi num" id="puni_${i}" type="number" placeholder="0.00" min="0" step="0.01"
+          value="${l.precio_unitario!=null?l.precio_unitario:''}" oninput="calcTotal(${i})"></td>
+      <td><input class="fi num" id="ptot_${i}" type="number" placeholder="0.00" min="0" step="0.01"
+          value="${l.precio_total_lote!=null?l.precio_total_lote:''}"></td>
+    </tr>`).join('');
+
+  document.getElementById('edit-area').innerHTML = `
+    <div class="back-bar">
+      <button class="btn-back" onclick="volverDashboard()">← Volver al Dashboard</button>
+    </div>
+    <div class="edit-card">
+      <div class="edit-header">
+        <h2>✏️ ${esc(producto.nombre||'')}</h2>
+        <div class="meta">Código: ${esc(producto.codigo||'—')} &nbsp;|&nbsp; Bodega: <strong>${esc(bodegaActual)}</strong></div>
+      </div>
+      <div class="edit-body">
+        <div class="alert alert-ok"  id="alerta-ok">✅ Datos guardados correctamente en el Excel.</div>
+        <div class="alert alert-err" id="alerta-err"></div>
+        <div class="ftwrap">
+          <label>No. Tarjeta Kardex</label>
+          <input class="fi" id="tarjeta_kardex" type="text"
+                 placeholder="Número de tarjeta Kardex" value="${esc(producto.tarjeta_kardex||'')}">
+        </div>
+        <div style="overflow-x:auto">
+          <table class="lotes-table">
+            <thead><tr>
+              <th>Lote #</th><th>Fecha Vencimiento</th><th>Código de Lote</th>
+              <th>Saldo (cant.)</th><th>Precio Unitario (Q)</th><th>Precio Total Lote (Q)</th>
+            </tr></thead>
+            <tbody>${filas}</tbody>
+          </table>
+        </div>
+      </div>
+      <div class="actions-bar">
+        <button class="btn btn-save" id="btn-guardar" onclick="guardar()">💾 Guardar Cambios</button>
+        <button class="btn btn-reset" onclick="recargarProducto()">↩ Recargar</button>
+        <span id="saving-msg" style="font-size:13px;color:#6b7280;display:none">Guardando…</span>
+      </div>
+    </div>`;
+}
+
+function calcTotal(i) {
+  const u = parseFloat(document.getElementById(`puni_${i}`)?.value) || 0;
+  const s = parseFloat(document.getElementById(`saldo_${i}`)?.value) || 0;
+  const el = document.getElementById(`ptot_${i}`);
+  if (el && u > 0 && s > 0) el.value = (u * s).toFixed(2);
+}
+
+function recargarProducto() {
+  const el = document.querySelector('.pi.active');
+  if (el) seleccionarProducto(el.dataset.nombre, el.dataset.codigo, el);
+}
+
+async function guardar() {
+  const btn   = document.getElementById('btn-guardar');
+  const msg   = document.getElementById('saving-msg');
+  const okEl  = document.getElementById('alerta-ok');
+  const errEl = document.getElementById('alerta-err');
+  okEl.classList.remove('show'); errEl.classList.remove('show');
+  const lotes = [];
+  for (let i = 0; i < 5; i++) {
+    lotes.push({
+      fv:                (document.getElementById(`fv_${i}`)?.value    || '').trim(),
+      lote:              (document.getElementById(`lote_${i}`)?.value  || '').trim(),
+      saldo:              document.getElementById(`saldo_${i}`)?.value || '',
+      precio_unitario:    document.getElementById(`puni_${i}`)?.value  || '',
+      precio_total_lote:  document.getElementById(`ptot_${i}`)?.value  || '',
+    });
+  }
+  const tarjeta_kardex = (document.getElementById('tarjeta_kardex')?.value || '').trim();
+  btn.disabled = true; msg.style.display = 'inline';
+  try {
+    const r = await fetch('/editor/api/guardar', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({bodega: bodegaActual, codigo: codigoActual, lotes, tarjeta_kardex})
+    });
+    const data = await r.json();
+    if (data.ok) {
+      okEl.classList.add('show');
+      const savedCod = codigoActual;
+      await cargarProductos();
+      await cargarDashboard();
+      document.querySelectorAll('.pi').forEach(el => {
+        if (el.dataset.codigo === savedCod) el.classList.add('active');
+      });
+    } else {
+      errEl.textContent = '⚠️ ' + (data.error || 'Error desconocido');
+      errEl.classList.add('show');
+    }
+  } catch(e) {
+    errEl.textContent = '⚠️ Error de conexión: ' + e.message;
+    errEl.classList.add('show');
+  } finally {
+    btn.disabled = false; msg.style.display = 'none';
+  }
+}
+
+function esc(str) {
+  return String(str)
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;')
+    .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+</script>
+</body></html>'''
+
+
+# =============================================================================
+# HTML: LISTA DE USUARIOS
+# =============================================================================
+_EDITOR_USUARIOS_HTML = '''<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>Gestión de Usuarios</title>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Segoe UI',system-ui,sans-serif;background:#f0f4f8;min-height:100vh}
+nav{background:linear-gradient(135deg,#0d4f2e,#1a7a45);color:#fff;padding:0 24px;
+    display:flex;align-items:center;justify-content:space-between;height:56px;box-shadow:0 2px 8px rgba(0,0,0,.2)}
+.nav-title{font-size:18px;font-weight:700}
+.nav-right{display:flex;align-items:center;gap:12px;font-size:13px}
+.nav-user{background:rgba(255,255,255,.15);border-radius:20px;padding:4px 14px}
+a.nb{background:rgba(255,255,255,.2);border:1px solid rgba(255,255,255,.4);color:#fff;
+     border-radius:6px;padding:5px 14px;text-decoration:none;font-size:13px;transition:background .2s}
+a.nb:hover{background:rgba(255,255,255,.35)}
+.body{max-width:1000px;margin:32px auto;padding:0 24px}
+.ph{display:flex;align-items:center;justify-content:space-between;margin-bottom:24px}
+.ph h1{font-size:22px;color:#0d4f2e;font-weight:700}
+a.btn-new{background:linear-gradient(135deg,#1a7a45,#0d4f2e);color:#fff;border:none;
+          border-radius:8px;padding:10px 20px;font-size:14px;font-weight:600;
+          cursor:pointer;text-decoration:none;transition:opacity .2s}
+a.btn-new:hover{opacity:.9}
+.alert{padding:12px 16px;border-radius:8px;font-size:13px;margin-bottom:20px}
+.alert-ok{background:#dcfce7;border:1px solid #86efac;color:#15803d}
+.alert-err{background:#fef2f2;border:1px solid #fca5a5;color:#dc2626}
+.card{background:#fff;border-radius:12px;box-shadow:0 2px 12px rgba(0,0,0,.08);overflow:hidden}
+table{width:100%;border-collapse:collapse}
+thead th{background:#f8fafc;color:#374151;font-size:12px;font-weight:700;text-transform:uppercase;
+         letter-spacing:.5px;padding:12px 16px;text-align:left;border-bottom:2px solid #e2e8f0}
+tbody tr{transition:background .15s}
+tbody tr:hover{background:#f9fafb}
+tbody td{padding:12px 16px;border-bottom:1px solid #f0f0f0;font-size:13px;color:#374151;vertical-align:middle}
+tbody tr:last-child td{border-bottom:none}
+.badge{display:inline-block;border-radius:10px;padding:2px 10px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.3px}
+.ba{background:#fef3c7;color:#92400e} .bu{background:#dbeafe;color:#1e40af}
+.bact{background:#dcfce7;color:#15803d} .binact{background:#f3f4f6;color:#6b7280}
+.actions{display:flex;gap:8px}
+.be,.bd{padding:5px 14px;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer;border:none;text-decoration:none;transition:opacity .2s}
+.be{background:#dbeafe;color:#1e40af} .be:hover{background:#bfdbfe}
+.bd{background:#fee2e2;color:#dc2626} .bd:hover{background:#fecaca}
+.empty{padding:32px;text-align:center;color:#9ca3af;font-size:14px}
+</style></head>
+<body>
+<nav>
+  <div class="nav-title">👥 Gestión de Usuarios</div>
+  <div class="nav-right">
+    <span class="nav-user">👤 {{ nombre_usuario }}</span>
+    <a href="/editor/dashboard" class="nb">← Dashboard</a>
+    <a href="/editor/salir" class="nb">Salir</a>
+  </div>
+</nav>
+<div class="body">
+  <div class="ph">
+    <h1>Usuarios del Sistema</h1>
+    <a href="/editor/usuarios/nuevo" class="btn-new">+ Nuevo Usuario</a>
+  </div>
+  {% if mensaje %}<div class="alert alert-ok">✅ {{ mensaje }}</div>{% endif %}
+  {% if error   %}<div class="alert alert-err">⚠️ {{ error }}</div>{% endif %}
+  <div class="card">
+    {% if usuarios %}
+    <table>
+      <thead><tr>
+        <th>#</th><th>Usuario</th><th>Nombre Completo</th><th>Email</th>
+        <th>Rol</th><th>Bodega Asignada</th><th>Estado</th><th>Acciones</th>
+      </tr></thead>
+      <tbody>
+        {% for u in usuarios %}
+        <tr>
+          <td style="color:#9ca3af">{{ u.id }}</td>
+          <td><strong>{{ u.username }}</strong></td>
+          <td>{{ u.nombre_completo or '—' }}</td>
+          <td style="color:#6b7280">{{ u.email or '—' }}</td>
+          <td><span class="badge {{ 'ba' if u.rol=='Admin' else 'bu' }}">{{ u.rol }}</span></td>
+          <td>{% if u.bodega_asignada %}
+            {% set ck = u.bodega_asignada.upper().replace('BODEGA_','').lower() %}
+            {{ bodegas.get(ck, u.bodega_asignada) }}
+          {% else %}—{% endif %}</td>
+          <td><span class="badge {{ 'bact' if u.activo else 'binact' }}">{{ 'Activo' if u.activo else 'Inactivo' }}</span></td>
+          <td>
+            <div class="actions">
+              <a href="/editor/usuarios/editar/{{ u.id }}" class="be">✏️ Editar</a>
+              <form method="POST" action="/editor/usuarios/eliminar/{{ u.id }}"
+                    onsubmit="return confirm('¿Eliminar al usuario {{ u.username }}?')">
+                <button type="submit" class="bd">🗑 Eliminar</button>
+              </form>
+            </div>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}<div class="empty">No hay usuarios registrados.</div>{% endif %}
+  </div>
+</div></body></html>'''
+
+
+# =============================================================================
+# HTML: FORMULARIO CREAR / EDITAR USUARIO
+# =============================================================================
+_EDITOR_USUARIO_FORM_HTML = '''<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>{% if accion=='nuevo' %}Nuevo Usuario{% else %}Editar Usuario{% endif %}</title>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Segoe UI',system-ui,sans-serif;background:#f0f4f8;min-height:100vh}
+nav{background:linear-gradient(135deg,#0d4f2e,#1a7a45);color:#fff;padding:0 24px;
+    display:flex;align-items:center;justify-content:space-between;height:56px;box-shadow:0 2px 8px rgba(0,0,0,.2)}
+.nav-title{font-size:18px;font-weight:700}
+.nav-right{display:flex;align-items:center;gap:12px}
+a.nb{background:rgba(255,255,255,.2);border:1px solid rgba(255,255,255,.4);color:#fff;
+     border-radius:6px;padding:5px 14px;text-decoration:none;font-size:13px;transition:background .2s}
+a.nb:hover{background:rgba(255,255,255,.35)}
+.body{max-width:560px;margin:32px auto;padding:0 24px 48px}
+.card{background:#fff;border-radius:12px;box-shadow:0 2px 12px rgba(0,0,0,.08);overflow:hidden;margin-top:32px}
+.ch{background:linear-gradient(135deg,#0d4f2e,#1a7a45);color:#fff;padding:20px 28px}
+.ch h2{font-size:18px;font-weight:700}
+.ch p{font-size:12px;opacity:.8;margin-top:4px}
+.cb{padding:28px}
+.fg{margin-bottom:18px}
+label{display:block;font-size:13px;font-weight:600;color:#374151;margin-bottom:6px}
+.hint{font-size:11px;color:#9ca3af;font-weight:400;margin-left:6px}
+input[type=text],input[type=password],input[type=email],select{
+  width:100%;padding:10px 14px;border:1.5px solid #d1d5db;border-radius:8px;
+  font-size:14px;outline:none;background:#fff;transition:border-color .2s}
+input:focus,select:focus{border-color:#1a7a45}
+.cr{display:flex;align-items:center;gap:10px;margin-top:4px}
+.cr input[type=checkbox]{width:18px;height:18px;cursor:pointer;accent-color:#1a7a45}
+.cr label{margin:0;font-weight:500;cursor:pointer}
+hr{border:none;border-top:1px solid #f0f0f0;margin:20px 0}
+.ab{display:flex;gap:12px;margin-top:8px}
+.btn-save{flex:1;padding:11px;background:linear-gradient(135deg,#1a7a45,#0d4f2e);color:#fff;
+          border:none;border-radius:8px;font-size:15px;font-weight:600;cursor:pointer;transition:opacity .2s}
+.btn-save:hover{opacity:.9}
+a.btn-cancel{padding:11px 20px;background:#f3f4f6;color:#374151;border:none;border-radius:8px;
+             font-size:15px;font-weight:600;cursor:pointer;text-decoration:none;display:flex;align-items:center}
+a.btn-cancel:hover{background:#e5e7eb}
+.err{background:#fef2f2;border:1px solid #fca5a5;color:#dc2626;border-radius:8px;
+     padding:10px 14px;font-size:13px;margin-bottom:20px}
+</style></head>
+<body>
+<nav>
+  <div class="nav-title">{% if accion=='nuevo' %}➕ Nuevo Usuario{% else %}✏️ Editar Usuario{% endif %}</div>
+  <div class="nav-right">
+    <a href="/editor/usuarios" class="nb">← Volver</a>
+    <a href="/editor/salir" class="nb">Salir</a>
+  </div>
+</nav>
+<div class="body">
+  <div class="card">
+    <div class="ch">
+      <h2>{% if accion=='nuevo' %}Crear nuevo usuario{% else %}Editar: {{ usuario.username }}{% endif %}</h2>
+      <p>{% if accion=='nuevo' %}Completa los datos para registrar el usuario{% else %}Modifica los campos que deseas actualizar{% endif %}</p>
+    </div>
+    <div class="cb">
+      {% if error %}<div class="err">⚠️ {{ error }}</div>{% endif %}
+      <form method="POST">
+        <div class="fg">
+          <label>Usuario <span style="color:#dc2626">*</span></label>
+          <input type="text" name="username" required
+                 value="{{ usuario.username if usuario else '' }}" placeholder="nombre_usuario">
+        </div>
+        <div class="fg">
+          <label>Contraseña{% if accion=='editar' %}<span class="hint">(dejar en blanco para no cambiar)</span>{% else %} <span style="color:#dc2626">*</span>{% endif %}</label>
+          <input type="password" name="password"
+                 {% if accion=='nuevo' %}required{% endif %}
+                 placeholder="{% if accion=='editar' %}••••••• (sin cambios){% else %}Contraseña{% endif %}">
+        </div>
+        <hr>
+        <div class="fg">
+          <label>Nombre Completo</label>
+          <input type="text" name="nombre_completo"
+                 value="{{ usuario.nombre_completo if usuario else '' }}" placeholder="Nombre y apellido">
+        </div>
+        <div class="fg">
+          <label>Correo Electrónico</label>
+          <input type="email" name="email"
+                 value="{{ usuario.email if usuario else '' }}" placeholder="correo@ejemplo.com">
+        </div>
+        <hr>
+        <div class="fg">
+          <label>Rol <span style="color:#dc2626">*</span></label>
+          <select name="rol" id="sel-rol" onchange="toggleBodega(this.value)">
+            <option value="User"  {% if not usuario or usuario.rol=='User'  %}selected{% endif %}>Usuario</option>
+            <option value="Admin" {% if usuario and usuario.rol=='Admin' %}selected{% endif %}>Administrador</option>
+          </select>
+        </div>
+        <div class="fg" id="bodega-row"
+             style="{{ 'display:none' if (usuario and usuario.rol=='Admin') else '' }}">
+          <label>Bodega Asignada</label>
+          <select name="bodega_asignada">
+            <option value="">— Sin bodega asignada —</option>
+            {% for key,label in bodegas.items() %}
+            <option value="{{ key }}"
+              {% if usuario and usuario.get('bodega_asignada_clave')==key %}selected{% endif %}>
+              {{ label }}
+            </option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="fg">
+          <label>Estado</label>
+          <div class="cr">
+            <input type="checkbox" id="activo" name="activo"
+                   {% if not usuario or usuario.activo %}checked{% endif %}>
+            <label for="activo">Usuario activo (puede iniciar sesión)</label>
+          </div>
+        </div>
+        <div class="ab">
+          <a href="/editor/usuarios" class="btn-cancel">Cancelar</a>
+          <button type="submit" class="btn-save">
+            {% if accion=='nuevo' %}➕ Crear Usuario{% else %}💾 Guardar Cambios{% endif %}
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+<script>
+function toggleBodega(rol) {
+  document.getElementById('bodega-row').style.display = rol==='Admin' ? 'none' : '';
+}
+</script>
+</body></html>'''
+
+# =============================================================================
+# FIN DEL MÓDULO EDITOR
+# =============================================================================
 
 if __name__ == '__main__':
     app.run()
